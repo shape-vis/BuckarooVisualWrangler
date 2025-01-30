@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <title> Data Cleaning Visualization Tool </title>
+    <link rel="stylesheet" href="styles.css" />
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/arquero@latest"></script>
+
+</head>
+
+<body>
+    <div id="header">
+        <h1>Scatterplot Matrix Visualization</h1>
+      </div>
+      <div id="matrix-vis"></div>
+      <div id="tooltip" class="tooltip"></div>
+
+      <div id="toolbox">
+        <form id="radio-buttons-form">
+            <p>Select an option:</p>
+            <label>
+              <input type="radio" name="options" value="allData" checked />
+              View all data
+            </label>
+            <label>
+              <input type="radio" name="options" value="selectData" />
+              Select data
+            </label>
+          </form>
+        <button id="undo">Undo</button>
+        <button id="redo">Redo</button>
+        <button id="clear-selection">Clear Selection</button>
+        <button id="remove-selected-data">Remove Selected Data</button>
+        <button id="impute-average">Impute selected data with the average</button>
+      </div>
+</body>
+<script src="js/dataModel.js"></script>
+<script src="js/scatterplotMatrixView.js"></script>
+<script src="js/controller.js"></script>
+<script src="js/script.js"></script>
+
+</html>

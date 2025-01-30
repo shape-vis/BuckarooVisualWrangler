@@ -1,0 +1,50 @@
+#header {
+    text-align: center;
+}
+
+#matrix-vis {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#toolbox {
+    text-align: center;
+}
+
+/* circle:hover {
+    fill: orange; 
+    cursor: pointer; 
+    stroke: black; 
+    stroke-width: 1.5px;
+} */
+
+/* rect:hover {
+    fill: orange; 
+    cursor: pointer; 
+    opacity: 1; 
+} */
+
+.tooltip {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 5px;
+    border-radius: 4px;
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    pointer-events: none; 
+    display: none; 
+    z-index: 10;
+}
+
+.tooltip.visible {
+    display: block;
+}
+
+.selected {
+    stroke: red;        
+    fill: red;
+    stroke-width: 2px; 
+}
