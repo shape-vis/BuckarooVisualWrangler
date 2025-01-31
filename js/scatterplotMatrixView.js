@@ -32,6 +32,17 @@ class ScatterplotMatrixView{
     plotMatrix(givenData) {    
         let columns = givenData.columnNames().slice(1);
         let matrixSize = columns.length * this.size + (columns.length - 1) * this.padding; // 3 * 175 + (2) * 25 = 575
+
+        // let nonNumericCounts = columns.map(col => {
+        //     let nonNumericData = givenData.select([col]).objects().filter(d => isNaN(d[col]));
+        //     let uniqueValues = new Set(nonNumericData.map(d => d[col]));
+        //     return uniqueValues.size;
+        // });
+    
+        // let maxNonNumericBins = Math.max(...nonNumericCounts); // Find the max needed bins
+        // let extraWidth = maxNonNumericBins * 30; // Adjust width dynamically per extra bin
+        // this.rightMargin = Math.max(100, extraWidth + 20); // Ensure minimum spacing
+
         let svgWidth = matrixSize + this.labelPadding + this.leftMargin + this.rightMargin;
         let svgHeight = matrixSize + this.labelPadding + this.topMargin + this.bottomMargin;
 
@@ -52,11 +63,21 @@ class ScatterplotMatrixView{
 
             if (i === j) {
                 const data = givenData.select(["id", xCol]).objects();
+
+                const numericData = data.filter(d => !isNaN(d[xCol]));
+                const nonNumericData = data.filter(d => isNaN(d[xCol]));
+
+                // let nonNumericGroups = d3.group(nonNumericData, d => d[xCol]);
+
+                const xScale = d3.scaleLinear()
+                    .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
+                    .range([0, this.size]);
+
                 const histogramGenerator = d3.histogram()
-                    .domain([d3.min(data, (d) => d[xCol]), d3.max(data, (d) => d[xCol]) + 1])
+                    .domain(xScale.domain())
                     .thresholds(10);
 
-                const histData = histogramGenerator(data.map(d => d[xCol])).map(bin => {
+                const histData = histogramGenerator(numericData.map(d => d[xCol])).map(bin => {
                     return {
                         x0: bin.x0,
                         x1: bin.x1,
@@ -67,12 +88,9 @@ class ScatterplotMatrixView{
                     
                 const tooltip = d3.select("#tooltip");
     
-                const xScale = d3
-                    .scaleLinear()
-                    .domain([d3.min(data, (d) => d[xCol]), d3.max(data, (d) => d[xCol])])
-                    .range([0, this.size]);
-    
-                const yScale = d3.scaleLinear().domain([0, d3.max(histData, (d) => d.length)]).range([this.size, 0]);
+                const yScale = d3.scaleLinear()
+                    .domain([0, d3.max(histData, (d) => d.length)])
+                    .range([this.size, 0]);
     
                 cellGroup.selectAll("rect")
                     .data(histData)
@@ -99,6 +117,56 @@ class ScatterplotMatrixView{
                         d3.select(this).attr("fill", "steelblue");
                         tooltip.style("display", "none");
                     });
+
+                // let binIndex = 0;
+                // nonNumericGroups.forEach((group,key) => {
+                //     let binData = {
+                //         label: key, 
+                //         length: group.length,
+                //         ids: group.map(d => d.id) 
+                //     };
+
+                let nanBinData = {
+                    x0: this.size,  
+                    x1: this.size + 40,  
+                    length: nonNumericData.length,
+                    ids: nonNumericData.map(d => d.id) 
+                };
+
+                cellGroup.append("rect")
+                    .attr("class", "bar nan")
+                    .attr("x", nanBinData.x0)
+                    .attr("y", yScale(nanBinData.length))
+                    .attr("width", 20)
+                    .attr("height", this.size - yScale(nanBinData.length))
+                    .attr("fill", "steelblue")                    
+                    .attr("opacity", 0.8)
+                    .attr("data-ids", nanBinData.ids.join(","))
+                    .on("mouseover", function(event, d) {
+                        d3.select(this).attr("fill", "orange");
+                        tooltip.style("display", "block")
+                            .html(`<strong>NaN Count:</strong> ${nanBinData.length}`)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function(event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function() {
+                        d3.select(this).attr("fill", "steelblue");
+                        tooltip.style("display", "none");
+                    });
+
+                cellGroup.append("text")
+                        .attr("x", nanBinData.x0 + 20)
+                        .attr("y", this.size + 15)
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "12px")
+                        .text("Nan");
+
+                //         binIndex++;
+                // });
             
                 cellGroup
                     .append("g")
@@ -255,7 +323,7 @@ class ScatterplotMatrixView{
                         return isSelected ? "red" : "steelblue";
                     })  
                     .attr("opacity", 0.8)
-                    .attr("data-ids", d => d.ids.join(",")) // Attach IDs as a data attribute
+                    .attr("data-ids", d => d.ids.join(",")) 
                     .on("click", (event, d) => handleBarClick(event, d, xCol));
                     // .on("mouseover", function(event, d) {
                     //     d3.select(this).attr("fill", "orange");
