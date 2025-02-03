@@ -64,10 +64,8 @@ class ScatterplotMatrixView{
             if (i === j) {
                 const data = givenData.select(["id", xCol]).objects();
 
-                const numericData = data.filter(d => !isNaN(d[xCol]));
-                const nonNumericData = data.filter(d => isNaN(d[xCol]));
-
-                // let nonNumericGroups = d3.group(nonNumericData, d => d[xCol]);
+                const numericData = data.filter(d => !isNaN(d[xCol])); //isNumber()
+                const nonNumericData = data.filter(d => isNaN(d[xCol])); //Convert all other types to strings. Use scaleOrdinal. Order the set.
 
                 const xScale = d3.scaleLinear()
                     .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
@@ -212,7 +210,7 @@ class ScatterplotMatrixView{
                 //     .domain(d3.extent(data, (d) => d[yCol]))
                 //     .range([this.size, 0]);
     
-                cellGroup
+                cellGroup                           //Outline nan circles to pop or make them bigger
                     .selectAll("circle.numeric")
                     .data(numericData)
                     .join("circle")
@@ -382,9 +380,9 @@ class ScatterplotMatrixView{
                 .append("g")
                 .attr("transform", `translate(${this.leftMargin + j * (this.size + this.padding)}, ${this.topMargin + i * (this.size + this.padding)})`); 
     
-            const brush = d3.brush()
-                .extent([[0, 0], [this.size, this.size]]) 
-                .on("start brush end", (event) => handleBrush(event, this.xScale, this.yScale, xCol, yCol));  
+            // const brush = d3.brush()
+            //     .extent([[0, 0], [this.size, this.size]]) 
+            //     .on("start brush end", (event) => handleBrush(event, this.xScale, this.yScale, xCol, yCol));  
 
             if (i === j) {
                 
@@ -450,6 +448,15 @@ class ScatterplotMatrixView{
                     length: nonNumericData.length,
                     ids: nonNumericData.map(d => d.id) 
                 };
+
+                // const nanBinData = histogramGenerator(nonNumericData.map(d => d[xCol])).map(bin => {
+                //     return {
+                //         x0: bin.x0,
+                //         x1: bin.x1,
+                //         length: bin.length,
+                //         ids: nonNumericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.id)
+                //     };
+                // });
 
                 cellGroup.append("rect")
                     .attr("class", "bar nan")
