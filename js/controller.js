@@ -14,17 +14,43 @@ class ScatterplotController {
   
     handleBrush(event, xScale, yScale, xCol, yCol) {
         const selection = event.selection;
+
+        const nanXPosition = 190; 
+        const nanYPosition = 15; 
+
         if (!selection) return; 
 
         if (selection) {
             const [[x0, y0], [x1, y1]] = selection;
 
+            // const selectedPoints = this.model.getData().objects().filter(d => {
+            //     if (isNaN(d[xCol]) || isNaN(d[yCol])) return true; //New for selecting Nans
+            //     const x = this.view.xScale(d[xCol]);
+            //     const y = this.view.yScale(d[yCol]);
+            //     // console.log(d);
+            //     return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+            // });
+
             const selectedPoints = this.model.getData().objects().filter(d => {
-                const x = this.view.xScale(d[xCol]);
-                const y = this.view.yScale(d[yCol]);
-                // console.log(d);
-                return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+                let xPos, yPos;
+    
+                if (isNaN(d[xCol]) && isNaN(d[yCol])) {
+                    xPos = nanXPosition;
+                    yPos = nanYPosition;
+                } else if (isNaN(d[xCol])) {
+                    xPos = nanXPosition;
+                    yPos = this.view.yScale(d[yCol]);
+                } else if (isNaN(d[yCol])) {
+                    xPos = this.view.xScale(d[xCol]);
+                    yPos = nanYPosition;
+                } else {
+                    xPos = this.view.xScale(d[xCol]);
+                    yPos = this.view.yScale(d[yCol]);
+                }
+    
+                return xPos >= x0 && xPos <= x1 && yPos >= y0 && yPos <= y1;
             });
+
             console.log(selectedPoints);
 
             // d3.selectAll("circle")
