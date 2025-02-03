@@ -111,4 +111,27 @@ class ScatterplotController {
         });
 
         d3.select("#remove-selected-data").on("click", () => {
-       
+        const selectedPoints = this.model.getSelectedPoints();
+        this.model.filterData((row) => !selectedPoints.some((point) => point.id === row.id));
+        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        });
+
+        d3.select("#impute-average").on("click", () => {
+        this.model.imputeAverage("age"); 
+        this.render();
+        });
+
+        const radioButtons = document.querySelectorAll("input[name='options']");
+
+        radioButtons.forEach((radio) => {
+            radio.addEventListener("change", (event) => {
+                if (event.target.value === "selectData" && event.target.checked) {
+                    console.log("selected");
+                    this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this)); 
+                } else {
+                    this.render();
+                }
+            });
+        });
+    }
+  }
