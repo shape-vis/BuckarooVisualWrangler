@@ -16,7 +16,7 @@ class ScatterplotController {
         const selection = event.selection;
 
         const nanXPosition = 190; 
-        const nanYPosition = 15; 
+        const nanYPosition = -15; 
 
         if (!selection) return; 
 

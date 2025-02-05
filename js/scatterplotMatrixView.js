@@ -83,6 +83,16 @@ class ScatterplotMatrixView{
                         ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.id)
                     };
                 });
+
+                if (nonNumericData.length > 0) {
+                    histData.push({
+                        x0: this.size,  
+                        x1: this.size + 40,  
+                        length: nonNumericData.length,
+                        ids: nonNumericData.map(d => d.id),
+                        isNan: true  
+                    });
+                }
                     
                 const tooltip = d3.select("#tooltip");
     
@@ -93,17 +103,21 @@ class ScatterplotMatrixView{
                 cellGroup.selectAll("rect")
                     .data(histData)
                     .join("rect")
-                    .attr("x", (d) => xScale(d.x0))
-                    .attr("width", (d) => xScale(d.x1) - xScale(d.x0))
+                    .attr("x", (d) => d.isNan ? d.x0 : xScale(d.x0))
+                    .attr("width", (d) => d.isNan ? 20 : xScale(d.x1) - xScale(d.x0))
                     .attr("y", (d) => yScale(d.length))
                     .attr("height", (d) => this.size - yScale(d.length))
-                    .attr("fill", "steelblue")                    
+                    .attr("fill", (d) => d.isNan ? "gray" : "steelblue") 
+                    .attr("stroke", d => (d.isNan ? "red" : "none")) 
+                    .attr("stroke-width", d => (d.isNan ? 1 : 0))  
                     .attr("opacity", 0.8)
                     .attr("data-ids", d => d.ids.join(","))
                     .on("mouseover", function(event, d) {
                         d3.select(this).attr("fill", "orange");
                         tooltip.style("display", "block")
-                            .html(`<strong>bin range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>count:</strong> ${d.length}`)
+                            .html(d.isNan
+                                ? `<strong>NaN Count:</strong> ${d.length}`
+                                : `<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count:</strong> ${d.length}`)
                             .style("left", `${event.pageX + 10}px`)
                             .style("top", `${event.pageY + 10}px`);
                     })
@@ -112,60 +126,17 @@ class ScatterplotMatrixView{
                             .style("top", `${event.pageY + 10}px`);
                     })
                     .on("mouseout", function() {
-                        d3.select(this).attr("fill", "steelblue");
-                        tooltip.style("display", "none");
-                    });
-
-                // let binIndex = 0;
-                // nonNumericGroups.forEach((group,key) => {
-                //     let binData = {
-                //         label: key, 
-                //         length: group.length,
-                //         ids: group.map(d => d.id) 
-                //     };
-
-                let nanBinData = {
-                    x0: this.size,  
-                    x1: this.size + 40,  
-                    length: nonNumericData.length,
-                    ids: nonNumericData.map(d => d.id) 
-                };
-
-                cellGroup.append("rect")
-                    .attr("class", "bar nan")
-                    .attr("x", nanBinData.x0)
-                    .attr("y", yScale(nanBinData.length))
-                    .attr("width", 20)
-                    .attr("height", this.size - yScale(nanBinData.length))
-                    .attr("fill", "gray")                    
-                    .attr("opacity", 0.6)
-                    .attr("data-ids", nanBinData.ids.join(","))
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).attr("fill", "orange");
-                        tooltip.style("display", "block")
-                            .html(`<strong>NaN Count:</strong> ${nanBinData.length}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function(event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function() {
-                        d3.select(this).attr("fill", "gray");
+                        d3.select(this).attr("fill", (d) => d.isNan ? "gray" : "steelblue");
                         tooltip.style("display", "none");
                     });
 
                 cellGroup.append("text")
-                    .attr("x", nanBinData.x0 + 20)
+                    .attr("x", this.size + 20)
                     .attr("y", this.size + 15)
                     .attr("text-anchor", "middle")
                     .style("font-size", "12px")
                     .text("Nan");
 
-                //         binIndex++;
-                // });
-            
                 cellGroup
                     .append("g")
                     .attr("transform", `translate(0, ${this.size})`)
@@ -199,7 +170,51 @@ class ScatterplotMatrixView{
                 let nonNumericYData = data.filter(d => !isNaN(d[xCol]) && isNaN(d[yCol])); 
                 let nonNumericData = data.filter(d => isNaN(d[xCol]) && isNaN(d[yCol]));
 
+                const combinedData = [
+                    ...numericData.map(d => ({ ...d, type: "numeric" })),
+                    ...nonNumericXData.map(d => ({ ...d, type: "nan-x" })),
+                    ...nonNumericYData.map(d => ({ ...d, type: "nan-y" })),
+                    ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
+                ];
+
                 const tooltip = d3.select("#tooltip");
+
+                const nanXPosition = this.size + 15; 
+                const nanYPosition = this.size - (this.size + 15); 
+
+                cellGroup.selectAll("circle")
+                    .data(combinedData)
+                    .join("circle")
+                    .attr("cx", d => {
+                        if (d.type === "numeric") return this.xScale(d[xCol]);
+                        if (d.type === "nan-x" || d.type === "nan-xy") return nanXPosition;
+                        return this.xScale(d[xCol]); 
+                    })
+                    .attr("cy", d => {
+                        if (d.type === "numeric") return this.yScale(d[yCol]);
+                        if (d.type === "nan-y" || d.type === "nan-xy") return nanYPosition;
+                        return this.yScale(d[yCol]);
+                    })
+                    .attr("r", d => (d.type.includes("nan") ? 4 : 3))
+                    .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
+                    .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
+                    .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
+                    .attr("opacity", 0.8)
+                    .on("mouseover", function(event, d) {
+                        d3.select(this).attr("fill", "orange");
+                        tooltip.style("display", "block")
+                            .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function(event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function() {
+                        d3.select(this).attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"));
+                        tooltip.style("display", "none");
+                    });
     
                 // const xScale = d3
                 //     .scaleLinear()
@@ -209,109 +224,6 @@ class ScatterplotMatrixView{
                 //     .scaleLinear()
                 //     .domain(d3.extent(data, (d) => d[yCol]))
                 //     .range([this.size, 0]);
-    
-                cellGroup                           //Outline nan circles to pop or make them bigger
-                    .selectAll("circle.numeric")
-                    .data(numericData)
-                    .join("circle")
-                    .attr("cx", (d) => this.xScale(d[xCol]))
-                    .attr("cy", (d) => this.yScale(d[yCol]))
-                    .attr("r", 3)
-                    .attr("fill", "steelblue")
-                    .attr("opacity", 0.8)
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).attr("fill", "orange");
-                        tooltip.style("display", "block")
-                            .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function(event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function() {
-                        d3.select(this).attr("fill", "steelblue");
-                        tooltip.style("display", "none");
-                    });
-
-                const nanXPosition = this.size + 15; 
-                const nanYPosition = this.size - (this.size + 15); 
-
-                cellGroup
-                    .selectAll("circle.nan-x")
-                    .data(nonNumericXData)
-                    .join("circle")
-                    .attr("cx", nanXPosition) 
-                    .attr("cy", d => this.yScale(d[yCol]))
-                    .attr("r", 3)
-                    .attr("fill", "gray")
-                    .attr("opacity", 0.8)
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).attr("fill", "orange");
-                        tooltip.style("display", "block")
-                            .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function(event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function() {
-                        d3.select(this).attr("fill", "gray");
-                        tooltip.style("display", "none");
-                    });
-
-                cellGroup
-                    .selectAll("circle.nan-y")
-                    .data(nonNumericYData)
-                    .join("circle")
-                    .attr("cx", d => this.xScale(d[xCol])) 
-                    .attr("cy", nanYPosition)
-                    .attr("r", 3)
-                    .attr("fill", "gray")
-                    .attr("opacity", 0.8)
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).attr("fill", "orange");
-                        tooltip.style("display", "block")
-                            .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function(event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function() {
-                        d3.select(this).attr("fill", "gray");
-                        tooltip.style("display", "none");
-                    });
-                
-                cellGroup
-                    .selectAll("circle.nan-xy")
-                    .data(nonNumericData)
-                    .join("circle")
-                    .attr("cx", nanXPosition) 
-                    .attr("cy", nanYPosition) 
-                    .attr("r", 3)
-                    .attr("fill", "gray")
-                    .attr("opacity", 0.8)
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).attr("fill", "orange");
-                        tooltip.style("display", "block")
-                            .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function(event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function() {
-                        d3.select(this).attr("fill", "gray");
-                        tooltip.style("display", "none");
-                    });
     
                 cellGroup
                     .append("g")
@@ -407,6 +319,16 @@ class ScatterplotMatrixView{
                         ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.id)
                     };
                 });
+
+                if (nonNumericData.length > 0) {
+                    histData.push({
+                        x0: this.size,  
+                        x1: this.size + 40,  
+                        length: nonNumericData.length,
+                        ids: nonNumericData.map(d => d.id),
+                        isNan: true  // Custom flag for NaN values
+                    });
+                }
     
                 const tooltip = d3.select("#tooltip");
     
@@ -415,16 +337,18 @@ class ScatterplotMatrixView{
                 const bars = cellGroup.selectAll("rect")
                     .data(histData)
                     .join("rect")
-                    .attr("x", (d) => xScale(d.x0))
-                    .attr("width", (d) => xScale(d.x1) - xScale(d.x0))
+                    .attr("x", (d) => d.isNan ? d.x0 : xScale(d.x0))
+                    .attr("width", (d) => d.isNan ? 20 : xScale(d.x1) - xScale(d.x0))
                     .attr("y", (d) => yScale(d.length))
                     .attr("height", (d) => this.size - yScale(d.length))
-                    .attr("fill", d => {
+                    .attr("fill", (d) => {
                         const isSelected = d.ids.some(id => this.selectedPoints.some(p => p.id === id));
-                        return isSelected ? "red" : "steelblue";
-                    })  
+                        return isSelected ? "red" : (d.isNan ? "gray" : "steelblue");
+                    })
+                    .attr("stroke", d => (d.isNan ? "red" : "none")) 
+                    .attr("stroke-width", d => (d.isNan ? 1 : 0))  
                     .attr("opacity", 0.8)
-                    .attr("data-ids", d => d.ids.join(",")) 
+                    .attr("data-ids", d => d.ids.join(","))
                     .on("click", (event, d) => handleBarClick(event, d, xCol));
                     // .on("mouseover", function(event, d) {
                     //     d3.select(this).attr("fill", "orange");
@@ -442,55 +366,8 @@ class ScatterplotMatrixView{
                     //     tooltip.style("display", "none");
                     // });
 
-                let nanBinData = {
-                    x0: this.size,  
-                    x1: this.size + 40,  
-                    length: nonNumericData.length,
-                    ids: nonNumericData.map(d => d.id) 
-                };
-
-                // const nanBinData = histogramGenerator(nonNumericData.map(d => d[xCol])).map(bin => {
-                //     return {
-                //         x0: bin.x0,
-                //         x1: bin.x1,
-                //         length: bin.length,
-                //         ids: nonNumericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.id)
-                //     };
-                // });
-
-                cellGroup.append("rect")
-                    .attr("class", "bar nan")
-                    .attr("x", nanBinData.x0)
-                    .attr("y", yScale(nanBinData.length))
-                    .attr("width", 20)
-                    .attr("height", this.size - yScale(nanBinData.length))
-                    .attr("fill", "gray")
-                    // .attr("fill", d => {
-                    //     const isSelected = d.ids.some(id => this.selectedPoints.some(p => p.id === id));
-                    //     return isSelected ? "red" : "gray";
-                    // })                    
-                    .attr("opacity", 0.6)
-                    .attr("data-ids", nanBinData.ids.join(","));
-                    // .on("click", (event, d) => handleBarClick(event, d, xCol));
-
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>NaN Count:</strong> ${nanBinData.length}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "gray");
-                    //     tooltip.style("display", "none");
-                    // });
-
                 cellGroup.append("text")
-                        .attr("x", nanBinData.x0 + 20)
+                        .attr("x", this.size + 20)
                         .attr("y", this.size + 15)
                         .attr("text-anchor", "middle")
                         .style("font-size", "12px")
@@ -529,6 +406,13 @@ class ScatterplotMatrixView{
                 let nonNumericYData = data.filter(d => !isNaN(d[xCol]) && isNaN(d[yCol])); 
                 let nonNumericData = data.filter(d => isNaN(d[xCol]) && isNaN(d[yCol]));
 
+                const combinedData = [
+                    ...numericData.map(d => ({ ...d, type: "numeric" })),
+                    ...nonNumericXData.map(d => ({ ...d, type: "nan-x" })),
+                    ...nonNumericYData.map(d => ({ ...d, type: "nan-y" })),
+                    ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
+                ];
+
                 const tooltip = d3.select("#tooltip");
 
                 const isSelected = (d) => this.selectedPoints.some(p => 
@@ -547,84 +431,30 @@ class ScatterplotMatrixView{
                 //     .range([this.size, 0]);
 
                 const brush = d3.brush()
-                    .extent([[-20, -20], [this.size + 20, this.size + 20]]) 
+                    .extent([[-20, -40], [this.size + 20, this.size + 20]]) 
                     .on("end", (event) => handleBrush(event, this.xScale, this.yScale, xCol, yCol));  
-                    
-                // cellGroup
-                //     .selectAll("circle")
-                //     .data(data)
-                //     .join("circle")
-                //     .attr("cx", (d) => this.xScale(d[xCol]))
-                //     .attr("cy", (d) => this.yScale(d[yCol]))
-                //     .attr("r", 3)
-                //     .attr("fill", (d) => {
-                //         const isSelected = this.selectedPoints.some(p => 
-                //             p[xCol] === d[xCol] && p[yCol] === d[yCol]
-                //         );
-                //         return isSelected ? "red" : "steelblue"; 
-                //     })                    
-                //     .attr("opacity", 0.8);
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "steelblue");
-                    //     tooltip.style("display", "none");
-                    // });
-
-                cellGroup
-                    .selectAll("circle.numeric")
-                    .data(numericData)
-                    .join("circle")
-                    .attr("cx", (d) => this.xScale(d[xCol]))
-                    .attr("cy", (d) => this.yScale(d[yCol]))
-                    .attr("r", 3)
-                    .attr("fill", "steelblue")
-                    .attr("opacity", 0.8)
-                    .attr("fill", d => isSelected(d) ? "red" : "steelblue");
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "steelblue");
-                    //     tooltip.style("display", "none");
-                    // });
 
                 const nanXPosition = this.size + 15; 
                 const nanYPosition = this.size - (this.size + 15); 
 
-                cellGroup
-                    .selectAll("circle.nan-x")
-                    .data(nonNumericXData)
+                cellGroup.selectAll("circle")
+                    .data(combinedData)
                     .join("circle")
-                    .attr("cx", nanXPosition) 
-                    .attr("cy", d => this.yScale(d[yCol]))
-                    .attr("r", 3)
-                    .attr("fill", "gray")
-                    .attr("opacity", 0.8)
-                    .attr("fill", d => isSelected(d) ? "red" : "gray");
-                    // .attr("fill", (d) => {
-                    //     const isSelected = this.selectedPoints.some(p => 
-                    //         p[xCol] === d[xCol] && p[yCol] === d[yCol]
-                    //     );
-                    //     return isSelected ? "red" : "gray"; 
-                    // });
+                    .attr("cx", d => {
+                        if (d.type === "numeric") return this.xScale(d[xCol]);
+                        if (d.type === "nan-x" || d.type === "nan-xy") return nanXPosition;
+                        return this.xScale(d[xCol]);
+                    })
+                    .attr("cy", d => {
+                        if (d.type === "numeric") return this.yScale(d[yCol]);
+                        if (d.type === "nan-y" || d.type === "nan-xy") return nanYPosition;
+                        return this.yScale(d[yCol]); 
+                    })
+                    .attr("r", d => (d.type.includes("nan") ? 4 : 3))
+                    .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
+                    .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
+                    .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
+                    .attr("opacity", 0.8);
                     // .on("mouseover", function(event, d) {
                     //     d3.select(this).attr("fill", "orange");
                     //     tooltip.style("display", "block")
@@ -637,62 +467,10 @@ class ScatterplotMatrixView{
                     //         .style("top", `${event.pageY + 10}px`);
                     // })
                     // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "gray");
+                    //     d3.select(this).attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"));
                     //     tooltip.style("display", "none");
                     // });
-
-                cellGroup
-                    .selectAll("circle.nan-y")
-                    .data(nonNumericYData)
-                    .join("circle")
-                    .attr("cx", d => this.xScale(d[xCol])) 
-                    .attr("cy", nanYPosition)
-                    .attr("r", 3)
-                    .attr("fill", "gray")
-                    .attr("opacity", 0.8)
-                    .attr("fill", d => isSelected(d) ? "red" : "gray");
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "gray");
-                    //     tooltip.style("display", "none");
-                    // });
-                
-                cellGroup
-                    .selectAll("circle.nan-xy")
-                    .data(nonNumericData)
-                    .join("circle")
-                    .attr("cx", nanXPosition) 
-                    .attr("cy", nanYPosition) 
-                    .attr("r", 3)
-                    .attr("fill", "gray")
-                    .attr("opacity", 0.8)
-                    .attr("fill", d => isSelected(d) ? "red" : "gray");
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "gray");
-                    //     tooltip.style("display", "none");
-                    // });
-    
+                    
                 cellGroup
                     .append("g")
                     .attr("transform", `translate(0, ${this.size})`)
