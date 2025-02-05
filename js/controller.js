@@ -51,7 +51,7 @@ class ScatterplotController {
                 return xPos >= x0 && xPos <= x1 && yPos >= y0 && yPos <= y1;
             });
 
-            console.log(selectedPoints);
+            console.log("Scatter points:", selectedPoints);
 
             // d3.selectAll("circle")
             //     .classed("selected", d => {
@@ -80,6 +80,8 @@ class ScatterplotController {
   
     handleBarClick(event, barData, column) {
         const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.id));
+
+        console.log("Selected bar points:", selectedPoints);
 
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
@@ -129,9 +131,4 @@ class ScatterplotController {
                     console.log("selected");
                     this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this)); 
                 } else {
-                    this.render();
-                }
-            });
-        });
-    }
-  }
+        
