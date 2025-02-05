@@ -131,4 +131,9 @@ class ScatterplotController {
                     console.log("selected");
                     this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this)); 
                 } else {
-        
+                    this.render();
+                }
+            });
+        });
+    }
+  }
