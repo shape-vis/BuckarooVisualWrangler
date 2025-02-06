@@ -6,7 +6,7 @@ class ScatterplotMatrixView{
     constructor(container) {
         this.container = container;
 
-        this.size = 175; // Size of each cell in matrix
+        this.size = 180; // Size of each cell in matrix
         this.padding = 60;
         this.labelPadding = 20;
 
@@ -33,16 +33,6 @@ class ScatterplotMatrixView{
         let columns = givenData.columnNames().slice(1);
         let matrixSize = columns.length * this.size + (columns.length - 1) * this.padding; // 3 * 175 + (2) * 25 = 575
 
-        // let nonNumericCounts = columns.map(col => {
-        //     let nonNumericData = givenData.select([col]).objects().filter(d => isNaN(d[col]));
-        //     let uniqueValues = new Set(nonNumericData.map(d => d[col]));
-        //     return uniqueValues.size;
-        // });
-    
-        // let maxNonNumericBins = Math.max(...nonNumericCounts); // Find the max needed bins
-        // let extraWidth = maxNonNumericBins * 30; // Adjust width dynamically per extra bin
-        // this.rightMargin = Math.max(100, extraWidth + 20); // Ensure minimum spacing
-
         let svgWidth = matrixSize + this.labelPadding + this.leftMargin + this.rightMargin;
         let svgHeight = matrixSize + this.labelPadding + this.topMargin + this.bottomMargin;
 
@@ -64,12 +54,26 @@ class ScatterplotMatrixView{
             if (i === j) {
                 const data = givenData.select(["id", xCol]).objects();
 
-                const numericData = data.filter(d => !isNaN(d[xCol])); //isNumber()
-                const nonNumericData = data.filter(d => isNaN(d[xCol])); //Convert all other types to strings. Use scaleOrdinal. Order the set.
+                // const numericData = data.filter(d => !isNaN(d[xCol])); //isNumber()
+                // const nonNumericData = data.filter(d => isNaN(d[xCol])); //Convert all other types to strings. Use scaleOrdinal. Order the set.
+                const numericData = data.filter(d => 
+                    typeof d[xCol] === "number" && !isNaN(d[xCol])
+                );
+                
+                const nonNumericData = data.filter(d => 
+                    typeof d[xCol] !== "number" || isNaN(d[xCol])
+                ).map(d => ({
+                    ...d,
+                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
+                }));
+                const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
+
+                const categorySpace = uniqueCategories.length * 20; 
+                const numericSpace = this.size - categorySpace; 
 
                 const xScale = d3.scaleLinear()
                     .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
-                    .range([0, this.size]);
+                    .range([0, numericSpace]);
 
                 const histogramGenerator = d3.histogram()
                     .domain(xScale.domain())
@@ -84,39 +88,56 @@ class ScatterplotMatrixView{
                     };
                 });
 
-                if (nonNumericData.length > 0) {
+                const binWidth = xScale(histData[0].x1) - xScale(histData[0].x0);
+                const categoricalStart = xScale.range()[1] + 10;
+
+                const categoricalScale = d3.scaleOrdinal()
+                    .domain(uniqueCategories)
+                    .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
+
+                // if (nonNumericData.length > 0) {
+                //     histData.push({
+                //         x0: this.size,  
+                //         x1: this.size + 40,  
+                //         length: nonNumericData.length,
+                //         ids: nonNumericData.map(d => d.id),
+                //         isNan: true  
+                //     });
+                // }
+
+                uniqueCategories.forEach(category => {
                     histData.push({
-                        x0: this.size,  
-                        x1: this.size + 40,  
-                        length: nonNumericData.length,
-                        ids: nonNumericData.map(d => d.id),
-                        isNan: true  
+                        x0: categoricalScale(category),
+                        x1: categoricalScale(category) + binWidth,
+                        length: nonNumericData.filter(d => String(d[xCol]) === category).length,
+                        ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.id),
+                        category: category 
                     });
-                }
+                });
                     
                 const tooltip = d3.select("#tooltip");
     
                 const yScale = d3.scaleLinear()
                     .domain([0, d3.max(histData, (d) => d.length)])
-                    .range([this.size, 0]);
+                    .range([numericSpace, 0]);
     
                 cellGroup.selectAll("rect")
                     .data(histData)
                     .join("rect")
-                    .attr("x", (d) => d.isNan ? d.x0 : xScale(d.x0))
-                    .attr("width", (d) => d.isNan ? 20 : xScale(d.x1) - xScale(d.x0))
-                    .attr("y", (d) => yScale(d.length))
-                    .attr("height", (d) => this.size - yScale(d.length))
-                    .attr("fill", (d) => d.isNan ? "gray" : "steelblue") 
-                    .attr("stroke", d => (d.isNan ? "red" : "none")) 
-                    .attr("stroke-width", d => (d.isNan ? 1 : 0))  
+                    .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.x0))
+                    .attr("width", binWidth)
+                    .attr("y", d => yScale(d.length))
+                    .attr("height", d => numericSpace - yScale(d.length))
+                    .attr("fill", d => d.category ? "gray" : "steelblue")
+                    .attr("stroke", d => d.category ? "red" : "none")
+                    .attr("stroke-width", d => d.category ? 1 : 0)
                     .attr("opacity", 0.8)
                     .attr("data-ids", d => d.ids.join(","))
                     .on("mouseover", function(event, d) {
                         d3.select(this).attr("fill", "orange");
                         tooltip.style("display", "block")
-                            .html(d.isNan
-                                ? `<strong>NaN Count:</strong> ${d.length}`
+                            .html(d.category
+                                ? `<strong>${d.category} Count:</strong> ${d.length}`
                                 : `<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count:</strong> ${d.length}`)
                             .style("left", `${event.pageX + 10}px`)
                             .style("top", `${event.pageY + 10}px`);
@@ -126,21 +147,50 @@ class ScatterplotMatrixView{
                             .style("top", `${event.pageY + 10}px`);
                     })
                     .on("mouseout", function() {
-                        d3.select(this).attr("fill", (d) => d.isNan ? "gray" : "steelblue");
+                        d3.select(this).attr("fill", (d) => d.category ? "gray" : "steelblue");
                         tooltip.style("display", "none");
                     });
-
-                cellGroup.append("text")
-                    .attr("x", this.size + 20)
-                    .attr("y", this.size + 15)
-                    .attr("text-anchor", "middle")
-                    .style("font-size", "12px")
-                    .text("Nan");
+                    // .attr("x", (d) => d.isNan ? d.x0 : xScale(d.x0))
+                    // .attr("width", (d) => d.isNan ? 20 : xScale(d.x1) - xScale(d.x0))
+                    // .attr("y", (d) => yScale(d.length))
+                    // .attr("height", (d) => this.size - yScale(d.length))
+                    // .attr("fill", (d) => d.isNan ? "gray" : "steelblue") 
+                    // .attr("stroke", d => (d.isNan ? "red" : "none")) 
+                    // .attr("stroke-width", d => (d.isNan ? 1 : 0))  
+                    // .attr("opacity", 0.8)
+                    // .attr("data-ids", d => d.ids.join(","))
+                    // .on("mouseover", function(event, d) {
+                    //     d3.select(this).attr("fill", "orange");
+                    //     tooltip.style("display", "block")
+                    //         .html(d.isNan
+                    //             ? `<strong>NaN Count:</strong> ${d.length}`
+                    //             : `<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count:</strong> ${d.length}`)
+                    //         .style("left", `${event.pageX + 10}px`)
+                    //         .style("top", `${event.pageY + 10}px`);
+                    // })
+                    // .on("mousemove", function(event) {
+                    //     tooltip.style("left", `${event.pageX + 10}px`)
+                    //         .style("top", `${event.pageY + 10}px`);
+                    // })
+                    // .on("mouseout", function() {
+                    //     d3.select(this).attr("fill", (d) => d.isNan ? "gray" : "steelblue");
+                    //     tooltip.style("display", "none");
+                    // });
 
                 cellGroup
                     .append("g")
-                    .attr("transform", `translate(0, ${this.size})`)
+                    .attr("transform", `translate(0, ${numericSpace})`)
                     .call(d3.axisBottom(xScale));
+
+                if (uniqueCategories.length > 0) {
+                    cellGroup.append("g")
+                        .attr("transform", `translate(10, ${numericSpace})`)
+                        .call(d3.axisBottom(categoricalScale))
+                        .selectAll("text")
+                        .style("text-anchor", "end") 
+                        .attr("transform", "rotate(-45)") 
+                        .style("font-size", "10px"); 
+                }
     
                 cellGroup.append("g").call(d3.axisLeft(yScale));
     
@@ -326,7 +376,7 @@ class ScatterplotMatrixView{
                         x1: this.size + 40,  
                         length: nonNumericData.length,
                         ids: nonNumericData.map(d => d.id),
-                        isNan: true  // Custom flag for NaN values
+                        isNan: true  
                     });
                 }
     
