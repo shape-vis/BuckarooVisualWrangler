@@ -45,19 +45,30 @@ class DataModel {
   }
   
   imputeAverage(column) {
-    const columnValues = this.data.array(column).filter((v) => !isNaN(v) && v > 0);
-    const avg = columnValues.length > 0 
-        ? columnValues.reduce((a, b) => a + b, 0) / columnValues.length
-        : 0; 
+    let condition = (d) => selectedIds.has(d.id) ? avg : d[column];
 
+    this.dataStates.push(this.data);
+    this.redoStack = [];
+    this.dataTransformations.push(condition);
+    this.transformationPoints.push(this.selectedPoints);
+
+    console.log("Column: ", column);
+    const columnValues = this.data.array(column).filter((v) => !isNaN(v) && v > 0);
+    console.log("Column values: ", columnValues);
+    const avg = columnValues.length > 0 
+        ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
+        : 0;
+      
+    console.log("Avg: ", avg);
+
+    const selectedIds = new Set(this.selectedPoints.map(p => p.id));
     this.data = this.data.derive({ 
-        [column]: (d) => {
-            const isSelected = this.selectedPoints.some(p => p.id === d.id);
-            return (isSelected && (isNaN(d[column]) || d[column] === 0)) ? avg : d[column];
-        }
+        [column]: aq.escape(condition)
     });
-}
+
+    console.log("Updated data:", this.data.objects());
   
+  }
     setSelectedPoints(points) {
       this.selectedPoints = points;
     }

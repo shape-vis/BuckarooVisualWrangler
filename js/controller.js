@@ -2,6 +2,7 @@ class ScatterplotController {
     constructor(data, container) {
       this.model = new DataModel(data);
       this.view = new ScatterplotMatrixView(container);
+      this.xCol = null;
   
       this.render();
       this.setupEventListeners();
@@ -13,6 +14,7 @@ class ScatterplotController {
     }
   
     handleBrush(event, xScale, yScale, xCol, yCol) {
+        this.xCol = xCol;
         const selection = event.selection;
 
         const nanXPosition = 190; 
@@ -79,6 +81,7 @@ class ScatterplotController {
     }
   
     handleBarClick(event, barData, column) {
+        this.xCol = column;
         const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.id));
 
         console.log("Selected bar points:", selectedPoints);
@@ -119,8 +122,9 @@ class ScatterplotController {
         });
 
         d3.select("#impute-average").on("click", () => {
-        this.model.imputeAverage("age"); 
-        this.render();
+        this.model.imputeAverage(this.xCol); 
+        this.view.setSelectedPoints([]);
+        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
         });
 
         const radioButtons = document.querySelectorAll("input[name='options']");
