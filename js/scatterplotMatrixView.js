@@ -215,10 +215,31 @@ class ScatterplotMatrixView{
             else {
                 const data = givenData.select([xCol, yCol]).objects(); 
 
-                let numericData = data.filter(d => !isNaN(d[xCol]) && !isNaN(d[yCol]));
-                let nonNumericXData = data.filter(d => isNaN(d[xCol]) && !isNaN(d[yCol])); 
-                let nonNumericYData = data.filter(d => !isNaN(d[xCol]) && isNaN(d[yCol])); 
-                let nonNumericData = data.filter(d => isNaN(d[xCol]) && isNaN(d[yCol]));
+                const numericData = data.filter(d => 
+                    typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+                );
+                
+                const nonNumericXData = data.filter(d => 
+                    (typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+                ).map(d => ({
+                    ...d,
+                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] // Convert booleans to strings
+                }));
+                
+                const nonNumericYData = data.filter(d => 
+                    typeof d[xCol] === "number" && !isNaN(d[xCol]) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+                ).map(d => ({
+                    ...d,
+                    [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] // Convert booleans to strings
+                }));
+                
+                const nonNumericData = data.filter(d => 
+                    (typeof d[xCol] !== "number" || isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+                ).map(d => ({
+                    ...d,
+                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol],
+                    [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol]
+                }));
 
                 const combinedData = [
                     ...numericData.map(d => ({ ...d, type: "numeric" })),
@@ -227,23 +248,55 @@ class ScatterplotMatrixView{
                     ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
                 ];
 
+                // Extract unique non-numeric categories
+                const uniqueXCategories = [...new Set(nonNumericXData.map(d => String(d[xCol])))];
+                const uniqueYCategories = [...new Set(nonNumericYData.map(d => String(d[yCol])))];
+
+                console.log("X Cat: ", uniqueXCategories);
+                console.log("Y Cat: ", uniqueYCategories);
+
+                // Extend space for categorical variables
+                const categorySpace = 40 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
+                const numericSpace = this.size - categorySpace;
+
+                // X Scale
+                const xScale = d3.scaleLinear()
+                    .domain([d3.min(numericData, d => d[xCol]), d3.max(numericData, d => d[xCol]) + 1])
+                    .range([0, numericSpace]);
+
+                const categoricalXStart = xScale.range()[1] + 10;
+                const categoricalXScale = d3.scaleOrdinal()
+                    .domain(uniqueXCategories)
+                    .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * 40))); 
+
+                // Y Scale
+                const yScale = d3.scaleLinear()
+                    .domain([d3.min(numericData, d => d[yCol]), d3.max(numericData, d => d[yCol]) + 1])
+                    .range([numericSpace, 0]);
+
+                const categoricalYStart = yScale.range()[0] - 10;
+                const categoricalYScale = d3.scaleOrdinal()
+                    .domain(uniqueYCategories)
+                    .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * 40)));
+                    
+
                 const tooltip = d3.select("#tooltip");
 
-                const nanXPosition = this.size + 15; 
-                const nanYPosition = this.size - (this.size + 15); 
+                // const nanXPosition = this.size + 15; 
+                // const nanYPosition = this.size - (this.size + 15); 
 
                 cellGroup.selectAll("circle")
                     .data(combinedData)
                     .join("circle")
                     .attr("cx", d => {
-                        if (d.type === "numeric") return this.xScale(d[xCol]);
-                        if (d.type === "nan-x" || d.type === "nan-xy") return nanXPosition;
-                        return this.xScale(d[xCol]); 
+                        if (d.type === "numeric") return xScale(d[xCol]);
+                        if (d.type === "nan-x" || d.type === "nan-xy") return categoricalXScale(d[xCol]);
+                        return xScale(d[xCol]); 
                     })
                     .attr("cy", d => {
-                        if (d.type === "numeric") return this.yScale(d[yCol]);
-                        if (d.type === "nan-y" || d.type === "nan-xy") return nanYPosition;
-                        return this.yScale(d[yCol]);
+                        if (d.type === "numeric") return yScale(d[yCol]);
+                        if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
+                        return yScale(d[yCol]);
                     })
                     .attr("r", d => (d.type.includes("nan") ? 4 : 3))
                     .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
@@ -266,21 +319,32 @@ class ScatterplotMatrixView{
                         tooltip.style("display", "none");
                     });
     
-                // const xScale = d3
-                //     .scaleLinear()
-                //     .domain(d3.extent(data, (d) => d[xCol]))
-                //     .range([0, this.size]);
-                // const yScale = d3
-                //     .scaleLinear()
-                //     .domain(d3.extent(data, (d) => d[yCol]))
-                //     .range([this.size, 0]);
-    
+                // Draw axes
                 cellGroup
-                    .append("g")
-                    .attr("transform", `translate(0, ${this.size})`)
-                    .call(d3.axisBottom(this.xScale));
-    
-                cellGroup.append("g").call(d3.axisLeft(this.yScale));
+                .append("g")
+                .attr("transform", `translate(0, ${numericSpace})`)
+                .call(d3.axisBottom(xScale));
+
+                if (uniqueXCategories.length > 0) {
+                cellGroup.append("g")
+                    .attr("transform", `translate(10, ${numericSpace})`)
+                    .call(d3.axisBottom(categoricalXScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end") 
+                    .attr("transform", "rotate(-45)") 
+                    .style("font-size", "10px"); 
+                }
+
+                cellGroup.append("g").call(d3.axisLeft(yScale));
+
+                if (uniqueYCategories.length > 0) {
+                cellGroup.append("g")
+                    .attr("transform", `translate(${categoricalYStart}, 0)`)
+                    .call(d3.axisLeft(categoricalYScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end") 
+                    .style("font-size", "10px"); 
+                }
     
                 svg
                     .append("text")
@@ -300,21 +364,21 @@ class ScatterplotMatrixView{
                     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                     .text(yCol);
 
-                cellGroup
-                    .append("text")
-                    .attr("x", this.size + 22)
-                    .attr("y", this.size + 16)
-                    .style("font-size", "12px")
-                    .attr("text-anchor", "middle")
-                    .text("Nan");
+                // cellGroup
+                //     .append("text")
+                //     .attr("x", this.size + 22)
+                //     .attr("y", this.size + 16)
+                //     .style("font-size", "12px")
+                //     .attr("text-anchor", "middle")
+                //     .text("Nan");
 
-                cellGroup.append("text")
-                    .attr("x", -22) 
-                    .attr("y", 5) 
-                    .attr("text-anchor", "middle")
-                    .attr("transform", `rotate(-90, -30, -10)`) 
-                    .style("font-size", "12px")
-                    .text("Nan");
+                // cellGroup.append("text")
+                //     .attr("x", -22) 
+                //     .attr("y", 5) 
+                //     .attr("text-anchor", "middle")
+                //     .attr("transform", `rotate(-90, -30, -10)`) 
+                //     .style("font-size", "12px")
+                //     .text("Nan");
                 }
             });
         });
@@ -605,4 +669,3 @@ class ScatterplotMatrixView{
     }
 
 }
-
