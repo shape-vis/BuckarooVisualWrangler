@@ -36,6 +36,16 @@ class ScatterplotMatrixView{
         let svgWidth = matrixSize + this.labelPadding + this.leftMargin + this.rightMargin;
         let svgHeight = matrixSize + this.labelPadding + this.topMargin + this.bottomMargin;
 
+        let maxUqNonNum = 0;
+
+        columns.forEach(yCol => {
+            const yValues = givenData.select([yCol]).objects().map(d => d[yCol]);
+            const uniqueNonNumericY = new Set(yValues.filter(val => isNaN(val) || typeof val !== "number"));
+            maxUqNonNum = Math.max(maxUqNonNum, uniqueNonNumericY.size);
+        });
+
+        this.topMargin = 30 + maxUqNonNum * 10; // Increase margin as categorical axis grows
+
         const container = d3.select(this.container);
         container.selectAll("*").remove();
         this.selectedPoints = [];
@@ -66,7 +76,21 @@ class ScatterplotMatrixView{
                     ...d,
                     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
                 }));
-                const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
+
+                // nonNumericData.sort((a, b) => String(a[xCol]).localeCompare(String(b[xCol])));
+
+                const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
+
+                let uniqueCategories;
+                
+                if (numericData.length === data.length)
+                {
+                    uniqueCategories = [];
+                }else{
+                    uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
+                }
+
+                // const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
 
                 const categorySpace = uniqueCategories.length * 20; 
                 const numericSpace = this.size - categorySpace; 
@@ -197,12 +221,12 @@ class ScatterplotMatrixView{
                 svg
                     .append("text")
                     .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2) 
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - 20) 
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace - 25) 
                     .style("text-anchor", "middle")
                     .text(xCol);
     
                 const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = this.topMargin + i * (this.size + this.padding) + this.size / 2; 
+                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
                 
                 svg
                     .append("text")
@@ -215,6 +239,8 @@ class ScatterplotMatrixView{
             else {
                 const data = givenData.select([xCol, yCol]).objects(); 
 
+                console.log("Data: ", data);
+
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
                 );
@@ -223,14 +249,14 @@ class ScatterplotMatrixView{
                     (typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])
                 ).map(d => ({
                     ...d,
-                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] // Convert booleans to strings
+                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
                 }));
                 
                 const nonNumericYData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol]) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
                 ).map(d => ({
                     ...d,
-                    [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] // Convert booleans to strings
+                    [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] 
                 }));
                 
                 const nonNumericData = data.filter(d => 
@@ -248,36 +274,57 @@ class ScatterplotMatrixView{
                     ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
                 ];
 
-                // Extract unique non-numeric categories
-                const uniqueXCategories = [...new Set(nonNumericXData.map(d => String(d[xCol])))];
-                const uniqueYCategories = [...new Set(nonNumericYData.map(d => String(d[yCol])))];
+                const allNonNumericX = [...nonNumericXData, ...nonNumericData].map(d => ({
+                    ...d,
+                    [xCol]: (typeof d[xCol] === "number" && isNaN(d[xCol])) || d[xCol] == null ? "NaN" : String(d[xCol])
+                }));
 
+                const allNonNumericY = [...nonNumericYData, ...nonNumericData].map(d => ({
+                    ...d,
+                    [yCol]: (typeof d[yCol] === "number" && isNaN(d[yCol])) || d[yCol] == null ? "NaN" : String(d[yCol])
+                }));
+
+                const groupedXCategories = d3.group(allNonNumericX, d => d[xCol]);
+                const groupedYCategories = d3.group(allNonNumericY, d => d[yCol]);
+
+                let uniqueXCategories, uniqueYCategories;
+
+                if (numericData.length === data.length)
+                {
+                    uniqueXCategories = [];
+                    uniqueYCategories = [];
+                }else{
+                    uniqueXCategories = ["NaN", ...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+                    uniqueYCategories = ["NaN", ...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+                }
+                
                 console.log("X Cat: ", uniqueXCategories);
                 console.log("Y Cat: ", uniqueYCategories);
 
-                // Extend space for categorical variables
-                const categorySpace = 40 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
+                const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
                 const numericSpace = this.size - categorySpace;
 
-                // X Scale
                 const xScale = d3.scaleLinear()
                     .domain([d3.min(numericData, d => d[xCol]), d3.max(numericData, d => d[xCol]) + 1])
                     .range([0, numericSpace]);
 
+                const xTickValues = xScale.ticks(); // Get tick values
+                const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); // Compute spacing in pixels
+
                 const categoricalXStart = xScale.range()[1] + 10;
                 const categoricalXScale = d3.scaleOrdinal()
                     .domain(uniqueXCategories)
-                    .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * 40))); 
+                    .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
 
                 // Y Scale
                 const yScale = d3.scaleLinear()
                     .domain([d3.min(numericData, d => d[yCol]), d3.max(numericData, d => d[yCol]) + 1])
                     .range([numericSpace, 0]);
 
-                const categoricalYStart = yScale.range()[0] - 10;
+                const categoricalYStart = yScale.range()[1] - 10;
                 const categoricalYScale = d3.scaleOrdinal()
                     .domain(uniqueYCategories)
-                    .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * 40)));
+                    .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
                     
 
                 const tooltip = d3.select("#tooltip");
@@ -319,7 +366,6 @@ class ScatterplotMatrixView{
                         tooltip.style("display", "none");
                     });
     
-                // Draw axes
                 cellGroup
                 .append("g")
                 .attr("transform", `translate(0, ${numericSpace})`)
@@ -327,7 +373,7 @@ class ScatterplotMatrixView{
 
                 if (uniqueXCategories.length > 0) {
                 cellGroup.append("g")
-                    .attr("transform", `translate(10, ${numericSpace})`)
+                    .attr("transform", `translate(0, ${numericSpace})`)
                     .call(d3.axisBottom(categoricalXScale))
                     .selectAll("text")
                     .style("text-anchor", "end") 
@@ -339,22 +385,23 @@ class ScatterplotMatrixView{
 
                 if (uniqueYCategories.length > 0) {
                 cellGroup.append("g")
-                    .attr("transform", `translate(${categoricalYStart}, 0)`)
+                    .attr("transform", `translate(0, 0)`)
                     .call(d3.axisLeft(categoricalYScale))
                     .selectAll("text")
                     .style("text-anchor", "end") 
                     .style("font-size", "10px"); 
                 }
-    
+                
+                console.log(numericSpace);
                 svg
                     .append("text")
                     .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - 20) 
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                     .style("text-anchor", "middle")
                     .text(xCol);
     
                 const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = this.topMargin + i * (this.size + this.padding) + this.size / 2; 
+                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
                 
                 svg
                     .append("text")
@@ -363,22 +410,6 @@ class ScatterplotMatrixView{
                     .style("text-anchor", "middle")
                     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                     .text(yCol);
-
-                // cellGroup
-                //     .append("text")
-                //     .attr("x", this.size + 22)
-                //     .attr("y", this.size + 16)
-                //     .style("font-size", "12px")
-                //     .attr("text-anchor", "middle")
-                //     .text("Nan");
-
-                // cellGroup.append("text")
-                //     .attr("x", -22) 
-                //     .attr("y", 5) 
-                //     .attr("text-anchor", "middle")
-                //     .attr("transform", `rotate(-90, -30, -10)`) 
-                //     .style("font-size", "12px")
-                //     .text("Nan");
                 }
             });
         });
