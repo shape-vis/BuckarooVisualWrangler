@@ -664,4 +664,109 @@ class ScatterplotMatrixView{
                 // Y Scale
                 const yScale = d3.scaleLinear()
                     .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
-      
+                    .range([numericSpace, 0]);
+
+                const categoricalYStart = yScale.range()[1] - 10;
+                const categoricalYScale = d3.scaleOrdinal()
+                    .domain(uniqueYCategories)
+                    .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
+                const tooltip = d3.select("#tooltip");
+
+                const isSelected = (d) => this.selectedPoints.some(p => 
+                    (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                    (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
+                    (p[yCol] === d[yCol] || isNaN(d[yCol]))
+                );
+
+                const brush = d3.brush()
+                    .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
+                    .on("end", (event) => handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol));  
+
+                cellGroup.selectAll("circle")
+                    .data(combinedData)
+                    .join("circle")
+                    .attr("cx", d => {
+                        if (d.type === "numeric") return xScale(d[xCol]);
+                        if (d.type === "nan-x" || d.type === "nan-xy") return categoricalXScale(d[xCol]);
+                        return xScale(d[xCol]); 
+                    })
+                    .attr("cy", d => {
+                        if (d.type === "numeric") return yScale(d[yCol]);
+                        if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
+                        return yScale(d[yCol]);
+                    })
+                    .attr("r", d => (d.type.includes("nan") ? 4 : 3))
+                    .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
+                    .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
+                    .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
+                    .attr("opacity", 0.8);
+                    // .on("mouseover", function(event, d) {
+                    //     d3.select(this).attr("fill", "orange");
+                    //     tooltip.style("display", "block")
+                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
+                    //         .style("left", `${event.pageX + 10}px`)
+                    //         .style("top", `${event.pageY + 10}px`);
+                    // })
+                    // .on("mousemove", function(event) {
+                    //     tooltip.style("left", `${event.pageX + 10}px`)
+                    //         .style("top", `${event.pageY + 10}px`);
+                    // })
+                    // .on("mouseout", function() {
+                    //     d3.select(this).attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"));
+                    //     tooltip.style("display", "none");
+                    // });
+                    
+                cellGroup.append("g")
+                    .attr("class", "brush")  
+                    .call(brush);  
+
+                cellGroup
+                    .append("g")
+                    .attr("transform", `translate(0, ${numericSpace})`)
+                    .call(d3.axisBottom(xScale));
+
+                if (uniqueXCategories.length > 0) {
+                cellGroup.append("g")
+                    .attr("transform", `translate(0, ${numericSpace})`)
+                    .call(d3.axisBottom(categoricalXScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end") 
+                    .attr("transform", "rotate(-45)") 
+                    .style("font-size", "10px"); 
+                }
+
+                cellGroup.append("g").call(d3.axisLeft(yScale));
+
+                if (uniqueYCategories.length > 0) {
+                cellGroup.append("g")
+                    .attr("transform", `translate(0, 0)`)
+                    .call(d3.axisLeft(categoricalYScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end") 
+                    .style("font-size", "10px"); 
+                }
+                
+                console.log(numericSpace);
+                svg
+                    .append("text")
+                    .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                    .style("text-anchor", "middle")
+                    .text(xCol);
+    
+                const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
+                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+                
+                svg
+                    .append("text")
+                    .attr("x", xPosition) 
+                    .attr("y", yPosition) 
+                    .style("text-anchor", "middle")
+                    .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                    .text(yCol);
+            }
+            });
+        });
+    }
+
+}
