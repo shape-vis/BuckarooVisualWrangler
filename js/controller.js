@@ -13,71 +13,62 @@ class ScatterplotController {
         this.view.plotMatrix(this.model.getData());
     }
   
-    handleBrush(event, xScale, yScale, xCol, yCol) {
+    handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
         this.xCol = xCol;
         const selection = event.selection;
 
-        const nanXPosition = 190; 
-        const nanYPosition = -15; 
+        console.log("Selection: ", selection);
 
         if (!selection) return; 
 
-        if (selection) {
-            const [[x0, y0], [x1, y1]] = selection;
+        const [[x0, y0], [x1, y1]] = selection; // Brush selection bounds
 
-            // const selectedPoints = this.model.getData().objects().filter(d => {
-            //     if (isNaN(d[xCol]) || isNaN(d[yCol])) return true; //New for selecting Nans
-            //     const x = this.view.xScale(d[xCol]);
-            //     const y = this.view.yScale(d[yCol]);
-            //     // console.log(d);
-            //     return x >= x0 && x <= x1 && y >= y0 && y <= y1;
-            // });
+        const selectedPoints = this.model.getData().objects().filter(d => {
+            let xPos, yPos;
 
-            const selectedPoints = this.model.getData().objects().filter(d => {
-                let xPos, yPos;
-    
-                if (isNaN(d[xCol]) && isNaN(d[yCol])) {
-                    xPos = nanXPosition;
-                    yPos = nanYPosition;
-                } else if (isNaN(d[xCol])) {
-                    xPos = nanXPosition;
-                    yPos = this.view.yScale(d[yCol]);
-                } else if (isNaN(d[yCol])) {
-                    xPos = this.view.xScale(d[xCol]);
-                    yPos = nanYPosition;
-                } else {
-                    xPos = this.view.xScale(d[xCol]);
-                    yPos = this.view.yScale(d[yCol]);
-                }
-    
-                return xPos >= x0 && xPos <= x1 && yPos >= y0 && yPos <= y1;
-            });
+            if (typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                // Both are numeric
+                xPos = xScale(d[xCol]);
+                yPos = yScale(d[yCol]);
+            } else if ((typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                // x is categorical, y is numeric
+                xPos = categoricalXScale(d[xCol]);
+                yPos = yScale(d[yCol]);
+            } else if ((typeof d[xCol] === "number" && !isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))) {
+                // x is numeric, y is categorical
+                xPos = xScale(d[xCol]);
+                yPos = categoricalYScale(d[yCol]);
+            } else {
+                // Both x and y are categorical
+                xPos = categoricalXScale(d[xCol]);
+                yPos = categoricalYScale(d[yCol]);
+            }
 
-            console.log("Scatter points:", selectedPoints);
+            // Adjust for inverted y-axis in D3
+            return xPos >= x0 && xPos <= x1 && yPos >= y0 && yPos <= y1;
+        });
 
-            // d3.selectAll("circle")
-            //     .classed("selected", d => {
-            //         const cx = this.view.xScale(d[xCol]);
-            //         const cy = this.view.yScale(d[yCol]);
-            //         this.view.brushXCol = xCol;
-            //         this.view.brushYCol = yCol;
-            //         return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-            //     });
+        console.log("Scatter points:", selectedPoints);
 
-            // // Highlight bars
-            // d3.selectAll("rect")
-            //     .classed("selected", d => {
-            //         return selectedPoints.some(p => p[xCol] >= d.x0 && p[xCol] <= d.x1 || p[yCol] >= d.x0 && p[yCol] <= d.x1);
-            //     });
-            
-            
-            this.model.setSelectedPoints(selectedPoints);
-            this.view.setSelectedPoints(selectedPoints);
-            this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        // d3.selectAll("circle")
+        //     .classed("selected", d => {
+        //         const cx = this.view.xScale(d[xCol]);
+        //         const cy = this.view.yScale(d[yCol]);
+        //         this.view.brushXCol = xCol;
+        //         this.view.brushYCol = yCol;
+        //         return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+        //     });
 
-        } else {
-            d3.selectAll("circle").classed("selected", false);
-        }
+        // // Highlight bars
+        // d3.selectAll("rect")
+        //     .classed("selected", d => {
+        //         return selectedPoints.some(p => p[xCol] >= d.x0 && p[xCol] <= d.x1 || p[yCol] >= d.x0 && p[yCol] <= d.x1);
+        //     });
+        
+        
+        this.model.setSelectedPoints(selectedPoints);
+        this.view.setSelectedPoints(selectedPoints);
+        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
     }
   
     handleBarClick(event, barData, column) {

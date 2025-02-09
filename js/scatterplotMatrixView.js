@@ -44,7 +44,7 @@ class ScatterplotMatrixView{
             maxUqNonNum = Math.max(maxUqNonNum, uniqueNonNumericY.size);
         });
 
-        this.topMargin = 30 + maxUqNonNum * 10; // Increase margin as categorical axis grows
+        this.topMargin = 30 + maxUqNonNum * 10; 
 
         const container = d3.select(this.container);
         container.selectAll("*").remove();
@@ -239,8 +239,6 @@ class ScatterplotMatrixView{
             else {
                 const data = givenData.select([xCol, yCol]).objects(); 
 
-                console.log("Data: ", data);
-
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
                 );
@@ -297,15 +295,12 @@ class ScatterplotMatrixView{
                     uniqueXCategories = ["NaN", ...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
                     uniqueYCategories = ["NaN", ...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
                 }
-                
-                console.log("X Cat: ", uniqueXCategories);
-                console.log("Y Cat: ", uniqueYCategories);
 
                 const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
                 const numericSpace = this.size - categorySpace;
 
                 const xScale = d3.scaleLinear()
-                    .domain([d3.min(numericData, d => d[xCol]), d3.max(numericData, d => d[xCol]) + 1])
+                    .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
                     .range([0, numericSpace]);
 
                 const xTickValues = xScale.ticks(); // Get tick values
@@ -318,7 +313,7 @@ class ScatterplotMatrixView{
 
                 // Y Scale
                 const yScale = d3.scaleLinear()
-                    .domain([d3.min(numericData, d => d[yCol]), d3.max(numericData, d => d[yCol]) + 1])
+                    .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
                     .range([numericSpace, 0]);
 
                 const categoricalYStart = yScale.range()[1] - 10;
@@ -367,9 +362,9 @@ class ScatterplotMatrixView{
                     });
     
                 cellGroup
-                .append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
-                .call(d3.axisBottom(xScale));
+                    .append("g")
+                    .attr("transform", `translate(0, ${numericSpace})`)
+                    .call(d3.axisBottom(xScale));
 
                 if (uniqueXCategories.length > 0) {
                 cellGroup.append("g")
@@ -422,6 +417,16 @@ class ScatterplotMatrixView{
         let svgWidth = matrixSize + this.labelPadding + this.leftMargin + this.rightMargin;
         let svgHeight = matrixSize + this.labelPadding + this.topMargin + this.bottomMargin;
 
+        let maxUqNonNum = 0;
+
+        columns.forEach(yCol => {
+            const yValues = givenData.select([yCol]).objects().map(d => d[yCol]);
+            const uniqueNonNumericY = new Set(yValues.filter(val => isNaN(val) || typeof val !== "number"));
+            maxUqNonNum = Math.max(maxUqNonNum, uniqueNonNumericY.size);
+        });
+
+        this.topMargin = 30 + maxUqNonNum * 10; 
+
         this.barSelected = false;
         const container = d3.select(this.container);
         container.selectAll("*").remove();
@@ -455,7 +460,21 @@ class ScatterplotMatrixView{
                     ...d,
                     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
                 }));
-                const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
+
+                // nonNumericData.sort((a, b) => String(a[xCol]).localeCompare(String(b[xCol])));
+
+                const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
+
+                let uniqueCategories;
+                
+                if (numericData.length === data.length)
+                {
+                    uniqueCategories = [];
+                }else{
+                    uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
+                }
+
+                // const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
 
                 const categorySpace = uniqueCategories.length * 20; 
                 const numericSpace = this.size - categorySpace; 
@@ -483,16 +502,6 @@ class ScatterplotMatrixView{
                 const categoricalScale = d3.scaleOrdinal()
                     .domain(uniqueCategories)
                     .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
-
-                // if (nonNumericData.length > 0) {
-                //     histData.push({
-                //         x0: this.size,  
-                //         x1: this.size + 40,  
-                //         length: nonNumericData.length,
-                //         ids: nonNumericData.map(d => d.id),
-                //         isNan: true  
-                //     });
-                // }
 
                 uniqueCategories.forEach(category => {
                     histData.push({
@@ -562,12 +571,12 @@ class ScatterplotMatrixView{
                 svg
                     .append("text")
                     .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2) 
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - 20) 
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace - 25) 
                     .style("text-anchor", "middle")
                     .text(xCol);
     
                 const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = this.topMargin + i * (this.size + this.padding) + this.size / 2; 
+                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
                 
                 svg
                     .append("text")
@@ -580,10 +589,31 @@ class ScatterplotMatrixView{
             else {
                 const data = givenData.select([xCol, yCol]).objects(); 
 
-                let numericData = data.filter(d => !isNaN(d[xCol]) && !isNaN(d[yCol]));
-                let nonNumericXData = data.filter(d => isNaN(d[xCol]) && !isNaN(d[yCol])); 
-                let nonNumericYData = data.filter(d => !isNaN(d[xCol]) && isNaN(d[yCol])); 
-                let nonNumericData = data.filter(d => isNaN(d[xCol]) && isNaN(d[yCol]));
+                const numericData = data.filter(d => 
+                    typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+                );
+                
+                const nonNumericXData = data.filter(d => 
+                    (typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+                ).map(d => ({
+                    ...d,
+                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
+                }));
+                
+                const nonNumericYData = data.filter(d => 
+                    typeof d[xCol] === "number" && !isNaN(d[xCol]) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+                ).map(d => ({
+                    ...d,
+                    [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] 
+                }));
+                
+                const nonNumericData = data.filter(d => 
+                    (typeof d[xCol] !== "number" || isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+                ).map(d => ({
+                    ...d,
+                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol],
+                    [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol]
+                }));
 
                 const combinedData = [
                     ...numericData.map(d => ({ ...d, type: "numeric" })),
@@ -592,111 +622,46 @@ class ScatterplotMatrixView{
                     ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
                 ];
 
-                const tooltip = d3.select("#tooltip");
+                const allNonNumericX = [...nonNumericXData, ...nonNumericData].map(d => ({
+                    ...d,
+                    [xCol]: (typeof d[xCol] === "number" && isNaN(d[xCol])) || d[xCol] == null ? "NaN" : String(d[xCol])
+                }));
 
-                const isSelected = (d) => this.selectedPoints.some(p => 
-                    (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
-                    (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
-                    (p[yCol] === d[yCol] || isNaN(d[yCol]))
-                );
-    
-                // const xScale = d3
-                //     .scaleLinear()
-                //     .domain(d3.extent(data, (d) => d[xCol]))
-                //     .range([0, this.size]);
-                // const yScale = d3
-                //     .scaleLinear()
-                //     .domain(d3.extent(data, (d) => d[yCol]))
-                //     .range([this.size, 0]);
+                const allNonNumericY = [...nonNumericYData, ...nonNumericData].map(d => ({
+                    ...d,
+                    [yCol]: (typeof d[yCol] === "number" && isNaN(d[yCol])) || d[yCol] == null ? "NaN" : String(d[yCol])
+                }));
 
-                const brush = d3.brush()
-                    .extent([[-20, -40], [this.size + 20, this.size + 20]]) 
-                    .on("end", (event) => handleBrush(event, this.xScale, this.yScale, xCol, yCol));  
+                const groupedXCategories = d3.group(allNonNumericX, d => d[xCol]);
+                const groupedYCategories = d3.group(allNonNumericY, d => d[yCol]);
 
-                const nanXPosition = this.size + 15; 
-                const nanYPosition = this.size - (this.size + 15); 
+                let uniqueXCategories, uniqueYCategories;
 
-                cellGroup.selectAll("circle")
-                    .data(combinedData)
-                    .join("circle")
-                    .attr("cx", d => {
-                        if (d.type === "numeric") return this.xScale(d[xCol]);
-                        if (d.type === "nan-x" || d.type === "nan-xy") return nanXPosition;
-                        return this.xScale(d[xCol]);
-                    })
-                    .attr("cy", d => {
-                        if (d.type === "numeric") return this.yScale(d[yCol]);
-                        if (d.type === "nan-y" || d.type === "nan-xy") return nanYPosition;
-                        return this.yScale(d[yCol]); 
-                    })
-                    .attr("r", d => (d.type.includes("nan") ? 4 : 3))
-                    .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
-                    .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
-                    .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
-                    .attr("opacity", 0.8);
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"));
-                    //     tooltip.style("display", "none");
-                    // });
-                    
-                cellGroup
-                    .append("g")
-                    .attr("transform", `translate(0, ${this.size})`)
-                    .call(d3.axisBottom(this.xScale));
-    
-                cellGroup.append("g").call(d3.axisLeft(this.yScale));
-    
-                cellGroup.append("g")
-                    .attr("class", "brush")  
-                    .call(brush);            
-    
-                svg
-                    .append("text")
-                    .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2) 
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - 20) 
-                    .style("text-anchor", "middle")
-                    .text(xCol);
-    
-                const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = this.topMargin + i * (this.size + this.padding) + this.size / 2; 
-                
-                svg
-                    .append("text")
-                    .attr("x", xPosition) 
-                    .attr("y", yPosition) 
-                    .style("text-anchor", "middle")
-                    .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                    .text(yCol);
+                if (numericData.length === data.length)
+                {
+                    uniqueXCategories = [];
+                    uniqueYCategories = [];
+                }else{
+                    uniqueXCategories = ["NaN", ...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+                    uniqueYCategories = ["NaN", ...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+                }
 
-                cellGroup
-                    .append("text")
-                    .attr("x", this.size + 22)
-                    .attr("y", this.size + 16)
-                    .style("font-size", "12px")
-                    .attr("text-anchor", "middle")
-                    .text("Nan");
+                const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
+                const numericSpace = this.size - categorySpace;
 
-                cellGroup.append("text")
-                    .attr("x", -22) 
-                    .attr("y", 5) 
-                    .attr("text-anchor", "middle")
-                    .attr("transform", `rotate(-90, -30, -10)`) 
-                    .style("font-size", "12px")
-                    .text("Nan");
-            }
-            });
-        });
-    }
+                const xScale = d3.scaleLinear()
+                    .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
+                    .range([0, numericSpace]);
 
-}
+                const xTickValues = xScale.ticks(); // Get tick values
+                const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); // Compute spacing in pixels
+
+                const categoricalXStart = xScale.range()[1] + 10;
+                const categoricalXScale = d3.scaleOrdinal()
+                    .domain(uniqueXCategories)
+                    .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
+
+                // Y Scale
+                const yScale = d3.scaleLinear()
+                    .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
+      
