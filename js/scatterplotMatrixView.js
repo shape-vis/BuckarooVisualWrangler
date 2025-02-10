@@ -79,8 +79,6 @@ class ScatterplotMatrixView{
                     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
                 }));
 
-                // nonNumericData.sort((a, b) => String(a[xCol]).localeCompare(String(b[xCol])));
-
                 const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
 
                 let uniqueCategories;
@@ -91,8 +89,6 @@ class ScatterplotMatrixView{
                 }else{
                     uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
                 }
-
-                // const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
 
                 const categorySpace = uniqueCategories.length * 20; 
                 const numericSpace = this.size - categorySpace; 
@@ -120,16 +116,6 @@ class ScatterplotMatrixView{
                 const categoricalScale = d3.scaleOrdinal()
                     .domain(uniqueCategories)
                     .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
-
-                // if (nonNumericData.length > 0) {
-                //     histData.push({
-                //         x0: this.size,  
-                //         x1: this.size + 40,  
-                //         length: nonNumericData.length,
-                //         ids: nonNumericData.map(d => d.id),
-                //         isNan: true  
-                //     });
-                // }
 
                 uniqueCategories.forEach(category => {
                     histData.push({
@@ -245,9 +231,9 @@ class ScatterplotMatrixView{
                     .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
 
                 lineViewButton.append("rect")
-                    .attr("x", this.size - 20)
+                    .attr("x", this.size - 34)
                     .attr("y", 0)
-                    .attr("width", 15)
+                    .attr("width", 40)
                     .attr("height", 15)
                     .attr("rx", 3)
                     .attr("fill", "#d3d3d3")
@@ -257,9 +243,9 @@ class ScatterplotMatrixView{
                     .attr("x", this.size - 14)
                     .attr("y", 10)
                     .attr("text-anchor", "middle")
-                    .attr("font-size", "12px")
+                    .attr("font-size", "10px")
                     .attr("fill", "#333")
-                    .text("L");
+                    .text("Linechart");
                 
                 this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol);
             }
@@ -297,11 +283,7 @@ class ScatterplotMatrixView{
             columns.forEach((yCol, j) => {
             const cellGroup = svg
                 .append("g")
-                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.padding)}, ${this.topMargin + i * (this.size + this.padding)})`); 
-    
-            // const brush = d3.brush()
-            //     .extent([[0, 0], [this.size, this.size]]) 
-            //     .on("start brush end", (event) => handleBrush(event, this.xScale, this.yScale, xCol, yCol));  
+                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.padding)}, ${this.topMargin + i * (this.size + this.padding)})`);  
 
             if (i === j) {
                 
@@ -318,8 +300,6 @@ class ScatterplotMatrixView{
                     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
                 }));
 
-                // nonNumericData.sort((a, b) => String(a[xCol]).localeCompare(String(b[xCol])));
-
                 const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
 
                 let uniqueCategories;
@@ -330,8 +310,6 @@ class ScatterplotMatrixView{
                 }else{
                     uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
                 }
-
-                // const uniqueCategories = [...new Set(nonNumericData.map(d => String(d[xCol])))] 
 
                 const categorySpace = uniqueCategories.length * 20; 
                 const numericSpace = this.size - categorySpace; 
@@ -510,15 +488,14 @@ class ScatterplotMatrixView{
                     .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
                     .range([0, numericSpace]);
 
-                const xTickValues = xScale.ticks(); // Get tick values
-                const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); // Compute spacing in pixels
+                const xTickValues = xScale.ticks(); 
+                const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
 
                 const categoricalXStart = xScale.range()[1] + 10;
                 const categoricalXScale = d3.scaleOrdinal()
                     .domain(uniqueXCategories)
                     .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
 
-                // Y Scale
                 const yScale = d3.scaleLinear()
                     .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
                     .range([numericSpace, 0]);
@@ -693,15 +670,14 @@ class ScatterplotMatrixView{
             .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
             .range([0, numericSpace]);
 
-        const xTickValues = xScale.ticks(); // Get tick values
-        const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); // Compute spacing in pixels
+        const xTickValues = xScale.ticks(); 
+        const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
 
         const categoricalXStart = xScale.range()[1] + 10;
         const categoricalXScale = d3.scaleOrdinal()
             .domain(uniqueXCategories)
             .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
 
-        // Y Scale
         const yScale = d3.scaleLinear()
             .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
             .range([numericSpace, 0]);
@@ -712,10 +688,7 @@ class ScatterplotMatrixView{
             .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
             
 
-        const tooltip = d3.select("#tooltip");
-
-        // const nanXPosition = this.size + 15; 
-        // const nanYPosition = this.size - (this.size + 15); 
+        const tooltip = d3.select("#tooltip"); 
 
         cellGroup.selectAll("circle")
             .data(combinedData)
@@ -800,7 +773,7 @@ class ScatterplotMatrixView{
         const cellGroup = d3.select(`#${cellID}`);
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
 
-        cellGroup.selectAll("*").remove();  // Remove previous scatterplot
+        cellGroup.selectAll("*").remove();  
 
         const data = givenData.select([xCol, yCol]).objects();
 
@@ -809,7 +782,7 @@ class ScatterplotMatrixView{
             typeof d[yCol] === "number" && !isNaN(d[yCol])
         );
 
-        numericData.sort((a, b) => a[xCol] - b[xCol]); // Sort data for line chart
+        numericData.sort((a, b) => a[xCol] - b[xCol]); 
 
         const xScale = d3.scaleLinear()
             .domain(d3.extent(numericData, d => d[xCol]))
@@ -837,29 +810,10 @@ class ScatterplotMatrixView{
 
         cellGroup.append("g").call(d3.axisLeft(yScale));
 
-        // cellGroup
-        //     .append("text")
-        //     .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
-        //     .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - this.size  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-        //     .style("text-anchor", "middle")
-        //     .text(xCol);
-
-        // const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-        // const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - this.size; 
-        
-        // cellGroup
-        //     .append("text")
-        //     .attr("x", xPosition) 
-        //     .attr("y", yPosition) 
-        //     .style("text-anchor", "middle")
-        //     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-        //     .text(yCol);
-
-        // Back button to switch back to scatterplot
         cellGroup.append("rect")
-            .attr("x", this.size - 20)
+            .attr("x", this.size - 36)
             .attr("y", 5)
-            .attr("width", 15)
+            .attr("width", 45)
             .attr("height", 15)
             .attr("rx", 3)
             .attr("fill", "#d3d3d3")
@@ -871,25 +825,24 @@ class ScatterplotMatrixView{
             .attr("x", this.size - 14)
             .attr("y", 16)
             .attr("text-anchor", "middle")
-            .attr("font-size", "12px")
+            .attr("font-size", "10px")
             .attr("fill", "#333")
-            .text("S")  // "S" for Scatterplot
+            .text("Scatterplot")  
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
     }
 
     restoreScatterplot(givenData, svg, xCol, yCol, cellID) {
         const cellGroup = d3.select(`#${cellID}`);
-        cellGroup.selectAll("*").remove();  // Clear the line chart
+        cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol);  // Restore scatterplot
-    
-        // Re-add the button to switch to line chart
+        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol);  
+
         cellGroup.append("rect")
             .attr("class", "switch-view-button")
-            .attr("x", this.size - 20)
-            .attr("y", 5)
-            .attr("width", 15)
+            .attr("x", this.size - 34)
+            .attr("y", 0)
+            .attr("width", 40)
             .attr("height", 15)
             .attr("rx", 3)
             .attr("fill", "#d3d3d3")
@@ -899,11 +852,11 @@ class ScatterplotMatrixView{
     
         cellGroup.append("text")
             .attr("x", this.size - 14)
-            .attr("y", 16)
+            .attr("y", 10)
             .attr("text-anchor", "middle")
-            .attr("font-size", "12px")
+            .attr("font-size", "10px")
             .attr("fill", "#333")
-            .text("L")
+            .text("Linechart")
             .attr("cursor", "pointer")
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
     }
