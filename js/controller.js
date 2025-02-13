@@ -3,6 +3,7 @@ class ScatterplotController {
       this.model = new DataModel(data);
       this.view = new ScatterplotMatrixView(container);
       this.xCol = null;
+      this.yCol = null;
   
       this.render();
       this.setupEventListeners();
@@ -14,7 +15,10 @@ class ScatterplotController {
     }
   
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
+        document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;
+        document.getElementById("impute-average-y").textContent = `Impute average for ${yCol}`;
         this.xCol = xCol;
+        this.yCol = yCol
         const selection = event.selection;
 
         console.log("Selection: ", selection);
@@ -51,6 +55,7 @@ class ScatterplotController {
     }
   
     handleBarClick(event, barData, column) {
+        document.getElementById("impute-average-x").textContent = `Impute average for ${column}`;
         this.xCol = column;
         const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.id));
 
@@ -81,6 +86,8 @@ class ScatterplotController {
         });
 
         d3.select("#clear-selection").on("click", () => {
+            document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
+            document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
             this.view.setSelectedPoints([]);
             this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this))
         });
@@ -91,10 +98,16 @@ class ScatterplotController {
         this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
         });
 
-        d3.select("#impute-average").on("click", () => {
+        d3.select("#impute-average-x").on("click", () => {
         this.model.imputeAverage(this.xCol); 
         this.view.setSelectedPoints([]);
         this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        });
+        
+        d3.select("#impute-average-y").on("click", () => {
+            this.model.imputeAverage(this.yCol); 
+            this.view.setSelectedPoints([]);
+            this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
         });
 
         const radioButtons = document.querySelectorAll("input[name='options']");
