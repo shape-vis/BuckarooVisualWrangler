@@ -7,10 +7,11 @@ class ScatterplotMatrixView{
         this.container = container;
 
         this.size = 180; // Size of each cell in matrix
-        this.padding = 60;
+        this.xPadding = 150;
+        this.yPadding = 60;
         this.labelPadding = 20;
 
-        this.leftMargin = 60;
+        this.leftMargin = 100;
         this.topMargin = 30;
         this.bottomMargin = 25; 
         this.rightMargin = 60; 
@@ -31,10 +32,11 @@ class ScatterplotMatrixView{
 
     plotMatrix(givenData) {    
         let columns = givenData.columnNames().slice(1);
-        let matrixSize = columns.length * this.size + (columns.length - 1) * this.padding; // 3 * 175 + (2) * 25 = 575
+        let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
+        let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
 
-        let svgWidth = matrixSize + this.labelPadding + this.leftMargin + this.rightMargin;
-        let svgHeight = matrixSize + this.labelPadding + this.topMargin + this.bottomMargin;
+        let svgWidth = matrixWidth + this.labelPadding + this.leftMargin + this.rightMargin;
+        let svgHeight = matrixHeight + this.labelPadding + this.topMargin + this.bottomMargin;
 
         let maxUqNonNum = 0;
 
@@ -61,7 +63,7 @@ class ScatterplotMatrixView{
             const cellGroup = svg
                 .append("g")
                 .attr("id", cellID)
-                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.padding)}, ${this.topMargin + i * (this.size + this.padding)})`);
+                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);
 
             if (i === j) {
                 const data = givenData.select(["id", xCol]).objects();
@@ -208,13 +210,13 @@ class ScatterplotMatrixView{
     
                 svg
                     .append("text")
-                    .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2) 
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace - 25) 
+                    .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace - 25) 
                     .style("text-anchor", "middle")
                     .text(xCol);
     
-                const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+                const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+                const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
                 
                 svg
                     .append("text")
@@ -231,7 +233,7 @@ class ScatterplotMatrixView{
                     .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
 
                 lineViewButton.append("rect")
-                    .attr("x", this.size - 34)
+                    .attr("x", - 85)
                     .attr("y", 0)
                     .attr("width", 40)
                     .attr("height", 15)
@@ -240,7 +242,7 @@ class ScatterplotMatrixView{
                     .attr("stroke", "#333");
 
                 lineViewButton.append("text")
-                    .attr("x", this.size - 14)
+                    .attr("x", - 65)
                     .attr("y", 10)
                     .attr("text-anchor", "middle")
                     .attr("font-size", "10px")
@@ -256,9 +258,11 @@ class ScatterplotMatrixView{
 
     enableBrushing (givenData, handleBrush, handleBarClick){
         let columns = givenData.columnNames().slice(1);
-        let matrixSize = columns.length * this.size + (columns.length - 1) * this.padding; // 3 * 175 + (2) * 25 = 575
-        let svgWidth = matrixSize + this.labelPadding + this.leftMargin + this.rightMargin;
-        let svgHeight = matrixSize + this.labelPadding + this.topMargin + this.bottomMargin;
+        let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
+        let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
+
+        let svgWidth = matrixWidth + this.labelPadding + this.leftMargin + this.rightMargin;
+        let svgHeight = matrixHeight + this.labelPadding + this.topMargin + this.bottomMargin;
 
         let maxUqNonNum = 0;
 
@@ -283,7 +287,7 @@ class ScatterplotMatrixView{
             columns.forEach((yCol, j) => {
             const cellGroup = svg
                 .append("g")
-                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.padding)}, ${this.topMargin + i * (this.size + this.padding)})`);  
+                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);  
 
             if (i === j) {
                 
@@ -405,13 +409,13 @@ class ScatterplotMatrixView{
     
                 svg
                     .append("text")
-                    .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2) 
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace - 25) 
+                    .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace - 25) 
                     .style("text-anchor", "middle")
                     .text(xCol);
     
-                const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+                const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+                const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
                 
                 svg
                     .append("text")
@@ -580,16 +584,15 @@ class ScatterplotMatrixView{
                     .style("font-size", "10px"); 
                 }
                 
-                console.log(numericSpace);
                 svg
                     .append("text")
-                    .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                    .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                     .style("text-anchor", "middle")
                     .text(xCol);
     
-                const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-                const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+                const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+                const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
                 
                 svg
                     .append("text")
@@ -752,13 +755,13 @@ class ScatterplotMatrixView{
         
         svg
             .append("text")
-            .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
-            .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+            .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+            .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
             .style("text-anchor", "middle")
             .text(xCol);
 
-        const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-        const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+        const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+        const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
         
         svg
             .append("text")
@@ -933,13 +936,13 @@ class ScatterplotMatrixView{
         
         svg
             .append("text")
-            .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
-            .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+            .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+            .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
             .style("text-anchor", "middle")
             .text(xCol);
 
-        const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
-        const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+        const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+        const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
         
         svg
             .append("text")
@@ -955,8 +958,8 @@ class ScatterplotMatrixView{
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
 
         lineViewButton.append("rect")
-            .attr("x", this.size - 36)
-            .attr("y", 5)
+            .attr("x", - 90)
+            .attr("y", 0)
             .attr("width", 45)
             .attr("height", 15)
             .attr("rx", 3)
@@ -964,8 +967,8 @@ class ScatterplotMatrixView{
             .attr("stroke", "#333");
 
         lineViewButton.append("text")
-            .attr("x", this.size - 14)
-            .attr("y", 16)
+            .attr("x", - 67)
+            .attr("y", 10)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")
@@ -984,7 +987,7 @@ class ScatterplotMatrixView{
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
 
         lineViewButton.append("rect")
-            .attr("x", this.size - 34)
+            .attr("x", - 85)
             .attr("y", 0)
             .attr("width", 40)
             .attr("height", 15)
@@ -993,7 +996,7 @@ class ScatterplotMatrixView{
             .attr("stroke", "#333");
 
         lineViewButton.append("text")
-            .attr("x", this.size - 14)
+            .attr("x", - 65)
             .attr("y", 10)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")

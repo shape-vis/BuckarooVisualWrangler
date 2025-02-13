@@ -21,8 +21,6 @@ class ScatterplotController {
         this.yCol = yCol
         const selection = event.selection;
 
-        console.log("Selection: ", selection);
-
         if (!selection) return; 
 
         const [[x0, y0], [x1, y1]] = selection; 
@@ -75,50 +73,83 @@ class ScatterplotController {
     }
   
     setupEventListeners() {
+        document.querySelectorAll(".tab-button").forEach(button => {
+            button.addEventListener("click", function() {
+                document.querySelectorAll(".tab-button").forEach(btn => btn.classList.remove("active"));
+                this.classList.add("active");
+    
+                document.querySelectorAll(".tab-content").forEach(tab => {
+                    tab.style.display = "none";
+                });
+    
+                activeDataset = this.dataset.target === "tab1" ? "practice" : "stackoverflow";
+                const targetTab = document.getElementById(this.getAttribute("data-target"));
+                targetTab.style.display = "block";
+
+                const controller = getActiveController();
+                controller.view.enableBrushing(
+                    controller.model.getData(), 
+                    controller.handleBrush.bind(controller), 
+                    controller.handleBarClick.bind(controller)
+                );
+            });
+        });
+    
+        // Function to get active controller
+        const getActiveController = () => {
+            return activeDataset === "practice" ? practiceController : stackoverflowController;
+        };
+    
         d3.select("#undo").on("click", () => {
-            this.model.undoLastTransformation(); 
-            this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+            const controller = getActiveController();
+            controller.model.undoLastTransformation();
+            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
         });
-
+    
         d3.select("#redo").on("click", () => {
-            this.model.redoLastTransformation(); 
-            this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+            const controller = getActiveController();
+            controller.model.redoLastTransformation();
+            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
         });
-
+    
         d3.select("#clear-selection").on("click", () => {
             document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
             document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
-            this.view.setSelectedPoints([]);
-            this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this))
+            const controller = getActiveController();
+            controller.view.setSelectedPoints([]);
+            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
         });
-
+    
         d3.select("#remove-selected-data").on("click", () => {
-        const selectedPoints = this.model.getSelectedPoints();
-        this.model.filterData((row) => !selectedPoints.some((point) => point.id === row.id));
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+            const controller = getActiveController();
+            const selectedPoints = controller.model.getSelectedPoints();
+            controller.model.filterData((row) => !selectedPoints.some((point) => point.id === row.id));
+            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
         });
-
+    
         d3.select("#impute-average-x").on("click", () => {
-        this.model.imputeAverage(this.xCol); 
-        this.view.setSelectedPoints([]);
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+            const controller = getActiveController();
+            controller.model.imputeAverage(controller.xCol);
+            controller.view.setSelectedPoints([]);
+            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
         });
-        
+    
         d3.select("#impute-average-y").on("click", () => {
-            this.model.imputeAverage(this.yCol); 
-            this.view.setSelectedPoints([]);
-            this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+            const controller = getActiveController();
+            controller.model.imputeAverage(controller.yCol);
+            controller.view.setSelectedPoints([]);
+            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
         });
-
+    
         const radioButtons = document.querySelectorAll("input[name='options']");
-
+    
         radioButtons.forEach((radio) => {
             radio.addEventListener("change", (event) => {
+                const controller = getActiveController();
                 if (event.target.value === "selectData" && event.target.checked) {
-                    console.log("selected");
-                    this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this)); 
+                    controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
                 } else {
-                    this.render();
+                    controller.render();
                 }
             });
         });
