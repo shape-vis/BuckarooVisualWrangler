@@ -23,61 +23,39 @@
         <button class="tab-button" data-target="tab2">StackOverflow Data</button>
     </div>
 
+    <div id="tooltip" class="tooltip"></div>
+
     <!-- Tab Content -->
     <div id="container">
-      <div id="tab1" class="tab-content active">
-          <div class="matrix-and-toolbox">
-              <div id="matrix-vis-practice"></div>
-              <div class="toolbox-wrapper">
-                  <div id="toolbox">
-                      <form id="radio-buttons-form">
-                          <p>Select an option:</p>
-                          <label>
-                              <input type="radio" name="options" value="allData" checked />
-                              View all data
-                          </label>
-                          <label>
-                              <input type="radio" name="options" value="selectData" />
-                              Select data
-                          </label>
-                      </form>
-                      <button id="undo">Undo</button>
-                      <button id="redo">Redo</button>
-                      <button id="clear-selection">Clear Selection</button>
-                      <button id="remove-selected-data">Remove Selected Data</button>
-                      <button id="impute-average-x">Impute selected data with average for X</button>
-                      <button id="impute-average-y">Impute selected data with average for Y</button>
-                  </div>
-              </div>
-          </div>
-      </div>
-
-      <div id="tab2" class="tab-content">
-          <div class="matrix-and-toolbox">
-              <div id="matrix-vis-stackoverflow"></div>
-              <div class="toolbox-wrapper">
-                  <div id="toolbox">
-                      <form id="radio-buttons-form">
-                          <p>Select an option:</p>
-                          <label>
-                              <input type="radio" name="options" value="allData" checked />
-                              View all data
-                          </label>
-                          <label>
-                              <input type="radio" name="options" value="selectData" />
-                              Select data
-                          </label>
-                      </form>
-                      <button id="undo">Undo</button>
-                      <button id="redo">Redo</button>
-                      <button id="clear-selection">Clear Selection</button>
-                      <button id="remove-selected-data">Remove Selected Data</button>
-                      <button id="impute-average-x">Impute selected data with average for X</button>
-                      <button id="impute-average-y">Impute selected data with average for Y</button>
-                  </div>
-              </div>
-          </div>
-      </div>
+        <div class="matrix-and-toolbox">
+            <div id="tab1" class="tab-content active">
+                <div id="matrix-vis-practice"></div>
+            </div>
+            <div id="tab2" class="tab-content">
+                <div id="matrix-vis-stackoverflow"></div>
+            </div>
+            <div class="toolbox-wrapper">
+                <div id="toolbox">
+                    <form id="radio-buttons-form">
+                        <p>Select an option:</p>
+                        <label>
+                            <input type="radio" name="options" value="allData" checked />
+                            View all data
+                        </label>
+                        <label>
+                            <input type="radio" name="options" value="selectData" />
+                            Select data
+                        </label>
+                    </form>
+                    <button id="undo">Undo</button>
+                    <button id="redo">Redo</button>
+                    <button id="clear-selection">Clear Selection</button>
+                    <button id="remove-selected-data">Remove Selected Data</button>
+                    <button id="impute-average-x">Impute selected data with average for X</button>
+                    <button id="impute-average-y">Impute selected data with average for Y</button>
+                </div>
+            </div>
+        </div>
   </div>
 </body>
 <script src="js/dataModel.js"></script>

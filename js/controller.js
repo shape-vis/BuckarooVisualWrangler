@@ -7,7 +7,6 @@ class ScatterplotController {
   
       this.render();
       this.setupEventListeners();
-      console.log(data.objects());
     }
   
     render() {
@@ -83,75 +82,85 @@ class ScatterplotController {
                 });
     
                 activeDataset = this.dataset.target === "tab1" ? "practice" : "stackoverflow";
+
                 const targetTab = document.getElementById(this.getAttribute("data-target"));
                 targetTab.style.display = "block";
 
-                const controller = getActiveController();
-                controller.view.enableBrushing(
-                    controller.model.getData(), 
-                    controller.handleBrush.bind(controller), 
-                    controller.handleBarClick.bind(controller)
-                );
+                document.querySelector("input[name='options'][value='allData']").checked = true;
+
+                attachButtonEventListeners();
             });
         });
-    
-        // Function to get active controller
-        const getActiveController = () => {
-            return activeDataset === "practice" ? practiceController : stackoverflowController;
-        };
-    
-        d3.select("#undo").on("click", () => {
-            const controller = getActiveController();
-            controller.model.undoLastTransformation();
-            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-        });
-    
-        d3.select("#redo").on("click", () => {
-            const controller = getActiveController();
-            controller.model.redoLastTransformation();
-            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-        });
-    
-        d3.select("#clear-selection").on("click", () => {
-            document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
-            document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
-            const controller = getActiveController();
-            controller.view.setSelectedPoints([]);
-            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-        });
-    
-        d3.select("#remove-selected-data").on("click", () => {
-            const controller = getActiveController();
-            const selectedPoints = controller.model.getSelectedPoints();
-            controller.model.filterData((row) => !selectedPoints.some((point) => point.id === row.id));
-            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-        });
-    
-        d3.select("#impute-average-x").on("click", () => {
-            const controller = getActiveController();
-            controller.model.imputeAverage(controller.xCol);
-            controller.view.setSelectedPoints([]);
-            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-        });
-    
-        d3.select("#impute-average-y").on("click", () => {
-            const controller = getActiveController();
-            controller.model.imputeAverage(controller.yCol);
-            controller.view.setSelectedPoints([]);
-            controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-        });
-    
-        const radioButtons = document.querySelectorAll("input[name='options']");
-    
-        radioButtons.forEach((radio) => {
-            radio.addEventListener("change", (event) => {
-                const controller = getActiveController();
-                if (event.target.value === "selectData" && event.target.checked) {
-                    controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
-                } else {
-                    controller.render();
-                }
-            });
-        });
+
     }
-  }
+}
+
+function attachButtonEventListeners(){
+    d3.select("#undo").on("click", null);
+    d3.select("#redo").on("click", null);
+    d3.select("#clear-selection").on("click", null);
+    d3.select("#remove-selected-data").on("click", null);
+    d3.select("#impute-average-x").on("click", null);
+    d3.select("#impute-average-y").on("click", null);
+
+     const getActiveController = () => {
+        return activeDataset === "practice" ? practiceController : stackoverflowController;
+    };
+
+    d3.select("#undo").on("click", () => {
+        const controller = getActiveController();
+        console.log("Controller undo: ", controller);
+        controller.model.undoLastTransformation();
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+    });
+
+    d3.select("#redo").on("click", () => {
+        const controller = getActiveController();
+        controller.model.redoLastTransformation();
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+    });
+
+    d3.select("#clear-selection").on("click", () => {
+        document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
+        document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
+        const controller = getActiveController();
+        controller.view.setSelectedPoints([]);
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+    });
+
+    d3.select("#remove-selected-data").on("click", () => {
+        const controller = getActiveController();
+        const selectedPoints = controller.model.getSelectedPoints();
+        controller.model.filterData((row) => !selectedPoints.some((point) => point.id === row.id));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+    });
+
+    d3.select("#impute-average-x").on("click", () => {
+        const controller = getActiveController();
+        controller.model.imputeAverage(controller.xCol);
+        controller.view.setSelectedPoints([]);
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+    });
+
+    d3.select("#impute-average-y").on("click", () => {
+        const controller = getActiveController();
+        controller.model.imputeAverage(controller.yCol);
+        controller.view.setSelectedPoints([]);
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+    });
+
+    const radioButtons = document.querySelectorAll("input[name='options']");
+
+    radioButtons.forEach((radio) => {
+        radio.addEventListener("change", (event) => {
+            const controller = getActiveController();
+            if (event.target.value === "selectData" && event.target.checked) {
+                controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+            } else {
+                controller.render();
+            }
+        });
+    });
+}
+    
+       

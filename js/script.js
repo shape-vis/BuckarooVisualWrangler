@@ -18,4 +18,4 @@ const stackoverflowController = new ScatterplotController(data2, "#matrix-vis-st
 document.getElementById("tab2").style.display = "none";
 let activeDataset = "practice";
 
-
+attachButtonEventListeners();
