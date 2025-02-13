@@ -75,6 +75,11 @@
     transition: fill 0.2s;
 }
 
+.scatterplot-button {
+    cursor: pointer;
+    transition: fill 0.2s;
+}
+
 .switch-view-button:hover {
     fill: #b0b0b0;
 }

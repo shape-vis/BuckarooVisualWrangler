@@ -775,61 +775,201 @@ class ScatterplotMatrixView{
 
         cellGroup.selectAll("*").remove();  
 
-        const data = givenData.select([xCol, yCol]).objects();
+        const data = givenData.select([xCol, yCol]).objects(); 
 
-        const numericData = data.filter(d =>
-            typeof d[xCol] === "number" && !isNaN(d[xCol]) &&
-            typeof d[yCol] === "number" && !isNaN(d[yCol])
+        const numericData = data.filter(d => 
+            typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
         );
+        
+        const nonNumericXData = data.filter(d => 
+            (typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+        ).map(d => ({
+            ...d,
+            [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
+        }));
+        
+        const nonNumericYData = data.filter(d => 
+            typeof d[xCol] === "number" && !isNaN(d[xCol]) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+        ).map(d => ({
+            ...d,
+            [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] 
+        }));
+        
+        const nonNumericData = data.filter(d => 
+            (typeof d[xCol] !== "number" || isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+        ).map(d => ({
+            ...d,
+            [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol],
+            [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol]
+        }));
 
-        numericData.sort((a, b) => a[xCol] - b[xCol]); 
+        const combinedData = [
+            ...numericData.map(d => ({ ...d, type: "numeric" })),
+            ...nonNumericXData.map(d => ({ ...d, type: "nan-x" })),
+            ...nonNumericYData.map(d => ({ ...d, type: "nan-y" })),
+            ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
+        ];
+
+        const allNonNumericX = [...nonNumericXData, ...nonNumericData].map(d => ({
+            ...d,
+            [xCol]: (typeof d[xCol] === "number" && isNaN(d[xCol])) || d[xCol] == null ? "NaN" : String(d[xCol])
+        }));
+
+        const allNonNumericY = [...nonNumericYData, ...nonNumericData].map(d => ({
+            ...d,
+            [yCol]: (typeof d[yCol] === "number" && isNaN(d[yCol])) || d[yCol] == null ? "NaN" : String(d[yCol])
+        }));
+
+        const groupedXCategories = d3.group(allNonNumericX, d => d[xCol]);
+        const groupedYCategories = d3.group(allNonNumericY, d => d[yCol]);
+
+        let uniqueXCategories, uniqueYCategories;
+
+        if (numericData.length === data.length)
+        {
+            uniqueXCategories = [];
+            uniqueYCategories = [];
+        }else{
+            uniqueXCategories = ["NaN", ...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+            uniqueYCategories = ["NaN", ...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+        }
+
+        const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
+        const numericSpace = this.size - categorySpace;
 
         const xScale = d3.scaleLinear()
-            .domain(d3.extent(numericData, d => d[xCol]))
-            .range([0, this.size]);
+            .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
+            .range([0, numericSpace]);
+
+        const xTickValues = xScale.ticks(); 
+        const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+
+        const categoricalXStart = xScale.range()[1] + 10;
+        const categoricalXScale = d3.scaleOrdinal()
+            .domain(uniqueXCategories)
+            .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
 
         const yScale = d3.scaleLinear()
-            .domain(d3.extent(numericData, d => d[yCol]))
-            .range([this.size, 0]);
+            .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
+            .range([numericSpace, 0]);
+
+        const categoricalYStart = yScale.range()[1] - 10;
+        const categoricalYScale = d3.scaleOrdinal()
+            .domain(uniqueYCategories)
+            .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
+
+        console.log("Before sorting:", combinedData.map(d => ({ x: d[xCol], type: d.type })));
+
+
+        combinedData.sort((a, b) => {
+            const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
+            const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
+        
+            if (aIsNumeric && bIsNumeric) {
+                return Number(a[xCol]) - Number(b[xCol]); 
+            }
+        
+            const aIsCategorical = !aIsNumeric;
+            const bIsCategorical = !bIsNumeric;
+        
+            if (aIsCategorical && bIsCategorical) {
+                return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
+            }
+        
+            return aIsNumeric ? -1 : 1; 
+        });
+
+        console.log("After sorting:", combinedData.map(d => ({ x: d[xCol], type: d.type })));
 
         const line = d3.line()
-            .x(d => xScale(d[xCol]))
-            .y(d => yScale(d[yCol]))
+            .x(d => {
+                if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
+                    return xScale(d[xCol]); 
+                } else {
+                    return categoricalXScale(String(d[xCol])) || xScale(0); 
+                }
+            })
+            .y(d => {
+                if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                    return yScale(d[yCol]); 
+                } else {
+                    return categoricalYScale(String(d[yCol])) || yScale(0);
+                }
+            })
             .curve(d3.curveMonotoneX);
 
         cellGroup.append("path")
-            .datum(numericData)
+            .datum(combinedData)
             .attr("fill", "none")
             .attr("stroke", "steelblue")
             .attr("stroke-width", 2)
             .attr("d", line);
 
-        cellGroup.append("g")
-            .attr("transform", `translate(0, ${this.size})`)
+        cellGroup
+            .append("g")
+            .attr("transform", `translate(0, ${numericSpace})`)
             .call(d3.axisBottom(xScale));
+
+        if (uniqueXCategories.length > 0) {
+        cellGroup.append("g")
+            .attr("transform", `translate(0, ${numericSpace})`)
+            .call(d3.axisBottom(categoricalXScale))
+            .selectAll("text")
+            .style("text-anchor", "end") 
+            .attr("transform", "rotate(-45)") 
+            .style("font-size", "10px"); 
+        }
 
         cellGroup.append("g").call(d3.axisLeft(yScale));
 
-        cellGroup.append("rect")
+        if (uniqueYCategories.length > 0) {
+        cellGroup.append("g")
+            .attr("transform", `translate(0, 0)`)
+            .call(d3.axisLeft(categoricalYScale))
+            .selectAll("text")
+            .style("text-anchor", "end") 
+            .style("font-size", "10px"); 
+        }
+        
+        svg
+            .append("text")
+            .attr("x", this.leftMargin + j * (this.size + this.padding) + this.size / 2)
+            .attr("y", this.topMargin + (i + 1) * (this.size + this.padding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+            .style("text-anchor", "middle")
+            .text(xCol);
+
+        const xPosition = this.leftMargin + j * (this.size + this.padding) - this.labelPadding - 10; 
+        const yPosition = (this.topMargin + i * (this.size + this.padding) + this.size / 2) - categorySpace; 
+        
+        svg
+            .append("text")
+            .attr("x", xPosition) 
+            .attr("y", yPosition) 
+            .style("text-anchor", "middle")
+            .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+            .text(yCol);
+
+        const lineViewButton = cellGroup.append("g")
+            .attr("class", "scatterplot-button")
+            .attr("cursor", "pointer")
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
+
+        lineViewButton.append("rect")
             .attr("x", this.size - 36)
             .attr("y", 5)
             .attr("width", 45)
             .attr("height", 15)
             .attr("rx", 3)
             .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333")
-            .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
+            .attr("stroke", "#333");
 
-        cellGroup.append("text")
+        lineViewButton.append("text")
             .attr("x", this.size - 14)
             .attr("y", 16)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")
-            .text("Scatterplot")  
-            .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
+            .text("Scatterplot");
     }
 
     restoreScatterplot(givenData, svg, xCol, yCol, cellID) {
@@ -838,27 +978,27 @@ class ScatterplotMatrixView{
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
         this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol);  
 
-        cellGroup.append("rect")
-            .attr("class", "switch-view-button")
+        const lineViewButton = cellGroup.append("g")
+            .attr("class", "linechart-button")
+            .attr("cursor", "pointer")
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
+
+        lineViewButton.append("rect")
             .attr("x", this.size - 34)
             .attr("y", 0)
             .attr("width", 40)
             .attr("height", 15)
             .attr("rx", 3)
             .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333")
-            .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
-    
-        cellGroup.append("text")
+            .attr("stroke", "#333");
+
+        lineViewButton.append("text")
             .attr("x", this.size - 14)
             .attr("y", 10)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")
-            .text("Linechart")
-            .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
+            .text("Linechart");
     }
 
 }
