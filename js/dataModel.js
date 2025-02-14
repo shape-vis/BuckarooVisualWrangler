@@ -1,14 +1,34 @@
 class DataModel {
     constructor(initialData) {
       this.originalData = initialData;
-      this.data = initialData;
+      this.data = this.preprocessData(initialData);
+      console.log("Cleaned Data: ", this.data.objects());
       this.selectedPoints = [];
       this.dataStates = [];
       this.redoStack = [];
       this.dataTransformations = [];
       this.transformationPoints = [];
     }
-  
+
+    preprocessData(table) {
+      let tempArr = table.objects().map(row => {
+        let newRow = { ...row }; 
+
+        Object.keys(row).forEach(column => {
+            let value = row[column];
+
+            let parsedValue = parseInt(value, 10);
+
+            newRow[column] = isNaN(parsedValue) ? value : parsedValue;
+        });
+
+        return newRow;
+      });
+
+      // Convert back to an Arquero table
+      return aq.from(tempArr);
+    }
+
     getData() {
       return this.data;
     }

@@ -1,7 +1,7 @@
 let activeDataset = "practice";
 
 const data = aq.table({
-    id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     age:        ["sixty", 22, true, 99, 40, 45, 0, 89, NaN, 55],
     "salary (k)": [NaN, 65, '$', 70, "fifty", 80, 0, 99, 85, 89],
     employees: [0, 5, "None", NaN, 15, 20, 25, 30, 0, 89],
@@ -9,8 +9,10 @@ const data = aq.table({
 
 console.log("Practice Data: ", data.objects());
 
+const practiceController = new ScatterplotController(data, "#matrix-vis-practice");
+
 // const data2 = aq.table({
-//     id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+//     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 //     age: [25, 0, 35, 0, 40, 45, 0, 89, 72, 55],
 //     "salary (k)": [40, 65, 55, 70, 15, 75, 0, 80, 85, 89],
 //     employees: [0, 5, 10, 55, 15, 20, 25, 30, 0, 89],
@@ -18,13 +20,14 @@ console.log("Practice Data: ", data.objects());
 
 let data2 = null;
 // May need to change 'id' to 'ID'
-d3.csv("data/stackoverflow_db.csv").then(data => {
-  data2 = aq.from(data).slice(0, 30);
+d3.csv("data/stackoverflow_db.csv").then(inputData => {
+  data2 = aq.from(inputData).slice(0, 5);
+  data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding');
   console.log("Data2: ", data2.objects());
-});
 
-const practiceController = new ScatterplotController(data, "#matrix-vis-practice");
-const stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
+  // Ensure controller is initialized only after data2 is ready
+  const stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
+});
 
 document.getElementById("tab2").style.display = "none";
 

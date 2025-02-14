@@ -11,7 +11,7 @@ class ScatterplotMatrixView{
         this.yPadding = 60;
         this.labelPadding = 20;
 
-        this.leftMargin = 100;
+        this.leftMargin = 120;
         this.topMargin = 30;
         this.bottomMargin = 25; 
         this.rightMargin = 60; 
@@ -66,10 +66,8 @@ class ScatterplotMatrixView{
                 .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);
 
             if (i === j) {
-                const data = givenData.select(["id", xCol]).objects();
+                const data = givenData.select(["ID", xCol]).objects();
 
-                // const numericData = data.filter(d => !isNaN(d[xCol])); //isNumber()
-                // const nonNumericData = data.filter(d => isNaN(d[xCol])); //Convert all other types to strings. Use scaleOrdinal. Order the set.
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol])
                 );
@@ -164,32 +162,6 @@ class ScatterplotMatrixView{
                         d3.select(this).attr("fill", (d) => d.category ? "gray" : "steelblue");
                         tooltip.style("display", "none");
                     });
-                    // .attr("x", (d) => d.isNan ? d.x0 : xScale(d.x0))
-                    // .attr("width", (d) => d.isNan ? 20 : xScale(d.x1) - xScale(d.x0))
-                    // .attr("y", (d) => yScale(d.length))
-                    // .attr("height", (d) => this.size - yScale(d.length))
-                    // .attr("fill", (d) => d.isNan ? "gray" : "steelblue") 
-                    // .attr("stroke", d => (d.isNan ? "red" : "none")) 
-                    // .attr("stroke-width", d => (d.isNan ? 1 : 0))  
-                    // .attr("opacity", 0.8)
-                    // .attr("data-ids", d => d.ids.join(","))
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(d.isNan
-                    //             ? `<strong>NaN Count:</strong> ${d.length}`
-                    //             : `<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count:</strong> ${d.length}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", (d) => d.isNan ? "gray" : "steelblue");
-                    //     tooltip.style("display", "none");
-                    // });
 
                 cellGroup
                     .append("g")
@@ -221,7 +193,7 @@ class ScatterplotMatrixView{
                 svg
                     .append("text")
                     .attr("x", xPosition) 
-                    .attr("y", yPosition) 
+                    .attr("y", yPosition - 20) 
                     .style("text-anchor", "middle")
                     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                     .text("count");
@@ -233,7 +205,7 @@ class ScatterplotMatrixView{
                     .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
 
                 lineViewButton.append("rect")
-                    .attr("x", - 85)
+                    .attr("x", - 105)
                     .attr("y", 0)
                     .attr("width", 40)
                     .attr("height", 15)
@@ -242,7 +214,7 @@ class ScatterplotMatrixView{
                     .attr("stroke", "#333");
 
                 lineViewButton.append("text")
-                    .attr("x", - 65)
+                    .attr("x", - 85)
                     .attr("y", 10)
                     .attr("text-anchor", "middle")
                     .attr("font-size", "10px")
@@ -291,7 +263,7 @@ class ScatterplotMatrixView{
 
             if (i === j) {
                 
-                const data = givenData.select(["id", xCol]).objects();
+                const data = givenData.select(["ID", xCol]).objects();
 
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol])
@@ -374,21 +346,6 @@ class ScatterplotMatrixView{
                     .attr("opacity", 0.8)
                     .attr("data-ids", d => d.ids.join(","))
                     .on("click", (event, d) => handleBarClick(event, d, xCol));
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>bin range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>count:</strong> ${d.length}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", "steelblue");
-                    //     tooltip.style("display", "none");
-                    // });
             
                 cellGroup
                     .append("g")
@@ -420,7 +377,7 @@ class ScatterplotMatrixView{
                 svg
                     .append("text")
                     .attr("x", xPosition) 
-                    .attr("y", yPosition) 
+                    .attr("y", yPosition - 20) 
                     .style("text-anchor", "middle")
                     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                     .text("count");
@@ -538,21 +495,6 @@ class ScatterplotMatrixView{
                     .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
                     .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
                     .attr("opacity", 0.8);
-                    // .on("mouseover", function(event, d) {
-                    //     d3.select(this).attr("fill", "orange");
-                    //     tooltip.style("display", "block")
-                    //         .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                    //         .style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mousemove", function(event) {
-                    //     tooltip.style("left", `${event.pageX + 10}px`)
-                    //         .style("top", `${event.pageY + 10}px`);
-                    // })
-                    // .on("mouseout", function() {
-                    //     d3.select(this).attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"));
-                    //     tooltip.style("display", "none");
-                    // });
                     
                 cellGroup.append("g")
                     .attr("class", "brush")  
@@ -597,7 +539,7 @@ class ScatterplotMatrixView{
                 svg
                     .append("text")
                     .attr("x", xPosition) 
-                    .attr("y", yPosition) 
+                    .attr("y", yPosition - 20) 
                     .style("text-anchor", "middle")
                     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                     .text(yCol);
@@ -766,7 +708,7 @@ class ScatterplotMatrixView{
         svg
             .append("text")
             .attr("x", xPosition) 
-            .attr("y", yPosition) 
+            .attr("y", yPosition - 20) 
             .style("text-anchor", "middle")
             .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
             .text(yCol);
@@ -947,7 +889,7 @@ class ScatterplotMatrixView{
         svg
             .append("text")
             .attr("x", xPosition) 
-            .attr("y", yPosition) 
+            .attr("y", yPosition - 20) 
             .style("text-anchor", "middle")
             .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
             .text(yCol);
@@ -958,7 +900,7 @@ class ScatterplotMatrixView{
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
 
         lineViewButton.append("rect")
-            .attr("x", - 90)
+            .attr("x", - 110)
             .attr("y", 0)
             .attr("width", 45)
             .attr("height", 15)
@@ -967,7 +909,7 @@ class ScatterplotMatrixView{
             .attr("stroke", "#333");
 
         lineViewButton.append("text")
-            .attr("x", - 67)
+            .attr("x", - 87)
             .attr("y", 10)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
@@ -987,7 +929,7 @@ class ScatterplotMatrixView{
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
 
         lineViewButton.append("rect")
-            .attr("x", - 85)
+            .attr("x", - 105)
             .attr("y", 0)
             .attr("width", 40)
             .attr("height", 15)
@@ -996,7 +938,7 @@ class ScatterplotMatrixView{
             .attr("stroke", "#333");
 
         lineViewButton.append("text")
-            .attr("x", - 65)
+            .attr("x", - 85)
             .attr("y", 10)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
