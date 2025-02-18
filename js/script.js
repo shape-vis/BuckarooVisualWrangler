@@ -1,4 +1,5 @@
 let activeDataset = "practice";
+let practiceController, stackoverflowController;
 
 const data = aq.table({
     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -9,7 +10,7 @@ const data = aq.table({
 
 console.log("Practice Data: ", data.objects());
 
-const practiceController = new ScatterplotController(data, "#matrix-vis-practice");
+practiceController = new ScatterplotController(data, "#matrix-vis-practice");
 
 // const data2 = aq.table({
 //     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -25,8 +26,7 @@ d3.csv("data/stackoverflow_db.csv").then(inputData => {
   data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding');
   console.log("Data2: ", data2.objects());
 
-  // Ensure controller is initialized only after data2 is ready
-  const stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
+  stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
 });
 
 document.getElementById("tab2").style.display = "none";

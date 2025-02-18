@@ -65,7 +65,7 @@ class DataModel {
   }
   
   imputeAverage(column) {
-    let condition = (d) => selectedIds.has(d.id) ? avg : d[column];
+    let condition = (d) => selectedIds.has(d.ID) ? avg : d[column];
 
     this.dataStates.push(this.data);
     this.redoStack = [];
@@ -81,7 +81,7 @@ class DataModel {
       
     console.log("Avg: ", avg);
 
-    const selectedIds = new Set(this.selectedPoints.map(p => p.id));
+    const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
     this.data = this.data.derive({ 
         [column]: aq.escape(condition)
     });

@@ -52,9 +52,10 @@ class ScatterplotController {
     }
   
     handleBarClick(event, barData, column) {
+        console.log("Bar data: ", barData);
         document.getElementById("impute-average-x").textContent = `Impute average for ${column}`;
         this.xCol = column;
-        const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.id));
+        const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.ID));
 
         console.log("Selected bar points:", selectedPoints);
 
@@ -87,6 +88,9 @@ class ScatterplotController {
                 targetTab.style.display = "block";
 
                 document.querySelector("input[name='options'][value='allData']").checked = true;
+
+                const activeController = getActiveController();
+                activeController.render();
 
                 attachButtonEventListeners();
             });
@@ -131,7 +135,7 @@ function attachButtonEventListeners(){
     d3.select("#remove-selected-data").on("click", () => {
         const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
-        controller.model.filterData((row) => !selectedPoints.some((point) => point.id === row.id));
+        controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
         controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 

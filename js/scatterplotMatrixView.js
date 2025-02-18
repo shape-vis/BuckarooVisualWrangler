@@ -106,7 +106,7 @@ class ScatterplotMatrixView{
                         x0: bin.x0,
                         x1: bin.x1,
                         length: bin.length,
-                        ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.id)
+                        ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.ID)
                     };
                 });
 
@@ -122,7 +122,7 @@ class ScatterplotMatrixView{
                         x0: categoricalScale(category),
                         x1: categoricalScale(category) + binWidth,
                         length: nonNumericData.filter(d => String(d[xCol]) === category).length,
-                        ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.id),
+                        ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
                         category: category 
                     });
                 });
@@ -303,7 +303,7 @@ class ScatterplotMatrixView{
                         x0: bin.x0,
                         x1: bin.x1,
                         length: bin.length,
-                        ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.id)
+                        ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.ID)
                     };
                 });
 
@@ -319,7 +319,7 @@ class ScatterplotMatrixView{
                         x0: categoricalScale(category),
                         x1: categoricalScale(category) + binWidth,
                         length: nonNumericData.filter(d => String(d[xCol]) === category).length,
-                        ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.id),
+                        ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
                         category: category 
                     });
                 });
@@ -338,7 +338,7 @@ class ScatterplotMatrixView{
                     .attr("y", (d) => yScale(d.length))
                     .attr("height", (d) => numericSpace - yScale(d.length))
                     .attr("fill", (d) => {
-                        const isSelected = d.ids.some(id => this.selectedPoints.some(p => p.id === id));
+                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                         return isSelected ? "red" : (d.category ? "gray" : "steelblue");
                     })
                     .attr("stroke", d => (d.category ? "red" : "none")) 
