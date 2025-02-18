@@ -2,6 +2,7 @@ class DataModel {
     constructor(initialData) {
       this.originalData = initialData;
       this.data = this.preprocessData(initialData);
+      // this.data = initialData;
       console.log("Cleaned Data: ", this.data.objects());
       this.selectedPoints = [];
       this.dataStates = [];
@@ -11,21 +12,26 @@ class DataModel {
     }
 
     preprocessData(table) {
+      function parseValue(value) {
+        if (typeof value === "number") return value; // Already a number
+
+        if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim())) {
+            return +value; // Convert only if it's purely numeric
+        }
+
+        return value; // Keep categorical values as-is
+      }
+
       let tempArr = table.objects().map(row => {
         let newRow = { ...row }; 
 
         Object.keys(row).forEach(column => {
-            let value = row[column];
-
-            let parsedValue = parseInt(value, 10);
-
-            newRow[column] = isNaN(parsedValue) ? value : parsedValue;
+            newRow[column] = parseValue(row[column]); // Apply parsing logic
         });
 
         return newRow;
       });
 
-      // Convert back to an Arquero table
       return aq.from(tempArr);
     }
 
