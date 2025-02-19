@@ -31,4 +31,4 @@ d3.csv("data/stackoverflow_db.csv").then(inputData => {
 
 document.getElementById("tab2").style.display = "none";
 
-attachButtonEventListeners(
+attachButtonEventListeners();
