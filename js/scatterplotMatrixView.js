@@ -8,12 +8,12 @@ class ScatterplotMatrixView{
 
         this.size = 180; // Size of each cell in matrix
         this.xPadding = 150;
-        this.yPadding = 60;
-        this.labelPadding = 20;
+        this.yPadding = 90;
+        this.labelPadding = 60;
 
         this.leftMargin = 120;
         this.topMargin = 30;
-        this.bottomMargin = 100; 
+        this.bottomMargin = 125; 
         this.rightMargin = 60; 
 
         this.selection = null;
@@ -95,6 +95,7 @@ class ScatterplotMatrixView{
                 
                 if (numericData.length > 0)
                 {
+                    uniqueCategories = sortCategories(uniqueCategories);
                     const xScale = d3.scaleLinear()
                         .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
                         .range([0, numericSpace]);
@@ -207,6 +208,7 @@ class ScatterplotMatrixView{
                 }
                 else{   // Data is all categorical
                     uniqueCategories = uniqueCategories.slice(1);
+                    uniqueCategories = sortCategories(uniqueCategories);
 
                     const xScale = d3.scaleBand()
                         .domain(uniqueCategories)
@@ -297,7 +299,7 @@ class ScatterplotMatrixView{
 
                 lineViewButton.append("rect")
                     .attr("x", - 105)
-                    .attr("y", 0)
+                    .attr("y", - 35)
                     .attr("width", 40)
                     .attr("height", 15)
                     .attr("rx", 3)
@@ -306,7 +308,7 @@ class ScatterplotMatrixView{
 
                 lineViewButton.append("text")
                     .attr("x", - 85)
-                    .attr("y", 10)
+                    .attr("y", - 25)
                     .attr("text-anchor", "middle")
                     .attr("font-size", "10px")
                     .attr("fill", "#333")
@@ -756,7 +758,7 @@ class ScatterplotMatrixView{
                 .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
                 .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
                 .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
-                .attr("opacity", 0.8)
+                .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
@@ -829,6 +831,9 @@ class ScatterplotMatrixView{
         {
             console.log("NON X PLOT", xCol, yCol);
             uniqueXCategories = uniqueXCategories.slice(1);
+            uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = sortCategories(uniqueXCategories);
+            uniqueYCategories = sortCategories(uniqueYCategories);
 
             const xScale = d3.scalePoint()
                 .domain(uniqueXCategories)
@@ -844,7 +849,7 @@ class ScatterplotMatrixView{
             
             const yScale = d3.scaleLinear()
                 .domain([Math.min(0, d3.min(nonNumericXData, d => d[yCol])), d3.max(nonNumericXData, d => d[yCol]) + 1])
-                .range([numericSpace, 0]);
+                .range([this.size, 0]);
 
             const categoricalYStart = yScale.range()[1] - 10;
             const categoricalYScale = d3.scaleOrdinal()
@@ -868,7 +873,7 @@ class ScatterplotMatrixView{
                 .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
                 .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
                 .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
-                .attr("opacity", 0.8)
+                .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
@@ -925,7 +930,7 @@ class ScatterplotMatrixView{
                 .text(xCol);
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
             svg
                 .append("text")
@@ -941,10 +946,13 @@ class ScatterplotMatrixView{
         {
             console.log("NON Y PLOT", xCol, yCol);
             uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = uniqueXCategories.slice(1);
+            uniqueYCategories = sortCategories(uniqueYCategories);
+            uniqueXCategories = sortCategories(uniqueXCategories);
 
             const xScale = d3.scaleLinear()
-                .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
-                .range([0, numericSpace]);
+                .domain([Math.min(0, d3.min(nonNumericYData, d => d[xCol])), d3.max(nonNumericYData, d => d[xCol]) + 1])
+                .range([0, this.size]);
 
             const xTickValues = xScale.ticks(); 
             const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
@@ -981,7 +989,7 @@ class ScatterplotMatrixView{
                 .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
                 .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
                 .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
-                .attr("opacity", 0.8)
+                .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
@@ -1000,7 +1008,7 @@ class ScatterplotMatrixView{
 
             cellGroup
                 .append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
+                .attr("transform", `translate(0, ${this.size})`)
                 .call(d3.axisBottom(xScale))
                 .selectAll("text") 
                 .style("text-anchor", "end") 
@@ -1008,6 +1016,8 @@ class ScatterplotMatrixView{
                 .attr("dx", "-0.5em") 
                 .attr("dy", "0.5em")  
                 .attr("transform", "rotate(-45)");
+
+            console.log("UX", uniqueXCategories);
 
             if (uniqueXCategories.length > 0) {
             cellGroup.append("g")
@@ -1033,7 +1043,7 @@ class ScatterplotMatrixView{
             svg
                 .append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
                 .text(xCol);
 
@@ -1054,6 +1064,8 @@ class ScatterplotMatrixView{
             console.log("ALL CAT PLOT", xCol, yCol);
             uniqueXCategories = uniqueXCategories.slice(1);
             uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = sortCategories(uniqueXCategories);
+            uniqueYCategories = sortCategories(uniqueYCategories);
 
             const xScale = d3.scalePoint()
                 .domain(uniqueXCategories)
@@ -1072,7 +1084,7 @@ class ScatterplotMatrixView{
                 .attr("cy", d => yScale(d[yCol]))
                 .attr("r", 3)
                 .attr("fill", "steelblue")
-                .attr("opacity", 0.8)
+                .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
@@ -1233,7 +1245,6 @@ class ScatterplotMatrixView{
 
         console.log("Before sorting:", combinedData.map(d => ({ x: d[xCol], type: d.type })));
 
-
         combinedData.sort((a, b) => {
             const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
             const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
@@ -1329,7 +1340,7 @@ class ScatterplotMatrixView{
 
         lineViewButton.append("rect")
             .attr("x", - 110)
-            .attr("y", 0)
+            .attr("y", - 35)
             .attr("width", 45)
             .attr("height", 15)
             .attr("rx", 3)
@@ -1338,7 +1349,7 @@ class ScatterplotMatrixView{
 
         lineViewButton.append("text")
             .attr("x", - 87)
-            .attr("y", 10)
+            .attr("y", - 25)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")
@@ -1358,7 +1369,7 @@ class ScatterplotMatrixView{
 
         lineViewButton.append("rect")
             .attr("x", - 105)
-            .attr("y", 0)
+            .attr("y", - 35)
             .attr("width", 40)
             .attr("height", 15)
             .attr("rx", 3)
@@ -1367,7 +1378,7 @@ class ScatterplotMatrixView{
 
         lineViewButton.append("text")
             .attr("x", - 85)
-            .attr("y", 10)
+            .attr("y", - 25)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")
@@ -1393,4 +1404,23 @@ class ScatterplotMatrixView{
         }
     }
 
+}
+
+function sortCategories(categories) {
+    return categories
+        .filter(d => d !== undefined && d !== null)  // Remove null/undefined values
+        .sort((a, b) => {
+            const numA = parseInt(a.match(/^\d+/)?.[0]); // Extract leading number (if any)
+            const numB = parseInt(b.match(/^\d+/)?.[0]);
+
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return numA - numB; // Sort numerically if both have numbers
+            } else if (!isNaN(numA)) {
+                return -1; // Numbers should come before text
+            } else if (!isNaN(numB)) {
+                return 1;
+            } else {
+                return a.localeCompare(b); // Default to alphabetical sorting
+            }
+        });
 }
