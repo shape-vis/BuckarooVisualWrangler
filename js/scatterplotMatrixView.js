@@ -1829,19 +1829,19 @@ class ScatterplotMatrixView{
 
 function sortCategories(categories) {
     return categories
-        .filter(d => d !== undefined && d !== null)  // Remove null/undefined values
+        .filter(d => d !== undefined && d !== null)  
         .sort((a, b) => {
-            const numA = parseInt(a.match(/^\d+/)?.[0]); // Extract leading number (if any)
+            const numA = parseInt(a.match(/^\d+/)?.[0]);
             const numB = parseInt(b.match(/^\d+/)?.[0]);
 
             if (!isNaN(numA) && !isNaN(numB)) {
-                return numA - numB; // Sort numerically if both have numbers
+                return numA - numB;
             } else if (!isNaN(numA)) {
-                return -1; // Numbers should come before text
+                return -1; 
             } else if (!isNaN(numB)) {
                 return 1;
             } else {
-                return a.localeCompare(b); // Default to alphabetical sorting
+                return a.localeCompare(b); 
             }
         });
 }

@@ -13,20 +13,20 @@ class DataModel {
 
     preprocessData(table) {
       function parseValue(value) {
-        if (typeof value === "number") return value; // Already a number
+        if (typeof value === "number") return value; 
 
         if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim())) {
-            return +value; // Convert only if it's purely numeric
+            return +value; 
         }
 
-        return value; // Keep categorical values as-is
+        return value; 
       }
 
       let tempArr = table.objects().map(row => {
         let newRow = { ...row }; 
 
         Object.keys(row).forEach(column => {
-            newRow[column] = parseValue(row[column]); // Apply parsing logic
+            newRow[column] = parseValue(row[column]); 
         });
 
         return newRow;
@@ -71,99 +71,52 @@ class DataModel {
   }
   
   imputeAverage(column) {
-    // let condition = (d) => selectedIds.has(d.ID) ? avg : d[column];
-
-    // this.dataStates.push(this.data);
-    // this.redoStack = [];
-    // this.dataTransformations.push(condition);
-    // this.transformationPoints.push(this.selectedPoints);
-
-    // console.log("Column: ", column);
-    // const columnValues = this.data.array(column).filter((v) => !isNaN(v) && v > 0);
-    // console.log("Column values: ", columnValues);
-    // const avg = columnValues.length > 0 
-    //     ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
-    //     : 0;
-      
-    // console.log("Avg: ", avg);
-
-    // const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
-    // this.data = this.data.derive({ 
-    //     [column]: aq.escape(condition)
-    // });
-
-    // console.log("Updated data:", this.data.objects());
-  
-    let condition = (d) => selectedIds.has(d.ID) ? avg : d[column];
-
     this.dataStates.push(this.data);
     this.redoStack = [];
-    this.dataTransformations.push(condition);
-    this.transformationPoints.push(this.selectedPoints);
 
     console.log("Column: ", column);
 
-    // Step 1: Check if the column is numeric or categorical
+    const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
+
     const isNumeric = this.data.array(column).some(v => typeof v === "number" && !isNaN(v));
 
-    let avgValue;
+    let imputedValue;
 
-    if (isNumeric) {
+    /// Calculate numeric average ///
+    if(isNumeric){
       const columnValues = this.data.array(column).filter((v) => !isNaN(v) && v > 0);
       console.log("Column values: ", columnValues);
-      const avg = columnValues.length > 0 
+      imputedValue = columnValues.length > 0 
           ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
           : 0;
         
-      console.log("Avg: ", avg);
-
-      const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
-      this.data = this.data.derive({ 
-          [column]: aq.escape(condition)
-      });
+      console.log("Avg: ", imputedValue);
     }
+    /// Calculate categorical mode ///
     else{
-      const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
-      const uniqueCategories = [...new Set(this.data.array(column))].filter(v => v !== null && v !== undefined);
+        const frequencyMap = this.data.array(column).reduce((acc, val) => {
+            acc[val] = (acc[val] || 0) + 1;
+            return acc;
+        }, {});
 
-      // Create numeric mappings
-      const categoryMap = uniqueCategories.reduce((acc, category, index) => {
-          acc[category] = index + 1; // Assign numeric values starting from 1
-          return acc;
-      }, {});
+        console.log("Category Frequency Map: ", frequencyMap);
 
-      const reverseCategoryMap = Object.entries(categoryMap).reduce((acc, [category, value]) => {
-          acc[value] = category;
-          return acc;
-      }, {});
+        imputedValue = Object.keys(frequencyMap).reduce((a, b) =>
+            frequencyMap[a] > frequencyMap[b] ? a : b
+        );
 
-      console.log("Category Map: ", categoryMap);
-
-      // Convert categories to numbers
-      const columnValues = this.data.array(column)
-          .filter(v => v in categoryMap)
-          .map(v => categoryMap[v]);
-
-      console.log("Column values (numeric for categories): ", columnValues);
-
-      // Compute average numeric representation
-      const avgNumeric = columnValues.length > 0 
-          ? Math.round(columnValues.reduce((a, b) => a + b, 0) / columnValues.length)
-          : 1; // Default to the lowest category
-
-      avgValue = reverseCategoryMap[avgNumeric] || uniqueCategories[0]; // Default to first category if undefined
-
-      console.log("Computed Categorical Average: ", avgValue);
-
-      let condition = (d) => selectedIds.has(d.ID) ? avgValue : d[column];
-
-      this.data = this.data.derive({ 
-          [column]: aq.escape(condition)
-      });
+        console.log("Computed Categorical Mode: ", imputedValue);
     }
+
+    let condition = (d) => selectedIds.has(d.ID) ? imputedValue : d[column];
+    this.dataTransformations.push(condition);
+    this.transformationPoints.push(this.selectedPoints);
+
+    this.data = this.data.derive({ 
+      [column]: aq.escape(condition)
+    });
 
     console.log("Updated data:", this.data.objects());
-  
   }
     setSelectedPoints(points) {
       this.selectedPoints = points;
