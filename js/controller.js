@@ -27,19 +27,50 @@ class ScatterplotController {
         const selectedPoints = this.model.getData().objects().filter(d => {
             let xPos, yPos;
 
-            if (typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
-                xPos = xScale(d[xCol]);
-                yPos = yScale(d[yCol]);
-            } else if ((typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
-                xPos = categoricalXScale(d[xCol]);
-                yPos = yScale(d[yCol]);
-            } else if ((typeof d[xCol] === "number" && !isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))) {
-                xPos = xScale(d[xCol]);
-                yPos = categoricalYScale(d[yCol]);
-            } else {
-                xPos = categoricalXScale(d[xCol]);
-                yPos = categoricalYScale(d[yCol]);
+            if(categoricalXScale != null && categoricalYScale != null )
+            {
+                if (typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                    xPos = xScale(d[xCol]);
+                    yPos = yScale(d[yCol]);
+                } else if ((typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                    xPos = categoricalXScale(d[xCol]);
+                    yPos = yScale(d[yCol]);
+                } else if ((typeof d[xCol] === "number" && !isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))) {
+                    xPos = xScale(d[xCol]);
+                    yPos = categoricalYScale(d[yCol]);
+                } else {
+                    xPos = categoricalXScale(d[xCol]);
+                    yPos = categoricalYScale(d[yCol]);
+                }
             }
+            else if(categoricalXScale != null)
+            {
+                if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
+                    xPos = xScale(d[xCol]);
+                }
+                else {
+                    xPos = categoricalXScale(d[xCol]);
+                }
+
+                yPos = yScale(d[yCol]);
+            }
+            else if(categoricalYScale != null)
+            {
+                if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                    yPos = yScale(d[yCol]);
+                }
+                else {
+                    yPos = categoricalYScale(d[yCol]);
+                }
+
+                xPos = xScale(d[xCol]);
+            }
+            else
+            {
+                xPos = xScale(d[xCol]);
+                yPos = yScale(d[yCol]);
+            }
+            
 
             return xPos >= x0 && xPos <= x1 && yPos >= y0 && yPos <= y1;
         });

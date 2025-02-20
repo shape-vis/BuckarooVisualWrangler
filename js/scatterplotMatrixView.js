@@ -323,6 +323,7 @@ class ScatterplotMatrixView{
     }
 
     enableBrushing (givenData, handleBrush, handleBarClick){
+        console.log("Brushing enabled");
         let columns = givenData.columnNames().slice(1);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
@@ -557,8 +558,14 @@ class ScatterplotMatrixView{
                         .text("count");
                 }
             } 
+            /// Begin Scatterplot Code ///
             else {
                 const data = givenData.select([xCol, yCol]).objects(); 
+
+                const isNumeric = col => data.some(d => typeof d[col] === "number" && !isNaN(d[col]));
+
+                const xIsNumeric = isNumeric(xCol);
+                const yIsNumeric = isNumeric(yCol);
 
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
@@ -675,25 +682,14 @@ class ScatterplotMatrixView{
                             return yScale(d[yCol]);
                         })
                         .attr("r", d => (d.type.includes("nan") ? 4 : 3))
-                        .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
+                        .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
                         .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
                         .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
-                        .attr("opacity", 0.6)
-                        .on("mouseover", function(event, d) {
-                            d3.select(this).attr("fill", "orange");
-                            tooltip.style("display", "block")
-                                .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                                .style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mousemove", function(event) {
-                            tooltip.style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mouseout", function() {
-                            d3.select(this).attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"));
-                            tooltip.style("display", "none");
-                        });
+                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
+
+                    cellGroup.append("g")
+                        .attr("class", "brush")  
+                        .call(brush);
 
                     cellGroup
                         .append("g")
@@ -779,6 +775,16 @@ class ScatterplotMatrixView{
                         
                     const tooltip = d3.select("#tooltip"); 
 
+                    const isSelected = (d) => this.selectedPoints.some(p => 
+                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                        (p[xCol] === d[xCol]) &&
+                        (p[yCol] === d[yCol] || isNaN(d[yCol]))
+                    );
+    
+                    const brush = d3.brush()
+                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
+                        .on("end", (event) => handleBrush(event, xScale, yScale, null, categoricalYScale, xCol, yCol));  
+
                     cellGroup.selectAll("circle")
                         .data(combinedData)
                         .join("circle")
@@ -789,25 +795,14 @@ class ScatterplotMatrixView{
                             return yScale(d[yCol]);
                         })
                         .attr("r", d => (d.type === "nan-y" ? 4 : 3))
-                        .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
+                        .attr("fill", d => isSelected(d) ? "red" : (d.type === "nan-y" ? "gray" : "steelblue"))
                         .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
                         .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
-                        .attr("opacity", 0.6)
-                        .on("mouseover", function(event, d) {
-                            d3.select(this).attr("fill", "orange");
-                            tooltip.style("display", "block")
-                                .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                                .style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mousemove", function(event) {
-                            tooltip.style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mouseout", function() {
-                            d3.select(this).attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"));
-                            tooltip.style("display", "none");
-                        });
+                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
+
+                    cellGroup.append("g")
+                        .attr("class", "brush")  
+                        .call(brush);
 
                     cellGroup
                         .append("g")
@@ -894,6 +889,16 @@ class ScatterplotMatrixView{
 
                     const tooltip = d3.select("#tooltip"); 
 
+                    const isSelected = (d) => this.selectedPoints.some(p => 
+                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                        (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
+                        (p[yCol] === d[yCol])
+                    );
+    
+                    const brush = d3.brush()
+                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
+                        .on("end", (event) => handleBrush(event, xScale, yScale, categoricalXScale, null, xCol, yCol));  
+
                     cellGroup.selectAll("circle")
                         .data(combinedData)
                         .join("circle")
@@ -904,25 +909,14 @@ class ScatterplotMatrixView{
                         })
                         .attr("cy", d => yScale(d[yCol]))
                         .attr("r", d => (d.type === "nan-x" ? 4 : 3))
-                        .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
+                        .attr("fill", d => isSelected(d) ? "red" : (d.type === "nan-x" ? "gray" : "steelblue"))
                         .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
                         .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
-                        .attr("opacity", 0.6)
-                        .on("mouseover", function(event, d) {
-                            d3.select(this).attr("fill", "orange");
-                            tooltip.style("display", "block")
-                                .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                                .style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mousemove", function(event) {
-                            tooltip.style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mouseout", function() {
-                            d3.select(this).attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"));
-                            tooltip.style("display", "none");
-                        });
+                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
+
+                    cellGroup.append("g")
+                        .attr("class", "brush")  
+                        .call(brush);
 
                     cellGroup
                         .append("g")
@@ -994,29 +988,28 @@ class ScatterplotMatrixView{
 
                     const tooltip = d3.select("#tooltip"); 
 
+                    const isSelected = (d) => this.selectedPoints.some(p => 
+                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                        (p[xCol] === d[xCol]) &&
+                        (p[yCol] === d[yCol])
+                    );
+    
+                    const brush = d3.brush()
+                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
+                        .on("end", (event) => handleBrush(event, xScale, yScale, null, null, xCol, yCol));  
+
                     cellGroup.selectAll("circle")
                         .data(combinedData)
                         .join("circle")
                         .attr("cx", d => xScale(d[xCol]))
                         .attr("cy", d => yScale(d[yCol]))
                         .attr("r", 3)
-                        .attr("fill", "steelblue")
-                        .attr("opacity", 0.6)
-                        .on("mouseover", function(event, d) {
-                            d3.select(this).attr("fill", "orange");
-                            tooltip.style("display", "block")
-                                .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
-                                .style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mousemove", function(event) {
-                            tooltip.style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mouseout", function() {
-                            d3.select(this).attr("fill", "steelblue");
-                            tooltip.style("display", "none");
-                        });
+                        .attr("fill", d => isSelected(d) ? "red" : "steelblue")
+                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
+                    
+                    cellGroup.append("g")
+                        .attr("class", "brush")  
+                        .call(brush);
 
                     cellGroup
                         .append("g")
