@@ -2,15 +2,23 @@ class ScatterplotController {
     constructor(data, container) {
       this.model = new DataModel(data);
       this.view = new ScatterplotMatrixView(container);
+      this.selectedAttributes = []; // Store selected columns
       this.xCol = null;
       this.yCol = null;
+      this.filteredData = this.model.getData();
   
       this.render();
       this.setupEventListeners();
     }
+
+    updateSelectedAttributes(attributes) {
+        this.selectedAttributes = ["ID", ...attributes];
+        this.filteredData = this.model.getData().select(this.selectedAttributes);
+        this.render(); // Re-render visualization with updated columns
+    }
   
     render() {
-        this.view.plotMatrix(this.model.getData());
+        this.view.plotMatrix(this.filteredData);
     }
   
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
@@ -79,12 +87,14 @@ class ScatterplotController {
                
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        this.view.enableBrushing(this.filteredData, this.handleBrush.bind(this), this.handleBarClick.bind(this));
     }
   
     handleBarClick(event, barData, column) {
         console.log("Bar data: ", barData);
         document.getElementById("impute-average-x").textContent = `Impute average for ${column}`;
+        document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
+
         this.xCol = column;
         const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.ID));
 
@@ -93,7 +103,7 @@ class ScatterplotController {
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
         
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        this.view.enableBrushing(this.filteredData, this.handleBrush.bind(this), this.handleBarClick.bind(this));
 
         d3.select(event.target)
             .attr('fill', 'red');
@@ -104,6 +114,10 @@ class ScatterplotController {
     }
   
     setupEventListeners() {
+        const getActiveController = () => {
+            return activeDataset === "practice" ? practiceController : stackoverflowController;
+        };
+
         document.querySelectorAll(".tab-button").forEach(button => {
             button.addEventListener("click", function() {
                 document.querySelectorAll(".tab-button").forEach(btn => btn.classList.remove("active"));
@@ -119,9 +133,16 @@ class ScatterplotController {
                 targetTab.style.display = "block";
 
                 document.querySelector("input[name='options'][value='allData']").checked = true;
+                document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
+                document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
 
                 const activeController = getActiveController();
                 activeController.render();
+
+                // Update dropdown with correct dataset using the view function
+                console.log("Updating dropdown for dataset:", activeController);
+
+                activeController.view.populateDropdownFromTable(activeController.model.data, activeController);
 
                 attachButtonEventListeners();
             });
@@ -146,13 +167,13 @@ function attachButtonEventListeners(){
         const controller = getActiveController();
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 
     d3.select("#redo").on("click", () => {
         const controller = getActiveController();
         controller.model.redoLastTransformation();
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 
     d3.select("#clear-selection").on("click", () => {
@@ -160,28 +181,28 @@ function attachButtonEventListeners(){
         document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
         const controller = getActiveController();
         controller.view.setSelectedPoints([]);
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 
     d3.select("#remove-selected-data").on("click", () => {
         const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 
     d3.select("#impute-average-x").on("click", () => {
         const controller = getActiveController();
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 
     d3.select("#impute-average-y").on("click", () => {
         const controller = getActiveController();
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
     });
 
     const radioButtons = document.querySelectorAll("input[name='options']");
@@ -190,12 +211,13 @@ function attachButtonEventListeners(){
         radio.addEventListener("change", (event) => {
             const controller = getActiveController();
             if (event.target.value === "selectData" && event.target.checked) {
-                controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+                controller.view.enableBrushing(controller.filteredData, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
             } else {
                 controller.render();
             }
         });
     });
 }
+
     
        

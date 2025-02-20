@@ -23,7 +23,7 @@ let data2 = null;
 // May need to change 'id' to 'ID'
 d3.csv("data/stackoverflow_db.csv").then(inputData => {
   data2 = aq.from(inputData).slice(0, 200);
-  data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding');
+  // data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding', 'HoursComputer');
   console.log("Data2: ", data2.objects());
 
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");

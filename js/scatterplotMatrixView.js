@@ -31,7 +31,89 @@ class ScatterplotMatrixView{
         this.selectedPoints = points;
       }
 
+    populateDropdownFromTable(table, controller) {
+        const dropdownMenu = document.getElementById("dropdown-menu");
+        const dropdownButton = document.getElementById("dropdown-button");
+    
+        dropdownMenu.innerHTML = ""; // Clear previous options
+        let selectedAttributes = new Set();
+    
+        const attributes = table.columnNames().slice(1);
+    
+        // ✅ Preselect the first three attributes
+        if (attributes.length >= 3) {
+            selectedAttributes = new Set(attributes.slice(0, 3)); // Select first 3 attributes
+            controller.updateSelectedAttributes(Array.from(selectedAttributes)); // ✅ Update visualization
+        }
+    
+        // ✅ Deselect All Button
+        let deselectAllButton = document.createElement("button");
+        deselectAllButton.textContent = "Deselect All";
+        deselectAllButton.classList.add("deselect-button");
+        deselectAllButton.addEventListener("click", function (event) {
+            event.preventDefault();
+            selectedAttributes.clear();
+            document.querySelectorAll("#dropdown-menu input[type='checkbox']").forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            controller.updateSelectedAttributes([]); // ✅ Pass empty list to reset selection
+            updateDropdownButton();
+        });
+    
+        dropdownMenu.appendChild(deselectAllButton);
+    
+        attributes.forEach((attr, index) => {
+            let label = document.createElement("label");
+            let checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = attr;
+    
+            // ✅ Automatically check the first 3 attributes
+            if (selectedAttributes.has(attr)) {
+                checkbox.checked = true;
+            }
+    
+            checkbox.addEventListener("change", function () {
+                if (checkbox.checked) {
+                    if (selectedAttributes.size < 3) {
+                        selectedAttributes.add(attr);
+                    } else {
+                        checkbox.checked = false; // Prevent more than 3 selections
+                        alert("You can select up to 3 attributes only.");
+                    }
+                } else {
+                    selectedAttributes.delete(attr);
+                }
+    
+                controller.updateSelectedAttributes(Array.from(selectedAttributes)); // ✅ Update visualization
+                updateDropdownButton();
+            });
+    
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(attr));
+            dropdownMenu.appendChild(label);
+        });
+    
+        function updateDropdownButton() {
+            dropdownButton.textContent = `Select Attributes (${selectedAttributes.size}/3)`;
+        }
+    
+        dropdownButton.onclick = function () {
+            dropdownMenu.classList.toggle("show");
+        };
+    
+        document.addEventListener("click", function (event) {
+            if (!dropdownMenu.contains(event.target) && event.target !== dropdownButton) {
+                dropdownMenu.classList.remove("show");
+            }
+        });
+    
+        // ✅ Ensure button text updates initially
+        updateDropdownButton();
+    }
+
     plotMatrix(givenData) {    
+        console.log("Given data", givenData);
         let columns = givenData.columnNames().slice(1);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
@@ -1807,7 +1889,6 @@ class ScatterplotMatrixView{
     }
 
     getScatterScale(data, column, size, isX = true) {
-        // Check if the column contains only numeric values
         const isNumeric = data.every(d => typeof d[column] === "number" && !isNaN(d[column]));
     
         if (isNumeric) {
@@ -1815,7 +1896,6 @@ class ScatterplotMatrixView{
                 .domain([Math.min(0, d3.min(data, d => d[column])), d3.max(data, d => d[column]) + 1])
                 .range(isX ? [0, size] : [size, 0]); // X is left to right, Y is bottom to top
         } else {
-            // Extract unique categorical values
             const uniqueCategories = [...new Set(data.map(d => String(d[column])))].sort();
             
             return d3.scaleBand()

@@ -11,6 +11,13 @@ class DataModel {
       this.transformationPoints = [];
     }
 
+    selectColumns(selectedColumns) {
+      if (!selectedColumns || selectedColumns.length === 0) {
+          return this.data; // Return all columns if none are selected
+      }
+      return this.data.select(selectedColumns);
+  }
+
     preprocessData(table) {
       function parseValue(value) {
         if (typeof value === "number") return value; 

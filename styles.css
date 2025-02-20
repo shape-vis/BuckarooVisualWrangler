@@ -113,3 +113,49 @@
 .switch-view-button:hover {
     fill: #b0b0b0;
 }
+
+/* Dropdown container */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+/* Dropdown button */
+#dropdown-button {
+    background-color: #f9f9f9;
+    border: 1px solid #ccc;
+    padding: 8px;
+    cursor: pointer;
+    width: 150px;
+    text-align: center;
+}
+
+/* Dropdown content (hidden by default) */
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    width: 150px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+/* Show dropdown when active */
+.dropdown-content.show {
+    display: block;
+}
+
+/* Style for checkbox labels */
+.dropdown-content label {
+    display: block;
+    padding: 5px;
+    cursor: pointer;
+}
+
+/* Checkbox styling */
+.dropdown-content input[type="checkbox"] {
+    margin-right: 5px;
+}
