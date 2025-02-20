@@ -8,7 +8,6 @@ const data = aq.table({
     employees: [0, 5, "None", NaN, 15, 20, 25, 30, 0, 89],
   });
 
-console.log("Practice Data: ", data.objects());
 
 practiceController = new ScatterplotController(data, "#matrix-vis-practice");
 
@@ -24,7 +23,6 @@ let data2 = null;
 d3.csv("data/stackoverflow_db.csv").then(inputData => {
   data2 = aq.from(inputData).slice(0, 200);
   // data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding', 'HoursComputer');
-  console.log("Data2: ", data2.objects());
 
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
 });

@@ -35,18 +35,16 @@ class ScatterplotMatrixView{
         const dropdownMenu = document.getElementById("dropdown-menu");
         const dropdownButton = document.getElementById("dropdown-button");
     
-        dropdownMenu.innerHTML = ""; // Clear previous options
+        dropdownMenu.innerHTML = ""; 
         let selectedAttributes = new Set();
     
-        const attributes = table.columnNames().slice(1);
+        const attributes = table.columnNames().slice(1).sort();
     
-        // ✅ Preselect the first three attributes
         if (attributes.length >= 3) {
-            selectedAttributes = new Set(attributes.slice(0, 3)); // Select first 3 attributes
-            controller.updateSelectedAttributes(Array.from(selectedAttributes)); // ✅ Update visualization
+            selectedAttributes = new Set(attributes.slice(0, 3)); 
+            controller.updateSelectedAttributes(Array.from(selectedAttributes)); 
         }
     
-        // ✅ Deselect All Button
         let deselectAllButton = document.createElement("button");
         deselectAllButton.textContent = "Deselect All";
         deselectAllButton.classList.add("deselect-button");
@@ -56,7 +54,7 @@ class ScatterplotMatrixView{
             document.querySelectorAll("#dropdown-menu input[type='checkbox']").forEach(checkbox => {
                 checkbox.checked = false;
             });
-            controller.updateSelectedAttributes([]); // ✅ Pass empty list to reset selection
+            controller.updateSelectedAttributes([]); 
             updateDropdownButton();
         });
     
@@ -68,7 +66,6 @@ class ScatterplotMatrixView{
             checkbox.type = "checkbox";
             checkbox.value = attr;
     
-            // ✅ Automatically check the first 3 attributes
             if (selectedAttributes.has(attr)) {
                 checkbox.checked = true;
             }
@@ -78,14 +75,14 @@ class ScatterplotMatrixView{
                     if (selectedAttributes.size < 3) {
                         selectedAttributes.add(attr);
                     } else {
-                        checkbox.checked = false; // Prevent more than 3 selections
+                        checkbox.checked = false; 
                         alert("You can select up to 3 attributes only.");
                     }
                 } else {
                     selectedAttributes.delete(attr);
                 }
     
-                controller.updateSelectedAttributes(Array.from(selectedAttributes)); // ✅ Update visualization
+                controller.updateSelectedAttributes(Array.from(selectedAttributes)); 
                 updateDropdownButton();
             });
     
@@ -108,12 +105,10 @@ class ScatterplotMatrixView{
             }
         });
     
-        // ✅ Ensure button text updates initially
         updateDropdownButton();
     }
 
     plotMatrix(givenData) {    
-        console.log("Given data", givenData);
         let columns = givenData.columnNames().slice(1);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
@@ -405,7 +400,6 @@ class ScatterplotMatrixView{
     }
 
     enableBrushing (givenData, handleBrush, handleBarClick){
-        console.log("Brushing enabled");
         let columns = givenData.columnNames().slice(1);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
@@ -1011,8 +1005,6 @@ class ScatterplotMatrixView{
                         .attr("dy", "0.5em")  
                         .attr("transform", "rotate(-45)");
 
-                    console.log("UX", uniqueXCategories);
-
                     if (uniqueXCategories.length > 0) {
                     cellGroup.append("g")
                         .attr("transform", `translate(0, ${numericSpace})`)
@@ -1521,8 +1513,6 @@ class ScatterplotMatrixView{
                 .attr("dy", "0.5em")  
                 .attr("transform", "rotate(-45)");
 
-            console.log("UX", uniqueXCategories);
-
             if (uniqueXCategories.length > 0) {
             cellGroup.append("g")
                 .attr("transform", `translate(0, ${numericSpace})`)
@@ -1746,8 +1736,6 @@ class ScatterplotMatrixView{
             .domain(uniqueYCategories)
             .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
 
-        console.log("Before sorting:", combinedData.map(d => ({ x: d[xCol], type: d.type })));
-
         combinedData.sort((a, b) => {
             const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
             const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
@@ -1765,8 +1753,6 @@ class ScatterplotMatrixView{
         
             return aIsNumeric ? -1 : 1; 
         });
-
-        console.log("After sorting:", combinedData.map(d => ({ x: d[xCol], type: d.type })));
 
         const line = d3.line()
             .x(d => {
