@@ -113,3 +113,64 @@
 .switch-view-button:hover {
     fill: #b0b0b0;
 }
+
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+#dropdown-button {
+    background-color: #f9f9f9;
+    border: 1px solid #ccc;
+    padding: 8px;
+    cursor: pointer;
+    width: 150px;
+    text-align: center;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    width: 150px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+.dropdown-content.show {
+    display: block;
+}
+
+.dropdown-content label {
+    display: block;
+    padding: 5px;
+    cursor: pointer;
+}
+
+.dropdown-content input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+#legend {
+  width: 50%;
+  margin: 10px auto;
+  padding: 5px;
+  border: 1px solid #ccc;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin: 2px 0;
+  font-size: 14px;
+}
+
+.legend-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+}
