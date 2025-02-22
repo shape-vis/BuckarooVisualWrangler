@@ -121,6 +121,32 @@ class ScatterplotMatrixView{
         updateDropdownButton();
     }
 
+    updateLegend(groupByAttribute, givenData) {
+        const legendContainer = d3.select("#legend");
+        legendContainer.html("");
+      
+        if (!groupByAttribute) {
+          legendContainer.style("display", "none");
+          return;
+        }
+        legendContainer.style("display", "block");
+      
+        const uniqueGroups = Array.from(new Set(givenData.objects().map(d => d[groupByAttribute])));
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+      
+        uniqueGroups.forEach(group => {
+          const legendItem = legendContainer.append("div")
+            .attr("class", "legend-item");
+      
+          legendItem.append("span")
+            .attr("class", "legend-color")
+            .style("background-color", colorScale(group));
+      
+          legendItem.append("span")
+            .text(group);
+        });
+      }
+
     plotMatrix(givenData, groupByAttribute) {  
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
@@ -159,7 +185,14 @@ class ScatterplotMatrixView{
                 .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);
 
             if (i === j) {
-                const data = givenData.select(["ID", xCol]).objects();
+                let data = [];
+
+                if(groupByAttribute){
+                    data = givenData.select(["ID", xCol, groupByAttribute]).objects();
+                }
+                else{
+                    data = givenData.select(["ID", xCol]).objects();
+                }
 
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol])
@@ -313,49 +346,119 @@ class ScatterplotMatrixView{
                         .domain(uniqueCategories)
                         .range([0, this.size]);
 
-                    const histData = [];
+                    let yScale = null;
 
-                    uniqueCategories.forEach(category => {
-                        histData.push({
+                    if (groupByAttribute) {
+                        // Get unique groups from the groupByAttribute values
+                        const groups = Array.from(new Set(nonNumericData.map(d => d[groupByAttribute])));
+                        // Create a color scale using the same scheme as your plots
+                        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
+                        
+                        // For each unique category, count records per group
+                        const stackedData = uniqueCategories.map(category => {
+                            const obj = {
+                            category: category,
                             x0: xScale(category),
-                            x1: xScale(category) + xScale.bandwidth(),
-                            length: nonNumericData.filter(d => String(d[xCol]) === category).length,
-                            ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
-                            category: category 
+                            x1: xScale(category) + xScale.bandwidth()
+                            };
+                            groups.forEach(g => {
+                            obj[g] = nonNumericData.filter(d =>
+                                String(d[xCol]) === category && d[groupByAttribute] === g
+                            ).length;
+                            });
+                            return obj;
                         });
-                    });
-                    
-                    const yScale = d3.scaleLinear()
-                        .domain([0, d3.max(histData, (d) => d.length)])
-                        .range([this.size, 0]);
-                    
-                    const tooltip = d3.select("#tooltip");
 
-                    cellGroup.selectAll("rect")
-                        .data(histData)
-                        .join("rect")
-                        .attr("x", d => xScale(d.category))
-                        .attr("width", xScale.bandwidth())
-                        .attr("y", d => yScale(d.length))
-                        .attr("height", d => Math.max(0, this.size - yScale(d.length)))
-                        .attr("fill", "steelblue")
-                        .attr("opacity", 0.8)
-                        .attr("data-ids", d => d.ids.join(","))
-                        .on("mouseover", function(event, d) {
+                        console.log("StackData:", stackedData);
+                        
+                        // Compute maximum total count (across groups) for any category
+                        const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
+                        yScale = d3.scaleLinear().domain([0, yMax]).range([this.size, 0]);
+                        const tooltip = d3.select("#tooltip");
+                        
+                        // Create a stack generator for the groups
+                        const stackGen = d3.stack().keys(groups);
+                        const series = stackGen(stackedData);
+                        
+                        // Draw the stacked bars
+                        cellGroup.selectAll("g.series")
+                            .data(series)
+                            .join("g")
+                            .attr("class", "series")
+                            .attr("fill", d => colorScale(d.key))
+                            .selectAll("rect")
+                            .data(d => d)
+                            .join("rect")
+                            .attr("x", d => xScale(d.data.category))
+                            .attr("y", d => yScale(d[1]))
+                            .attr("width", xScale.bandwidth())
+                            .attr("height", d => yScale(d[0]) - yScale(d[1]))
+                            .on("mouseover", function(event, d) {
+                            // Get the group key from the parent element's data
+                            const group = d3.select(this.parentNode).datum().key;
+                            const count = d[1] - d[0];
+                            const totalCount = groups.reduce((sum, key) => sum + (d.data[key] || 0), 0);
                             d3.select(this).attr("fill", "orange");
                             tooltip.style("display", "block")
-                                .html(`<strong>${d.category}</strong><br><strong>Count: </strong>${d.length}`)
+                                .html(`<strong>${d.data.category}</strong><br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
                                 .style("left", `${event.pageX + 10}px`)
                                 .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mousemove", function(event) {
+                            })
+                            .on("mousemove", function(event) {
                             tooltip.style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                        })
-                        .on("mouseout", function() {
-                            d3.select(this).attr("fill", "steelblue");
+                                    .style("top", `${event.pageY + 10}px`);
+                            })
+                            .on("mouseout", function() {
+                            const group = d3.select(this.parentNode).datum().key;
+                            d3.select(this).attr("fill", colorScale(group));
                             tooltip.style("display", "none");
+                            });
+                    }
+                    else{
+                        const histData = [];
+
+                        uniqueCategories.forEach(category => {
+                            histData.push({
+                                x0: xScale(category),
+                                x1: xScale(category) + xScale.bandwidth(),
+                                length: nonNumericData.filter(d => String(d[xCol]) === category).length,
+                                ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
+                                category: category 
+                            });
                         });
+                        
+                        yScale = d3.scaleLinear()
+                            .domain([0, d3.max(histData, (d) => d.length)])
+                            .range([this.size, 0]);
+                        
+                        const tooltip = d3.select("#tooltip");
+
+                        cellGroup.selectAll("rect")
+                            .data(histData)
+                            .join("rect")
+                            .attr("x", d => xScale(d.category))
+                            .attr("width", xScale.bandwidth())
+                            .attr("y", d => yScale(d.length))
+                            .attr("height", d => Math.max(0, this.size - yScale(d.length)))
+                            .attr("fill", "steelblue")
+                            .attr("opacity", 0.8)
+                            .attr("data-ids", d => d.ids.join(","))
+                            .on("mouseover", function(event, d) {
+                                d3.select(this).attr("fill", "orange");
+                                tooltip.style("display", "block")
+                                    .html(`<strong>${d.category}</strong><br><strong>Count: </strong>${d.length}`)
+                                    .style("left", `${event.pageX + 10}px`)
+                                    .style("top", `${event.pageY + 10}px`);
+                            })
+                            .on("mousemove", function(event) {
+                                tooltip.style("left", `${event.pageX + 10}px`)
+                                    .style("top", `${event.pageY + 10}px`);
+                            })
+                            .on("mouseout", function() {
+                                d3.select(this).attr("fill", "steelblue");
+                                tooltip.style("display", "none");
+                            });
+                    }
                     
                     cellGroup
                         .append("g")
@@ -421,12 +524,17 @@ class ScatterplotMatrixView{
             });
         });
 
+        this.updateLegend(groupByAttribute, givenData);
+
     }
 
     enableBrushing (givenData, handleBrush, handleBarClick, groupByAttribute){
-        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+        const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
+        console.log("Unique groups:", uniqueGroups);
 
-        let columns = givenData.columnNames().slice(1);
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+
+        let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
 
@@ -460,7 +568,14 @@ class ScatterplotMatrixView{
 
             if (i === j) {
                 
-                const data = givenData.select(["ID", xCol]).objects();
+                let data = [];
+                
+                if(groupByAttribute){
+                    data = givenData.select(["ID", xCol, groupByAttribute]).objects();
+                }
+                else{
+                    data = givenData.select(["ID", xCol]).objects();
+                }
 
                 const numericData = data.filter(d => 
                     typeof d[xCol] === "number" && !isNaN(d[xCol])
@@ -607,38 +722,93 @@ class ScatterplotMatrixView{
                         .domain(uniqueCategories)
                         .range([0, this.size]);
 
-                    const histData = [];
+                    let yScale = null;
 
-                    uniqueCategories.forEach(category => {
-                        histData.push({
+                    if (groupByAttribute) {
+                        // Get unique groups from the groupByAttribute values
+                        const groups = Array.from(new Set(nonNumericData.map(d => d[groupByAttribute])));
+                        // Create a color scale using the same scheme as your plots
+                        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
+                        
+                        // For each unique category, count records per group
+                        const stackedData = uniqueCategories.map(category => {
+                            const obj = {
+                            category: category,
                             x0: xScale(category),
-                            x1: xScale(category) + xScale.bandwidth(),
-                            length: nonNumericData.filter(d => String(d[xCol]) === category).length,
-                            ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
-                            category: category 
+                            x1: xScale(category) + xScale.bandwidth()
+                            };
+                            groups.forEach(g => {
+                            obj[g] = nonNumericData.filter(d =>
+                                String(d[xCol]) === category && d[groupByAttribute] === g
+                            ).length;
+                            });
+                            return obj;
                         });
-                    });
-                    
-                    const yScale = d3.scaleLinear()
-                        .domain([0, d3.max(histData, (d) => d.length)])
-                        .range([this.size, 0]);
-                    
-                    const tooltip = d3.select("#tooltip");
 
-                    cellGroup.selectAll("rect")
-                        .data(histData)
-                        .join("rect")
-                        .attr("x", d => xScale(d.category))
-                        .attr("width", xScale.bandwidth())
-                        .attr("y", d => yScale(d.length))
-                        .attr("height", d => Math.max(0, this.size - yScale(d.length)))
-                        .attr("fill", (d) => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            return isSelected ? "red" : "steelblue";
-                        })                        
-                        .attr("opacity", 0.8)
-                        .attr("data-ids", d => d.ids.join(","))
-                        .on("click", (event, d) => handleBarClick(event, d, xCol));
+                        console.log("StackData:", stackedData);
+                        
+                        // Compute maximum total count (across groups) for any category
+                        const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
+                        yScale = d3.scaleLinear().domain([0, yMax]).range([this.size, 0]);
+                        const tooltip = d3.select("#tooltip");
+                        
+                        // Create a stack generator for the groups
+                        const stackGen = d3.stack().keys(groups);
+                        const series = stackGen(stackedData);
+                        
+                        // Draw the stacked bars
+                        cellGroup.selectAll("g.series")
+                            .data(series)
+                            .join("g")
+                            .attr("class", "series")
+                            .attr("fill", d => colorScale(d.key))
+                            .attr("stroke", d => isSelected(d) ? "black": "none")
+                            .selectAll("rect")
+                            .data(d => d)
+                            .join("rect")
+                            .attr("x", d => xScale(d.data.category))
+                            .attr("y", d => yScale(d[1]))
+                            .attr("width", xScale.bandwidth())
+                            .attr("height", d => yScale(d[0]) - yScale(d[1]))
+                            .attr("opacity", 0.8)
+                            .attr("data-ids", d => d.ids.join(","))
+                            .on("click", (event, d) => handleBarClick(event, d, xCol));
+                    }
+                    else{
+                        const histData = [];
+
+                        uniqueCategories.forEach(category => {
+                            histData.push({
+                                x0: xScale(category),
+                                x1: xScale(category) + xScale.bandwidth(),
+                                length: nonNumericData.filter(d => String(d[xCol]) === category).length,
+                                ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
+                                category: category 
+                            });
+                        });
+                        
+                        yScale = d3.scaleLinear()
+                            .domain([0, d3.max(histData, (d) => d.length)])
+                            .range([this.size, 0]);
+                        
+                        const tooltip = d3.select("#tooltip");
+
+                        cellGroup.selectAll("rect")
+                            .data(histData)
+                            .join("rect")
+                            .attr("x", d => xScale(d.category))
+                            .attr("width", xScale.bandwidth())
+                            .attr("y", d => yScale(d.length))
+                            .attr("height", d => Math.max(0, this.size - yScale(d.length)))
+                            .attr("fill", (d) => {
+                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                                return isSelected ? "red" : "steelblue";
+                            })                       
+                            .attr("stroke", d => isSelected(d) ? "black": "none") 
+                            .attr("opacity", 0.8)
+                            .attr("data-ids", d => d.ids.join(","))
+                            .on("click", (event, d) => handleBarClick(event, d, xCol));
+                    }
                     
                     cellGroup
                         .append("g")
@@ -683,8 +853,16 @@ class ScatterplotMatrixView{
             } 
             /// Begin Scatterplot Code ///
             else {
-                const data = givenData.select([xCol, yCol]).objects(); 
+                let data = [];
 
+                if(groupByAttribute)
+                {
+                    data = givenData.select([xCol, yCol, groupByAttribute]).objects(); 
+                }
+                else{
+                    data = givenData.select([xCol, yCol]).objects();
+                }
+                
                 const isNumeric = col => data.some(d => typeof d[col] === "number" && !isNaN(d[col]));
 
                 const xIsNumeric = isNumeric(xCol);
@@ -805,9 +983,16 @@ class ScatterplotMatrixView{
                             return yScale(d[yCol]);
                         })
                         .attr("r", d => (d.type.includes("nan") ? 4 : 3))
-                        .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
-                        .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
-                        .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
+                        // .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
+                        .attr("fill", d => {
+                            if (groupByAttribute) {
+                                return colorScale(d[groupByAttribute]);
+                            } else {
+                                return d.type === "numeric" ? "steelblue" : "gray"; 
+                            }
+                        })
+                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
+                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
                         .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
 
                     cellGroup.append("g")
@@ -932,9 +1117,15 @@ class ScatterplotMatrixView{
                             return yScale(d[yCol]);
                         })
                         .attr("r", d => (d.type === "nan-y" ? 4 : 3))
-                        .attr("fill", d => isSelected(d) ? "red" : (d.type === "nan-y" ? "gray" : "steelblue"))
-                        .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
-                        .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
+                        .attr("fill", d => {
+                            if (groupByAttribute) {
+                                return colorScale(d[groupByAttribute]);
+                            } else {
+                                return d.type === "nan-y" ? "gray" : "steelblue"; 
+                            }
+                        })
+                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
+                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
                         .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
 
                     cellGroup.append("g")
@@ -1057,9 +1248,15 @@ class ScatterplotMatrixView{
                         })
                         .attr("cy", d => yScale(d[yCol]))
                         .attr("r", d => (d.type === "nan-x" ? 4 : 3))
-                        .attr("fill", d => isSelected(d) ? "red" : (d.type === "nan-x" ? "gray" : "steelblue"))
-                        .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
-                        .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
+                        .attr("fill", d => {
+                            if (groupByAttribute) {
+                                return colorScale(d[groupByAttribute]);
+                            } else {
+                                return d.type === "nan-x" ? "gray" : "steelblue"; 
+                            }
+                        })
+                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
+                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
                         .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
 
                     cellGroup.append("g")
@@ -1162,7 +1359,16 @@ class ScatterplotMatrixView{
                         .attr("cx", d => xScale(d[xCol]))
                         .attr("cy", d => yScale(d[yCol]))
                         .attr("r", 3)
-                        .attr("fill", d => isSelected(d) ? "red" : "steelblue")
+                        // .attr("fill", d => isSelected(d) ? "red" : "steelblue")
+                        .attr("fill", d => {
+                            if (groupByAttribute) {
+                                return colorScale(d[groupByAttribute]);
+                            } else {
+                                return "steelblue"; 
+                            }
+                        })
+                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
+                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
                         .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
                     
                     cellGroup.append("g")
@@ -1235,7 +1441,7 @@ class ScatterplotMatrixView{
 
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
-        console.log("Unique groups:", uniqueGroups);
+        // console.log("Unique groups:", uniqueGroups);
 
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
 
