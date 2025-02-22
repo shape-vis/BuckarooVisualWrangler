@@ -5,7 +5,7 @@ class ScatterplotController {
       this.selectedAttributes = []; // Store selected columns
       this.xCol = null;
       this.yCol = null;
-  
+
       this.render();
       this.setupEventListeners();
     }
@@ -15,9 +15,23 @@ class ScatterplotController {
         this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes)); 
         this.render();
     }
+
+    updateGrouping(attribute) {
+        console.log("User selected group by:", attribute);
+        
+        this.model.setGroupByAttribute(attribute); 
+
+        const selectedColumns = new Set([...this.selectedAttributes]); 
+        if (attribute && !selectedColumns.has(attribute)) {
+            selectedColumns.add(attribute);  
+        }
+
+        this.model.setFilteredData(this.model.getFullData().select([...selectedColumns]));
+        this.render();
+    }
   
     render() {
-        this.view.plotMatrix(this.model.getData());
+        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute());
     }
   
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
@@ -86,7 +100,7 @@ class ScatterplotController {
                
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
   
     handleBarClick(event, barData, column) {
@@ -102,7 +116,7 @@ class ScatterplotController {
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
         
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this));
+        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
 
         d3.select(event.target)
             .attr('fill', 'red');
@@ -163,13 +177,13 @@ function attachButtonEventListeners(){
         const controller = getActiveController();
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
     });
 
     d3.select("#redo").on("click", () => {
         const controller = getActiveController();
         controller.model.redoLastTransformation();
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
     });
 
     d3.select("#clear-selection").on("click", () => {
@@ -177,28 +191,28 @@ function attachButtonEventListeners(){
         document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
         const controller = getActiveController();
         controller.view.setSelectedPoints([]);
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
     });
 
     d3.select("#remove-selected-data").on("click", () => {
         const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
     });
 
     d3.select("#impute-average-x").on("click", () => {
         const controller = getActiveController();
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
     });
 
     d3.select("#impute-average-y").on("click", () => {
         const controller = getActiveController();
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
     });
 
     const radioButtons = document.querySelectorAll("input[name='options']");
@@ -207,7 +221,7 @@ function attachButtonEventListeners(){
         radio.addEventListener("change", (event) => {
             const controller = getActiveController();
             if (event.target.value === "selectData" && event.target.checked) {
-                controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller));
+                controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
             } else {
                 controller.render();
             }

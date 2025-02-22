@@ -34,8 +34,11 @@ class ScatterplotMatrixView{
     populateDropdownFromTable(table, controller) {
         const dropdownMenu = document.getElementById("dropdown-menu");
         const dropdownButton = document.getElementById("dropdown-button");
+        const groupDropdown = document.getElementById("group-dropdown");
     
         dropdownMenu.innerHTML = ""; 
+        groupDropdown.innerHTML = '<option value="">None</option>'; 
+
         let selectedAttributes = new Set();
     
         const attributes = table.columnNames().slice(1).sort();
@@ -89,6 +92,12 @@ class ScatterplotMatrixView{
             label.appendChild(checkbox);
             label.appendChild(document.createTextNode(attr));
             dropdownMenu.appendChild(label);
+
+            // Group by append options
+            let option = document.createElement("option");
+            option.value = attr;
+            option.textContent = attr;
+            groupDropdown.appendChild(option);
         });
     
         function updateDropdownButton() {
@@ -104,12 +113,18 @@ class ScatterplotMatrixView{
                 dropdownMenu.classList.remove("show");
             }
         });
+
+        groupDropdown.addEventListener("change", function () {
+            controller.updateGrouping(this.value);
+        });
     
         updateDropdownButton();
     }
 
-    plotMatrix(givenData) {    
-        let columns = givenData.columnNames().slice(1);
+    plotMatrix(givenData, groupByAttribute) {  
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
 
@@ -253,7 +268,10 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)"); 
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d);
 
                     if (uniqueCategories.length > 0) {
                         cellGroup.append("g")
@@ -262,9 +280,12 @@ class ScatterplotMatrixView{
                             .selectAll("text")
                             .style("text-anchor", "end") 
                             .attr("transform", "rotate(-45)") 
-                            .style("font-size", "8px"); 
+                            .style("font-size", "8px")
+                            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                            .append("title")  
+                            .text(d => d);
                     }
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
+                    cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
 
                     svg
                         .append("text")
@@ -340,14 +361,17 @@ class ScatterplotMatrixView{
                         .append("g")
                         .attr("transform", `translate(0, ${this.size})`)
                         .call(d3.axisBottom(xScale))
-                        .selectAll("text") // Select all tick labels
-                        .style("text-anchor", "end") // Align text
+                        .selectAll("text") 
+                        .style("text-anchor", "end") 
                         .style("font-size", "8px")
-                        .attr("dx", "-0.5em") // Adjust horizontal positioning
-                        .attr("dy", "0.5em")  // Adjust vertical positioning
-                        .attr("transform", "rotate(-45)"); // Rotate labels`
+                        .attr("dx", "-0.5em") 
+                        .attr("dy", "0.5em")  
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d);
 
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
+                    cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
                         
                     svg
                         .append("text")
@@ -392,14 +416,16 @@ class ScatterplotMatrixView{
                     .attr("fill", "#333")
                     .text("Linechart");
                 
-                this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol);
+                this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute);
             }
             });
         });
 
     }
 
-    enableBrushing (givenData, handleBrush, handleBarClick){
+    enableBrushing (givenData, handleBrush, handleBarClick, groupByAttribute){
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
         let columns = givenData.columnNames().slice(1);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
@@ -530,7 +556,10 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)"); 
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                        .append("title") 
+                        .text(d => d);
 
                     if (uniqueCategories.length > 0) {
                         cellGroup.append("g")
@@ -539,9 +568,18 @@ class ScatterplotMatrixView{
                             .selectAll("text")
                             .style("text-anchor", "end") 
                             .attr("transform", "rotate(-45)") 
-                            .style("font-size", "8px"); 
+                            .style("font-size", "8px")
+                            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                            .append("title") 
+                            .text(d => d);
                     }
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
+                    cellGroup.append("g")
+                        .call(d3.axisLeft(yScale))
+                        .selectAll("text")
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d); 
 
                     svg
                         .append("text")
@@ -611,10 +649,19 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)"); 
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d);
 
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
-                        
+                    cellGroup.append("g")
+                        .call(d3.axisLeft(yScale))
+                        .selectAll("text")
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d);  
+
                     svg
                         .append("text")
                         .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
@@ -776,7 +823,10 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)");
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                        .append("title")  
+                        .text(d => d);
 
                     if (uniqueXCategories.length > 0) {
                     cellGroup.append("g")
@@ -785,18 +835,29 @@ class ScatterplotMatrixView{
                         .selectAll("text")
                         .style("text-anchor", "end") 
                         .attr("transform", "rotate(-45)") 
-                        .style("font-size", "10px"); 
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                        .append("title") 
+                        .text(d => d); 
                     }
 
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
+                    cellGroup.append("g")
+                        .call(d3.axisLeft(yScale))
+                        .selectAll("text")
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title") 
+                        .text(d => d); 
 
                     if (uniqueYCategories.length > 0) {
                     cellGroup.append("g")
                         .attr("transform", `translate(0, 0)`)
                         .call(d3.axisLeft(categoricalYScale))
                         .selectAll("text")
-                        .style("text-anchor", "end") 
-                        .style("font-size", "10px"); 
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d); 
                     }
                     
                     svg
@@ -889,7 +950,10 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)");
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title") 
+                        .text(d => d);
 
                     // if (uniqueXCategories.length > 0) {
                     // cellGroup.append("g")
@@ -901,15 +965,23 @@ class ScatterplotMatrixView{
                     //     .style("font-size", "10px"); 
                     // }
 
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
+                    cellGroup.append("g")
+                        .call(d3.axisLeft(yScale))
+                        .selectAll("text")
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title") 
+                        .text(d => d); 
 
                     if (uniqueYCategories.length > 0) {
                     cellGroup.append("g")
                         .attr("transform", `translate(0, 0)`)
                         .call(d3.axisLeft(categoricalYScale))
                         .selectAll("text")
-                        .style("text-anchor", "end") 
-                        .style("font-size", "10px"); 
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title") 
+                        .text(d => d); 
                     }
                     
                     svg
@@ -1003,7 +1075,10 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)");
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d);
 
                     if (uniqueXCategories.length > 0) {
                     cellGroup.append("g")
@@ -1012,10 +1087,19 @@ class ScatterplotMatrixView{
                         .selectAll("text")
                         .style("text-anchor", "end") 
                         .attr("transform", "rotate(-45)") 
-                        .style("font-size", "10px"); 
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d); 
                     }
 
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
+                    cellGroup.append("g")
+                        .call(d3.axisLeft(yScale))
+                        .selectAll("text")
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d); 
 
                     // if (uniqueYCategories.length > 0) {
                     // cellGroup.append("g")
@@ -1094,7 +1178,10 @@ class ScatterplotMatrixView{
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)");
+                        .attr("transform", "rotate(-45)")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                        .append("title")  
+                        .text(d => d);
 
                     // if (uniqueXCategories.length > 0) {
                     // cellGroup.append("g")
@@ -1106,8 +1193,14 @@ class ScatterplotMatrixView{
                     //     .style("font-size", "10px"); 
                     // }
 
-                    cellGroup.append("g").call(d3.axisLeft(yScale));
-
+                    cellGroup.append("g")
+                        .call(d3.axisLeft(yScale))
+                        .selectAll("text")
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d); 
+                                            
                     // if (uniqueYCategories.length > 0) {
                     // cellGroup.append("g")
                     //     .attr("transform", `translate(0, 0)`)
@@ -1140,8 +1233,21 @@ class ScatterplotMatrixView{
         });
     }
 
-    drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol){
-        const data = givenData.select([xCol, yCol]).objects(); 
+    drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute){
+        const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
+        console.log("Unique groups:", uniqueGroups);
+
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+
+        let data = [];
+
+        if(groupByAttribute)
+        {
+            data = givenData.select([xCol, yCol, groupByAttribute]).objects(); 
+        }
+        else{
+            data = givenData.select([xCol, yCol]).objects();
+        }
 
         const isNumeric = col => data.some(d => typeof d[col] === "number" && !isNaN(d[col]));
 
@@ -1236,7 +1342,6 @@ class ScatterplotMatrixView{
                     ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
                     : [0]); 
                 
-
             const tooltip = d3.select("#tooltip"); 
 
             cellGroup.selectAll("circle")
@@ -1253,14 +1358,21 @@ class ScatterplotMatrixView{
                     return yScale(d[yCol]);
                 })
                 .attr("r", d => (d.type.includes("nan") ? 4 : 3))
-                .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
+                // .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
+                .attr("fill", d => {
+                    if (groupByAttribute) {
+                        return colorScale(d[groupByAttribute]);
+                    } else {
+                        return d.type === "numeric" ? "steelblue" : "gray"; 
+                    }
+                })
                 .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
                 .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
+                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -1269,7 +1381,13 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"));
+                    d3.select(this).attr("fill", d => {
+                        if (groupByAttribute) {
+                            return colorScale(d[groupByAttribute]);
+                        } else {
+                            return d.type === "numeric" ? "steelblue" : "gray"; 
+                        }
+                    });
                     tooltip.style("display", "none");
                 });
 
@@ -1282,7 +1400,10 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px")
                 .attr("dx", "-0.5em") 
                 .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)");
+                .attr("transform", "rotate(-45)")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
 
             if (uniqueXCategories.length > 0) {
             cellGroup.append("g")
@@ -1291,18 +1412,29 @@ class ScatterplotMatrixView{
                 .selectAll("text")
                 .style("text-anchor", "end") 
                 .attr("transform", "rotate(-45)") 
-                .style("font-size", "10px"); 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d); 
             }
 
-            cellGroup.append("g").call(d3.axisLeft(yScale));
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title") 
+                .text(d => d); 
 
             if (uniqueYCategories.length > 0) {
             cellGroup.append("g")
                 .attr("transform", `translate(0, 0)`)
                 .call(d3.axisLeft(categoricalYScale))
                 .selectAll("text")
-                .style("text-anchor", "end") 
-                .style("font-size", "10px"); 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title") 
+                .text(d => d); 
             }
             
             svg
@@ -1367,14 +1499,21 @@ class ScatterplotMatrixView{
                     return yScale(d[yCol]);
                 })
                 .attr("r", d => (d.type === "nan-y" ? 4 : 3))
-                .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
+                // .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
+                .attr("fill", d => {
+                    if (groupByAttribute) {
+                        return colorScale(d[groupByAttribute]);
+                    } else {
+                        return d.type === "nan-y" ? "gray" : "steelblue"; 
+                    }
+                })
                 .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
                 .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
+                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -1383,7 +1522,13 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"));
+                    d3.select(this).attr("fill", d => {
+                        if (groupByAttribute) {
+                            return colorScale(d[groupByAttribute]);
+                        } else {
+                            return d.type === "nan-y" ? "gray" : "steelblue"; 
+                        }
+                    });
                     tooltip.style("display", "none");
                 });
 
@@ -1396,7 +1541,10 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px")
                 .attr("dx", "-0.5em") 
                 .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)");
+                .attr("transform", "rotate(-45)")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title") 
+                .text(d => d);
 
             // if (uniqueXCategories.length > 0) {
             // cellGroup.append("g")
@@ -1408,15 +1556,23 @@ class ScatterplotMatrixView{
             //     .style("font-size", "10px"); 
             // }
 
-            cellGroup.append("g").call(d3.axisLeft(yScale));
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title")  
+                .text(d => d); 
 
             if (uniqueYCategories.length > 0) {
             cellGroup.append("g")
                 .attr("transform", `translate(0, 0)`)
                 .call(d3.axisLeft(categoricalYScale))
                 .selectAll("text")
-                .style("text-anchor", "end") 
-                .style("font-size", "10px"); 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title")
+                .text(d => d); 
             }
             
             svg
@@ -1482,14 +1638,21 @@ class ScatterplotMatrixView{
                 })
                 .attr("cy", d => yScale(d[yCol]))
                 .attr("r", d => (d.type === "nan-x" ? 4 : 3))
-                .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
+                // .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
+                .attr("fill", d => {
+                    if (groupByAttribute) {
+                        return colorScale(d[groupByAttribute]);
+                    } else {
+                        return d.type === "nan-x" ? "gray" : "steelblue"; 
+                    }
+                })
                 .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
                 .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
+                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -1498,7 +1661,13 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"));
+                    d3.select(this).attr("fill", d => {
+                        if (groupByAttribute) {
+                            return colorScale(d[groupByAttribute]);
+                        } else {
+                            return d.type === "nan-x" ? "gray" : "steelblue"; 
+                        }
+                    });
                     tooltip.style("display", "none");
                 });
 
@@ -1511,7 +1680,10 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px")
                 .attr("dx", "-0.5em") 
                 .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)");
+                .attr("transform", "rotate(-45)")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title") 
+                .text(d => d);
 
             if (uniqueXCategories.length > 0) {
             cellGroup.append("g")
@@ -1520,10 +1692,19 @@ class ScatterplotMatrixView{
                 .selectAll("text")
                 .style("text-anchor", "end") 
                 .attr("transform", "rotate(-45)") 
-                .style("font-size", "10px"); 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title") 
+                .text(d => d); 
             }
 
-            cellGroup.append("g").call(d3.axisLeft(yScale));
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title") 
+                .text(d => d); 
 
             // if (uniqueYCategories.length > 0) {
             // cellGroup.append("g")
@@ -1576,12 +1757,19 @@ class ScatterplotMatrixView{
                 .attr("cx", d => xScale(d[xCol]))
                 .attr("cy", d => yScale(d[yCol]))
                 .attr("r", 3)
-                .attr("fill", "steelblue")
+                // .attr("fill", "steelblue")
+                .attr("fill", d => {
+                    if (groupByAttribute) {
+                        return colorScale(d[groupByAttribute]);
+                    } else {
+                        return "steelblue"; 
+                    }
+                })
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`)
+                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -1590,7 +1778,13 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", "steelblue");
+                    d3.select(this).attr("fill", d => {
+                        if (groupByAttribute) {
+                            return colorScale(d[groupByAttribute]);
+                        } else {
+                            return "steelblue"; 
+                        }
+                    });
                     tooltip.style("display", "none");
                 });
 
@@ -1603,7 +1797,10 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px")
                 .attr("dx", "-0.5em") 
                 .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)");
+                .attr("transform", "rotate(-45)")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title")
+                .text(d => d);
 
             // if (uniqueXCategories.length > 0) {
             // cellGroup.append("g")
@@ -1615,7 +1812,13 @@ class ScatterplotMatrixView{
             //     .style("font-size", "10px"); 
             // }
 
-            cellGroup.append("g").call(d3.axisLeft(yScale));
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+                .append("title")
+                .text(d => d); 
 
             // if (uniqueYCategories.length > 0) {
             // cellGroup.append("g")
@@ -1781,7 +1984,14 @@ class ScatterplotMatrixView{
         cellGroup
             .append("g")
             .attr("transform", `translate(0, ${numericSpace})`)
-            .call(d3.axisBottom(xScale));
+            .call(d3.axisBottom(xScale))
+            .selectAll("text")
+            .style("text-anchor", "end") 
+            .attr("transform", "rotate(-45)") 
+            .style("font-size", "8px")
+            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+            .append("title") 
+            .text(d => d); 
 
         if (uniqueXCategories.length > 0) {
         cellGroup.append("g")
@@ -1790,18 +2000,29 @@ class ScatterplotMatrixView{
             .selectAll("text")
             .style("text-anchor", "end") 
             .attr("transform", "rotate(-45)") 
-            .style("font-size", "10px"); 
+            .style("font-size", "8px")
+            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+            .append("title")  
+            .text(d => d); 
         }
 
-        cellGroup.append("g").call(d3.axisLeft(yScale));
+        cellGroup.append("g")
+            .call(d3.axisLeft(yScale))
+            .selectAll("text")
+            .style("font-size", "8px")
+            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+            .append("title")  
+            .text(d => d);
 
         if (uniqueYCategories.length > 0) {
         cellGroup.append("g")
             .attr("transform", `translate(0, 0)`)
             .call(d3.axisLeft(categoricalYScale))
             .selectAll("text")
-            .style("text-anchor", "end") 
-            .style("font-size", "10px"); 
+            .style("font-size", "8px")
+            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+            .append("title")  
+            .text(d => d); 
         }
         
         svg
@@ -1849,7 +2070,7 @@ class ScatterplotMatrixView{
         const cellGroup = d3.select(`#${cellID}`);
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol);  
+        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute);  
 
         const lineViewButton = cellGroup.append("g")
             .attr("class", "linechart-button")

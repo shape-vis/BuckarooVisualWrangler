@@ -1,22 +1,23 @@
 class DataModel {
-    constructor(initialData) {
-      this.originalData = initialData;
-      this.data = this.preprocessData(initialData);
-      this.filteredData = this.data;
-      // this.data = initialData;
-      this.selectedPoints = [];
-      this.dataStates = [];
-      this.redoStack = [];
-      this.dataTransformations = [];
-      this.transformationPoints = [];
-    }
-
-    selectColumns(selectedColumns) {
-      if (!selectedColumns || selectedColumns.length === 0) {
-          return this.data; 
-      }
-      return this.data.select(selectedColumns);
+  constructor(initialData) {
+    this.originalData = initialData;
+    this.data = this.preprocessData(initialData);
+    this.filteredData = this.data;
+    // this.data = initialData;
+    this.selectedPoints = [];
+    this.dataStates = [];
+    this.redoStack = [];
+    this.dataTransformations = [];
+    this.transformationPoints = [];
+    this.groupByAttribute = null;
   }
+
+  // selectColumns(selectedColumns) {
+  //     if (!selectedColumns || selectedColumns.length === 0) {
+  //         return this.data; 
+  //     }
+  //     return this.data.select(selectedColumns);
+  // }
 
   getData() {
     return this.filteredData;
@@ -29,58 +30,67 @@ class DataModel {
   setFilteredData(filteredData) {
     this.filteredData = filteredData;  
   } 
+  
+  setGroupByAttribute(attribute) {
+    console.log("Grouping by:", attribute);
+    this.groupByAttribute = attribute && attribute !== "None" ? attribute : null;
+  }
 
-    preprocessData(table) {
-      function parseValue(value) {
-        if (typeof value === "number") return value; 
+  getGroupByAttribute() {
+    return this.groupByAttribute;
+  }
 
-        if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim())) {
-            return +value; 
-        }
+  preprocessData(table) {
+    function parseValue(value) {
+      if (typeof value === "number") return value; 
 
-        return value; 
+      if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim())) {
+          return +value; 
       }
 
-      let tempArr = table.objects().map(row => {
-        let newRow = { ...row }; 
+      return value; 
+    }
 
-        Object.keys(row).forEach(column => {
-            newRow[column] = parseValue(row[column]); 
-        });
+    let tempArr = table.objects().map(row => {
+      let newRow = { ...row }; 
 
-        return newRow;
+      Object.keys(row).forEach(column => {
+          newRow[column] = parseValue(row[column]); 
       });
 
-      return aq.from(tempArr);
-    }
-  
-    filterData(condition) {
-      this.dataStates.push(this.filteredData);
-      this.redoStack = [];
-      this.dataTransformations.push(condition);
-      this.transformationPoints.push(this.selectedPoints);
-      this.filteredData = this.filteredData.filter(aq.escape(condition));
-    }
+      return newRow;
+    });
 
-    undoLastTransformation() {
-      if (this.dataStates.length > 0) {
-          this.redoStack.push(this.filteredData); 
-          this.filteredData = this.dataStates.pop(); 
-          console.log("Undo works:", this.filteredData);
-      } else {
-          console.log("Nothing to undo.");
-      }
-    } 
-
-    redoLastTransformation() {
-      if (this.redoStack.length > 0) {
-          this.dataStates.push(this.filteredData);
+    return aq.from(tempArr);
+  }
   
-          this.filteredData = this.redoStack.pop();
-          console.log("Redo works:", this.filteredData.objects());
-      } else {
-          console.log("Nothing to redo.");
-      }
+  filterData(condition) {
+    this.dataStates.push(this.filteredData);
+    this.redoStack = [];
+    this.dataTransformations.push(condition);
+    this.transformationPoints.push(this.selectedPoints);
+    this.filteredData = this.filteredData.filter(aq.escape(condition));
+  }
+
+  undoLastTransformation() {
+    if (this.dataStates.length > 0) {
+        this.redoStack.push(this.filteredData); 
+        this.filteredData = this.dataStates.pop(); 
+        console.log("Undo works:", this.filteredData);
+    } else {
+        console.log("Nothing to undo.");
+    }
+  } 
+
+  redoLastTransformation() {
+    if (this.redoStack.length > 0) {
+        this.dataStates.push(this.filteredData);
+
+        this.filteredData = this.redoStack.pop();
+        console.log("Redo works:", this.filteredData.objects());
+    } else {
+        console.log("Nothing to redo.");
+    }
   }
   
   imputeAverage(column) {
