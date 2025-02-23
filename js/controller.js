@@ -103,13 +103,22 @@ class ScatterplotController {
         this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
   
-    handleBarClick(event, barData, column) {
+    handleBarClick(event, barData, column, groupByAttribute) {
         console.log("Bar data: ", barData);
         document.getElementById("impute-average-x").textContent = `Impute average for ${column}`;
         document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
 
         this.xCol = column;
-        const selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.ID));
+        let selectedPoints = [];
+
+        if(groupByAttribute)
+        {
+            const groupKey = barData.group;
+            selectedPoints = this.model.getData().objects().filter(d => barData.data[`${groupKey}_ids`].includes(d.ID));        
+        }
+        else{
+            selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.ID));
+        }
 
         console.log("Selected bar points:", selectedPoints);
 
@@ -117,9 +126,6 @@ class ScatterplotController {
         this.view.setSelectedPoints(selectedPoints);
         
         this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
-
-        d3.select(event.target)
-            .attr('fill', 'red');
 
         barX0 = barData.x0;
         barX1 = barData.x1;
