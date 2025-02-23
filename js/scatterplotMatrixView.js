@@ -147,7 +147,7 @@ class ScatterplotMatrixView{
         });
       }
 
-    plotMatrix(givenData, groupByAttribute) {  
+    plotMatrix(givenData, groupByAttribute, selectedGroups) {  
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
         let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
@@ -187,7 +187,7 @@ class ScatterplotMatrixView{
             if (i === j) {
                 let data = [];
 
-                if(groupByAttribute){
+                if (groupByAttribute){
                     data = givenData.select(["ID", xCol, groupByAttribute]).objects();
                 }
                 else{

@@ -174,3 +174,37 @@
   height: 10px;
   margin-right: 5px;
 }
+
+.modal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    width: 300px; 
+    background-color: #fff;
+    border: 1px solid #888;
+    border-radius: 4px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+  
+  .modal h3 {
+    margin-top: 0;
+    text-align: center;
+  }
+  
+  .modal ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .modal li {
+    margin: 5px 0;
+  }
+  
+  .modal-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+  }

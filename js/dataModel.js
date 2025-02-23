@@ -9,15 +9,32 @@ class DataModel {
     this.redoStack = [];
     this.dataTransformations = [];
     this.transformationPoints = [];
+    this.selectedGroups = [];
     this.groupByAttribute = null;
   }
 
-  // selectColumns(selectedColumns) {
-  //     if (!selectedColumns || selectedColumns.length === 0) {
-  //         return this.data; 
-  //     }
-  //     return this.data.select(selectedColumns);
-  // }
+  // New method to update the selected groups:
+  setSelectedGroups(groups, selectedAttributes) {
+    this.selectedGroups = groups;  
+    const selectedColumns = new Set([...selectedAttributes]); 
+        if (this.groupByAttribute && !selectedColumns.has(this.groupByAttribute)) {
+            selectedColumns.add(this.groupByAttribute);  
+        }
+
+    const selectedAttrData = this.getFullData().select([...selectedColumns])
+
+    const groupByCol = this.groupByAttribute; 
+    if (groupByCol && groups && groups.length > 0) {
+      this.filteredData = selectedAttrData.filter(aq.escape(d =>
+        groups.includes(d[groupByCol])
+      ));
+    } else {
+      this.filteredData = selectedAttrData;
+    }
+  }
+  getSelectedGroups() {
+    return this.selectedGroups;
+  }
 
   getData() {
     return this.filteredData;

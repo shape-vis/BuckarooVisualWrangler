@@ -33,6 +33,30 @@
         <option value="">None</option>
     </select>
 
+    <!-- Group Selection Popup Modal -->
+    <div id="group-selection-popup" class="modal" style="display: none;">
+        <div class="modal-content">
+        <h3 id="overall-average">Overall Salary Average: $XYZ</h3>
+        <ul id="group-list">
+            <!-- Dynamically generated list items will appear here.
+                Each item should be formatted as:
+                <li>
+                <label>
+                    <input type="checkbox" value="groupName" />
+                    GroupName (Avg: $ABC)
+                </label>
+                </li>
+            -->
+        </ul>
+        <div class="modal-buttons">
+            <button id="plot-groups">Plot Selected Groups</button>
+            <button id="close-popup">Cancel</button>
+        </div>
+        </div>
+    </div>
+
+    <button id="select-groups-btn">Select Groups</button>
+
     <div id="legend"></div>
 
     <div id="tooltip" class="tooltip"></div>

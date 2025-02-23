@@ -29,9 +29,84 @@ class ScatterplotController {
         this.model.setFilteredData(this.model.getFullData().select([...selectedColumns]));
         this.render();
     }
+
+    openGroupSelectionPopup() {
+        // Assume `controller` is your ScatterplotController instance.
+        const groupBy = this.model.getGroupByAttribute();
+        if (!groupBy) return; // no grouping selected
+      
+        // Get the full Arquero table
+        const fullTable = this.model.getFullData();
+      
+        // Compute the overall average using Arquero's rollup
+        const overallAvg = fullTable.rollup({ overallAvg: aq.op.mean('ConvertedSalary') })
+                                    .objects()[0].overallAvg;
+      
+        // Compute group averages using Arquero's groupby and rollup
+        const groupStatsTable = fullTable.groupby(groupBy).rollup({
+          avgSalary: aq.op.mean('ConvertedSalary')
+        });
+        
+        // Convert the grouped table to an array of objects,
+        // and compute the absolute difference from the overall average.
+        const groupStats = groupStatsTable.objects().map(d => ({
+          group: d[groupBy],
+          avg: d.avgSalary,
+          diff: Math.abs(d.avgSalary - overallAvg)
+        }));
+        
+        // Sort groups by the absolute difference descending.
+        groupStats.sort((a, b) => a.diff - b.diff);
+      
+        // Populate the popup DOM with overall average and group stats.
+        const popup = document.getElementById("group-selection-popup");
+        popup.innerHTML = `
+          <h3>Overall Salary Average: ${overallAvg.toFixed(2)}</h3>
+          <text>(Ordered from closest to the overall avg. to farthest from the overall avg.)</text>
+          <ul id="group-list">
+            ${groupStats.map(stat => `
+               <li>
+                 <label>
+                   <input type="checkbox" value="${stat.group}" />
+                   ${stat.group} (Avg: ${stat.avg.toFixed(2)})
+                 </label>
+               </li>
+            `).join('')}
+          </ul>
+          <button id="plot-groups">Plot Selected Groups</button>
+          <button id="close-popup">Cancel</button>
+        `;
+        
+        // Optionally, pre-check boxes if there is a prior selection
+        const currentSelection = this.model.getSelectedGroups() || [];
+        popup.querySelectorAll("input[type=checkbox]").forEach(cb => {
+          if (currentSelection.includes(cb.value)) {
+            cb.checked = true;
+          }
+        });
+      
+        popup.style.display = "block";
+      
+        document.getElementById("plot-groups").onclick = () => {
+          const selected = Array.from(popup.querySelectorAll("input[type=checkbox]:checked"))
+                                .map(cb => cb.value);
+
+          console.log("selected", selected);
+          // Update model with selected groups:
+          this.model.setSelectedGroups(selected, this.selectedAttributes);
+          // Re-render the visualization using filtered data:
+          console.log("getSelectedGroups", this.model.getSelectedGroups());
+          this.render();
+          popup.style.display = "none";
+        };
+      
+        document.getElementById("close-popup").onclick = () => {
+          popup.style.display = "none";
+        };
+      }
   
     render() {
-        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute());
+        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups());
     }
   
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
@@ -164,6 +239,10 @@ class ScatterplotController {
             });
         });
 
+        const selectGroupsBtn = document.getElementById("select-groups-btn");
+        if (selectGroupsBtn) {
+            selectGroupsBtn.addEventListener("click", this.openGroupSelectionPopup.bind(this));
+        }
     }
 }
 
