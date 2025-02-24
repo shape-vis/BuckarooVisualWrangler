@@ -21,7 +21,7 @@ practiceController = new ScatterplotController(data, "#matrix-vis-practice");
 let data2 = null;
 // May need to change 'id' to 'ID'
 d3.csv("data/stackoverflow_db.csv").then(inputData => {
-  data2 = aq.from(inputData).slice(0, 10);
+  data2 = aq.from(inputData).slice(0, 1000);
   // data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding', 'HoursComputer');
 
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
