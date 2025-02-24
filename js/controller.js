@@ -10,12 +10,14 @@ class ScatterplotController {
       this.setupEventListeners();
     }
 
+    // Update the 1-3 columns the user selects
     updateSelectedAttributes(attributes) {
         this.selectedAttributes = ["ID", ...attributes];
         this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes)); 
         this.render();
     }
 
+    // Update the 1 group by attribute the user selects
     updateGrouping(attribute) {
         console.log("User selected group by:", attribute);
         
@@ -30,35 +32,28 @@ class ScatterplotController {
         this.render();
     }
 
+    // Pop up window for avg aggregations
     openGroupSelectionPopup() {
-        // Assume `controller` is your ScatterplotController instance.
         const groupBy = this.model.getGroupByAttribute();
-        if (!groupBy) return; // no grouping selected
+        if (!groupBy) return; 
       
-        // Get the full Arquero table
         const fullTable = this.model.getFullData();
       
-        // Compute the overall average using Arquero's rollup
         const overallAvg = fullTable.rollup({ overallAvg: aq.op.mean('ConvertedSalary') })
                                     .objects()[0].overallAvg;
       
-        // Compute group averages using Arquero's groupby and rollup
         const groupStatsTable = fullTable.groupby(groupBy).rollup({
           avgSalary: aq.op.mean('ConvertedSalary')
         });
         
-        // Convert the grouped table to an array of objects,
-        // and compute the absolute difference from the overall average.
         const groupStats = groupStatsTable.objects().map(d => ({
           group: d[groupBy],
           avg: d.avgSalary,
           diff: Math.abs(d.avgSalary - overallAvg)
         }));
         
-        // Sort groups by the absolute difference descending.
         groupStats.sort((a, b) => a.diff - b.diff);
       
-        // Populate the popup DOM with overall average and group stats.
         const popup = document.getElementById("group-selection-popup");
         popup.innerHTML = `
           <h3>Overall Salary Average: ${overallAvg.toFixed(2)}</h3>
@@ -77,7 +72,6 @@ class ScatterplotController {
           <button id="close-popup">Cancel</button>
         `;
         
-        // Optionally, pre-check boxes if there is a prior selection
         const currentSelection = this.model.getSelectedGroups() || [];
         popup.querySelectorAll("input[type=checkbox]").forEach(cb => {
           if (currentSelection.includes(cb.value)) {
@@ -92,9 +86,7 @@ class ScatterplotController {
                                 .map(cb => cb.value);
 
           console.log("selected", selected);
-          // Update model with selected groups:
           this.model.setSelectedGroups(selected, this.selectedAttributes);
-          // Re-render the visualization using filtered data:
           console.log("getSelectedGroups", this.model.getSelectedGroups());
           this.render();
           popup.style.display = "none";

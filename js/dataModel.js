@@ -21,7 +21,7 @@ class DataModel {
             selectedColumns.add(this.groupByAttribute);  
         }
 
-    const selectedAttrData = this.getFullData().select([...selectedColumns])
+    const selectedAttrData = this.getData().select([...selectedColumns])
 
     const groupByCol = this.groupByAttribute; 
     if (groupByCol && groups && groups.length > 0) {

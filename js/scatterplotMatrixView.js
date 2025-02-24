@@ -584,7 +584,7 @@ class ScatterplotMatrixView{
                 const lineViewButton = cellGroup.append("g")
                     .attr("class", "linechart-button")
                     .attr("cursor", "pointer")
-                    .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
+                    .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
 
                 lineViewButton.append("rect")
                     .attr("x", - 105)
@@ -1765,8 +1765,12 @@ class ScatterplotMatrixView{
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
+                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
+                    if (groupByAttribute) {
+                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
+                    }
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
+                        .html(tooltipContent)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -1906,8 +1910,12 @@ class ScatterplotMatrixView{
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
+                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
+                    if (groupByAttribute) {
+                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
+                    }
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
+                        .html(tooltipContent)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -2045,8 +2053,12 @@ class ScatterplotMatrixView{
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
+                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
+                    if (groupByAttribute) {
+                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
+                    }
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
+                        .html(tooltipContent)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -2162,8 +2174,12 @@ class ScatterplotMatrixView{
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
+                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
+                    if (groupByAttribute) {
+                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
+                    }
                     tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`)
+                        .html(tooltipContent)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
@@ -2244,13 +2260,30 @@ class ScatterplotMatrixView{
         
     }
 
-    switchToLineChart(givenData, svg, xCol, yCol, cellID) {
+    switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
         const cellGroup = d3.select(`#${cellID}`);
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
 
         cellGroup.selectAll("*").remove();  
 
-        const data = givenData.select([xCol, yCol]).objects(); 
+        const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
+
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+
+        let data = [];
+
+        if(groupByAttribute)
+        {
+            data = givenData.select([xCol, yCol, groupByAttribute]).objects(); 
+        }
+        else{
+            data = givenData.select([xCol, yCol]).objects();
+        }
+
+        const isNumeric = col => data.some(d => typeof d[col] === "number" && !isNaN(d[col]));
+
+        const xIsNumeric = isNumeric(xCol);
+        const yIsNumeric = isNumeric(yCol);
 
         const numericData = data.filter(d => 
             typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
@@ -2312,46 +2345,200 @@ class ScatterplotMatrixView{
         const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
         const numericSpace = this.size - categorySpace;
 
-        const xScale = d3.scaleLinear()
-            .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
-            .range([0, numericSpace]);
+        // const xScale = d3.scaleLinear()
+        //     .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
+        //     .range([0, numericSpace]);
 
-        const xTickValues = xScale.ticks(); 
-        const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+        // const xTickValues = xScale.ticks(); 
+        // const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
 
-        const categoricalXStart = xScale.range()[1] + 10;
-        const categoricalXScale = d3.scaleOrdinal()
-            .domain(uniqueXCategories)
-            .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
+        // const categoricalXStart = xScale.range()[1] + 10;
+        // const categoricalXScale = d3.scaleOrdinal()
+        //     .domain(uniqueXCategories)
+        //     .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
 
-        const yScale = d3.scaleLinear()
-            .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
-            .range([numericSpace, 0]);
+        // const yScale = d3.scaleLinear()
+        //     .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
+        //     .range([numericSpace, 0]);
 
-        const categoricalYStart = yScale.range()[1] - 10;
-        const categoricalYScale = d3.scaleOrdinal()
-            .domain(uniqueYCategories)
-            .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
+        // const categoricalYStart = yScale.range()[1] - 10;
+        // const categoricalYScale = d3.scaleOrdinal()
+        //     .domain(uniqueYCategories)
+        //     .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
 
-        combinedData.sort((a, b) => {
-            const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
-            const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
+        // combinedData.sort((a, b) => {
+        //     const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
+        //     const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
         
-            if (aIsNumeric && bIsNumeric) {
-                return Number(a[xCol]) - Number(b[xCol]); 
-            }
+        //     if (aIsNumeric && bIsNumeric) {
+        //         return Number(a[xCol]) - Number(b[xCol]); 
+        //     }
         
-            const aIsCategorical = !aIsNumeric;
-            const bIsCategorical = !bIsNumeric;
+        //     const aIsCategorical = !aIsNumeric;
+        //     const bIsCategorical = !bIsNumeric;
         
-            if (aIsCategorical && bIsCategorical) {
-                return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
-            }
+        //     if (aIsCategorical && bIsCategorical) {
+        //         return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
+        //     }
         
-            return aIsNumeric ? -1 : 1; 
-        });
+        //     return aIsNumeric ? -1 : 1; 
+        // });
 
-        const line = d3.line()
+        // const line = d3.line()
+        //     .x(d => {
+        //         if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
+        //             return xScale(d[xCol]); 
+        //         } else {
+        //             return categoricalXScale(String(d[xCol])) || xScale(0); 
+        //         }
+        //     })
+        //     .y(d => {
+        //         if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+        //             return yScale(d[yCol]); 
+        //         } else {
+        //             return categoricalYScale(String(d[yCol])) || yScale(0);
+        //         }
+        //     })
+        //     .curve(d3.curveMonotoneX);
+
+        // cellGroup.append("path")
+        //     .datum(combinedData)
+        //     .attr("fill", "none")
+        //     .attr("stroke", "steelblue")
+        //     .attr("stroke-width", 2)
+        //     .attr("d", line);
+
+        // cellGroup
+        //     .append("g")
+        //     .attr("transform", `translate(0, ${numericSpace})`)
+        //     .call(d3.axisBottom(xScale))
+        //     .selectAll("text")
+        //     .style("text-anchor", "end") 
+        //     .attr("transform", "rotate(-45)") 
+        //     .style("font-size", "8px")
+        //     .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+        //     .append("title") 
+        //     .text(d => d); 
+
+        // if (uniqueXCategories.length > 0) {
+        // cellGroup.append("g")
+        //     .attr("transform", `translate(0, ${numericSpace})`)
+        //     .call(d3.axisBottom(categoricalXScale))
+        //     .selectAll("text")
+        //     .style("text-anchor", "end") 
+        //     .attr("transform", "rotate(-45)") 
+        //     .style("font-size", "8px")
+        //     .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+        //     .append("title")  
+        //     .text(d => d); 
+        // }
+
+        // cellGroup.append("g")
+        //     .call(d3.axisLeft(yScale))
+        //     .selectAll("text")
+        //     .style("font-size", "8px")
+        //     .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+        //     .append("title")  
+        //     .text(d => d);
+
+        // if (uniqueYCategories.length > 0) {
+        // cellGroup.append("g")
+        //     .attr("transform", `translate(0, 0)`)
+        //     .call(d3.axisLeft(categoricalYScale))
+        //     .selectAll("text")
+        //     .style("font-size", "8px")
+        //     .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+        //     .append("title")  
+        //     .text(d => d); 
+        // }
+        
+        // svg
+        //     .append("text")
+        //     .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+        //     .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+        //     .style("text-anchor", "middle")
+        //     .text(xCol);
+
+        // const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+        // const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+        
+        // svg
+        //     .append("text")
+        //     .attr("x", xPosition) 
+        //     .attr("y", yPosition - 20) 
+        //     .style("text-anchor", "middle")
+        //     .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+        //     .text(yCol);
+
+        // const lineViewButton = cellGroup.append("g")
+        //     .attr("class", "scatterplot-button")
+        //     .attr("cursor", "pointer")
+        //     .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
+
+        // lineViewButton.append("rect")
+        //     .attr("x", - 110)
+        //     .attr("y", - 35)
+        //     .attr("width", 45)
+        //     .attr("height", 15)
+        //     .attr("rx", 3)
+        //     .attr("fill", "#d3d3d3")
+        //     .attr("stroke", "#333");
+
+        // lineViewButton.append("text")
+        //     .attr("x", - 87)
+        //     .attr("y", - 25)
+        //     .attr("text-anchor", "middle")
+        //     .attr("font-size", "10px")
+        //     .attr("fill", "#333")
+        //     .text("Scatterplot");
+
+        /// All numeric plot ///
+        if(xIsNumeric && yIsNumeric)
+        {
+            const xScale = d3.scaleLinear()
+                .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
+                .range([0, numericSpace]);
+
+            const xTickValues = xScale.ticks(); 
+            const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+
+            const categoricalXStart = xScale.range()[1] + 10;
+            const categoricalXScale = d3.scaleOrdinal()
+                .domain(uniqueXCategories)
+                .range(uniqueXCategories.length > 0 
+                    ? [...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * ((xTickSpacing || 5) + 5)))
+                    : [0]); 
+
+            const yScale = d3.scaleLinear()
+                .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
+                .range([numericSpace, 0]);
+
+            const categoricalYStart = yScale.range()[1] - 10;
+            const categoricalYScale = d3.scaleOrdinal()
+                .domain(uniqueYCategories)
+                .range(uniqueYCategories.length > 0 
+                    ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
+                    : [0]); 
+                
+            combinedData.sort((a, b) => {
+                const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
+                const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
+            
+                if (aIsNumeric && bIsNumeric) {
+                    return Number(a[xCol]) - Number(b[xCol]); 
+                }
+            
+                const aIsCategorical = !aIsNumeric;
+                const bIsCategorical = !bIsNumeric;
+            
+                if (aIsCategorical && bIsCategorical) {
+                    return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
+                }
+            
+                return aIsNumeric ? -1 : 1; 
+            });
+
+            const line = d3.line()
             .x(d => {
                 if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
                     return xScale(d[xCol]); 
@@ -2368,79 +2555,449 @@ class ScatterplotMatrixView{
             })
             .curve(d3.curveMonotoneX);
 
-        cellGroup.append("path")
-            .datum(combinedData)
-            .attr("fill", "none")
-            .attr("stroke", "steelblue")
-            .attr("stroke-width", 2)
-            .attr("d", line);
+            if(groupByAttribute){
+                uniqueGroups.forEach((groupData, key) => {
+                    svg.append("path")
+                      .datum(groupData)
+                      .attr("class", "line")
+                      .attr("d", line)
+                      .attr("stroke", colorScale(key))
+                      .attr("fill", "none");
+                  });
+            }
+            else{
+                cellGroup.append("path")
+                    .datum(combinedData)
+                    .attr("fill", "none")
+                    .attr("stroke", "steelblue")
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+            }
 
-        cellGroup
-            .append("g")
-            .attr("transform", `translate(0, ${numericSpace})`)
-            .call(d3.axisBottom(xScale))
-            .selectAll("text")
-            .style("text-anchor", "end") 
-            .attr("transform", "rotate(-45)") 
-            .style("font-size", "8px")
-            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
-            .append("title") 
-            .text(d => d); 
+            cellGroup
+                .append("g")
+                .attr("transform", `translate(0, ${numericSpace})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end") 
+                .attr("transform", "rotate(-45)") 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+                .append("title") 
+                .text(d => d); 
 
-        if (uniqueXCategories.length > 0) {
-        cellGroup.append("g")
-            .attr("transform", `translate(0, ${numericSpace})`)
-            .call(d3.axisBottom(categoricalXScale))
-            .selectAll("text")
-            .style("text-anchor", "end") 
-            .attr("transform", "rotate(-45)") 
-            .style("font-size", "8px")
-            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-            .append("title")  
-            .text(d => d); 
+            if (uniqueXCategories.length > 0) {
+            cellGroup.append("g")
+                .attr("transform", `translate(0, ${numericSpace})`)
+                .call(d3.axisBottom(categoricalXScale))
+                .selectAll("text")
+                .style("text-anchor", "end") 
+                .attr("transform", "rotate(-45)") 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d); 
+            }
+
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
+
+            if (uniqueYCategories.length > 0) {
+            cellGroup.append("g")
+                .attr("transform", `translate(0, 0)`)
+                .call(d3.axisLeft(categoricalYScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title")  
+                .text(d => d); 
+            }
+            
+            svg
+                .append("text")
+                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .style("text-anchor", "middle")
+                .text(xCol);
+
+            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+            
+            svg
+                .append("text")
+                .attr("x", xPosition) 
+                .attr("y", yPosition - 20) 
+                .style("text-anchor", "middle")
+                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                .text(yCol);
         }
 
-        cellGroup.append("g")
-            .call(d3.axisLeft(yScale))
-            .selectAll("text")
-            .style("font-size", "8px")
-            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-            .append("title")  
-            .text(d => d);
+        /// Non numeric X plot ///
+        else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
+        {
+            uniqueXCategories = uniqueXCategories.slice(1);
+            uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = sortCategories(uniqueXCategories);
+            uniqueYCategories = sortCategories(uniqueYCategories);
 
-        if (uniqueYCategories.length > 0) {
-        cellGroup.append("g")
-            .attr("transform", `translate(0, 0)`)
-            .call(d3.axisLeft(categoricalYScale))
-            .selectAll("text")
-            .style("font-size", "8px")
-            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-            .append("title")  
-            .text(d => d); 
+            const xScale = d3.scalePoint()
+                .domain(uniqueXCategories)
+                .range([0, this.size]);
+
+            const xTickValues = xScale.step(); 
+            const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+
+            const yScale = d3.scaleLinear()
+                .domain([Math.min(0, d3.min(nonNumericXData, d => d[yCol])), d3.max(nonNumericXData, d => d[yCol]) + 1])
+                .range([this.size, 0]);
+
+            const categoricalYStart = yScale.range()[1] - 10;
+            const categoricalYScale = d3.scaleOrdinal()
+                .domain(uniqueYCategories)
+                .range(uniqueYCategories.length > 0 
+                    ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
+                    : [0]); 
+                
+            combinedData.sort((a, b) => {
+                const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
+                const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
+            
+                if (aIsNumeric && bIsNumeric) {
+                    return Number(a[xCol]) - Number(b[xCol]); 
+                }
+            
+                const aIsCategorical = !aIsNumeric;
+                const bIsCategorical = !bIsNumeric;
+            
+                if (aIsCategorical && bIsCategorical) {
+                    return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
+                }
+            
+                return aIsNumeric ? -1 : 1; 
+            });
+
+            const line = d3.line()
+            .x(d => {
+                if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
+                    return xScale(d[xCol]); 
+                } else {
+                    return categoricalXScale(String(d[xCol])) || xScale(0); 
+                }
+            })
+            .y(d => {
+                if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                    return yScale(d[yCol]); 
+                } else {
+                    return categoricalYScale(String(d[yCol])) || yScale(0);
+                }
+            })
+            .curve(d3.curveMonotoneX);
+
+            if(groupByAttribute){
+                uniqueGroups.forEach((groupData, key) => {
+                    svg.append("path")
+                      .datum(groupData)
+                      .attr("class", "line")
+                      .attr("d", line)
+                      .attr("stroke", colorScale(key))
+                      .attr("fill", "none");
+                  });
+            }
+            else{
+                cellGroup.append("path")
+                    .datum(combinedData)
+                    .attr("fill", "none")
+                    .attr("stroke", "steelblue")
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+            }
+
+            cellGroup
+                .append("g")
+                .attr("transform", `translate(0, ${numericSpace})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end") 
+                .attr("transform", "rotate(-45)") 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+                .append("title") 
+                .text(d => d); 
+
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
+
+            if (uniqueYCategories.length > 0) {
+            cellGroup.append("g")
+                .attr("transform", `translate(0, 0)`)
+                .call(d3.axisLeft(categoricalYScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                .append("title")  
+                .text(d => d); 
+            }
+            
+            svg
+                .append("text")
+                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .style("text-anchor", "middle")
+                .text(xCol);
+
+            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+            
+            svg
+                .append("text")
+                .attr("x", xPosition) 
+                .attr("y", yPosition - 20) 
+                .style("text-anchor", "middle")
+                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                .text(yCol);
         }
-        
-        svg
-            .append("text")
-            .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-            .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-            .style("text-anchor", "middle")
-            .text(xCol);
 
-        const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-        const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
-        
-        svg
-            .append("text")
-            .attr("x", xPosition) 
-            .attr("y", yPosition - 20) 
-            .style("text-anchor", "middle")
-            .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-            .text(yCol);
+        /// Non numeric Y plot ///
+        else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
+        {
+            uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = uniqueXCategories.slice(1);
+            uniqueYCategories = sortCategories(uniqueYCategories);
+            uniqueXCategories = sortCategories(uniqueXCategories);
+
+            const xScale = d3.scaleLinear()
+                .domain([Math.min(0, d3.min(nonNumericYData, d => d[xCol])), d3.max(nonNumericYData, d => d[xCol]) + 1])
+                .range([0, this.size]);
+
+            const xTickValues = xScale.ticks(); 
+            const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+
+            const categoricalXStart = xScale.range()[1] + 10;
+            const categoricalXScale = d3.scaleOrdinal()
+                .domain(uniqueXCategories)
+                .range(uniqueXCategories.length > 0 
+                    ? [...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * ((xTickSpacing || 5) + 5)))
+                    : [0]); 
+            
+            const yScale = d3.scalePoint()
+                .domain(uniqueYCategories)
+                .range([this.size, 0]);
+
+                combinedData.sort((a, b) => {
+                    const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
+                    const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
+                
+                    if (aIsNumeric && bIsNumeric) {
+                        return Number(a[xCol]) - Number(b[xCol]); 
+                    }
+                
+                    const aIsCategorical = !aIsNumeric;
+                    const bIsCategorical = !bIsNumeric;
+                
+                    if (aIsCategorical && bIsCategorical) {
+                        return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
+                    }
+                
+                    return aIsNumeric ? -1 : 1; 
+                });
+    
+                const line = d3.line()
+                .x(d => {
+                    if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
+                        return xScale(d[xCol]); 
+                    } else {
+                        return categoricalXScale(String(d[xCol])) || xScale(0); 
+                    }
+                })
+                .y(d => {
+                    if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                        return yScale(d[yCol]); 
+                    } else {
+                        return categoricalYScale(String(d[yCol])) || yScale(0);
+                    }
+                })
+                .curve(d3.curveMonotoneX);
+    
+                if(groupByAttribute){
+                    uniqueGroups.forEach((groupData, key) => {
+                        svg.append("path")
+                          .datum(groupData)
+                          .attr("class", "line")
+                          .attr("d", line)
+                          .attr("stroke", colorScale(key))
+                          .attr("fill", "none");
+                      });
+                }
+                else{
+                    cellGroup.append("path")
+                        .datum(combinedData)
+                        .attr("fill", "none")
+                        .attr("stroke", "steelblue")
+                        .attr("stroke-width", 2)
+                        .attr("d", line);
+                }
+    
+                cellGroup
+                    .append("g")
+                    .attr("transform", `translate(0, ${numericSpace})`)
+                    .call(d3.axisBottom(xScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end") 
+                    .attr("transform", "rotate(-45)") 
+                    .style("font-size", "8px")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+                    .append("title") 
+                    .text(d => d); 
+    
+                cellGroup.append("g")
+                    .call(d3.axisLeft(yScale))
+                    .selectAll("text")
+                    .style("font-size", "8px")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                    .append("title")  
+                    .text(d => d);
+
+                svg
+                    .append("text")
+                    .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+                    .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                    .style("text-anchor", "middle")
+                    .text(xCol);
+    
+                const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+                const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+                
+                svg
+                    .append("text")
+                    .attr("x", xPosition) 
+                    .attr("y", yPosition - 20) 
+                    .style("text-anchor", "middle")
+                    .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                    .text(yCol);
+        }
+
+        /// All non numeric plot ///
+        else{   
+            uniqueXCategories = uniqueXCategories.slice(1);
+            uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = sortCategories(uniqueXCategories);
+            uniqueYCategories = sortCategories(uniqueYCategories);
+
+            const xScale = d3.scalePoint()
+                .domain(uniqueXCategories)
+                .range([0, this.size]);
+            
+            const yScale = d3.scalePoint()
+                .domain(uniqueYCategories)
+                .range([this.size, 0]);
+
+            combinedData.sort((a, b) => {
+                const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
+                const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
+            
+                if (aIsNumeric && bIsNumeric) {
+                    return Number(a[xCol]) - Number(b[xCol]); 
+                }
+            
+                const aIsCategorical = !aIsNumeric;
+                const bIsCategorical = !bIsNumeric;
+            
+                if (aIsCategorical && bIsCategorical) {
+                    return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
+                }
+            
+                return aIsNumeric ? -1 : 1; 
+            });
+
+            const line = d3.line()
+            .x(d => {
+                if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
+                    return xScale(d[xCol]); 
+                } else {
+                    return categoricalXScale(String(d[xCol])) || xScale(0); 
+                }
+            })
+            .y(d => {
+                if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                    return yScale(d[yCol]); 
+                } else {
+                    return categoricalYScale(String(d[yCol])) || yScale(0);
+                }
+            })
+            .curve(d3.curveMonotoneX);
+
+            if(groupByAttribute){
+                uniqueGroups.forEach((groupData, key) => {
+                    svg.append("path")
+                        .datum(groupData)
+                        .attr("class", "line")
+                        .attr("d", line)
+                        .attr("stroke", colorScale(key))
+                        .attr("fill", "none");
+                    });
+            }
+            else{
+                cellGroup.append("path")
+                    .datum(combinedData)
+                    .attr("fill", "none")
+                    .attr("stroke", "steelblue")
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+            }
+
+            cellGroup
+                .append("g")
+                .attr("transform", `translate(0, ${numericSpace})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end") 
+                .attr("transform", "rotate(-45)") 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+                .append("title") 
+                .text(d => d); 
+
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
+            
+            svg
+                .append("text")
+                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .style("text-anchor", "middle")
+                .text(xCol);
+
+            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+            
+            svg
+                .append("text")
+                .attr("x", xPosition) 
+                .attr("y", yPosition - 20) 
+                .style("text-anchor", "middle")
+                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                .text(yCol);
+        }
 
         const lineViewButton = cellGroup.append("g")
             .attr("class", "scatterplot-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID));
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
 
         lineViewButton.append("rect")
             .attr("x", - 110)
@@ -2460,7 +3017,7 @@ class ScatterplotMatrixView{
             .text("Scatterplot");
     }
 
-    restoreScatterplot(givenData, svg, xCol, yCol, cellID) {
+    restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
         const cellGroup = d3.select(`#${cellID}`);
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
@@ -2469,7 +3026,7 @@ class ScatterplotMatrixView{
         const lineViewButton = cellGroup.append("g")
             .attr("class", "linechart-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID));
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
 
         lineViewButton.append("rect")
             .attr("x", - 105)
