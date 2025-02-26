@@ -21,16 +21,19 @@ class DataModel {
             selectedColumns.add(this.groupByAttribute);  
         }
 
-    const selectedAttrData = this.getData().select([...selectedColumns])
+    const selectedAttrData = this.getFullData().select([...selectedColumns])
 
     const groupByCol = this.groupByAttribute; 
     if (groupByCol && groups && groups.length > 0) {
       this.filteredData = selectedAttrData.filter(aq.escape(d =>
         groups.includes(d[groupByCol])
-      ));
+      ) );
     } else {
       this.filteredData = selectedAttrData;
     }
+
+    console.log("set filtered data", this.filteredData.objects());
+
   }
   getSelectedGroups() {
     return this.selectedGroups;

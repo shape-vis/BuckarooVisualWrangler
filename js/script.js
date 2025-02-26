@@ -1,5 +1,18 @@
-let activeDataset = "practice";
+let activeDataset = "stackoverflow";
 let practiceController, stackoverflowController;
+
+let data2 = null;
+// May need to change 'id' to 'ID'
+d3.csv("data/stackoverflow_db.csv").then(inputData => {
+  data2 = aq.from(inputData).slice(0, 200);
+
+  stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
+
+  stackoverflowController.render();
+  stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
+
+  attachButtonEventListeners();
+});
 
 const data = aq.table({
     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -18,15 +31,6 @@ practiceController = new ScatterplotController(data, "#matrix-vis-practice");
 //     employees: [0, 5, 10, 55, 15, 20, 25, 30, 0, 89],
 //   });
 
-let data2 = null;
-// May need to change 'id' to 'ID'
-d3.csv("data/stackoverflow_db.csv").then(inputData => {
-  data2 = aq.from(inputData).slice(0, 1000);
-  // data2 = data2.select('ID', 'Age', 'ConvertedSalary', 'YearsCoding', 'HoursComputer');
 
-  stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
-});
+document.getElementById("tab1").style.display = "none";
 
-document.getElementById("tab2").style.display = "none";
-
-attachButtonEventListeners();

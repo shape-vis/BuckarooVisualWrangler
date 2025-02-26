@@ -146,6 +146,124 @@ class ScatterplotMatrixView{
             .text(group);
         });
       }
+    
+    drawBoxPlots(groupStats, onSelectGroups, overallAvg) {
+        const container = d3.select("#boxplot-container");
+        container.html(""); // Clear previous plots
+    
+        const width = 1000; 
+        const height = 300; 
+        const margin = { top: 30, right: 100, bottom: 100, left: 100 };
+    
+        const salaryExtent = d3.extent(groupStats.flatMap(d => [d.min, d.max]));
+    
+        // Ensure the y-axis includes the overall average
+        salaryExtent[0] = Math.min(salaryExtent[0], overallAvg);
+        salaryExtent[1] = Math.max(salaryExtent[1], overallAvg);
+    
+        // X-axis: Group Names
+        const xScale = d3.scaleBand()
+                         .domain(groupStats.map(d => d.group))
+                         .range([margin.left, width - margin.right])
+                         .padding(0.5);
+    
+        // Y-axis: Salary Values
+        const yScale = d3.scaleLinear()
+                         .domain(salaryExtent)
+                         .nice() // Adds better tick spacing
+                         .range([height - margin.bottom, margin.top]);
+    
+        // Create a single SVG for all box plots
+        const svg = container.append("svg")
+                             .attr("width", width)
+                             .attr("height", height);
+    
+        // Draw y-axis (Salary values)
+        svg.append("g")
+            .attr("transform", `translate(${margin.left}, 0)`)
+            .call(d3.axisLeft(yScale).ticks(5));
+    
+        // Draw x-axis (Group Names)
+        svg.append("g")
+            .attr("transform", `translate(0, ${height - margin.bottom})`)
+            .call(d3.axisBottom(xScale))
+            .selectAll("text") 
+            .attr("transform", "rotate(-45)") // Rotates labels for better readability
+            .style("text-anchor", "end")
+            .style("font-size", "10px");
+    
+        // 🔴 Draw overall average salary line (Red Dashed Line)
+        svg.append("line")
+            .attr("x1", margin.left)
+            .attr("x2", width - margin.right)
+            .attr("y1", yScale(overallAvg))
+            .attr("y2", yScale(overallAvg))
+            .attr("stroke", "red")
+            .attr("stroke-dasharray", "5,5") // Dashed line
+            .attr("stroke-width", 2);
+    
+        // 🏷️ Add label for overall average salary
+        svg.append("text")
+            .attr("x", width - margin.right) // Position text slightly outside the plot
+            .attr("y", yScale(overallAvg) + 4) // Align text to the red line
+            .attr("fill", "red")
+            .attr("font-size", "10px")
+            .attr("font-weight", "bold")
+            .attr("text-anchor", "start") // Align text to the left
+            .text(`Overall Avg: ${overallAvg.toFixed(2)}`);
+    
+        // Draw each group's box plot
+        groupStats.forEach(d => {
+            const groupX = xScale(d.group) + xScale.bandwidth() / 2; // Center of group
+    
+            // Draw whiskers (min to max)
+            svg.append("line")
+                .attr("x1", groupX).attr("x2", groupX)
+                .attr("y1", yScale(d.min)).attr("y2", yScale(d.max))
+                .attr("stroke", "black");
+    
+            // Draw box (Q1 to Q3)
+            svg.append("rect")
+                .attr("x", xScale(d.group))
+                .attr("width", xScale.bandwidth())
+                .attr("y", yScale(d.q3))
+                .attr("height", yScale(d.q1) - yScale(d.q3)) // Box height from Q3 to Q1
+                .attr("fill", "steelblue").attr("opacity", 0.6);
+    
+            // Draw median line
+            svg.append("line")
+                .attr("x1", xScale(d.group)).attr("x2", xScale(d.group) + xScale.bandwidth())
+                .attr("y1", yScale(d.median)).attr("y2", yScale(d.median))
+                .attr("stroke", "black").attr("stroke-width", 2);
+        });
+    
+        // Add checkboxes below the box plots
+        const checkboxContainer = container.append("div")
+                                           .attr("class", "checkbox-container")
+                                           .style("display", "flex")
+                                           .style("justify-content", "center")
+                                           .style("gap", "10px")
+                                           .style("margin-top", "10px");
+    
+        groupStats.forEach((d, i) => {
+            const groupDiv = checkboxContainer.append("div")
+                                              .attr("class", "group-checkbox");
+    
+            const checkbox = groupDiv.append("input")
+                                     .attr("type", "checkbox")
+                                     .attr("value", d.group)
+                                     .attr("id", `checkbox-${i}`);
+            
+            groupDiv.append("label")
+                    .attr("for", `checkbox-${i}`)
+                    .text(` ${d.group}`);
+    
+            // Attach event listener for selection
+            checkbox.on("change", function () {
+                onSelectGroups();
+            });
+        });
+    }
 
     plotMatrix(givenData, groupByAttribute, selectedGroups) {  
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
@@ -455,8 +573,6 @@ class ScatterplotMatrixView{
                             });
                             return obj;
                         });
-
-                        console.log("StackData:", stackedData);
                         
                         const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
                         yScale = d3.scaleLinear().domain([0, yMax]).range([this.size, 0]);
@@ -912,8 +1028,6 @@ class ScatterplotMatrixView{
                             });
                             return obj;
                           });
-
-                        console.log("StackData:", stackedData);
                         
                         const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
                         yScale = d3.scaleLinear().domain([0, yMax]).range([this.size, 0]);
@@ -2261,8 +2375,7 @@ class ScatterplotMatrixView{
     }
 
     switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
-        console.log("here in linechart");
-        const cellGroup = d3.select(`#${cellID}`);
+        const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`);  // Hardcoded for stackoverflow tab, need to make dynamic later
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
 
         console.log("cellID", cellID);
@@ -2348,7 +2461,6 @@ class ScatterplotMatrixView{
         const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
         const numericSpace = this.size - categorySpace;
 
-
         /// All numeric plot ///
         if(xIsNumeric && yIsNumeric)
         {
@@ -2412,14 +2524,18 @@ class ScatterplotMatrixView{
             })
             .curve(d3.curveMonotoneX);
 
+            let groupedData;
+
             if(groupByAttribute){
-                uniqueGroups.forEach((groupData, key) => {
+                groupedData = d3.group(combinedData, d => d[groupByAttribute]);
+                groupedData.forEach((groupArray, key) => {
                     cellGroup.append("path")
-                      .datum(groupData)
+                      .datum(groupArray)
                       .attr("class", "line")
                       .attr("d", line)
                       .attr("stroke", colorScale(key))
-                      .attr("fill", "none");
+                      .attr("fill", "none")
+                      .attr("stroke-width", 2);
                   });
             }
             else{
@@ -2521,46 +2637,34 @@ class ScatterplotMatrixView{
                     : [0]); 
                 
             combinedData.sort((a, b) => {
-                return Number(a[xCol]) - Number(b[xCol]); 
-
-                // const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
-                // const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
-            
-                // if (aIsNumeric && bIsNumeric) {
-                //     return Number(a[xCol]) - Number(b[xCol]); 
-                // }
-            
-                // const aIsCategorical = !aIsNumeric;
-                // const bIsCategorical = !bIsNumeric;
-            
-                // if (aIsCategorical && bIsCategorical) {
-                //     return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
-                // }
-            
-                // return aIsNumeric ? -1 : 1; 
+                return uniqueXCategories.indexOf(a[xCol]) - uniqueXCategories.indexOf(b[xCol]);
             });
 
             const line = d3.line()
-            .x(d => {
-                    return xScale(d[xCol]); 
-            })
-            .y(d => {
-                if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
-                    return yScale(d[yCol]); 
-                } else {
-                    return categoricalYScale(String(d[yCol])) || yScale(0);
-                }
-            })
-            .curve(d3.curveMonotoneX);
+                .x(d => {
+                        return xScale(d[xCol]); 
+                })
+                .y(d => {
+                    if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
+                        return yScale(d[yCol]); 
+                    } else {
+                        return categoricalYScale(String(d[yCol])) || yScale(0);
+                    }
+                })
+                .curve(d3.curveMonotoneX);
+            
+            let groupedData;
 
             if(groupByAttribute){
-                uniqueGroups.forEach((groupData, key) => {
+                groupedData = d3.group(combinedData, d => d[groupByAttribute]);
+                groupedData.forEach((groupArray, key) => {
                     cellGroup.append("path")
-                      .datum(groupData)
+                      .datum(groupArray)
                       .attr("class", "line")
                       .attr("d", line)
                       .attr("stroke", colorScale(key))
-                      .attr("fill", "none");
+                      .attr("fill", "none")
+                      .attr("stroke-width", 2);
                   });
             }
             else{
@@ -2574,7 +2678,7 @@ class ScatterplotMatrixView{
 
             cellGroup
                 .append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
+                .attr("transform", `translate(0, ${this.size})`)
                 .call(d3.axisBottom(xScale))
                 .selectAll("text")
                 .style("text-anchor", "end") 
@@ -2606,12 +2710,12 @@ class ScatterplotMatrixView{
             svg
                 .append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
                 .text(xCol);
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
             svg
                 .append("text")
@@ -2648,25 +2752,11 @@ class ScatterplotMatrixView{
                 .domain(uniqueYCategories)
                 .range([this.size, 0]);
 
-                combinedData.sort((a, b) => {
-                    const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
-                    const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
-                
-                    if (aIsNumeric && bIsNumeric) {
-                        return Number(a[xCol]) - Number(b[xCol]); 
-                    }
-                
-                    const aIsCategorical = !aIsNumeric;
-                    const bIsCategorical = !bIsNumeric;
-                
-                    if (aIsCategorical && bIsCategorical) {
-                        return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
-                    }
-                
-                    return aIsNumeric ? -1 : 1; 
-                });
-    
-                const line = d3.line()
+            combinedData.sort((a, b) => {
+                return Number(a[xCol]) - Number(b[xCol]); 
+            });
+
+            const line = d3.line()
                 .x(d => {
                     if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
                         return xScale(d[xCol]); 
@@ -2678,63 +2768,67 @@ class ScatterplotMatrixView{
                         return yScale(d[yCol]); 
                 })
                 .curve(d3.curveMonotoneX);
-    
-                if(groupByAttribute){
-                    uniqueGroups.forEach((groupData, key) => {
-                        cellGroup.append("path")
-                          .datum(groupData)
-                          .attr("class", "line")
-                          .attr("d", line)
-                          .attr("stroke", colorScale(key))
-                          .attr("fill", "none");
-                      });
-                }
-                else{
-                    cellGroup.append("path")
-                        .datum(combinedData)
-                        .attr("fill", "none")
-                        .attr("stroke", "steelblue")
-                        .attr("stroke-width", 2)
-                        .attr("d", line);
-                }
-    
-                cellGroup
-                    .append("g")
-                    .attr("transform", `translate(0, ${numericSpace})`)
-                    .call(d3.axisBottom(xScale))
-                    .selectAll("text")
-                    .style("text-anchor", "end") 
-                    .attr("transform", "rotate(-45)") 
-                    .style("font-size", "8px")
-                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
-                    .append("title") 
-                    .text(d => d); 
-    
-                cellGroup.append("g")
-                    .call(d3.axisLeft(yScale))
-                    .selectAll("text")
-                    .style("font-size", "8px")
-                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                    .append("title")  
-                    .text(d => d);
 
-                svg
-                    .append("text")
-                    .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                    .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                    .style("text-anchor", "middle")
-                    .text(xCol);
-    
-                const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
-                
-                svg
-                    .append("text")
-                    .attr("x", xPosition) 
-                    .attr("y", yPosition - 20) 
-                    .style("text-anchor", "middle")
-                    .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                    .text(yCol);
+            let groupedData;
+
+            if(groupByAttribute){
+                groupedData = d3.group(combinedData, d => d[groupByAttribute]);
+                groupedData.forEach((groupArray, key) => {
+                    cellGroup.append("path")
+                      .datum(groupArray)
+                      .attr("class", "line")
+                      .attr("d", line)
+                      .attr("stroke", colorScale(key))
+                      .attr("fill", "none")
+                      .attr("stroke-width", 2);
+                  });
+            }
+            else{
+                cellGroup.append("path")
+                    .datum(combinedData)
+                    .attr("fill", "none")
+                    .attr("stroke", "steelblue")
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+            }
+
+            cellGroup
+                .append("g")
+                .attr("transform", `translate(0, ${this.size})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end") 
+                .attr("transform", "rotate(-45)") 
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
+                .append("title") 
+                .text(d => d); 
+
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
+
+            svg
+                .append("text")
+                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .style("text-anchor", "middle")
+                .text(xCol);
+
+            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
+            
+            svg
+                .append("text")
+                .attr("x", xPosition) 
+                .attr("y", yPosition - 20) 
+                .style("text-anchor", "middle")
+                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                .text(yCol);
         }
 
         /// All non numeric plot ///
@@ -2748,7 +2842,6 @@ class ScatterplotMatrixView{
             console.log("uniqueXCategories", uniqueXCategories);
             console.log("uniqueYCategories", uniqueYCategories);
 
-
             const xScale = d3.scalePoint()
                 .domain(uniqueXCategories)
                 .range([0, this.size]);
@@ -2757,23 +2850,8 @@ class ScatterplotMatrixView{
                 .domain(uniqueYCategories)
                 .range([this.size, 0]);
 
-                //Sort by uniqueXCategories
             combinedData.sort((a, b) => {
-                const aIsNumeric = a.type === "numeric" || a.type === "nan-y";
-                const bIsNumeric = b.type === "numeric" || a.type === "nan-y";
-            
-                if (aIsNumeric && bIsNumeric) {
-                    return Number(a[xCol]) - Number(b[xCol]); 
-                }
-            
-                const aIsCategorical = !aIsNumeric;
-                const bIsCategorical = !bIsNumeric;
-            
-                if (aIsCategorical && bIsCategorical) {
-                    return categoricalXScale.domain().indexOf(a[xCol]) - categoricalXScale.domain().indexOf(b[xCol]);
-                }
-            
-                return aIsNumeric ? -1 : 1; 
+                return uniqueXCategories.indexOf(a[xCol]) - uniqueXCategories.indexOf(b[xCol]);
             });
 
             console.log("sorted data", combinedData);
@@ -2787,17 +2865,22 @@ class ScatterplotMatrixView{
                             })
                             .curve(d3.curveMonotoneX);
 
+            let groupedData;
+
             if(groupByAttribute){
-                uniqueGroups.forEach((groupData, key) => {
+                groupedData = d3.group(combinedData, d => d[groupByAttribute]);
+                groupedData.forEach((groupArray, key) => {
                     cellGroup.append("path")
-                        .datum(groupData)
-                        .attr("class", "line")
-                        .attr("d", line)
-                        .attr("stroke", colorScale(key))
-                        .attr("fill", "none");
-                    });
+                      .datum(groupArray)
+                      .attr("class", "line")
+                      .attr("d", line)
+                      .attr("stroke", colorScale(key))
+                      .attr("fill", "none")
+                      .attr("stroke-width", 2);
+                  });
             }
             else{
+                console.log("here in no groupBy");
                 cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
@@ -2808,7 +2891,7 @@ class ScatterplotMatrixView{
 
             cellGroup
                 .append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
+                .attr("transform", `translate(0, ${this.size})`)
                 .call(d3.axisBottom(xScale))
                 .selectAll("text")
                 .style("text-anchor", "end") 
@@ -2829,12 +2912,12 @@ class ScatterplotMatrixView{
             svg
                 .append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
                 .text(xCol);
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
+            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
             svg
                 .append("text")
@@ -2869,7 +2952,7 @@ class ScatterplotMatrixView{
     }
 
     restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
-        const cellGroup = d3.select(`#${cellID}`);
+        const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
         this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute);  

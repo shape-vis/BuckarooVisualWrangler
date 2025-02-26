@@ -126,6 +126,7 @@
     cursor: pointer;
     width: 150px;
     text-align: center;
+    border-radius: 4px;
 }
 
 .dropdown-content {
@@ -155,24 +156,35 @@
 }
 
 #legend {
-  width: 50%;
-  margin: 10px auto;
-  padding: 5px;
-  border: 1px solid #ccc;
+    position: absolute;
+    left: 10px; 
+    top: 200px; 
+    background: white;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+    max-width: 200px; 
+    word-wrap: break-word; 
+    overflow-wrap: break-word; 
 }
-
 .legend-item {
   display: flex;
   align-items: center;
   margin: 2px 0;
   font-size: 14px;
+  max-width: 200px; 
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal; 
 }
 
 .legend-color {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 5px;
+    width: 15px;
+    height: 15px;
+    margin-right: 5px;
+    border: 1px solid black;
+    flex-shrink: 0; 
 }
 
 .modal {
@@ -181,7 +193,7 @@
     top: 50%;
     transform: translate(-50%, -50%);
     z-index: 1000;
-    width: 300px; 
+    width: 1000px; 
     background-color: #fff;
     border: 1px solid #888;
     border-radius: 4px;
@@ -208,3 +220,18 @@
     justify-content: space-between;
     margin-top: 15px;
   }
+
+  #boxplot-container {
+    display: flex;
+    flex-wrap: wrap; 
+    justify-content: center; 
+    align-items: flex-start; 
+    gap: 20px;
+}
+
+.group-boxplot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+

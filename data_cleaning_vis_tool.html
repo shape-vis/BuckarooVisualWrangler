@@ -18,8 +18,8 @@
     </div>
 
     <div class="tabs">
-        <button class="tab-button active" data-target="tab1">Practice Data</button>
-        <button class="tab-button" data-target="tab2">StackOverflow Data</button>
+        <button class="tab-button" data-target="tab1">Practice Data</button>
+        <button class="tab-button active" data-target="tab2">StackOverflow Data</button>
     </div>
 
     <div id="attribute-dropdown" class="dropdown">
@@ -57,16 +57,15 @@
 
     <button id="select-groups-btn">Select Groups</button>
 
-    <div id="legend"></div>
-
     <div id="tooltip" class="tooltip"></div>
 
     <div id="container">
+        <div id="legend"></div>
         <div class="matrix-and-toolbox">
-            <div id="tab1" class="tab-content active">
+            <div id="tab1" class="tab-content">
                 <div id="matrix-vis-practice"></div>
             </div>
-            <div id="tab2" class="tab-content">
+            <div id="tab2" class="tab-content active">
                 <div id="matrix-vis-stackoverflow"></div>
             </div>
             <div class="toolbox-wrapper">
@@ -82,7 +81,7 @@
                             Select data
                         </label>
                     </form>
-                    <button id="undo">Undo</button>
+                    <button id="undo" >Undo</button>
                     <button id="redo">Redo</button>
                     <button id="clear-selection">Clear Selection</button>
                     <button id="remove-selected-data">Remove Selected Data</button>

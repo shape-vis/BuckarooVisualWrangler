@@ -35,65 +35,55 @@ class ScatterplotController {
     // Pop up window for avg aggregations
     openGroupSelectionPopup() {
         const groupBy = this.model.getGroupByAttribute();
-        if (!groupBy) return; 
-      
+        if (!groupBy) return;
+
         const fullTable = this.model.getFullData();
-      
-        const overallAvg = fullTable.rollup({ overallAvg: aq.op.mean('ConvertedSalary') })
-                                    .objects()[0].overallAvg;
-      
+
+        const overallAvg = fullTable.rollup({ overallAvg: aq.op.mean("ConvertedSalary") }).objects()[0].overallAvg;
+
+        // Compute box plot statistics for each group
         const groupStatsTable = fullTable.groupby(groupBy).rollup({
-          avgSalary: aq.op.mean('ConvertedSalary')
+            min: aq.op.min("ConvertedSalary"),
+            q1: aq.op.quantile("ConvertedSalary", 0.25),
+            median: aq.op.median("ConvertedSalary"),
+            q3: aq.op.quantile("ConvertedSalary", 0.75),
+            max: aq.op.max("ConvertedSalary")
         });
         
+
         const groupStats = groupStatsTable.objects().map(d => ({
-          group: d[groupBy],
-          avg: d.avgSalary,
-          diff: Math.abs(d.avgSalary - overallAvg)
+            group: d[groupBy],
+            min: d.min,
+            q1: d.q1,
+            median: d.median,
+            q3: d.q3,
+            max: d.max
         }));
-        
-        groupStats.sort((a, b) => a.diff - b.diff);
-      
+
         const popup = document.getElementById("group-selection-popup");
         popup.innerHTML = `
-          <h3>Overall Salary Average: ${overallAvg.toFixed(2)}</h3>
-          <text>(Ordered from closest to the overall avg. to farthest from the overall avg.)</text>
-          <ul id="group-list">
-            ${groupStats.map(stat => `
-               <li>
-                 <label>
-                   <input type="checkbox" value="${stat.group}" />
-                   ${stat.group} (Avg: ${stat.avg.toFixed(2)})
-                 </label>
-               </li>
-            `).join('')}
-          </ul>
-          <button id="plot-groups">Plot Selected Groups</button>
-          <button id="close-popup">Cancel</button>
+            <h3>Group Salary Distributions</h3>
+            <div id="boxplot-container"></div> 
+            <button id="plot-groups">Plot Selected Groups</button>
+            <button id="close-popup">Cancel</button>
         `;
-        
-        const currentSelection = this.model.getSelectedGroups() || [];
-        popup.querySelectorAll("input[type=checkbox]").forEach(cb => {
-          if (currentSelection.includes(cb.value)) {
-            cb.checked = true;
-          }
-        });
-      
+
         popup.style.display = "block";
-      
+
+        // Use the view to draw box plots
+        this.view.drawBoxPlots(groupStats, () => this.handleGroupSelection(), overallAvg);
+
         document.getElementById("plot-groups").onclick = () => {
-          const selected = Array.from(popup.querySelectorAll("input[type=checkbox]:checked"))
+            const selected = Array.from(document.querySelectorAll("#boxplot-container input[type=checkbox]:checked"))
                                 .map(cb => cb.value);
 
-          console.log("selected", selected);
-          this.model.setSelectedGroups(selected, this.selectedAttributes);
-          console.log("getSelectedGroups", this.model.getSelectedGroups());
-          this.render();
-          popup.style.display = "none";
+            this.model.setSelectedGroups(selected, this.selectedAttributes);
+            this.render();
+            popup.style.display = "none";
         };
-      
+
         document.getElementById("close-popup").onclick = () => {
-          popup.style.display = "none";
+            popup.style.display = "none";
         };
       }
   
@@ -198,6 +188,13 @@ class ScatterplotController {
         barX1 = barData.x1;
         selectedBar = barData;
     }
+
+    handleGroupSelection() {
+        const selectedGroups = Array.from(document.querySelectorAll("#boxplot-container input[type=checkbox]:checked"))
+                                    .map(cb => cb.value);
+        console.log("Selected groups:", selectedGroups);
+        this.model.setSelectedGroups(selectedGroups, this.selectedAttributes);
+    }
   
     setupEventListeners() {
         const getActiveController = () => {
@@ -213,7 +210,7 @@ class ScatterplotController {
                     tab.style.display = "none";
                 });
     
-                activeDataset = this.dataset.target === "tab1" ? "practice" : "stackoverflow";
+                activeDataset = this.dataset.target === "tab2" ? "stackoverflow" : "practice";
 
                 const targetTab = document.getElementById(this.getAttribute("data-target"));
                 targetTab.style.display = "block";
