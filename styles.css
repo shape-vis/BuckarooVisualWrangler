@@ -233,4 +233,6 @@
 .group-boxplot {
     display: flex;
     flex-direction: column;
-    align-i
+    align-items: center;
+}
+
