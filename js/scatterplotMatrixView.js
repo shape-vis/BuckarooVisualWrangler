@@ -147,118 +147,123 @@ class ScatterplotMatrixView{
         });
       }
     
-    drawBoxPlots(groupStats, onSelectGroups, overallAvg) {
+    drawBoxPlots(groupStats, onSelectGroups, overallMedian, selectedGroups, significantGroups) {
+        console.log("significant groups", significantGroups);
         const container = d3.select("#boxplot-container");
-        container.html(""); // Clear previous plots
+        container.html(""); 
     
-        const width = 1000; 
-        const height = 300; 
-        const margin = { top: 30, right: 100, bottom: 100, left: 100 };
+        const width = 1300; 
+        const height = 500; 
+        const margin = { top: 30, right: 100, bottom: 50, left: 100 };
     
         const salaryExtent = d3.extent(groupStats.flatMap(d => [d.min, d.max]));
     
-        // Ensure the y-axis includes the overall average
-        salaryExtent[0] = Math.min(salaryExtent[0], overallAvg);
-        salaryExtent[1] = Math.max(salaryExtent[1], overallAvg);
+        salaryExtent[0] = Math.min(salaryExtent[0], overallMedian);
+        salaryExtent[1] = Math.max(salaryExtent[1], overallMedian);
     
-        // X-axis: Group Names
         const xScale = d3.scaleBand()
                          .domain(groupStats.map(d => d.group))
                          .range([margin.left, width - margin.right])
-                         .padding(0.5);
+                         .padding(0.2);
     
-        // Y-axis: Salary Values
         const yScale = d3.scaleLinear()
                          .domain(salaryExtent)
-                         .nice() // Adds better tick spacing
                          .range([height - margin.bottom, margin.top]);
     
-        // Create a single SVG for all box plots
         const svg = container.append("svg")
                              .attr("width", width)
                              .attr("height", height);
     
-        // Draw y-axis (Salary values)
         svg.append("g")
             .attr("transform", `translate(${margin.left}, 0)`)
-            .call(d3.axisLeft(yScale).ticks(5));
+            .call(d3.axisLeft(yScale).ticks(10));
     
-        // Draw x-axis (Group Names)
         svg.append("g")
             .attr("transform", `translate(0, ${height - margin.bottom})`)
             .call(d3.axisBottom(xScale))
             .selectAll("text") 
-            .attr("transform", "rotate(-45)") // Rotates labels for better readability
-            .style("text-anchor", "end")
-            .style("font-size", "10px");
+            .style("font-size", "10px")
+            .style("fill", d => significantGroups.some(group => group.group === d) ? "red" : "black")            
+            .text(d => d.length > 10 ? d.substring(0, 12) + "…" : d)  
+            .append("title")  
+            .text(d => d);
     
-        // 🔴 Draw overall average salary line (Red Dashed Line)
         svg.append("line")
             .attr("x1", margin.left)
             .attr("x2", width - margin.right)
-            .attr("y1", yScale(overallAvg))
-            .attr("y2", yScale(overallAvg))
-            .attr("stroke", "red")
-            .attr("stroke-dasharray", "5,5") // Dashed line
+            .attr("y1", yScale(overallMedian))
+            .attr("y2", yScale(overallMedian))
+            .attr("stroke", "blue")
+            .attr("stroke-dasharray", "5,5") 
             .attr("stroke-width", 2);
     
-        // 🏷️ Add label for overall average salary
         svg.append("text")
-            .attr("x", width - margin.right) // Position text slightly outside the plot
-            .attr("y", yScale(overallAvg) + 4) // Align text to the red line
-            .attr("fill", "red")
+            .attr("x", width - margin.right) 
+            .attr("y", yScale(overallMedian) + 4) 
+            .attr("fill", "blue")
             .attr("font-size", "10px")
             .attr("font-weight", "bold")
-            .attr("text-anchor", "start") // Align text to the left
-            .text(`Overall Avg: ${overallAvg.toFixed(2)}`);
+            .attr("text-anchor", "start") 
+            .text(`Dataset Median: ${overallMedian.toFixed(2)}`);
+
+        svg.append("text")
+            .attr("x", 0) 
+            .attr("y", 0) 
+            .attr("transform", `translate(${margin.left - 60}, ${height / 2}) rotate(-90)`) 
+            .attr("text-anchor", "middle") 
+            .attr("font-size", "18px") 
+            .text("Salary $");
     
-        // Draw each group's box plot
         groupStats.forEach(d => {
-            const groupX = xScale(d.group) + xScale.bandwidth() / 2; // Center of group
+            const groupX = xScale(d.group) + xScale.bandwidth() / 2; 
     
-            // Draw whiskers (min to max)
             svg.append("line")
                 .attr("x1", groupX).attr("x2", groupX)
                 .attr("y1", yScale(d.min)).attr("y2", yScale(d.max))
                 .attr("stroke", "black");
     
-            // Draw box (Q1 to Q3)
             svg.append("rect")
                 .attr("x", xScale(d.group))
                 .attr("width", xScale.bandwidth())
                 .attr("y", yScale(d.q3))
-                .attr("height", yScale(d.q1) - yScale(d.q3)) // Box height from Q3 to Q1
+                .attr("height", yScale(d.q1) - yScale(d.q3)) 
                 .attr("fill", "steelblue").attr("opacity", 0.6);
     
-            // Draw median line
             svg.append("line")
                 .attr("x1", xScale(d.group)).attr("x2", xScale(d.group) + xScale.bandwidth())
                 .attr("y1", yScale(d.median)).attr("y2", yScale(d.median))
                 .attr("stroke", "black").attr("stroke-width", 2);
         });
     
-        // Add checkboxes below the box plots
         const checkboxContainer = container.append("div")
-                                           .attr("class", "checkbox-container")
-                                           .style("display", "flex")
-                                           .style("justify-content", "center")
-                                           .style("gap", "10px")
-                                           .style("margin-top", "10px");
-    
+            .attr("id", "checkbox-container")
+            .style("position", "absolute")
+            .style("top", `${height - margin.bottom + 80}px`) 
+            .style("left", "0px") 
+            .style("width", `${width}px`) 
+            .style("display", "flex")
+            .style("justify-content", "center") 
+            .style("gap", "10px");
+
         groupStats.forEach((d, i) => {
-            const groupDiv = checkboxContainer.append("div")
-                                              .attr("class", "group-checkbox");
-    
-            const checkbox = groupDiv.append("input")
-                                     .attr("type", "checkbox")
-                                     .attr("value", d.group)
-                                     .attr("id", `checkbox-${i}`);
-            
-            groupDiv.append("label")
-                    .attr("for", `checkbox-${i}`)
-                    .text(` ${d.group}`);
-    
-            // Attach event listener for selection
+            const whiskerX = xScale(d.group) + xScale.bandwidth() / 2 + 20; 
+
+            const checkboxWrapper = checkboxContainer.append("div")
+                .attr("class", "group-checkbox")
+                .style("position", "absolute") 
+                .style("left", `${whiskerX}px`) 
+                .style("transform", "translateX(-50%)") 
+                .style("text-align", "center");
+
+            const checkbox = checkboxWrapper.append("input")
+                .attr("type", "checkbox")
+                .attr("value", d.group)
+                .attr("id", `checkbox-${i}`);
+
+            if (selectedGroups.includes(d.group)) {
+                checkbox.property("checked", true);
+            }
+
             checkbox.on("change", function () {
                 onSelectGroups();
             });

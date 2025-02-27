@@ -39,7 +39,31 @@ class ScatterplotController {
 
         const fullTable = this.model.getFullData();
 
-        const overallAvg = fullTable.rollup({ overallAvg: aq.op.mean("ConvertedSalary") }).objects()[0].overallAvg;
+        const overallStats = fullTable.rollup({ 
+            overallAvg: aq.op.mean("ConvertedSalary"),
+            stdDev: aq.op.stdev("ConvertedSalary"),
+            median: aq.op.median("ConvertedSalary"),
+        }).objects()[0];
+
+        const overallAvg = overallStats.overallAvg;
+        // const overallStdDev = overallStats.stdDev;
+        const overallMedian = overallStats.median;
+
+        const absDeviationTable = fullTable.derive({
+            absDeviation: aq.escape(d => Math.abs(d.ConvertedSalary - overallMedian))
+        });
+        
+        const madStats = absDeviationTable.rollup({
+            mad: aq.op.median("absDeviation")
+        }).objects()[0];
+
+        const overallMad = madStats.mad;
+
+        // const upperBound = overallAvg + 2 * overallStdDev;
+        // const lowerBound = overallAvg - 2 * overallStdDev;
+
+        const upperBound = overallMedian + 2 * overallMad;
+        const lowerBound = overallMedian - 2 * overallMad;
 
         // Compute box plot statistics for each group
         const groupStatsTable = fullTable.groupby(groupBy).rollup({
@@ -47,18 +71,26 @@ class ScatterplotController {
             q1: aq.op.quantile("ConvertedSalary", 0.25),
             median: aq.op.median("ConvertedSalary"),
             q3: aq.op.quantile("ConvertedSalary", 0.75),
-            max: aq.op.max("ConvertedSalary")
+            max: aq.op.max("ConvertedSalary"),
+            mean: aq.op.mean("ConvertedSalary")
         });
         
-
         const groupStats = groupStatsTable.objects().map(d => ({
             group: d[groupBy],
             min: d.min,
             q1: d.q1,
             median: d.median,
             q3: d.q3,
-            max: d.max
+            max: d.max,
+            mean: d.mean
         }));
+
+        console.log(groupStats);
+        console.log(overallMedian);
+        console.log("upper", upperBound);
+        console.log("lower", lowerBound);
+
+        const significantGroups = groupStats.filter(d => d.median > upperBound || d.median < lowerBound);
 
         const popup = document.getElementById("group-selection-popup");
         popup.innerHTML = `
@@ -71,7 +103,7 @@ class ScatterplotController {
         popup.style.display = "block";
 
         // Use the view to draw box plots
-        this.view.drawBoxPlots(groupStats, () => this.handleGroupSelection(), overallAvg);
+        this.view.drawBoxPlots(groupStats, () => this.handleGroupSelection(), overallMedian, this.model.getSelectedGroups(), significantGroups);
 
         document.getElementById("plot-groups").onclick = () => {
             const selected = Array.from(document.querySelectorAll("#boxplot-container input[type=checkbox]:checked"))
