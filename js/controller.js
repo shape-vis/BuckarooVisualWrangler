@@ -2,11 +2,11 @@ class ScatterplotController {
     constructor(data, container) {
       this.model = new DataModel(data);
       this.view = new ScatterplotMatrixView(container);
-      this.selectedAttributes = []; // Store selected columns
+      this.selectedAttributes = data.columnNames().slice(1).sort(); // Store selected columns
       this.xCol = null;
       this.yCol = null;
 
-      this.render();
+      this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
     }
 
@@ -252,7 +252,7 @@ class ScatterplotController {
                 document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
 
                 const activeController = getActiveController();
-                activeController.render();
+                activeController.updateSelectedAttributes(controller.selectedAttributes); // renders
 
                 activeController.view.populateDropdownFromTable(activeController.model.getFullData(), activeController);
 

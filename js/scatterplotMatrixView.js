@@ -8,11 +8,11 @@ class ScatterplotMatrixView{
         this.container = container;
 
         this.size = 180; // Size of each cell in matrix
-        this.xPadding = 150;
+        this.xPadding = 175;
         this.yPadding = 90;
         this.labelPadding = 60;
 
-        this.leftMargin = 120;
+        this.leftMargin = 115;
         this.topMargin = 30;
         this.bottomMargin = 125; 
         this.rightMargin = 60; 
@@ -600,24 +600,24 @@ class ScatterplotMatrixView{
                             .attr("width", xScale.bandwidth())
                             .attr("height", d => yScale(d[0]) - yScale(d[1]))
                             .on("mouseover", function(event, d) {
-                            const group = d3.select(this.parentNode).datum().key;
-                            const count = d[1] - d[0];
-                            const totalCount = groups.reduce((sum, key) => sum + (d.data[key] || 0), 0);
-                            d3.select(this).attr("opacity", 0.5);
-                            tooltip.style("display", "block")
-                                .html(`<strong>${d.data.category}</strong><br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
-                                .style("left", `${event.pageX + 10}px`)
-                                .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mousemove", function(event) {
-                            tooltip.style("left", `${event.pageX + 10}px`)
+                                const group = d3.select(this.parentNode).datum().key;
+                                const count = d[1] - d[0];
+                                const totalCount = groups.reduce((sum, key) => sum + (d.data[key] || 0), 0);
+                                d3.select(this).attr("opacity", 0.5);
+                                tooltip.style("display", "block")
+                                    .html(`<strong>${d.data.category}</strong><br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
+                                    .style("left", `${event.pageX + 10}px`)
                                     .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mouseout", function() {
-                            const group = d3.select(this.parentNode).datum().key;
-                            d3.select(this).attr("opacity", 0.8);
-                            tooltip.style("display", "none");
-                            });
+                                })
+                                .on("mousemove", function(event) {
+                                tooltip.style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mouseout", function() {
+                                const group = d3.select(this.parentNode).datum().key;
+                                d3.select(this).attr("opacity", 0.8);
+                                tooltip.style("display", "none");
+                                });
                     }
                     else{
                         const histData = [];
@@ -702,23 +702,44 @@ class ScatterplotMatrixView{
     
             } 
             else {
+                const scatterViewButton = cellGroup.append("g")
+                    .attr("class", "scatterplot-button")
+                    .attr("cursor", "pointer")
+                    .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+
+                scatterViewButton.append("ellipse")
+                    .attr("cx", -85)  
+                    .attr("cy", -28)  
+                    .attr("rx", 25)   
+                    .attr("ry", 10)   
+                    .attr("fill", "#d3d3d3")
+                    .attr("stroke", "#333");
+
+                scatterViewButton.append("text")
+                    .attr("x", - 85)
+                    .attr("y", - 25)
+                    .attr("text-anchor", "middle")
+                    .attr("font-size", "10px")
+                    .attr("fill", "#333")
+                    .text("Scatterplot");
+
                 const lineViewButton = cellGroup.append("g")
                     .attr("class", "linechart-button")
                     .attr("cursor", "pointer")
                     .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
 
-                lineViewButton.append("rect")
-                    .attr("x", - 105)
-                    .attr("y", - 35)
-                    .attr("width", 40)
-                    .attr("height", 15)
-                    .attr("rx", 3)
+                lineViewButton.append("ellipse")
+                    .attr("cx", - 86)
+                    .attr("cy", - 53)
+                    .attr("rx", 40)
+                    .attr("rx", 25)
+                    .attr("ry", 10)
                     .attr("fill", "#d3d3d3")
                     .attr("stroke", "#333");
 
                 lineViewButton.append("text")
                     .attr("x", - 85)
-                    .attr("y", - 25)
+                    .attr("y", - 50)
                     .attr("text-anchor", "middle")
                     .attr("font-size", "10px")
                     .attr("fill", "#333")
@@ -1751,6 +1772,10 @@ class ScatterplotMatrixView{
     drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
+        const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+        let xScale = null;
+        let yScale = null;
+
         let data = [];
 
         if(groupByAttribute)
@@ -1826,615 +1851,806 @@ class ScatterplotMatrixView{
         const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
         const numericSpace = this.size - categorySpace;
 
+        const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
+        const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
+
+        uniqueXCategories = uniqueXCategories.slice(1);
+        uniqueYCategories = uniqueYCategories.slice(1);
+        uniqueXCategories = sortCategories(uniqueXCategories);
+        uniqueYCategories = sortCategories(uniqueYCategories);
+
+        const uniqueXStringBins = uniqueXCategories; 
+        const uniqueYStringBins = uniqueYCategories; 
+
+        let binXGenerator = d3.bin()
+            .domain([d3.min(nonNumericYData, (d) => d[xCol]), d3.max(nonNumericYData, (d) => d[xCol])])  
+            .thresholds(10);  
+
+        let binYGenerator = d3.bin()
+            .domain([d3.min(nonNumericXData, (d) => d[yCol]), d3.max(nonNumericXData, (d) => d[yCol])])  
+            .thresholds(10);  
+
+        let xBins = binXGenerator(numericData);
+        let xBinLabels = xBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+        let yBins = binYGenerator(numericData);
+        let yBinLabels = yBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+
+        let xCategories = [...xBinLabels, ...uniqueXStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+        let yCategories = [...yBinLabels, ...uniqueYStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+
         /// All numeric plot ///
         if(xIsNumeric && yIsNumeric)
         {
-            const xScale = d3.scaleLinear()
-                .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
-                .range([0, numericSpace]);
+            binXGenerator = d3.bin()
+                .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol])])  
+                .thresholds(10);  
 
-            const xTickValues = xScale.ticks(); 
-            const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+            binYGenerator = d3.bin()
+                .domain([d3.min(numericData, (d) => d[yCol]), d3.max(numericData, (d) => d[yCol])])  
+                .thresholds(10);  
 
-            const categoricalXStart = xScale.range()[1] + 10;
-            const categoricalXScale = d3.scaleOrdinal()
-                .domain(uniqueXCategories)
-                .range(uniqueXCategories.length > 0 
-                    ? [...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * ((xTickSpacing || 5) + 5)))
-                    : [0]); 
+            xBins = binXGenerator(numericData);
+            xBinLabels = xBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+            yBins = binYGenerator(numericData);
+            yBinLabels = yBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
 
-            const yScale = d3.scaleLinear()
-                .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
-                .range([numericSpace, 0]);
+            data = data.map(d => ({
+                    ...d,
+                    binnedNumericalXCol: isNaN(d[xCol])
+                        ? String(d[xCol])
+                        : xBinLabels.find((label, i) => {
+                            return d[xCol] >= xBins[i].x0 && d[xCol] < xBins[i].x1;
+                        }) || xBinLabels[xBinLabels.length - 1],
+                    binnedNumericalYCol: isNaN(d[yCol])
+                        ? String(d[yCol])
+                        : yBinLabels.find((label, i) => {
+                            return d[yCol] >= yBins[i].x0 && d[yCol] < yBins[i].x1;
+                        }) || yBinLabels[yBinLabels.length - 1] 
+            }));
 
-            const categoricalYStart = yScale.range()[1] - 10;
-            const categoricalYScale = d3.scaleOrdinal()
-                .domain(uniqueYCategories)
-                .range(uniqueYCategories.length > 0 
-                    ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
-                    : [0]); 
+            if(groupByAttribute){
+                const groupedData = d3.rollups(
+                    data,
+                    v => {
+                        let groupCounts = {};
+                        v.forEach(d => {
+                            if (!groupCounts[d[groupByAttribute]]) {
+                                groupCounts[d[groupByAttribute]] = 0;
+                            }
+                            groupCounts[d[groupByAttribute]] += 1; 
+                        });
+                        return groupCounts; 
+                    },
+                    d => d.binnedNumericalXCol, 
+                    d => d.binnedNumericalYCol  
+                );
+
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, groupCounts]) => ({
+                        x: xKey,
+                        y: yKey,
+                        groups: groupCounts 
+                    }))
+                );
+
+                xCategories = [...xBinLabels, ...uniqueXStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+                yCategories = [...yBinLabels, ...uniqueYStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+
+                xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
+
+                const tooltip = d3.select("#tooltip");
+
+                cellGroup.selectAll("g.cell-group")
+                    .data(heatmapData)
+                    .join("g")
+                    .attr("class", "cell-group")
+                    .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                    .each(function (d) {
+                        const g = d3.select(this);
+                        let yOffset = 0;
+                        const total = d3.sum(Object.values(d.groups));
+
+                        Object.entries(d.groups).forEach(([group, count]) => {
+                            g.append("rect")
+                                .attr("x", 0)
+                                .attr("y", yOffset) 
+                                .attr("width", xScale.bandwidth())
+                                .attr("height", (yScale.bandwidth() * count) / total)  
+                                .attr("fill", groupColorScale(group))
+                                .attr("stroke", "white")
+                                .on("mouseover", function (event) {
+                                    d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
-            const tooltip = d3.select("#tooltip"); 
+                                    let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
+                                                          <strong>${yCol}:</strong> ${d.y} <br>
+                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                    
+                                    Object.entries(d.groups).forEach(([group, count]) => {
+                                        tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
+                                                          <strong>${group}:</strong> ${count} <br>`;
+                                    });
+                
+                                    tooltip.html(tooltipContent)
+                                        .style("display", "block")
+                                        .style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mousemove", function (event) {
+                                    tooltip.style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mouseout", function () {
+                                    d3.select(this).attr("stroke", "white").attr("stroke-width", 0.5);
+                                    tooltip.style("display", "none");
+                                });
 
-            cellGroup.selectAll("circle")
-                .data(combinedData)
-                .join("circle")
-                .attr("cx", d => {
-                    if (d.type === "numeric") return xScale(d[xCol]);
-                    if (d.type === "nan-x" || d.type === "nan-xy") return categoricalXScale(d[xCol]);
-                    return xScale(d[xCol]); 
-                })
-                .attr("cy", d => {
-                    if (d.type === "numeric") return yScale(d[yCol]);
-                    if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
-                    return yScale(d[yCol]);
-                })
-                .attr("r", d => (d.type.includes("nan") ? 4 : 3))
-                .attr("fill", d => {
-                    if (groupByAttribute) {
-                        return colorScale(d[groupByAttribute]);
-                    } else {
-                        return d.type === "numeric" ? "steelblue" : "gray"; 
-                    }
-                })
-                .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
-                .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
-                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
-                    if (groupByAttribute) {
-                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
-                    }
-                    tooltip.style("display", "block")
-                        .html(tooltipContent)
-                        .style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mousemove", function(event) {
-                    tooltip.style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
-                        if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return d.type === "numeric" ? "steelblue" : "gray"; 
-                        }
+                            yOffset += (yScale.bandwidth() * count) / total; 
+                        });
+                    });   
+            }
+            else{
+                const groupedData = d3.rollups(
+                    data,
+                    v => v.length,  
+                    d => d.binnedNumericalXCol,   
+                    d => d.binnedNumericalYCol  
+                );
+    
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, count]) => ({
+                        x: xKey,
+                        y: yKey,
+                        value: count
+                    }))
+                );
+    
+                xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
+                const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                    .domain([0, d3.max(heatmapData, d => d.value)]);
+    
+                const tooltip = d3.select("#tooltip");
+    
+                cellGroup.selectAll("rect")
+                    .data(heatmapData)
+                    .join("rect")
+                    .attr("x", d => xScale(d.x))
+                    .attr("y", d => yScale(d.y))
+                    .attr("width", xScale.bandwidth())
+                    .attr("height", yScale.bandwidth())
+                    .attr("fill", d => {
+                        if (d.y === "NaN") return "gray"; 
+                        if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) return "gray"; 
+                        return colorScale(d.value); 
+                    })
+                    .attr("stroke", "gray")
+                    .attr("stroke-width", 0.5)
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                        tooltip.style("display", "block")
+                            .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function (event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).attr("stroke", "gray").attr("stroke-width", 0.5);
+                        tooltip.style("display", "none");
                     });
-                    tooltip.style("display", "none");
+    
+                const legendHeight = this.size;
+                const legendWidth = 10;
+                const legendX = this.size + 5; 
+                const legendY = 0;
+    
+                const legendScale = d3.scaleLinear()
+                    .domain(colorScale.domain())
+                    .range([legendHeight, 0]);
+    
+                const defs = svg.append("defs");
+    
+                const linearGradient = defs.append("linearGradient")
+                    .attr("id", `legend-gradient-${i}-${j}`)
+                    .attr("x1", "0%").attr("x2", "0%")
+                    .attr("y1", "100%").attr("y2", "0%");
+    
+                const numGradientStops = 10;
+                d3.range(numGradientStops).forEach(d => {
+                    linearGradient.append("stop")
+                        .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                        .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
                 });
-
-            cellGroup
-                .append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
-                .call(d3.axisBottom(xScale))
-                .selectAll("text") 
-                .style("text-anchor", "end") 
-                .style("font-size", "8px")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                .append("title")  
-                .text(d => d);
-
-            if (uniqueXCategories.length > 0) {
-            cellGroup.append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
-                .call(d3.axisBottom(categoricalXScale))
-                .selectAll("text")
-                .style("text-anchor", "end") 
-                .attr("transform", "rotate(-45)") 
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                .append("title")  
-                .text(d => d); 
+    
+                cellGroup.append("rect")
+                    .attr("x", legendX)
+                    .attr("y", legendY)
+                    .attr("width", legendWidth)
+                    .attr("height", legendHeight)
+                    .style("fill", `url(#legend-gradient-${i}-${j})`)
+                    .attr("stroke", "black");
+    
+                cellGroup.append("g")
+                    .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                    .call(d3.axisRight(legendScale)
+                        .ticks(5))
+                    .selectAll("text")
+                    .style("font-size", "8px");
             }
-
-            cellGroup.append("g")
-                .call(d3.axisLeft(yScale))
-                .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d); 
-
-            if (uniqueYCategories.length > 0) {
-            cellGroup.append("g")
-                .attr("transform", `translate(0, 0)`)
-                .call(d3.axisLeft(categoricalYScale))
-                .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d); 
-            }
-            
-            svg
-                .append("text")
-                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                .style("text-anchor", "middle")
-                .text(xCol);
-
-            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
-            
-            svg
-                .append("text")
-                .attr("x", xPosition) 
-                .attr("y", yPosition - 20) 
-                .style("text-anchor", "middle")
-                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
         }
-
         /// Non numeric X plot ///
         else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
         {
-            uniqueXCategories = uniqueXCategories.slice(1);
-            uniqueYCategories = uniqueYCategories.slice(1);
-            uniqueXCategories = sortCategories(uniqueXCategories);
-            uniqueYCategories = sortCategories(uniqueYCategories);
-
-            // Define binning function for numeric data
-            const binGenerator = d3.bin()
-                .domain([d3.min(nonNumericXData, (d) => d[yCol]), d3.max(nonNumericXData, (d) => d[yCol])])  // Data range
-                .thresholds(10);  // Number of bins
-
-            // Generate bin ranges
-            const bins = binGenerator(nonNumericXData);
-            const binLabels = bins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
-
-            const uniqueStringBins = uniqueYCategories; 
-
-            // Assign each numerical value to a bin label, and keep non-numeric values as their own bins
             data = data.map(d => ({
-                    ...d,
-                    binnedNumericalCol: isNaN(d[yCol])
-                        ? String(d[yCol]) // Keep non-numeric values as separate bins
-                        : binLabels.find((label, i) => {
-                            return d[yCol] >= bins[i].x0 && d[yCol] < bins[i].x1;
-                        }) || binLabels[binLabels.length - 1] // Default to last bin
-
+                ...d,
+                binnedNumericalCol: isNaN(d[yCol])
+                    ? String(d[yCol])
+                    : yBinLabels.find((label, i) => d[yCol] >= yBins[i].x0 && d[yCol] < yBins[i].x1) || yBinLabels[yBinLabels.length - 1]
             }));
 
-            // const yCategories = ["NaN", ...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
-            const yCategories = [...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+            if(groupByAttribute){
+                const groupedData = d3.rollups(
+                    data,
+                    v => {
+                        let groupCounts = {};
+                        v.forEach(d => {
+                            if (!groupCounts[d[groupByAttribute]]) {
+                                groupCounts[d[groupByAttribute]] = 0;
+                            }
+                            groupCounts[d[groupByAttribute]] += 1; 
+                        });
+                        return groupCounts; 
+                    },
+                    d => d[xCol], 
+                    d => d.binnedNumericalCol  
+                );
 
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, groupCounts]) => ({
+                        x: xKey,
+                        y: yKey,
+                        groups: groupCounts 
+                    }))
+                );
 
-            // Group data by (xCol, binnedNumericalCol) and count occurrences
-            const groupedData = d3.rollups(
-                data,
-                v => v.length,  // Count occurrences
-                d => d[xCol],   // Group by categorical variable
-                d => d.binnedNumericalCol  // Group by binned numerical values (including "NaN" and text)
-            );
+                xScale = d3.scaleBand().domain(uniqueXCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
 
-            // Flatten grouped data into an array
-            const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
-                yValues.map(([yKey, count]) => ({
-                    x: xKey,
-                    y: yKey,
-                    value: count
-                }))
-            );
+                const tooltip = d3.select("#tooltip");
 
-            // Define scales
-            const xScale = d3.scaleBand().domain(uniqueXCategories).range([0, this.size]).padding(0.05);
-            const yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
-            const colorScale = d3.scaleSequential(d3.interpolateBlues)
-                .domain([0, d3.max(heatmapData, d => d.value)]);
+                cellGroup.selectAll("g.cell-group")
+                    .data(heatmapData)
+                    .join("g")
+                    .attr("class", "cell-group")
+                    .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                    .each(function (d) {
+                        const g = d3.select(this);
+                        let yOffset = 0;
+                        const total = d3.sum(Object.values(d.groups));
 
-            const tooltip = d3.select("#tooltip");
+                        Object.entries(d.groups).forEach(([group, count]) => {
+                            g.append("rect")
+                                .attr("x", 0)
+                                .attr("y", yOffset) 
+                                .attr("width", xScale.bandwidth())
+                                .attr("height", (yScale.bandwidth() * count) / total)  
+                                .attr("fill", groupColorScale(group))
+                                .attr("stroke", "white")
+                                .on("mouseover", function (event) {
+                                    d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                
+                                    let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
+                                                          <strong>${yCol}:</strong> ${d.y} <br>
+                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                    
+                                    Object.entries(d.groups).forEach(([group, count]) => {
+                                        tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
+                                                          <strong>${group}:</strong> ${count} <br>`;
+                                    });
+                
+                                    tooltip.html(tooltipContent)
+                                        .style("display", "block")
+                                        .style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mousemove", function (event) {
+                                    tooltip.style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mouseout", function () {
+                                    d3.select(this).attr("stroke", "white").attr("stroke-width", 0.5);
+                                    tooltip.style("display", "none");
+                                });
 
-            // Draw heatmap rectangles
-            cellGroup.selectAll("rect")
-                .data(heatmapData)
-                .join("rect")
-                .attr("x", d => xScale(d.x))
-                .attr("y", d => yScale(d.y))
-                .attr("width", xScale.bandwidth())
-                .attr("height", yScale.bandwidth())
-                .attr("fill", d => {
-                    if (d.y === "NaN") return "gray"; // Special color for NaN
-                    if (uniqueStringBins.includes(d.y)) return "gray"; 
-                    return colorScale(d.value); // Normal color for numeric bins
-                })
-                .attr("stroke", "white")
-                .on("mouseover", function (event, d) {
-                    d3.select(this).attr("stroke", "black");
-                    tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
-                        .style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mousemove", function (event) {
-                    tooltip.style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mouseout", function () {
-                    d3.select(this).attr("stroke", "white");
-                    tooltip.style("display", "none");
+                            yOffset += (yScale.bandwidth() * count) / total; 
+                        });
+                    });                
+            }
+            else{
+                const groupedData = d3.rollups(
+                    data,
+                    v => v.length,  
+                    d => d[xCol],   
+                    d => d.binnedNumericalCol  
+                );
+
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, count]) => ({
+                        x: xKey,
+                        y: yKey,
+                        value: count
+                    }))
+                );
+
+                xScale = d3.scaleBand().domain(uniqueXCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
+                const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                    .domain([0, d3.max(heatmapData, d => d.value)]);
+
+                const tooltip = d3.select("#tooltip");
+
+                cellGroup.selectAll("rect")
+                    .data(heatmapData)
+                    .join("rect")
+                    .attr("x", d => xScale(d.x))
+                    .attr("y", d => yScale(d.y))
+                    .attr("width", xScale.bandwidth())
+                    .attr("height", yScale.bandwidth())
+                    .attr("fill", d => {
+                        if (d.y === "NaN") return "gray"; 
+                        if (uniqueYStringBins.includes(d.y)) return "gray"; 
+                        return colorScale(d.value); 
+                    })
+                    .attr("stroke", "gray")
+                    .attr("stroke-width", 0.5)
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                        tooltip.style("display", "block")
+                            .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function (event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).attr("stroke", "gray").attr("stroke-width", 0.5);
+                        tooltip.style("display", "none");
+                    });
+
+                const legendHeight = this.size;
+                const legendWidth = 10;
+                const legendX = this.size + 5; 
+                const legendY = 0;
+
+                const legendScale = d3.scaleLinear()
+                    .domain(colorScale.domain())
+                    .range([legendHeight, 0]);
+
+                const defs = svg.append("defs");
+
+                const linearGradient = defs.append("linearGradient")
+                    .attr("id", `legend-gradient-${i}-${j}`)
+                    .attr("x1", "0%").attr("x2", "0%")
+                    .attr("y1", "100%").attr("y2", "0%");
+
+                const numGradientStops = 10;
+                d3.range(numGradientStops).forEach(d => {
+                    linearGradient.append("stop")
+                        .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                        .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
                 });
 
-            // Draw axes
-            cellGroup.append("g")
-                .attr("transform", `translate(0, ${this.size})`)
-                .call(d3.axisBottom(xScale))
-                .selectAll("text")
-                .style("text-anchor", "end")
-                .style("font-size", "8px")
-                .attr("dx", "-0.5em")
-                .attr("dy", "0.5em")
-                .attr("transform", "rotate(-45)");
+                cellGroup.append("rect")
+                    .attr("x", legendX)
+                    .attr("y", legendY)
+                    .attr("width", legendWidth)
+                    .attr("height", legendHeight)
+                    .style("fill", `url(#legend-gradient-${i}-${j})`)
+                    .attr("stroke", "black");
 
-            cellGroup.append("g")
-                .call(d3.axisLeft(yScale))
-                .selectAll("text")
-                .style("font-size", "8px");
-
-            const legendHeight = this.size;
-            const legendWidth = 10;
-            const legendX = this.size + 5; 
-            const legendY = 0;
-
-            const legendScale = d3.scaleLinear()
-                .domain(colorScale.domain())
-                .range([legendHeight, 0]);
-
-            const defs = svg.append("defs");
-
-            const linearGradient = defs.append("linearGradient")
-                .attr("id", `legend-gradient-${i}-${j}`)
-                .attr("x1", "0%").attr("x2", "0%")
-                .attr("y1", "100%").attr("y2", "0%");
-
-            const numGradientStops = 10;
-            d3.range(numGradientStops).forEach(d => {
-                linearGradient.append("stop")
-                    .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
-                    .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
-            });
-
-            cellGroup.append("rect")
-                .attr("x", legendX)
-                .attr("y", legendY)
-                .attr("width", legendWidth)
-                .attr("height", legendHeight)
-                .style("fill", `url(#legend-gradient-${i}-${j})`)
-                .attr("stroke", "black");
-
-            cellGroup.append("g")
-                .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
-                .call(d3.axisRight(legendScale)
-                    .ticks(5))
-                .selectAll("text")
-                .style("font-size", "8px");
-
-            // Add axis labels
-            svg.append("text")
-                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25)
-                .style("text-anchor", "middle")
-                .text(xCol);
-
-            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
-            const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
-
-            svg.append("text")
-                .attr("x", xPosition)
-                .attr("y", yPosition - 20)
-                .style("text-anchor", "middle")
-                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
-                .text(yCol);
+                cellGroup.append("g")
+                    .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                    .call(d3.axisRight(legendScale)
+                        .ticks(5))
+                    .selectAll("text")
+                    .style("font-size", "8px");
+                }
         }
 
         /// Non numeric Y plot ///
         else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
         {
-            uniqueYCategories = uniqueYCategories.slice(1);
-            uniqueXCategories = uniqueXCategories.slice(1);
-            uniqueYCategories = sortCategories(uniqueYCategories);
-            uniqueXCategories = sortCategories(uniqueXCategories);
-
-            // Define binning function for numeric data
-            const binGenerator = d3.bin()
-                .domain([d3.min(nonNumericYData, (d) => d[xCol]), d3.max(nonNumericYData, (d) => d[xCol])])  // Data range
-                .thresholds(10);  // Number of bins
-
-            // Generate bin ranges
-            const bins = binGenerator(nonNumericXData);
-            const binLabels = bins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
-
-            const uniqueStringBins = uniqueXCategories; 
-
-            // Assign each numerical value to a bin label, and keep non-numeric values as their own bins
             data = data.map(d => ({
                     ...d,
                     binnedNumericalCol: isNaN(d[xCol])
                         ? String(d[xCol]) // Keep non-numeric values as separate bins
-                        : binLabels.find((label, i) => {
-                            return d[xCol] >= bins[i].x0 && d[xCol] < bins[i].x1;
-                        }) || binLabels[binLabels.length - 1] // Default to last bin
+                        : xBinLabels.find((label, i) => {
+                            return d[xCol] >= xBins[i].x0 && d[xCol] < xBins[i].x1;
+                        }) || xBinLabels[xBinLabels.length - 1] // Default to last bin
 
             }));
 
-            // const yCategories = ["NaN", ...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
-            const xCategories = [...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+            if(groupByAttribute){
+                const groupedData = d3.rollups(
+                    data,
+                    v => {
+                        let groupCounts = {};
+                        v.forEach(d => {
+                            if (!groupCounts[d[groupByAttribute]]) {
+                                groupCounts[d[groupByAttribute]] = 0;
+                            }
+                            groupCounts[d[groupByAttribute]] += 1; 
+                        });
+                        return groupCounts; 
+                    },
+                    d => d.binnedNumericalCol, 
+                    d => d[yCol] 
+                );
 
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, groupCounts]) => ({
+                        x: xKey,
+                        y: yKey,
+                        groups: groupCounts 
+                    }))
+                );
 
-            // Group data by (xCol, binnedNumericalCol) and count occurrences
-            const groupedData = d3.rollups(
-                data,
-                v => v.length,  // Count occurrences
-                d => d.binnedNumericalCol,   // Group by categorical variable
-                d => d[yCol]  // Group by binned numerical values (including "NaN" and text)
-            );
+                xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
 
-            // Flatten grouped data into an array
-            const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
-                yValues.map(([yKey, count]) => ({
-                    x: xKey,
-                    y: yKey,
-                    value: count
-                }))
-            );
+                const tooltip = d3.select("#tooltip");
 
-            // Define scales
-            const xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
-            const yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
-            const colorScale = d3.scaleSequential(d3.interpolateBlues)
-                .domain([0, d3.max(heatmapData, d => d.value)]);
+                cellGroup.selectAll("g.cell-group")
+                    .data(heatmapData)
+                    .join("g")
+                    .attr("class", "cell-group")
+                    .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                    .each(function (d) {
+                        const g = d3.select(this);
+                        let yOffset = 0;
+                        const total = d3.sum(Object.values(d.groups));
 
-            const tooltip = d3.select("#tooltip");
+                        Object.entries(d.groups).forEach(([group, count]) => {
+                            g.append("rect")
+                                .attr("x", 0)
+                                .attr("y", yOffset) 
+                                .attr("width", xScale.bandwidth())
+                                .attr("height", (yScale.bandwidth() * count) / total)  
+                                .attr("fill", groupColorScale(group))
+                                .attr("stroke", "white")
+                                .on("mouseover", function (event) {
+                                    d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                
+                                    let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
+                                                          <strong>${yCol}:</strong> ${d.y} <br>
+                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                    
+                                    Object.entries(d.groups).forEach(([group, count]) => {
+                                        tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
+                                                          <strong>${group}:</strong> ${count} <br>`;
+                                    });
+                
+                                    tooltip.html(tooltipContent)
+                                        .style("display", "block")
+                                        .style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mousemove", function (event) {
+                                    tooltip.style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mouseout", function () {
+                                    d3.select(this).attr("stroke", "white").attr("stroke-width", 0.5);
+                                    tooltip.style("display", "none");
+                                });
 
-            // Draw heatmap rectangles
-            cellGroup.selectAll("rect")
-                .data(heatmapData)
-                .join("rect")
-                .attr("x", d => xScale(d.x))
-                .attr("y", d => yScale(d.y))
-                .attr("width", xScale.bandwidth())
-                .attr("height", yScale.bandwidth())
-                .attr("fill", d => {
-                    if (d.y === "NaN") return "gray"; // Special color for NaN
-                    if (uniqueStringBins.includes(d.y)) return "gray"; 
-                    return colorScale(d.value); // Normal color for numeric bins
-                })
-                .attr("stroke", "white")
-                .on("mouseover", function (event, d) {
-                    d3.select(this).attr("stroke", "black");
-                    tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
-                        .style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mousemove", function (event) {
-                    tooltip.style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mouseout", function () {
-                    d3.select(this).attr("stroke", "white");
-                    tooltip.style("display", "none");
+                            yOffset += (yScale.bandwidth() * count) / total; 
+                        });
+                    });         
+
+            }
+            else{
+                const groupedData = d3.rollups(
+                    data,
+                    v => v.length,  
+                    d => d.binnedNumericalCol,   
+                    d => d[yCol]  
+                );
+
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, count]) => ({
+                        x: xKey,
+                        y: yKey,
+                        value: count
+                    }))
+                );
+
+                xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
+                const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                    .domain([0, d3.max(heatmapData, d => d.value)]);
+
+                const tooltip = d3.select("#tooltip");
+
+                cellGroup.selectAll("rect")
+                    .data(heatmapData)
+                    .join("rect")
+                    .attr("x", d => xScale(d.x))
+                    .attr("y", d => yScale(d.y))
+                    .attr("width", xScale.bandwidth())
+                    .attr("height", yScale.bandwidth())
+                    .attr("fill", d => {
+                        if (d.y === "NaN") return "gray"; 
+                        if (uniqueXStringBins.includes(d.y)) return "gray"; 
+                        return colorScale(d.value); 
+                    })
+                    .attr("stroke", "gray")
+                    .attr("stroke-width", 0.5)                
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                        tooltip.style("display", "block")
+                            .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function (event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).attr("stroke", "gray").attr("stroke-width", 0.5);
+                        tooltip.style("display", "none");
+                    });
+
+                const legendHeight = this.size;
+                const legendWidth = 10;
+                const legendX = this.size + 5; 
+                const legendY = 0;
+
+                const legendScale = d3.scaleLinear()
+                    .domain(colorScale.domain())
+                    .range([legendHeight, 0]);
+
+                const defs = svg.append("defs");
+
+                const linearGradient = defs.append("linearGradient")
+                    .attr("id", `legend-gradient-${i}-${j}`)
+                    .attr("x1", "0%").attr("x2", "0%")
+                    .attr("y1", "100%").attr("y2", "0%");
+
+                const numGradientStops = 10;
+                d3.range(numGradientStops).forEach(d => {
+                    linearGradient.append("stop")
+                        .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                        .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
                 });
 
-            // Draw axes
-            cellGroup.append("g")
-                .attr("transform", `translate(0, ${this.size})`)
-                .call(d3.axisBottom(xScale))
-                .selectAll("text")
-                .style("text-anchor", "end")
-                .style("font-size", "8px")
-                .attr("dx", "-0.5em")
-                .attr("dy", "0.5em")
-                .attr("transform", "rotate(-45)");
+                cellGroup.append("rect")
+                    .attr("x", legendX)
+                    .attr("y", legendY)
+                    .attr("width", legendWidth)
+                    .attr("height", legendHeight)
+                    .style("fill", `url(#legend-gradient-${i}-${j})`)
+                    .attr("stroke", "black");
 
-            cellGroup.append("g")
-                .call(d3.axisLeft(yScale))
-                .selectAll("text")
-                .style("font-size", "8px");
-
-            const legendHeight = this.size;
-            const legendWidth = 10;
-            const legendX = this.size + 5; 
-            const legendY = 0;
-
-            const legendScale = d3.scaleLinear()
-                .domain(colorScale.domain())
-                .range([legendHeight, 0]);
-
-            const defs = svg.append("defs");
-
-            const linearGradient = defs.append("linearGradient")
-                .attr("id", `legend-gradient-${i}-${j}`)
-                .attr("x1", "0%").attr("x2", "0%")
-                .attr("y1", "100%").attr("y2", "0%");
-
-            const numGradientStops = 10;
-            d3.range(numGradientStops).forEach(d => {
-                linearGradient.append("stop")
-                    .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
-                    .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
-            });
-
-            cellGroup.append("rect")
-                .attr("x", legendX)
-                .attr("y", legendY)
-                .attr("width", legendWidth)
-                .attr("height", legendHeight)
-                .style("fill", `url(#legend-gradient-${i}-${j})`)
-                .attr("stroke", "black");
-
-            cellGroup.append("g")
-                .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
-                .call(d3.axisRight(legendScale)
-                    .ticks(5))
-                .selectAll("text")
-                .style("font-size", "8px");
-
-            svg.append("text")
-                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25)
-                .style("text-anchor", "middle")
-                .text(xCol);
-
-            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
-            const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
-
-            svg.append("text")
-                .attr("x", xPosition)
-                .attr("y", yPosition - 20)
-                .style("text-anchor", "middle")
-                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
-                .text(yCol);
-        
+                cellGroup.append("g")
+                    .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                    .call(d3.axisRight(legendScale)
+                        .ticks(5))
+                    .selectAll("text")
+                    .style("font-size", "8px");
+            }
         }
 
         /// All non numeric plot ///
         else{   
-            uniqueXCategories = uniqueXCategories.slice(1);
-            uniqueYCategories = uniqueYCategories.slice(1);
-            uniqueXCategories = sortCategories(uniqueXCategories);
-            uniqueYCategories = sortCategories(uniqueYCategories);
+            if(groupByAttribute){
+                const groupedData = d3.rollups(
+                    data,
+                    v => {
+                        let groupCounts = {};
+                        v.forEach(d => {
+                            if (!groupCounts[d[groupByAttribute]]) {
+                                groupCounts[d[groupByAttribute]] = 0;
+                            }
+                            groupCounts[d[groupByAttribute]] += 1; 
+                        });
+                        return groupCounts; 
+                    },
+                    d => d[xCol], 
+                    d => d[yCol] 
+                );
 
-            // Group data by unique (x, y) pairs and count occurrences
-            const groupedData = d3.rollups(
-                data,
-                v => v.length, // Count occurrences
-                d => d[xCol],
-                d => d[yCol]
-            );
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, groupCounts]) => ({
+                        x: xKey,
+                        y: yKey,
+                        groups: groupCounts 
+                    }))
+                );
 
-            // Flatten grouped data into an array
-            const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
-                yValues.map(([yKey, count]) => ({
-                    x: xKey,
-                    y: yKey,
-                    value: count
-                }))
-            );
+                xScale = d3.scaleBand().domain(uniqueXCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
 
-            const xCategories = [...new Set(data.map(d => d[xCol]))].sort();
-            const yCategories = [...new Set(data.map(d => d[yCol]))].sort();
+                const tooltip = d3.select("#tooltip");
 
-            // Define scales
-            const xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
-            const yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
-            
-            // Define color scale
-            const colorScale = d3.scaleSequential(d3.interpolateBlues)
-                .domain([0, d3.max(heatmapData, d => d.value)]);
+                cellGroup.selectAll("g.cell-group")
+                    .data(heatmapData)
+                    .join("g")
+                    .attr("class", "cell-group")
+                    .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                    .each(function (d) {
+                        const g = d3.select(this);
+                        let yOffset = 0;
+                        const total = d3.sum(Object.values(d.groups));
 
-            const tooltip = d3.select("#tooltip"); 
+                        Object.entries(d.groups).forEach(([group, count]) => {
+                            g.append("rect")
+                                .attr("x", 0)
+                                .attr("y", yOffset) 
+                                .attr("width", xScale.bandwidth())
+                                .attr("height", (yScale.bandwidth() * count) / total)  
+                                .attr("fill", groupColorScale(group))
+                                .attr("stroke", "white")
+                                .on("mouseover", function (event) {
+                                    d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                
+                                    let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
+                                                          <strong>${yCol}:</strong> ${d.y} <br>
+                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                    
+                                    Object.entries(d.groups).forEach(([group, count]) => {
+                                        tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
+                                                          <strong>${group}:</strong> ${count} <br>`;
+                                    });
+                
+                                    tooltip.html(tooltipContent)
+                                        .style("display", "block")
+                                        .style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mousemove", function (event) {
+                                    tooltip.style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mouseout", function () {
+                                    d3.select(this).attr("stroke", "white").attr("stroke-width", 0.5);
+                                    tooltip.style("display", "none");
+                                });
 
-            // Draw heatmap rectangles
-            cellGroup.selectAll("rect")
-                .data(heatmapData)
-                .join("rect")
-                .attr("x", d => xScale(d.x))
-                .attr("y", d => yScale(d.y))
-                .attr("width", xScale.bandwidth())
-                .attr("height", yScale.bandwidth())
-                .attr("fill", d => colorScale(d.value))
-                .attr("stroke", "white")
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("stroke", "black");
-                    tooltip.style("display", "block")
-                        .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
-                        .style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mousemove", function(event) {
-                    tooltip.style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mouseout", function() {
-                    d3.select(this).attr("stroke", "white");
-                    tooltip.style("display", "none");
+                            yOffset += (yScale.bandwidth() * count) / total; 
+                        });
+                    });
+
+            }
+            else{
+                const groupedData = d3.rollups(
+                    data,
+                    v => v.length, 
+                    d => d[xCol],
+                    d => d[yCol]
+                );
+    
+                const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                    yValues.map(([yKey, count]) => ({
+                        x: xKey,
+                        y: yKey,
+                        value: count
+                    }))
+                );
+    
+                xScale = d3.scaleBand().domain(uniqueXCategories).range([0, this.size]).padding(0.05);
+                yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
+                
+                const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                    .domain([0, d3.max(heatmapData, d => d.value)]);
+    
+                const tooltip = d3.select("#tooltip"); 
+    
+                cellGroup.selectAll("rect")
+                    .data(heatmapData)
+                    .join("rect")
+                    .attr("x", d => xScale(d.x))
+                    .attr("y", d => yScale(d.y))
+                    .attr("width", xScale.bandwidth())
+                    .attr("height", yScale.bandwidth())
+                    .attr("fill", d => colorScale(d.value))
+                    .attr("stroke", "gray")
+                    .attr("stroke-width", 0.5)                
+                    .on("mouseover", function(event, d) {
+                        d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                        tooltip.style("display", "block")
+                            .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function(event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function() {
+                        d3.select(this).attr("stroke", "gray").attr("stroke-width", 0.5);
+                        tooltip.style("display", "none");
+                    });
+    
+    
+                const legendHeight = this.size;
+                const legendWidth = 10;
+                const legendX = this.size + 5; 
+                const legendY = 0;
+    
+                const legendScale = d3.scaleLinear()
+                    .domain(colorScale.domain())
+                    .range([legendHeight, 0]);
+    
+                svg.select("defs").remove();
+                const defs = svg.append("defs");
+    
+                const gradientID = `legend-gradient-${i}-${j}`;
+    
+                const linearGradient = defs.append("linearGradient")
+                    .attr("id", gradientID)
+                    .attr("x1", "0%").attr("x2", "0%")
+                    .attr("y1", "100%").attr("y2", "0%");
+    
+                const numGradientStops = 10;
+                d3.range(numGradientStops).forEach(d => {
+                    linearGradient.append("stop")
+                        .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                        .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
                 });
-
-
-            cellGroup
-                .append("g")
-                .attr("transform", `translate(0, ${this.size})`)
-                .call(d3.axisBottom(xScale))
-                .selectAll("text") 
-                .style("text-anchor", "end") 
-                .style("font-size", "8px")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title")
-                .text(d => d);
-
-            cellGroup.append("g")
-                .call(d3.axisLeft(yScale))
-                .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
-                .append("title")
-                .text(d => d); 
-
-            const legendHeight = this.size;
-            const legendWidth = 10;
-            const legendX = this.size + 5; 
-            const legendY = 0;
-
-            const legendScale = d3.scaleLinear()
-                .domain(colorScale.domain())
-                .range([legendHeight, 0]);
-
-            const defs = svg.append("defs");
-
-            const linearGradient = defs.append("linearGradient")
-                .attr("id", `legend-gradient-${i}-${j}`)
-                .attr("x1", "0%").attr("x2", "0%")
-                .attr("y1", "100%").attr("y2", "0%");
-
-            const numGradientStops = 10;
-            d3.range(numGradientStops).forEach(d => {
-                linearGradient.append("stop")
-                    .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
-                    .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
-            });
-
-            cellGroup.append("rect")
-                .attr("x", legendX)
-                .attr("y", legendY)
-                .attr("width", legendWidth)
-                .attr("height", legendHeight)
-                .style("fill", `url(#legend-gradient-${i}-${j})`)
-                .attr("stroke", "black");
-
-            cellGroup.append("g")
-                .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
-                .call(d3.axisRight(legendScale)
-                    .ticks(5))
-                .selectAll("text")
-                .style("font-size", "8px");
-            
-            svg
-                .append("text")
-                .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                .style("text-anchor", "middle")
-                .text(xCol);
-
-            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-            
-            svg
-                .append("text")
-                .attr("x", xPosition) 
-                .attr("y", yPosition - 20) 
-                .style("text-anchor", "middle")
-                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+    
+                cellGroup.selectAll(".legend-rect").remove();
+    
+                cellGroup.append("rect")
+                    .attr("x", legendX)
+                    .attr("y", legendY)
+                    .attr("width", legendWidth)
+                    .attr("height", legendHeight)
+                    .style("fill", `url(#${gradientID}`)
+                    .attr("stroke", "black");
+    
+                cellGroup.append("g")
+                    .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                    .call(d3.axisRight(legendScale)
+                        .ticks(5))
+                    .selectAll("text")
+                    .style("font-size", "8px");
+            }
         }
+
+        cellGroup.append("g")
+            .attr("transform", `translate(0, ${this.size})`)
+            .call(d3.axisBottom(xScale))
+            .selectAll("text")
+            .style("text-anchor", "end")
+            .style("font-size", "8px")
+            .attr("dx", "-0.5em")
+            .attr("dy", "0.5em")
+            .attr("transform", "rotate(-45)");
+
+        cellGroup.append("g")
+            .call(d3.axisLeft(yScale))
+            .selectAll("text")
+            .style("font-size", "8px");
+
+        svg.append("text")
+            .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
+            .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25)
+            .style("text-anchor", "middle")
+            .text(xCol);
+
+        svg.append("text")
+            .attr("x", xPosition)
+            .attr("y", yPosition - 20)
+            .style("text-anchor", "middle")
+            .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
+            .text(yCol);
     }
 
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute){
@@ -3624,27 +3840,48 @@ class ScatterplotMatrixView{
                 .text(yCol);
         }
 
-        const lineViewButton = cellGroup.append("g")
+        const scatterViewButton = cellGroup.append("g")
             .attr("class", "scatterplot-button")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
 
-        lineViewButton.append("rect")
-            .attr("x", - 110)
-            .attr("y", - 35)
-            .attr("width", 45)
-            .attr("height", 15)
-            .attr("rx", 3)
+        scatterViewButton.append("ellipse")
+            .attr("cx", -85)  
+            .attr("cy", -28)  
+            .attr("rx", 25)   
+            .attr("ry", 10)   
             .attr("fill", "#d3d3d3")
             .attr("stroke", "#333");
 
-        lineViewButton.append("text")
-            .attr("x", - 87)
+        scatterViewButton.append("text")
+            .attr("x", - 85)
             .attr("y", - 25)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")
             .text("Scatterplot");
+
+        const heatMapViewButton = cellGroup.append("g")
+            .attr("class", "heatmap-button")
+            .attr("cursor", "pointer")
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+
+        heatMapViewButton.append("ellipse")
+            .attr("cx", - 86)
+            .attr("cy", - 53)
+            .attr("rx", 40)
+            .attr("rx", 25)
+            .attr("ry", 10)
+            .attr("fill", "#d3d3d3")
+            .attr("stroke", "#333");
+
+        heatMapViewButton.append("text")
+            .attr("x", - 85)
+            .attr("y", - 50)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .attr("fill", "#333")
+            .text("Heatmap");
     }
 
     restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
@@ -3653,23 +3890,95 @@ class ScatterplotMatrixView{
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
         this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute);  
 
+        const heatMapViewButton = cellGroup.append("g")
+            .attr("class", "heatmap-button")
+            .attr("cursor", "pointer")
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+
+        heatMapViewButton.append("ellipse")
+            .attr("cx", - 85)
+            .attr("cy", - 28)
+            .attr("rx", 40)
+            .attr("rx", 25)
+            .attr("ry", 10)
+            .attr("fill", "#d3d3d3")
+            .attr("stroke", "#333");
+
+        heatMapViewButton.append("text")
+            .attr("x", - 85)
+            .attr("y", - 25)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .attr("fill", "#333")
+            .text("Heatmap");
+
         const lineViewButton = cellGroup.append("g")
             .attr("class", "linechart-button")
             .attr("cursor", "pointer")
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
 
-        lineViewButton.append("rect")
-            .attr("x", - 105)
-            .attr("y", - 35)
-            .attr("width", 40)
-            .attr("height", 15)
-            .attr("rx", 3)
+        lineViewButton.append("ellipse")
+            .attr("cx", - 86)
+            .attr("cy", - 53)
+            .attr("rx", 40)
+            .attr("rx", 25)
+            .attr("ry", 10)
             .attr("fill", "#d3d3d3")
             .attr("stroke", "#333");
 
         lineViewButton.append("text")
             .attr("x", - 85)
+            .attr("y", - 50)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .attr("fill", "#333")
+            .text("Linechart");
+    }
+
+    restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
+        const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
+        cellGroup.selectAll("*").remove();  
+        const [, i, j] = cellID.split("-").map(d => parseInt(d));
+        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute);  
+
+        const scatterViewButton = cellGroup.append("g")
+            .attr("class", "scatterplot-button")
+            .attr("cursor", "pointer")
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+
+        scatterViewButton.append("ellipse")
+            .attr("cx", -85)  
+            .attr("cy", -28)  
+            .attr("rx", 25)   
+            .attr("ry", 10)   
+            .attr("fill", "#d3d3d3")
+            .attr("stroke", "#333");
+
+        scatterViewButton.append("text")
+            .attr("x", - 85)
             .attr("y", - 25)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .attr("fill", "#333")
+            .text("Scatterplot");
+
+        const lineViewButton = cellGroup.append("g")
+            .attr("class", "linechart-button")
+            .attr("cursor", "pointer")
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+
+        lineViewButton.append("ellipse")
+            .attr("cx", - 86)
+            .attr("cy", - 53)
+            .attr("rx", 40)
+            .attr("rx", 25)
+            .attr("ry", 10)
+            .attr("fill", "#d3d3d3")
+            .attr("stroke", "#333");
+
+        lineViewButton.append("text")
+            .attr("x", - 85)
+            .attr("y", - 50)
             .attr("text-anchor", "middle")
             .attr("font-size", "10px")
             .attr("fill", "#333")

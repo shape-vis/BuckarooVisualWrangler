@@ -16,9 +16,9 @@ d3.csv("data/stackoverflow_db.csv").then(inputData => {
 
 const data = aq.table({
     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    age:        ["sixty", 22, true, 99, 40, 45, 0, 89, NaN, 55],
-    "salary (k)": [NaN, 65, '$', 70, "fifty", 80, 0, 99, 85, 89],
-    employees: [0, 5, "None", NaN, 15, 20, 25, 30, 0, 89],
+    age:        ["sixty", 22, true, 99, 45, 45, 0, 89, NaN, 55],
+    "salary (k)": [NaN, 65, '$', 70, "fifty", 70, 0, 99, 85, 89],
+    employees: [0, 5, "None", NaN, 15, 15, 25, 30, 0, 89],
   });
 
 
