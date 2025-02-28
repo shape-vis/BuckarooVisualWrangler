@@ -1979,122 +1979,156 @@ class ScatterplotMatrixView{
             uniqueXCategories = sortCategories(uniqueXCategories);
             uniqueYCategories = sortCategories(uniqueYCategories);
 
-            const xScale = d3.scalePoint()
-                .domain(uniqueXCategories)
-                .range([0, this.size]);
+            // Define binning function for numeric data
+            const binGenerator = d3.bin()
+                .domain([d3.min(nonNumericXData, (d) => d[yCol]), d3.max(nonNumericXData, (d) => d[yCol])])  // Data range
+                .thresholds(10);  // Number of bins
 
-            const xTickValues = xScale.step(); 
-            const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
-            
-            const yScale = d3.scaleLinear()
-                .domain([Math.min(0, d3.min(nonNumericXData, d => d[yCol])), d3.max(nonNumericXData, d => d[yCol]) + 1])
-                .range([this.size, 0]);
+            // Generate bin ranges
+            const bins = binGenerator(nonNumericXData);
+            const binLabels = bins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
 
-            const categoricalYStart = yScale.range()[1] - 10;
-            const categoricalYScale = d3.scaleOrdinal()
-                .domain(uniqueYCategories)
-                .range(uniqueYCategories.length > 0 
-                    ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
-                    : [0]); 
-                
-            const tooltip = d3.select("#tooltip"); 
+            const uniqueStringBins = uniqueYCategories; 
 
-            cellGroup.selectAll("circle")
-                .data(combinedData)
-                .join("circle")
-                .attr("cx", d => xScale(d[xCol]))
-                .attr("cy", d => {
-                    if (d.type === "numeric") return yScale(d[yCol]);
-                    if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
-                    return yScale(d[yCol]);
-                })
-                .attr("r", d => (d.type === "nan-y" ? 4 : 3))
-                // .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
+            // Assign each numerical value to a bin label, and keep non-numeric values as their own bins
+            data = data.map(d => ({
+                    ...d,
+                    binnedNumericalCol: isNaN(d[yCol])
+                        ? String(d[yCol]) // Keep non-numeric values as separate bins
+                        : binLabels.find((label, i) => {
+                            return d[yCol] >= bins[i].x0 && d[yCol] < bins[i].x1;
+                        }) || binLabels[binLabels.length - 1] // Default to last bin
+
+            }));
+
+            // const yCategories = ["NaN", ...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+            const yCategories = [...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+
+
+            // Group data by (xCol, binnedNumericalCol) and count occurrences
+            const groupedData = d3.rollups(
+                data,
+                v => v.length,  // Count occurrences
+                d => d[xCol],   // Group by categorical variable
+                d => d.binnedNumericalCol  // Group by binned numerical values (including "NaN" and text)
+            );
+
+            // Flatten grouped data into an array
+            const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                yValues.map(([yKey, count]) => ({
+                    x: xKey,
+                    y: yKey,
+                    value: count
+                }))
+            );
+
+            // Define scales
+            const xScale = d3.scaleBand().domain(uniqueXCategories).range([0, this.size]).padding(0.05);
+            const yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
+            const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                .domain([0, d3.max(heatmapData, d => d.value)]);
+
+            const tooltip = d3.select("#tooltip");
+
+            // Draw heatmap rectangles
+            cellGroup.selectAll("rect")
+                .data(heatmapData)
+                .join("rect")
+                .attr("x", d => xScale(d.x))
+                .attr("y", d => yScale(d.y))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
                 .attr("fill", d => {
-                    if (groupByAttribute) {
-                        return colorScale(d[groupByAttribute]);
-                    } else {
-                        return d.type === "nan-y" ? "gray" : "steelblue"; 
-                    }
+                    if (d.y === "NaN") return "gray"; // Special color for NaN
+                    if (uniqueStringBins.includes(d.y)) return "gray"; 
+                    return colorScale(d.value); // Normal color for numeric bins
                 })
-                .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
-                .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
-                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
-                    if (groupByAttribute) {
-                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
-                    }
+                .attr("stroke", "white")
+                .on("mouseover", function (event, d) {
+                    d3.select(this).attr("stroke", "black");
                     tooltip.style("display", "block")
-                        .html(tooltipContent)
+                        .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
-                .on("mousemove", function(event) {
+                .on("mousemove", function (event) {
                     tooltip.style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
-                .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
-                        if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return d.type === "nan-y" ? "gray" : "steelblue"; 
-                        }
-                    });
+                .on("mouseout", function () {
+                    d3.select(this).attr("stroke", "white");
                     tooltip.style("display", "none");
                 });
 
-            cellGroup
-                .append("g")
+            // Draw axes
+            cellGroup.append("g")
                 .attr("transform", `translate(0, ${this.size})`)
                 .call(d3.axisBottom(xScale))
-                .selectAll("text") 
-                .style("text-anchor", "end") 
+                .selectAll("text")
+                .style("text-anchor", "end")
                 .style("font-size", "8px")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d);
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
 
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale))
                 .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title")  
-                .text(d => d); 
+                .style("font-size", "8px");
 
-            if (uniqueYCategories.length > 0) {
+            const legendHeight = this.size;
+            const legendWidth = 10;
+            const legendX = this.size + 5; 
+            const legendY = 0;
+
+            const legendScale = d3.scaleLinear()
+                .domain(colorScale.domain())
+                .range([legendHeight, 0]);
+
+            const defs = svg.append("defs");
+
+            const linearGradient = defs.append("linearGradient")
+                .attr("id", `legend-gradient-${i}-${j}`)
+                .attr("x1", "0%").attr("x2", "0%")
+                .attr("y1", "100%").attr("y2", "0%");
+
+            const numGradientStops = 10;
+            d3.range(numGradientStops).forEach(d => {
+                linearGradient.append("stop")
+                    .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                    .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+            });
+
+            cellGroup.append("rect")
+                .attr("x", legendX)
+                .attr("y", legendY)
+                .attr("width", legendWidth)
+                .attr("height", legendHeight)
+                .style("fill", `url(#legend-gradient-${i}-${j})`)
+                .attr("stroke", "black");
+
             cellGroup.append("g")
-                .attr("transform", `translate(0, 0)`)
-                .call(d3.axisLeft(categoricalYScale))
+                .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                .call(d3.axisRight(legendScale)
+                    .ticks(5))
                 .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title")
-                .text(d => d); 
-            }
-            
-            svg
-                .append("text")
+                .style("font-size", "8px");
+
+            // Add axis labels
+            svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25)
                 .style("text-anchor", "middle")
                 .text(xCol);
 
-            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-            
-            svg
-                .append("text")
-                .attr("x", xPosition) 
-                .attr("y", yPosition - 20) 
+            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
+            const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
+
+            svg.append("text")
+                .attr("x", xPosition)
+                .attr("y", yPosition - 20)
                 .style("text-anchor", "middle")
-                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
                 .text(yCol);
         }
 
@@ -2106,125 +2140,157 @@ class ScatterplotMatrixView{
             uniqueYCategories = sortCategories(uniqueYCategories);
             uniqueXCategories = sortCategories(uniqueXCategories);
 
-            const xScale = d3.scaleLinear()
-                .domain([Math.min(0, d3.min(nonNumericYData, d => d[xCol])), d3.max(nonNumericYData, d => d[xCol]) + 1])
-                .range([0, this.size]);
+            // Define binning function for numeric data
+            const binGenerator = d3.bin()
+                .domain([d3.min(nonNumericYData, (d) => d[xCol]), d3.max(nonNumericYData, (d) => d[xCol])])  // Data range
+                .thresholds(10);  // Number of bins
 
-            const xTickValues = xScale.ticks(); 
-            const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
+            // Generate bin ranges
+            const bins = binGenerator(nonNumericXData);
+            const binLabels = bins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
 
-            const categoricalXStart = xScale.range()[1] + 10;
-            const categoricalXScale = d3.scaleOrdinal()
-                .domain(uniqueXCategories)
-                .range(uniqueXCategories.length > 0 
-                    ? [...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * ((xTickSpacing || 5) + 5)))
-                    : [0]); 
-            
-            const yScale = d3.scalePoint()
-                .domain(uniqueYCategories)
-                .range([this.size, 0]);
-                
-            const tooltip = d3.select("#tooltip"); 
+            const uniqueStringBins = uniqueXCategories; 
 
-            cellGroup.selectAll("circle")
-                .data(combinedData)
-                .join("circle")
-                .attr("cx", d => {
-                    if (d.type === "numeric") return xScale(d[xCol]);
-                    if (d.type === "nan-x" || d.type === "nan-xy") return categoricalXScale(d[xCol]);
-                    return xScale(d[xCol]); 
-                })
-                .attr("cy", d => yScale(d[yCol]))
-                .attr("r", d => (d.type === "nan-x" ? 4 : 3))
-                // .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
+            // Assign each numerical value to a bin label, and keep non-numeric values as their own bins
+            data = data.map(d => ({
+                    ...d,
+                    binnedNumericalCol: isNaN(d[xCol])
+                        ? String(d[xCol]) // Keep non-numeric values as separate bins
+                        : binLabels.find((label, i) => {
+                            return d[xCol] >= bins[i].x0 && d[xCol] < bins[i].x1;
+                        }) || binLabels[binLabels.length - 1] // Default to last bin
+
+            }));
+
+            // const yCategories = ["NaN", ...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+            const xCategories = [...binLabels, ...uniqueStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+
+
+            // Group data by (xCol, binnedNumericalCol) and count occurrences
+            const groupedData = d3.rollups(
+                data,
+                v => v.length,  // Count occurrences
+                d => d.binnedNumericalCol,   // Group by categorical variable
+                d => d[yCol]  // Group by binned numerical values (including "NaN" and text)
+            );
+
+            // Flatten grouped data into an array
+            const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                yValues.map(([yKey, count]) => ({
+                    x: xKey,
+                    y: yKey,
+                    value: count
+                }))
+            );
+
+            // Define scales
+            const xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
+            const yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
+            const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                .domain([0, d3.max(heatmapData, d => d.value)]);
+
+            const tooltip = d3.select("#tooltip");
+
+            // Draw heatmap rectangles
+            cellGroup.selectAll("rect")
+                .data(heatmapData)
+                .join("rect")
+                .attr("x", d => xScale(d.x))
+                .attr("y", d => yScale(d.y))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
                 .attr("fill", d => {
-                    if (groupByAttribute) {
-                        return colorScale(d[groupByAttribute]);
-                    } else {
-                        return d.type === "nan-x" ? "gray" : "steelblue"; 
-                    }
+                    if (d.y === "NaN") return "gray"; // Special color for NaN
+                    if (uniqueStringBins.includes(d.y)) return "gray"; 
+                    return colorScale(d.value); // Normal color for numeric bins
                 })
-                .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
-                .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
-                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
-                    if (groupByAttribute) {
-                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
-                    }
+                .attr("stroke", "white")
+                .on("mouseover", function (event, d) {
+                    d3.select(this).attr("stroke", "black");
                     tooltip.style("display", "block")
-                        .html(tooltipContent)
+                        .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
                         .style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
-                .on("mousemove", function(event) {
+                .on("mousemove", function (event) {
                     tooltip.style("left", `${event.pageX + 10}px`)
                         .style("top", `${event.pageY + 10}px`);
                 })
-                .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
-                        if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return d.type === "nan-x" ? "gray" : "steelblue"; 
-                        }
-                    });
+                .on("mouseout", function () {
+                    d3.select(this).attr("stroke", "white");
                     tooltip.style("display", "none");
                 });
 
-            cellGroup
-                .append("g")
+            // Draw axes
+            cellGroup.append("g")
                 .attr("transform", `translate(0, ${this.size})`)
                 .call(d3.axisBottom(xScale))
-                .selectAll("text") 
-                .style("text-anchor", "end") 
-                .style("font-size", "8px")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d);
-
-            if (uniqueXCategories.length > 0) {
-            cellGroup.append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
-                .call(d3.axisBottom(categoricalXScale))
                 .selectAll("text")
-                .style("text-anchor", "end") 
-                .attr("transform", "rotate(-45)") 
+                .style("text-anchor", "end")
                 .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d); 
-            }
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
 
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale))
                 .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d); 
-            
-            svg
-                .append("text")
+                .style("font-size", "8px");
+
+            const legendHeight = this.size;
+            const legendWidth = 10;
+            const legendX = this.size + 5; 
+            const legendY = 0;
+
+            const legendScale = d3.scaleLinear()
+                .domain(colorScale.domain())
+                .range([legendHeight, 0]);
+
+            const defs = svg.append("defs");
+
+            const linearGradient = defs.append("linearGradient")
+                .attr("id", `legend-gradient-${i}-${j}`)
+                .attr("x1", "0%").attr("x2", "0%")
+                .attr("y1", "100%").attr("y2", "0%");
+
+            const numGradientStops = 10;
+            d3.range(numGradientStops).forEach(d => {
+                linearGradient.append("stop")
+                    .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                    .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+            });
+
+            cellGroup.append("rect")
+                .attr("x", legendX)
+                .attr("y", legendY)
+                .attr("width", legendWidth)
+                .attr("height", legendHeight)
+                .style("fill", `url(#legend-gradient-${i}-${j})`)
+                .attr("stroke", "black");
+
+            cellGroup.append("g")
+                .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                .call(d3.axisRight(legendScale)
+                    .ticks(5))
+                .selectAll("text")
+                .style("font-size", "8px");
+
+            svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
+                .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25)
                 .style("text-anchor", "middle")
                 .text(xCol);
 
-            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-            const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-            
-            svg
-                .append("text")
-                .attr("x", xPosition) 
-                .attr("y", yPosition - 20) 
+            const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
+            const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
+
+            svg.append("text")
+                .attr("x", xPosition)
+                .attr("y", yPosition - 20)
                 .style("text-anchor", "middle")
-                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
+                .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
                 .text(yCol);
+        
         }
 
         /// All non numeric plot ///
@@ -2259,7 +2325,7 @@ class ScatterplotMatrixView{
             const yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
             
             // Define color scale
-            const colorScale = d3.scaleSequential(d3.interpolateOrRd)
+            const colorScale = d3.scaleSequential(d3.interpolateBlues)
                 .domain([0, d3.max(heatmapData, d => d.value)]);
 
             const tooltip = d3.select("#tooltip"); 
@@ -2312,6 +2378,44 @@ class ScatterplotMatrixView{
                 .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
                 .append("title")
                 .text(d => d); 
+
+            const legendHeight = this.size;
+            const legendWidth = 10;
+            const legendX = this.size + 5; 
+            const legendY = 0;
+
+            const legendScale = d3.scaleLinear()
+                .domain(colorScale.domain())
+                .range([legendHeight, 0]);
+
+            const defs = svg.append("defs");
+
+            const linearGradient = defs.append("linearGradient")
+                .attr("id", `legend-gradient-${i}-${j}`)
+                .attr("x1", "0%").attr("x2", "0%")
+                .attr("y1", "100%").attr("y2", "0%");
+
+            const numGradientStops = 10;
+            d3.range(numGradientStops).forEach(d => {
+                linearGradient.append("stop")
+                    .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                    .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+            });
+
+            cellGroup.append("rect")
+                .attr("x", legendX)
+                .attr("y", legendY)
+                .attr("width", legendWidth)
+                .attr("height", legendHeight)
+                .style("fill", `url(#legend-gradient-${i}-${j})`)
+                .attr("stroke", "black");
+
+            cellGroup.append("g")
+                .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                .call(d3.axisRight(legendScale)
+                    .ticks(5))
+                .selectAll("text")
+                .style("font-size", "8px");
             
             svg
                 .append("text")
