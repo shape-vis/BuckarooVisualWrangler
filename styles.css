@@ -95,7 +95,7 @@
 }
 
 .selected {
-    stroke: red;        
+    stroke: black;        
     fill: red;
     stroke-width: 2px; 
 }
@@ -233,6 +233,4 @@
 .group-boxplot {
     display: flex;
     flex-direction: column;
-    align-items: center;
-}
-
+    align

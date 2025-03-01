@@ -119,8 +119,14 @@ class ScatterplotController {
         };
       }
   
-    render() {
-        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups());
+    render(selectionEnabled, handleBrush, handleBarClick, handleHeatmapClick) {
+        if(selectionEnabled)
+        {
+            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
+        }
+        else{
+            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled);
+        }
     }
   
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
@@ -213,12 +219,40 @@ class ScatterplotController {
 
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
-        
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
+
+        const selectionEnabled = true;
+        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
 
         barX0 = barData.x0;
         barX1 = barData.x1;
         selectedBar = barData;
+    }
+
+    handleHeatmapClick(event, data, xCol, yCol, groupByAttribute) {
+        console.log("Bar data: ", barData);
+        document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;
+        document.getElementById("impute-average-y").textContent = `Impute for ${yCol}`;
+
+        let selectedPoints = [];
+
+        if(groupByAttribute)
+        {
+            const groupKey = data.group;
+            //What is `${groupKey}_ids`
+            selectedPoints = this.model.getData().objects().filter(d => data.data[`${groupKey}_ids`].includes(d.ID));        
+        }
+        else{
+            selectedPoints = this.model.getData().objects().filter(d => data.ids.includes(d.ID));
+        }
+
+        console.log("Selected heatmap points:", selectedPoints);
+
+        this.model.setSelectedPoints(selectedPoints);
+        this.view.setSelectedPoints(selectedPoints);
+
+        const selectionEnabled = true;
+        controller.render(selectionEnabled);        
+        // this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
 
     handleGroupSelection() {
@@ -304,7 +338,9 @@ function attachButtonEventListeners(){
         const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
-        controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        const selectionEnabled = true;
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
     d3.select("#impute-average-x").on("click", () => {
@@ -327,7 +363,10 @@ function attachButtonEventListeners(){
         radio.addEventListener("change", (event) => {
             const controller = getActiveController();
             if (event.target.value === "selectData" && event.target.checked) {
-                controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+                // here instead of calling enableBrushing, try calling render() but pass in a selectionEnabled variable
+                const selectionEnabled = true;
+                controller.render(selectionEnabled);
+                // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
             } else {
                 controller.render();
             }
