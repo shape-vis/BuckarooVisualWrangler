@@ -367,10 +367,14 @@ class ScatterplotMatrixView{
                             let obj = {
                                 x0: bin.x0,
                                 x1: bin.x1,
-                                total: binData.length  
+                                total: binData.length,
+                                ids: binData.map(d => d.ID),
+                                groupIDs: {}  
                             };
                             groups.forEach(g => {
-                                obj[g] = binData.filter(d => d[groupByAttribute] === g).length;
+                                const groupData = binData.filter(d => d[groupByAttribute] === g);
+                                obj[g] = groupData.length;  
+                                obj.groupIDs[g] = groupData.map(d => d.ID);
                             });
                             return obj;
                         });
@@ -388,11 +392,17 @@ class ScatterplotMatrixView{
                             let obj = {
                                 x0: categoricalScale(category),
                                 x1: categoricalScale(category) + binWidth,
+                                group: null,
                                 total: catData.length,
-                                category: category 
+                                category: category,
+                                ids: catData.map(d => d.ID),
+                                groupIDs: {}   
                             };
                             groups.forEach(g => {
-                                obj[g] = catData.filter(d => d[groupByAttribute] === g).length;
+                                const groupData = binData.filter(d => d[groupByAttribute] === g);
+                                obj[g] = groupData.length;  
+                                obj.group = g;
+                                obj.groupIDs[g] = groupData.map(d => d.ID);
                             });
                             stackedData.push(obj);
                         });
@@ -406,7 +416,7 @@ class ScatterplotMatrixView{
                         const series = stackGen(stackedData);
                 
                         const tooltip = d3.select("#tooltip");
-                
+
                         cellGroup.selectAll("g.series")
                             .data(series)
                             .join("g")
@@ -440,7 +450,17 @@ class ScatterplotMatrixView{
                                 tooltip.style("display", "none");
                             })
                             .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
+                            .on("click", function (event, d) {
+                                if (!selectionEnabled) return;
+                                d3.selectAll(".selected").classed("selected", false);
+                                d3.select(this).classed("selected", true)
+                                    .style("fill", "red") 
+                                    .style("stroke", "black")
+                                    .style("stroke-width", "2px");
+
+                                const group = d3.select(this.parentNode).datum().key;  
+                                handleBarClick(event, d, xCol, groupByAttribute, group)
+                            });
                     }
                     else{
                         // No group by
@@ -506,7 +526,16 @@ class ScatterplotMatrixView{
                                 tooltip.style("display", "none");
                             })
                             .attr("data-ids", d => d.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
+                            .on("click", function (event, d) {
+                                if (!selectionEnabled) return;
+
+                                d3.selectAll(".selected").classed("selected", false);
+                                d3.select(this).classed("selected", true)
+                                    .style("fill", "red") 
+                                    .style("stroke", "black")
+                                    .style("stroke-width", "2px");
+                                handleBarClick(event, d, xCol, groupByAttribute)
+                            });
                     }
                     
                     cellGroup
@@ -571,14 +600,24 @@ class ScatterplotMatrixView{
                         
                         const stackedData = uniqueCategories.map(category => {
                             const obj = {
-                            category: category,
-                            x0: xScale(category),
-                            x1: xScale(category) + xScale.bandwidth()
+                                category: category,
+                                x0: xScale(category),
+                                x1: xScale(category) + xScale.bandwidth(),
+                                group: null,
+                                total: 0, 
+                                ids: [],  
+                                groupIDs: {}
                             };
                             groups.forEach(g => {
-                            obj[g] = nonNumericData.filter(d =>
-                                String(d[xCol]) === category && d[groupByAttribute] === g
-                            ).length;
+                                const groupData = nonNumericData.filter(d => 
+                                    String(d[xCol]) === category && d[groupByAttribute] === g
+                                );
+                                
+                                obj[g] = groupData.length;  
+                                obj.groupIDs[g] = groupData.map(d => d.ID);
+                                obj.group = g; 
+                                obj.total += groupData.length; 
+                                obj.ids.push(...groupData.map(d => d.ID)); 
                             });
                             return obj;
                         });
@@ -623,7 +662,18 @@ class ScatterplotMatrixView{
                                 tooltip.style("display", "none");
                                 })
                             .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
+                            .on("click", function (event, d) {
+                                if (!selectionEnabled) return;
+
+                                d3.selectAll(".selected").classed("selected", false);
+                                d3.select(this).classed("selected", true)
+                                    .style("fill", "red") 
+                                    .style("stroke", "black")
+                                    .style("stroke-width", "2px");
+
+                                const group = d3.select(this.parentNode).datum().key;  
+                                handleBarClick(event, d, xCol, groupByAttribute, group);
+                            });
                     }
                     else{
                         const histData = [];
@@ -670,7 +720,16 @@ class ScatterplotMatrixView{
                                 tooltip.style("display", "none");
                             })
                             .attr("data-ids", d => d.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
+                            .on("click", function (event, d) {
+                                if (!selectionEnabled) return;
+
+                                d3.selectAll(".selected").classed("selected", false);
+                                d3.select(this).classed("selected", true)
+                                    .style("fill", "red") 
+                                    .style("stroke", "black")
+                                    .style("stroke-width", "2px");
+                                handleBarClick(event, d, xCol, groupByAttribute)
+                            });
                     }
                     
                     cellGroup
@@ -713,7 +772,7 @@ class ScatterplotMatrixView{
                 const scatterViewButton = cellGroup.append("g")
                     .attr("class", "scatterplot-button")
                     .attr("cursor", "pointer")
-                    .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+                    .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
                 scatterViewButton.append("ellipse")
                     .attr("cx", -85)  
@@ -734,7 +793,7 @@ class ScatterplotMatrixView{
                 const lineViewButton = cellGroup.append("g")
                     .attr("class", "linechart-button")
                     .attr("cursor", "pointer")
-                    .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+                    .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
                 lineViewButton.append("ellipse")
                     .attr("cx", - 86)
@@ -754,7 +813,7 @@ class ScatterplotMatrixView{
                     .text("Linechart");
                 
                 // this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute);
-                this.drawHeatMap(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled);
+                this.drawHeatMap(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick);
 
             }
             });
@@ -927,7 +986,7 @@ class ScatterplotMatrixView{
                             .attr("width", binWidth)
                             .attr("height", d => yScale(d[0]) - yScale(d[1]))
                             .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
+                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute, group));
                     }
                     else{
                         // No group by
@@ -1105,7 +1164,7 @@ class ScatterplotMatrixView{
                             .attr("height", d => yScale(d[0]) - yScale(d[1]))
                             .attr("opacity", 0.8)
                             .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
+                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute, group));
                     }
                     // No group by selected
                     else{
@@ -1713,7 +1772,7 @@ class ScatterplotMatrixView{
         });
     }
 
-    drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled){
+    drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
         const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
@@ -1846,6 +1905,7 @@ class ScatterplotMatrixView{
                                 .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
+                                .attr("data-group", group)
                                 .on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
@@ -1879,7 +1939,8 @@ class ScatterplotMatrixView{
                             
                                     console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                                     console.log("Row IDs per group:", d.ids);
-
+                                    const group = this.getAttribute("data-group");                                    
+                                    handleHeatmapClick(event, d, xCol, yCol, groupByAttribute, group);
                                 });
 
                             yOffset += (yScale.bandwidth() * count) / total; 
@@ -1950,6 +2011,7 @@ class ScatterplotMatrixView{
                 
                         console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                         console.log("Selected row IDs:", d.ids);
+                        handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
                     });
     
                 const legendHeight = this.size;
@@ -2055,6 +2117,7 @@ class ScatterplotMatrixView{
                                 .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
+                                .attr("data-group", group)
                                 .on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
@@ -2088,6 +2151,8 @@ class ScatterplotMatrixView{
                             
                                     console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                                     console.log("Row IDs per group:", d.ids);
+                                    const group = this.getAttribute("data-group");                                    
+                                    handleHeatmapClick(event, d, xCol, yCol, groupByAttribute, group);
                                 });
 
                             yOffset += (yScale.bandwidth() * count) / total; 
@@ -2158,6 +2223,7 @@ class ScatterplotMatrixView{
                 
                         console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                         console.log("Selected row IDs:", d.ids);
+                        handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
                     });
 
                 const legendHeight = this.size;
@@ -2267,6 +2333,7 @@ class ScatterplotMatrixView{
                                 .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
+                                .attr("data-group", group)
                                 .on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
@@ -2300,7 +2367,8 @@ class ScatterplotMatrixView{
                             
                                     console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                                     console.log("Row IDs per group:", d.ids);  
-
+                                    const group = this.getAttribute("data-group");                                    
+                                    handleHeatmapClick(event, d, xCol, yCol, groupByAttribute, group);
                                 });
 
                             yOffset += (yScale.bandwidth() * count) / total; 
@@ -2372,7 +2440,7 @@ class ScatterplotMatrixView{
                 
                         console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                         console.log("Selected row IDs:", d.ids);
-
+                        handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
                     });
 
                 const legendHeight = this.size;
@@ -2471,6 +2539,7 @@ class ScatterplotMatrixView{
                                 .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
+                                .attr("data-group", group)
                                 .on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
@@ -2503,8 +2572,9 @@ class ScatterplotMatrixView{
                                     d3.select(this).classed("selected", true); 
                             
                                     console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
-                                    console.log("Row IDs per group:", d.ids);  
-
+                                    console.log("Row IDs per group:", d.ids); 
+                                    const group = this.getAttribute("data-group");                                    
+                                    handleHeatmapClick(event, d, xCol, yCol, groupByAttribute, group);
                                 });
 
                             yOffset += (yScale.bandwidth() * count) / total; 
@@ -2573,6 +2643,8 @@ class ScatterplotMatrixView{
                 
                         console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
                         console.log("Selected row IDs:", d.ids);
+                        
+                        handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
                     });
     
     
@@ -2650,7 +2722,7 @@ class ScatterplotMatrixView{
             .text(yCol);
     }
 
-    drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute){
+    drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
@@ -3219,7 +3291,7 @@ class ScatterplotMatrixView{
         
     }
 
-    switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
+    switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`);  // Hardcoded for stackoverflow tab, need to make dynamic later
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
 
@@ -3713,7 +3785,7 @@ class ScatterplotMatrixView{
         const scatterViewButton = cellGroup.append("g")
             .attr("class", "scatterplot-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
         scatterViewButton.append("ellipse")
             .attr("cx", -85)  
@@ -3734,7 +3806,7 @@ class ScatterplotMatrixView{
         const heatMapViewButton = cellGroup.append("g")
             .attr("class", "heatmap-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
         heatMapViewButton.append("ellipse")
             .attr("cx", - 86)
@@ -3754,16 +3826,16 @@ class ScatterplotMatrixView{
             .text("Heatmap");
     }
 
-    restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
+    restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute);  
+        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick);  
 
         const heatMapViewButton = cellGroup.append("g")
             .attr("class", "heatmap-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
         heatMapViewButton.append("ellipse")
             .attr("cx", - 85)
@@ -3785,7 +3857,7 @@ class ScatterplotMatrixView{
         const lineViewButton = cellGroup.append("g")
             .attr("class", "linechart-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
         lineViewButton.append("ellipse")
             .attr("cx", - 86)
@@ -3805,16 +3877,16 @@ class ScatterplotMatrixView{
             .text("Linechart");
     }
 
-    restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute) {
+    restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled);  
+        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick);  
 
         const scatterViewButton = cellGroup.append("g")
             .attr("class", "scatterplot-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
         scatterViewButton.append("ellipse")
             .attr("cx", -85)  
@@ -3835,7 +3907,7 @@ class ScatterplotMatrixView{
         const lineViewButton = cellGroup.append("g")
             .attr("class", "linechart-button")
             .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute));
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
         lineViewButton.append("ellipse")
             .attr("cx", - 86)

@@ -121,7 +121,7 @@ class DataModel {
 
     const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
 
-    const isNumeric = this. filteredData.array(column).some(v => typeof v === "number" && !isNaN(v));
+    const isNumeric = this.filteredData.array(column).some(v => typeof v === "number" && !isNaN(v));
 
     let imputedValue;
 
