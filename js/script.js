@@ -8,7 +8,8 @@ d3.csv("data/stackoverflow_db.csv").then(inputData => {
 
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
 
-  stackoverflowController.render();
+  stackoverflowController.updateSelectedAttributes(data2.columnNames().slice(1).sort().slice(0,3));
+  // stackoverflowController.render();
   stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
 
   attachButtonEventListeners();

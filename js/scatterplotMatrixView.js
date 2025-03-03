@@ -1776,6 +1776,11 @@ class ScatterplotMatrixView{
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
         const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+
+        svg.select("defs").remove(); 
+        const defs = svg.append("defs");
+        console.log("defs1", defs);
+
         let xScale = null;
         let yScale = null;
 
@@ -2022,9 +2027,7 @@ class ScatterplotMatrixView{
                 const legendScale = d3.scaleLinear()
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
-    
-                const defs = svg.append("defs");
-    
+        
                 const linearGradient = defs.append("linearGradient")
                     .attr("id", `legend-gradient-${i}-${j}`)
                     .attr("x1", "0%").attr("x2", "0%")
@@ -2235,10 +2238,10 @@ class ScatterplotMatrixView{
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
 
-                const defs = svg.append("defs");
+                const gradientID = `legend-gradient-${i}-${j}`;
 
                 const linearGradient = defs.append("linearGradient")
-                    .attr("id", `legend-gradient-${i}-${j}`)
+                    .attr("id", gradientID)
                     .attr("x1", "0%").attr("x2", "0%")
                     .attr("y1", "100%").attr("y2", "0%");
 
@@ -2254,7 +2257,7 @@ class ScatterplotMatrixView{
                     .attr("y", legendY)
                     .attr("width", legendWidth)
                     .attr("height", legendHeight)
-                    .style("fill", `url(#legend-gradient-${i}-${j})`)
+                    .style("fill", `url(#${gradientID})`)
                     .attr("stroke", "black");
 
                 cellGroup.append("g")
@@ -2452,10 +2455,10 @@ class ScatterplotMatrixView{
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
 
-                const defs = svg.append("defs");
+                const gradientID = `legend-gradient-${i}-${j}`;
 
                 const linearGradient = defs.append("linearGradient")
-                    .attr("id", `legend-gradient-${i}-${j}`)
+                    .attr("id", gradientID)
                     .attr("x1", "0%").attr("x2", "0%")
                     .attr("y1", "100%").attr("y2", "0%");
 
@@ -2471,7 +2474,7 @@ class ScatterplotMatrixView{
                     .attr("y", legendY)
                     .attr("width", legendWidth)
                     .attr("height", legendHeight)
-                    .style("fill", `url(#legend-gradient-${i}-${j})`)
+                    .style("fill", `url(#${gradientID})`)
                     .attr("stroke", "black");
 
                 cellGroup.append("g")
@@ -2656,16 +2659,13 @@ class ScatterplotMatrixView{
                 const legendScale = d3.scaleLinear()
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
-    
-                svg.select("defs").remove();
-                const defs = svg.append("defs");
-    
+        
                 const gradientID = `legend-gradient-${i}-${j}`;
     
                 const linearGradient = defs.append("linearGradient")
                     .attr("id", gradientID)
                     .attr("x1", "0%").attr("x2", "0%")
-                    .attr("y1", "100%").attr("y2", "0%");
+                    .attr("y1", "100%").attr("y2", "0%");                
     
                 const numGradientStops = 10;
                 d3.range(numGradientStops).forEach(d => {
@@ -2673,15 +2673,13 @@ class ScatterplotMatrixView{
                         .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
                         .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
                 });
-    
-                cellGroup.selectAll(".legend-rect").remove();
-    
+        
                 cellGroup.append("rect")
                     .attr("x", legendX)
                     .attr("y", legendY)
                     .attr("width", legendWidth)
                     .attr("height", legendHeight)
-                    .style("fill", `url(#${gradientID}`)
+                    .style("fill", `url(#${gradientID})`)
                     .attr("stroke", "black");
     
                 cellGroup.append("g")
@@ -2720,6 +2718,8 @@ class ScatterplotMatrixView{
             .style("text-anchor", "middle")
             .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
             .text(yCol);
+
+        console.log("defs2", defs);
     }
 
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick){
