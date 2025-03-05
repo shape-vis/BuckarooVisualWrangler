@@ -100,14 +100,19 @@
     stroke-width: 2px !important; 
 }
 
-.linechart-button {
+.linechart-button,
+.scatterplot-button,
+.heatmap-button {
     cursor: pointer;
     transition: fill 0.2s;
 }
 
-.scatterplot-button {
-    cursor: pointer;
-    transition: fill 0.2s;
+.linechart-button.active,
+.scatterplot-button.active,
+.heatmap-button.active {
+    filter: brightness(1.2);
+    outline: 3px solid #f0f354; 
+    border-radius: 4px;
 }
 
 .switch-view-button:hover {

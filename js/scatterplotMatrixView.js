@@ -768,48 +768,36 @@ class ScatterplotMatrixView{
     
             } 
             else {
-                const scatterViewButton = cellGroup.append("g")
+                const heatMapViewButton = cellGroup.append("image")
+                .attr("class", "heatmap-button active")
+                .attr("x", -110)  
+                .attr("y", -60)   
+                .attr("width", 45) 
+                .attr("height", 25)
+                .attr("xlink:href", "icons/heatmap.png")
+                .attr("cursor", "pointer")
+                .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+    
+                const scatterViewButton = cellGroup.append("image")
                     .attr("class", "scatterplot-button")
+                    .attr("x", -110)  
+                    .attr("y", -35)   
+                    .attr("width", 45) 
+                    .attr("height", 25)
+                    .attr("xlink:href", "icons/scatterplot.png")
                     .attr("cursor", "pointer")
                     .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
-                scatterViewButton.append("ellipse")
-                    .attr("cx", -85)  
-                    .attr("cy", -28)  
-                    .attr("rx", 25)   
-                    .attr("ry", 10)   
-                    .attr("fill", "#d3d3d3")
-                    .attr("stroke", "#333");
-
-                scatterViewButton.append("text")
-                    .attr("x", - 85)
-                    .attr("y", - 25)
-                    .attr("text-anchor", "middle")
-                    .attr("font-size", "10px")
-                    .attr("fill", "#333")
-                    .text("Scatterplot");
-
-                const lineViewButton = cellGroup.append("g")
+                const lineViewButton = cellGroup.append("image")
                     .attr("class", "linechart-button")
+                    .attr("x", -110)  
+                    .attr("y", -10)   
+                    .attr("width", 45) 
+                    .attr("height", 25)
+                    .attr("xlink:href", "icons/linechart.png")
                     .attr("cursor", "pointer")
                     .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
-                lineViewButton.append("ellipse")
-                    .attr("cx", - 86)
-                    .attr("cy", - 53)
-                    .attr("rx", 40)
-                    .attr("rx", 25)
-                    .attr("ry", 10)
-                    .attr("fill", "#d3d3d3")
-                    .attr("stroke", "#333");
-
-                lineViewButton.append("text")
-                    .attr("x", - 85)
-                    .attr("y", - 50)
-                    .attr("text-anchor", "middle")
-                    .attr("font-size", "10px")
-                    .attr("fill", "#333")
-                    .text("Linechart");
                 
                 // this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute);
                 this.drawHeatMap(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick);
@@ -3821,48 +3809,37 @@ class ScatterplotMatrixView{
                 .text(yCol);
         }
 
-        const scatterViewButton = cellGroup.append("g")
+        d3.select(this.parentNode).selectAll(".heatmap-button, .scatterplot-button").classed("active", false);
+
+        const heatMapViewButton = cellGroup.append("image")
+        .attr("class", "heatmap-button")
+        .attr("x", -110)  
+        .attr("y", -60)   
+        .attr("width", 45) 
+        .attr("height", 25)
+        .attr("xlink:href", "icons/heatmap.png")
+        .attr("cursor", "pointer")
+        .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+
+        const scatterViewButton = cellGroup.append("image")
             .attr("class", "scatterplot-button")
+            .attr("x", -110)  
+            .attr("y", -35)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/scatterplot.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
-        scatterViewButton.append("ellipse")
-            .attr("cx", -85)  
-            .attr("cy", -28)  
-            .attr("rx", 25)   
-            .attr("ry", 10)   
-            .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333");
-
-        scatterViewButton.append("text")
-            .attr("x", - 85)
-            .attr("y", - 25)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#333")
-            .text("Scatterplot");
-
-        const heatMapViewButton = cellGroup.append("g")
-            .attr("class", "heatmap-button")
+        const lineViewButton = cellGroup.append("image")
+            .attr("class", "linechart-button active")
+            .attr("x", -110)  
+            .attr("y", -10)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
-
-        heatMapViewButton.append("ellipse")
-            .attr("cx", - 86)
-            .attr("cy", - 53)
-            .attr("rx", 40)
-            .attr("rx", 25)
-            .attr("ry", 10)
-            .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333");
-
-        heatMapViewButton.append("text")
-            .attr("x", - 85)
-            .attr("y", - 50)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#333")
-            .text("Heatmap");
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
     }
 
     restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
@@ -3871,49 +3848,37 @@ class ScatterplotMatrixView{
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
         this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick);  
 
-        const heatMapViewButton = cellGroup.append("g")
+        d3.select(this.parentNode).selectAll(".linechart-button, .heatmap-button").classed("active", false);
+
+        const heatMapViewButton = cellGroup.append("image")
             .attr("class", "heatmap-button")
+            .attr("x", -110)  
+            .attr("y", -60)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/heatmap.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
-        heatMapViewButton.append("ellipse")
-            .attr("cx", - 85)
-            .attr("cy", - 28)
-            .attr("rx", 40)
-            .attr("rx", 25)
-            .attr("ry", 10)
-            .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333");
+        const scatterViewButton = cellGroup.append("image")
+            .attr("class", "scatterplot-button active")
+            .attr("x", -110)  
+            .attr("y", -35)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/scatterplot.png")
+            .attr("cursor", "pointer")
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
-        heatMapViewButton.append("text")
-            .attr("x", - 85)
-            .attr("y", - 25)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#333")
-            .text("Heatmap");
-
-        const lineViewButton = cellGroup.append("g")
+        const lineViewButton = cellGroup.append("image")
             .attr("class", "linechart-button")
+            .attr("x", -110)  
+            .attr("y", -10)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
-
-        lineViewButton.append("ellipse")
-            .attr("cx", - 86)
-            .attr("cy", - 53)
-            .attr("rx", 40)
-            .attr("rx", 25)
-            .attr("ry", 10)
-            .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333");
-
-        lineViewButton.append("text")
-            .attr("x", - 85)
-            .attr("y", - 50)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#333")
-            .text("Linechart");
     }
 
     restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
@@ -3922,48 +3887,38 @@ class ScatterplotMatrixView{
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
         this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick);  
 
-        const scatterViewButton = cellGroup.append("g")
+        d3.select(this.parentNode).selectAll(".linechart-button, .scatterplot-button").classed("active", false);
+
+
+        const heatMapViewButton = cellGroup.append("image")
+            .attr("class", "heatmap-button active")
+            .attr("x", -110)  
+            .attr("y", -60)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/heatmap.png")
+            .attr("cursor", "pointer")
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+
+        const scatterViewButton = cellGroup.append("image")
             .attr("class", "scatterplot-button")
+            .attr("x", -110)  
+            .attr("y", -35)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/scatterplot.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
 
-        scatterViewButton.append("ellipse")
-            .attr("cx", -85)  
-            .attr("cy", -28)  
-            .attr("rx", 25)   
-            .attr("ry", 10)   
-            .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333");
-
-        scatterViewButton.append("text")
-            .attr("x", - 85)
-            .attr("y", - 25)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#333")
-            .text("Scatterplot");
-
-        const lineViewButton = cellGroup.append("g")
+        const lineViewButton = cellGroup.append("image")
             .attr("class", "linechart-button")
+            .attr("x", -110)  
+            .attr("y", -10)   
+            .attr("width", 45) 
+            .attr("height", 25)
+            .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
-
-        lineViewButton.append("ellipse")
-            .attr("cx", - 86)
-            .attr("cy", - 53)
-            .attr("rx", 40)
-            .attr("rx", 25)
-            .attr("ry", 10)
-            .attr("fill", "#d3d3d3")
-            .attr("stroke", "#333");
-
-        lineViewButton.append("text")
-            .attr("x", - 85)
-            .attr("y", - 50)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#333")
-            .text("Linechart");
     }
 
     getScatterScale(data, column, size, isX = true) {
