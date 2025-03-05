@@ -541,14 +541,13 @@ class ScatterplotMatrixView{
                     cellGroup
                         .append("g")
                         .attr("transform", `translate(0, ${numericSpace})`)
-                        .call(d3.axisBottom(xScale))
+                        .call(d3.axisBottom(xScale).tickFormat(d3.format(".2s")))
                         .selectAll("text") 
                         .style("text-anchor", "end") 
                         .style("font-size", "8px")
                         .attr("dx", "-0.5em") 
                         .attr("dy", "0.5em")  
                         .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
                         .append("title")  
                         .text(d => d);
 
@@ -2266,7 +2265,28 @@ class ScatterplotMatrixView{
                         .ticks(5))
                     .selectAll("text")
                     .style("font-size", "8px");
-                }
+            }
+
+            cellGroup.append("g")
+                .attr("transform", `translate(0, ${this.size})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .style("font-size", "8px")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
+    
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale).tickFormat(d => {
+                    if (typeof d === "string" && d.includes("-")) {
+                        const [min, max] = d.split("-").map(Number);
+                        return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                    }
+                    return d3.format(".3s")(d); 
+                }))
+                .selectAll("text")
+                .style("font-size", "8px");
         }
 
         /// Non numeric Y plot ///
@@ -2484,6 +2504,26 @@ class ScatterplotMatrixView{
                     .selectAll("text")
                     .style("font-size", "8px");
             }
+            cellGroup.append("g")
+                .attr("transform", `translate(0, ${this.size})`)
+                .call(d3.axisBottom(xScale).tickFormat(d => {
+                    if (typeof d === "string" && d.includes("-")) {
+                        const [min, max] = d.split("-").map(Number);
+                        return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                    }
+                    return d3.format(".3s")(d); 
+                }))                
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .style("font-size", "8px")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
+    
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px");
         }
 
         /// All non numeric plot ///
@@ -2689,22 +2729,21 @@ class ScatterplotMatrixView{
                     .selectAll("text")
                     .style("font-size", "8px");
             }
+            cellGroup.append("g")
+                .attr("transform", `translate(0, ${this.size})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .style("font-size", "8px")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
+    
+            cellGroup.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("font-size", "8px");
         }
-
-        cellGroup.append("g")
-            .attr("transform", `translate(0, ${this.size})`)
-            .call(d3.axisBottom(xScale))
-            .selectAll("text")
-            .style("text-anchor", "end")
-            .style("font-size", "8px")
-            .attr("dx", "-0.5em")
-            .attr("dy", "0.5em")
-            .attr("transform", "rotate(-45)");
-
-        cellGroup.append("g")
-            .call(d3.axisLeft(yScale))
-            .selectAll("text")
-            .style("font-size", "8px");
 
         svg.append("text")
             .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
