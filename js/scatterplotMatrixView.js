@@ -292,7 +292,7 @@ class ScatterplotMatrixView{
 
         const container = d3.select(this.container);
         container.selectAll("*").remove();
-        this.selectedPoints = [];
+        // this.selectedPoints = [];
     
         const svg = container
             .append("svg")
@@ -503,7 +503,10 @@ class ScatterplotMatrixView{
                             .attr("width", binWidth)
                             .attr("y", d => yScale(d.length))
                             .attr("height", d => numericSpace - yScale(d.length))
-                            .attr("fill", d => d.category ? "gray" : "steelblue")
+                            .attr("fill", (d) => {
+                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                                return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
+                            })
                             .attr("stroke", d => d.category ? "red" : "none")
                             .attr("stroke-width", d => d.category ? 1 : 0)
                             .attr("opacity", 0.8)
@@ -700,7 +703,10 @@ class ScatterplotMatrixView{
                             .attr("width", xScale.bandwidth())
                             .attr("y", d => yScale(d.length))
                             .attr("height", d => Math.max(0, this.size - yScale(d.length)))
-                            .attr("fill", "steelblue")
+                            .attr("fill", (d) => {
+                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                                return isSelected ? "gold" : "steelblue";
+                            })
                             .attr("opacity", 0.8)
                             .attr("data-ids", d => d.ids.join(","))
                             .on("mouseover", function(event, d) {
@@ -1766,7 +1772,6 @@ class ScatterplotMatrixView{
 
         svg.select("defs").remove(); 
         const defs = svg.append("defs");
-        console.log("defs1", defs);
 
         let xScale = null;
         let yScale = null;
@@ -1974,8 +1979,18 @@ class ScatterplotMatrixView{
                     .attr("width", xScale.bandwidth())
                     .attr("height", yScale.bandwidth())
                     .attr("fill", d => {
-                        if (d.y === "NaN") return "gray"; 
-                        if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) return "gray"; 
+                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+
+                        if (isSelected) {
+                            return "gold"; 
+                        }
+                        if (d.y === "NaN") {
+                            return "gray";
+                        }
+                        if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
+                            return "gray";
+                        }
+    
                         return colorScale(d.value); 
                     })
                     .attr("stroke", "gray")
@@ -2184,8 +2199,18 @@ class ScatterplotMatrixView{
                     .attr("width", xScale.bandwidth())
                     .attr("height", yScale.bandwidth())
                     .attr("fill", d => {
-                        if (d.y === "NaN") return "gray"; 
-                        if (uniqueYStringBins.includes(d.y)) return "gray"; 
+                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+
+                        if (isSelected) {
+                            return "gold"; 
+                        }
+                        if (d.y === "NaN") {
+                            return "gray";
+                        }
+                        if (uniqueYStringBins.includes(d.y)) {
+                            return "gray";
+                        }
+    
                         return colorScale(d.value); 
                     })
                     .attr("stroke", "gray")
@@ -2263,7 +2288,10 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px")
                 .attr("dx", "-0.5em")
                 .attr("dy", "0.5em")
-                .attr("transform", "rotate(-45)");
+                .attr("transform", "rotate(-45)")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
     
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale).tickFormat(d => {
@@ -2422,8 +2450,17 @@ class ScatterplotMatrixView{
                     .attr("width", xScale.bandwidth())
                     .attr("height", yScale.bandwidth())
                     .attr("fill", d => {
-                        if (d.y === "NaN") return "gray"; 
-                        if (uniqueXStringBins.includes(d.y)) return "gray"; 
+                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+
+                        if (isSelected) {
+                            return "gold"; 
+                        }
+                        if (d.y === "NaN") {
+                            return "gray";
+                        }
+                        if (uniqueXStringBins.includes(d.x)) {
+                            return "gray";
+                        }
                         return colorScale(d.value); 
                     })
                     .attr("stroke", "gray")
@@ -2511,7 +2548,10 @@ class ScatterplotMatrixView{
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale))
                 .selectAll("text")
-                .style("font-size", "8px");
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
         }
 
         /// All non numeric plot ///
@@ -2648,7 +2688,10 @@ class ScatterplotMatrixView{
                     .attr("y", d => yScale(d.y))
                     .attr("width", xScale.bandwidth())
                     .attr("height", yScale.bandwidth())
-                    .attr("fill", d => colorScale(d.value))
+                    .attr("fill", (d) => {
+                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        return isSelected ? "gold" : colorScale(d.value);
+                    })
                     .attr("stroke", "gray")
                     .attr("stroke-width", 0.5)                
                     .on("mouseover", function(event, d) {
@@ -2725,12 +2768,18 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px")
                 .attr("dx", "-0.5em")
                 .attr("dy", "0.5em")
-                .attr("transform", "rotate(-45)");
+                .attr("transform", "rotate(-45)")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
     
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale))
                 .selectAll("text")
-                .style("font-size", "8px");
+                .style("font-size", "8px")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                .append("title")  
+                .text(d => d);
         }
 
         svg.append("text")
@@ -2746,7 +2795,6 @@ class ScatterplotMatrixView{
             .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
             .text(yCol);
 
-        console.log("defs2", defs);
     }
 
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick){
@@ -3761,7 +3809,6 @@ class ScatterplotMatrixView{
                   });
             }
             else{
-                console.log("here in no groupBy");
                 cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
