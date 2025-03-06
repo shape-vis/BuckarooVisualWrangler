@@ -35,9 +35,11 @@ class ScatterplotMatrixView{
         const dropdownMenu = document.getElementById("dropdown-menu");
         const dropdownButton = document.getElementById("dropdown-button");
         const groupDropdown = document.getElementById("group-dropdown");
+        const predicateDropdown = document.getElementById("predicate-dropdown");
     
         dropdownMenu.innerHTML = ""; 
         groupDropdown.innerHTML = '<option value="">None</option>'; 
+        predicateDropdown.innerHTML = '<option value="">None</option>'; 
 
         let selectedAttributes = new Set();
     
@@ -98,6 +100,7 @@ class ScatterplotMatrixView{
             option.value = attr;
             option.textContent = attr;
             groupDropdown.appendChild(option);
+            predicateDropdown.appendChild(option);
         });
     
         function updateDropdownButton() {
@@ -154,8 +157,8 @@ class ScatterplotMatrixView{
     
         const width = 1300; 
         const height = 500; 
-        const margin = { top: 30, right: 100, bottom: 50, left: 100 };
-    
+        const margin = { top: 30, right: 120, bottom: 50, left: 100 };
+
         const salaryExtent = d3.extent(groupStats.flatMap(d => [d.min, d.max]));
     
         salaryExtent[0] = Math.min(salaryExtent[0], overallMedian);
@@ -268,6 +271,23 @@ class ScatterplotMatrixView{
                 onSelectGroups();
             });
         });
+
+        const legend = svg.append("g")
+            .attr("transform", `translate(${width - margin.right - 300}, ${margin.top - 30})`);
+
+        legend.append("rect")
+            .attr("width", 15)
+            .attr("height", 15)
+            .attr("fill", "red")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1);
+
+        legend.append("text")
+            .attr("x", 20) 
+            .attr("y", 12) 
+            .attr("font-size", "12px")
+            .attr("fill", "black")
+            .text("Indicates groups > 2 Median Absolute Deviations (MAD) from dataset median");
     }
 
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, handleBrush, handleBarClick, handleHeatmapClick) {  
