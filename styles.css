@@ -119,6 +119,13 @@
     fill: #b0b0b0;
 }
 
+.dropdown-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px; 
+    align-items: flex-start;
+}
+
 .dropdown {
     position: relative;
     display: inline-block;

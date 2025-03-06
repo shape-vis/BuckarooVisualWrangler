@@ -128,6 +128,44 @@ class ScatterplotController {
             this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled);
         }
     }
+
+    predicateFilter(column, operator, value, isNumeric)
+    {
+        let predicatePoints = [];
+        if (isNumeric){
+            this.model.getData().objects().forEach(row => {
+                const cellValue = row[column];
+        
+                let conditionMet = false;
+                switch (operator) {
+                    case "<": conditionMet = cellValue < value; break;
+                    case ">": conditionMet = cellValue > value; break;
+                    case "=": conditionMet = cellValue === value; break;
+                    case "!=": conditionMet = cellValue !== value; break;
+                }
+        
+                if (!conditionMet) predicatePoints.push(row);
+            });
+        }
+        else {
+            this.model.getData().objects().forEach(row => {
+                const cellValue = row[column];
+        
+                let conditionMet = false;
+                switch (operator) {
+                    case "=": conditionMet = cellValue === value; break;
+                    case "!=": conditionMet = cellValue !== value; break;
+                }
+        
+                if (!conditionMet) predicatePoints.push(row);
+            });
+        }
+
+        this.view.setPredicatePoints(predicatePoints);
+
+        const selectionEnabled = false;
+        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
+    }
   
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
         document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;

@@ -22,34 +22,42 @@
         <button class="tab-button active" data-target="tab2">StackOverflow Data</button>
     </div>
 
-    <div id="attribute-dropdown" class="dropdown">
-        <button id="dropdown-button">Select Attributes (3/3)</button>
-        <div id="dropdown-menu" class="dropdown-content">
+    <div class="dropdown-container">
+        <div id="attribute-dropdown" class="dropdown">
+            <button id="dropdown-button">Select Attributes (3/3)</button>
+            <div id="dropdown-menu" class="dropdown-content">
+            </div>
+        </div>
+    
+        <div id="group-dropdown-container">
+            <label for="group-dropdown">Group by:</label>
+            <select id="group-dropdown">
+                <option value="">None</option>
+            </select>
+    
+            <div id="group-selection-popup" class="modal" style="display: none;">
+                <div class="modal-content">
+                <h3 id="overall-average">Overall Salary Average: $XYZ</h3>
+                <ul id="group-list"></ul>
+                <div class="modal-buttons">
+                    <button id="plot-groups">Plot Selected Groups</button>
+                    <button id="close-popup">Cancel</button>
+                </div>
+                </div>
+            </div>
+    
+            <button id="select-groups-btn">Select Groups</button>
+        </div>
+    
+        <div id="predicate-dropdown-container">
+            <label for="predicate-dropdown">Add a Predicate to a Column:</label>
+            <select id="predicate-dropdown">
+                <option value="">None</option>
+            </select>
+    
+            <div id="condition-container"></div>
         </div>
     </div>
-
-    <label for="group-dropdown">Group by:</label>
-    <select id="group-dropdown">
-        <option value="">None</option>
-    </select>
-
-    <div id="group-selection-popup" class="modal" style="display: none;">
-        <div class="modal-content">
-        <h3 id="overall-average">Overall Salary Average: $XYZ</h3>
-        <ul id="group-list"></ul>
-        <div class="modal-buttons">
-            <button id="plot-groups">Plot Selected Groups</button>
-            <button id="close-popup">Cancel</button>
-        </div>
-        </div>
-    </div>
-
-    <button id="select-groups-btn">Select Groups</button>
-
-    <label for="predicate-dropdown">Add a Predicate to a Column:</label>
-    <select id="predicate-dropdown">
-        <option value="">None</option>
-    </select>
 
     <div id="tooltip" class="tooltip"></div>
 

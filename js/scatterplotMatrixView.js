@@ -25,11 +25,16 @@ class ScatterplotMatrixView{
         this.brushYCol = 0;
 
         this.selectedPoints = [];
+        this.predicatePoints = [];
     }
 
     setSelectedPoints(points) {
         this.selectedPoints = points;
       }
+
+    setPredicatePoints(points) {
+        this.predicatePoints = points;
+    }
 
     populateDropdownFromTable(table, controller) {
         const dropdownMenu = document.getElementById("dropdown-menu");
@@ -95,12 +100,14 @@ class ScatterplotMatrixView{
             label.appendChild(document.createTextNode(attr));
             dropdownMenu.appendChild(label);
 
-            // Group by append options
-            let option = document.createElement("option");
-            option.value = attr;
-            option.textContent = attr;
-            groupDropdown.appendChild(option);
-            predicateDropdown.appendChild(option);
+            let groupOption = document.createElement("option");
+            groupOption.value = attr;
+            groupOption.textContent = attr;
+            groupDropdown.appendChild(groupOption);
+            let predicateOption = document.createElement("option");
+            predicateOption.value = attr;
+            predicateOption.textContent = attr;
+            predicateDropdown.appendChild(predicateOption);
         });
     
         function updateDropdownButton() {
@@ -120,8 +127,72 @@ class ScatterplotMatrixView{
         groupDropdown.addEventListener("change", function () {
             controller.updateGrouping(this.value);
         });
+
+        predicateDropdown.addEventListener("change", () => {
+            this.handlePredicateChange(table, controller);
+        });
     
         updateDropdownButton();
+    }
+
+    handlePredicateChange(table, controller) {
+        const predicateDropdown = document.getElementById("predicate-dropdown");
+        const conditionContainer = document.getElementById("condition-container"); 
+        conditionContainer.innerHTML = ""; 
+
+        const selectedColumn = predicateDropdown.value;
+        if (!selectedColumn) return; 
+   
+        const columnData = table.column(selectedColumn);
+        const isNumeric = columnData.every(value => !isNaN(value));
+    
+        if (isNumeric) {
+            const operatorDropdown = document.createElement("select");
+            ["<", ">", "=", "!="].forEach(op => {
+                let option = document.createElement("option");
+                option.value = op;
+                option.textContent = op;
+                operatorDropdown.appendChild(option);
+            });
+    
+            const valueInput = document.createElement("input");
+            valueInput.type = "number";
+    
+            const applyButton = document.createElement("button");
+            applyButton.textContent = "Apply";
+            applyButton.classList.add("apply-filter-button"); 
+            applyButton.addEventListener("click", () => {
+                controller.predicateFilter(selectedColumn, operatorDropdown.value, valueInput.value, isNumeric);
+            });
+
+            conditionContainer.appendChild(operatorDropdown);
+            conditionContainer.appendChild(valueInput);
+            conditionContainer.appendChild(applyButton);
+            
+        } else {
+            const operatorDropdown = document.createElement("select");
+            ["=", "!="].forEach(op => {
+                let option = document.createElement("option");
+                option.value = op;
+                option.textContent = op;
+                operatorDropdown.appendChild(option);
+            });
+    
+            const valueDropdown = document.createElement("select");
+            const categories = sortCategories([...new Set(columnData)])
+            categories.forEach(value => {
+                let option = document.createElement("option");
+                option.value = value;
+                option.textContent = value;
+                valueDropdown.appendChild(option);
+            });
+    
+            conditionContainer.appendChild(operatorDropdown);
+            conditionContainer.appendChild(valueDropdown);
+    
+            valueDropdown.addEventListener("change", () => controller.predicateFilter(selectedColumn, operatorDropdown.value, valueDropdown.value, isNumeric));
+            operatorDropdown.addEventListener("change", () => controller.predicateFilter(selectedColumn, operatorDropdown.value, valueDropdown.value, isNumeric));
+        }
     }
 
     updateLegend(groupByAttribute, givenData) {
@@ -291,6 +362,7 @@ class ScatterplotMatrixView{
     }
 
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, handleBrush, handleBarClick, handleHeatmapClick) {  
+        console.log("matrix predicate points", this.predicatePoints);
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
         let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
@@ -527,8 +599,16 @@ class ScatterplotMatrixView{
                                 const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                                 return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
                             })
-                            .attr("stroke", d => d.category ? "red" : "none")
-                            .attr("stroke-width", d => d.category ? 1 : 0)
+                            // .attr("stroke", d => d.category ? "red" : "none")
+                            .attr("stroke", (d) => {
+                                const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                                return isPredicated ? "red" : "none";
+                            })
+                            // .attr("stroke-width", d => d.category ? 1 : 0)
+                            .attr("stroke-width", (d) => {
+                                const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                                return isPredicated ? 1 : 0
+                            })
                             .attr("opacity", 0.8)
                             .attr("data-ids", d => d.ids.join(","))
                             .on("mouseover", function(event, d) {
@@ -726,6 +806,14 @@ class ScatterplotMatrixView{
                             .attr("fill", (d) => {
                                 const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                                 return isSelected ? "gold" : "steelblue";
+                            })
+                            .attr("stroke", (d) => {
+                                const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                                return isPredicated ? "red" : "none";
+                            })
+                            .attr("stroke-width", (d) => {
+                                const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                                return isPredicated ? 1 : 0
                             })
                             .attr("opacity", 0.8)
                             .attr("data-ids", d => d.ids.join(","))
@@ -2013,8 +2101,16 @@ class ScatterplotMatrixView{
     
                         return colorScale(d.value); 
                     })
-                    .attr("stroke", "gray")
-                    .attr("stroke-width", 0.5)
+                    // .attr("stroke", "gray")
+                    // .attr("stroke-width", 0.5)
+                    .attr("stroke", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? "red" : "gray";
+                    })
+                    .attr("stroke-width", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? 1 : 0.5
+                    })
                     .on("mouseover", function (event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
@@ -2233,8 +2329,16 @@ class ScatterplotMatrixView{
     
                         return colorScale(d.value); 
                     })
-                    .attr("stroke", "gray")
-                    .attr("stroke-width", 0.5)
+                    // .attr("stroke", "gray")
+                    // .attr("stroke-width", 0.5)
+                    .attr("stroke", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? "red" : "gray";
+                    })
+                    .attr("stroke-width", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? 1 : 0.5
+                    })
                     .on("mouseover", function (event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
@@ -2483,8 +2587,16 @@ class ScatterplotMatrixView{
                         }
                         return colorScale(d.value); 
                     })
-                    .attr("stroke", "gray")
-                    .attr("stroke-width", 0.5)                
+                    // .attr("stroke", "gray")
+                    // .attr("stroke-width", 0.5)    
+                    .attr("stroke", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? "red" : "gray";
+                    })
+                    .attr("stroke-width", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? 1 : 0.5
+                    })            
                     .on("mouseover", function (event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
@@ -2712,8 +2824,16 @@ class ScatterplotMatrixView{
                         const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                         return isSelected ? "gold" : colorScale(d.value);
                     })
-                    .attr("stroke", "gray")
-                    .attr("stroke-width", 0.5)                
+                    // .attr("stroke", "gray")
+                    // .attr("stroke-width", 0.5)    
+                    .attr("stroke", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? "red" : "gray";
+                    })
+                    .attr("stroke-width", (d) => {
+                        const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                        return isPredicated ? 1 : 0.5
+                    })            
                     .on("mouseover", function(event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
@@ -2864,6 +2984,12 @@ class ScatterplotMatrixView{
                 
             const tooltip = d3.select("#tooltip"); 
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
+                (p[yCol] === d[yCol] || isNaN(d[yCol]))
+            );
+
             cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
@@ -2886,8 +3012,10 @@ class ScatterplotMatrixView{
                         return d.type === "numeric" ? "steelblue" : "gray"; 
                     }
                 })
-                .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
-                .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
+                // .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
+                // .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
+                .attr("stroke", d => isPredicated(d) ? "red" : "none")
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
@@ -3013,6 +3141,12 @@ class ScatterplotMatrixView{
                 
             const tooltip = d3.select("#tooltip"); 
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol]) &&
+                (p[yCol] === d[yCol] || isNaN(d[yCol]))
+            );
+
             cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
@@ -3031,8 +3165,10 @@ class ScatterplotMatrixView{
                         return d.type === "nan-y" ? "gray" : "steelblue"; 
                     }
                 })
-                .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
-                .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
+                // .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
+                // .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
+                .attr("stroke", d => isPredicated(d) ? "red" : "none")
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
@@ -3156,6 +3292,12 @@ class ScatterplotMatrixView{
 
             const tooltip = d3.select("#tooltip"); 
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
+                (p[yCol] === d[yCol])
+            );
+
             cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
@@ -3174,8 +3316,10 @@ class ScatterplotMatrixView{
                         return d.type === "nan-x" ? "gray" : "steelblue"; 
                     }
                 })
-                .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
-                .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
+                // .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
+                // .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
+                .attr("stroke", d => isPredicated(d) ? "red" : "none")
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
@@ -3283,6 +3427,12 @@ class ScatterplotMatrixView{
 
             const tooltip = d3.select("#tooltip"); 
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol]) &&
+                (p[yCol] === d[yCol])
+            );
+
             cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
@@ -3297,6 +3447,8 @@ class ScatterplotMatrixView{
                         return "steelblue"; 
                     }
                 })
+                .attr("stroke", d => isPredicated(d) ? "red" : "none")
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
                 .attr("opacity", 0.6)
                 .on("mouseover", function(event, d) {
                     d3.select(this).attr("fill", "orange");
