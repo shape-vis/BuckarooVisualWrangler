@@ -141,7 +141,10 @@ class ScatterplotMatrixView{
         conditionContainer.innerHTML = ""; 
 
         const selectedColumn = predicateDropdown.value;
-        if (!selectedColumn) return; 
+        if (!selectedColumn){
+            controller.predicateFilter(selectedColumn);
+            return;
+        } 
    
         const columnData = table.column(selectedColumn);
         const isNumeric = columnData.every(value => !isNaN(value));
@@ -634,9 +637,7 @@ class ScatterplotMatrixView{
 
                                 d3.selectAll(".selected").classed("selected", false);
                                 d3.select(this).classed("selected", true)
-                                    .style("fill", "red") 
-                                    .style("stroke", "black")
-                                    .style("stroke-width", "2px");
+                                    .style("fill", "gold") 
                                 handleBarClick(event, d, xCol, groupByAttribute)
                             });
                     }
@@ -838,9 +839,7 @@ class ScatterplotMatrixView{
 
                                 d3.selectAll(".selected").classed("selected", false);
                                 d3.select(this).classed("selected", true)
-                                    .style("fill", "red") 
-                                    .style("stroke", "black")
-                                    .style("stroke-width", "2px");
+                                    .style("fill", "gold") 
                                 handleBarClick(event, d, xCol, groupByAttribute)
                             });
                     }
@@ -1878,8 +1877,12 @@ class ScatterplotMatrixView{
 
         const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
 
-        svg.select("defs").remove(); 
-        const defs = svg.append("defs");
+        const gradientID = `legend-gradient-${i}-${j}`;
+        let defs = svg.select("defs");
+        if (defs.empty()) {
+            defs = svg.append("defs");
+        }
+        svg.select(`#${gradientID}`).remove();
 
         let xScale = null;
         let yScale = null;
@@ -2147,7 +2150,7 @@ class ScatterplotMatrixView{
                     .range([legendHeight, 0]);
         
                 const linearGradient = defs.append("linearGradient")
-                    .attr("id", `legend-gradient-${i}-${j}`)
+                    .attr("id", gradientID)
                     .attr("x1", "0%").attr("x2", "0%")
                     .attr("y1", "100%").attr("y2", "0%");
     
@@ -2163,7 +2166,7 @@ class ScatterplotMatrixView{
                     .attr("y", legendY)
                     .attr("width", legendWidth)
                     .attr("height", legendHeight)
-                    .style("fill", `url(#legend-gradient-${i}-${j})`)
+                    .style("fill", `url(#${gradientID})`)
                     .attr("stroke", "black");
     
                 cellGroup.append("g")
@@ -2373,8 +2376,6 @@ class ScatterplotMatrixView{
                 const legendScale = d3.scaleLinear()
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
-
-                const gradientID = `legend-gradient-${i}-${j}`;
 
                 const linearGradient = defs.append("linearGradient")
                     .attr("id", gradientID)
@@ -2632,8 +2633,6 @@ class ScatterplotMatrixView{
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
 
-                const gradientID = `legend-gradient-${i}-${j}`;
-
                 const linearGradient = defs.append("linearGradient")
                     .attr("id", gradientID)
                     .attr("x1", "0%").attr("x2", "0%")
@@ -2870,9 +2869,7 @@ class ScatterplotMatrixView{
                 const legendScale = d3.scaleLinear()
                     .domain(colorScale.domain())
                     .range([legendHeight, 0]);
-        
-                const gradientID = `legend-gradient-${i}-${j}`;
-    
+            
                 const linearGradient = defs.append("linearGradient")
                     .attr("id", gradientID)
                     .attr("x1", "0%").attr("x2", "0%")
@@ -2934,7 +2931,6 @@ class ScatterplotMatrixView{
             .style("text-anchor", "middle")
             .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
             .text(yCol);
-
     }
 
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick){
@@ -4138,6 +4134,1158 @@ class ScatterplotMatrixView{
             .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+    }
+
+    drawPreviewPlot(givenData, containerId, isHistogram, groupByAttribute, xCol, yCol){
+        const container = document.getElementById(containerId);
+        container.innerHTML = ""; // Clear existing preview
+
+        console.log("givenData", givenData);
+
+        if (givenData.length === 0) {
+            container.style.display = "none"; // Hide if no data
+            return;
+        }
+
+        container.style.display = "block"; // Show container
+
+        const margin = { top: 10, right: 40, bottom: 50, left: 60 };
+        const width = 250 - margin.left - margin.right;
+        const height = 250 - margin.top - margin.bottom;
+
+        const svg = d3.select(`#${containerId}`)
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+        if(isHistogram)
+        {
+            if(containerId === "preview-impute-average-y")
+            {
+                return;
+            }
+            let data = [];
+
+            if (groupByAttribute){
+                data = givenData.select(["ID", xCol, groupByAttribute]).objects();
+            }
+            else{
+                data = givenData.select(["ID", xCol]).objects();
+            }
+
+            const numericData = data.filter(d => 
+                typeof d[xCol] === "number" && !isNaN(d[xCol])
+            );
+            
+            const nonNumericData = data.filter(d => 
+                typeof d[xCol] !== "number" || isNaN(d[xCol])
+            ).map(d => ({
+                ...d,
+                [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
+            }));
+
+            const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
+
+            let uniqueCategories;
+            
+            if (numericData.length === data.length)
+            {
+                uniqueCategories = [];
+            }else{
+                uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
+            }
+
+            const categorySpace = uniqueCategories.length * 20; 
+            const numericSpace = width - categorySpace; 
+            let categoricalScale = null;
+            
+            if (numericData.length > 0)
+            {
+                uniqueCategories = sortCategories(uniqueCategories);
+                const xScale = d3.scaleLinear()
+                    .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
+                    .range([0, numericSpace]);
+
+                let yScale = null;
+                
+                const histogramGenerator = d3.histogram()
+                    .domain(xScale.domain())
+                    .thresholds(10);
+
+                const bins = histogramGenerator(numericData.map(d => d[xCol]));
+
+                if (groupByAttribute) {
+                    const groups = Array.from(new Set(numericData.map(d => d[groupByAttribute])));
+                    const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
+            
+                    const stackedData = bins.map(bin => {
+                        const binData = numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1);
+                        let obj = {
+                            x0: bin.x0,
+                            x1: bin.x1,
+                            total: binData.length,
+                            ids: binData.map(d => d.ID),
+                            groupIDs: {}  
+                        };
+                        groups.forEach(g => {
+                            const groupData = binData.filter(d => d[groupByAttribute] === g);
+                            obj[g] = groupData.length;  
+                            obj.groupIDs[g] = groupData.map(d => d.ID);
+                        });
+                        return obj;
+                    });
+            
+                    const binWidth = xScale(bins[0].x1) - xScale(bins[0].x0);
+
+                    const categoricalStart = xScale.range()[1] + 10;
+
+                    categoricalScale = d3.scaleOrdinal()
+                        .domain(uniqueCategories)
+                        .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
+
+                    uniqueCategories.forEach(category => {
+                        const catData = nonNumericData.filter(d => String(d[xCol]) === category);
+                        let obj = {
+                            x0: categoricalScale(category),
+                            x1: categoricalScale(category) + binWidth,
+                            group: null,
+                            total: catData.length,
+                            category: category,
+                            ids: catData.map(d => d.ID),
+                            groupIDs: {}   
+                        };
+                        groups.forEach(g => {
+                            const groupData = binData.filter(d => d[groupByAttribute] === g);
+                            obj[g] = groupData.length;  
+                            obj.group = g;
+                            obj.groupIDs[g] = groupData.map(d => d.ID);
+                        });
+                        stackedData.push(obj);
+                    });
+            
+                    const yMax = d3.max(stackedData, d => d.total);
+                    yScale = d3.scaleLinear()
+                        .domain([0, yMax])
+                        .range([numericSpace, 0]);
+            
+                    const stackGen = d3.stack().keys(groups);
+                    const series = stackGen(stackedData);
+            
+                    svg.selectAll("g.series")
+                        .data(series)
+                        .join("g")
+                        .attr("class", "series")
+                        .attr("fill", d => d.category ? "gray" : colorScale(d.key))
+                        .attr("opacity", 0.8)
+                        .selectAll("rect")
+                        .data(d => d)
+                        .join("rect")
+                        .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
+                        .attr("y", d => yScale(d[1]))
+                        .attr("width", binWidth)
+                        .attr("height", d => yScale(d[0]) - yScale(d[1]));
+                }
+                else{
+                    // No group by
+                    const histData = histogramGenerator(numericData.map(d => d[xCol])).map(bin => {
+                        return {
+                            x0: bin.x0,
+                            x1: bin.x1,
+                            length: bin.length,
+                            ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.ID)
+                        };
+                    });
+
+                    const binWidth = xScale(histData[0].x1) - xScale(histData[0].x0);
+                    const categoricalStart = xScale.range()[1] + 10;
+
+                    categoricalScale = d3.scaleOrdinal()
+                        .domain(uniqueCategories)
+                        .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
+
+                    uniqueCategories.forEach(category => {
+                        histData.push({
+                            x0: categoricalScale(category),
+                            x1: categoricalScale(category) + binWidth,
+                            length: nonNumericData.filter(d => String(d[xCol]) === category).length,
+                            ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
+                            category: category 
+                        });
+                    });
+
+                    yScale = d3.scaleLinear()
+                        .domain([0, d3.max(histData, (d) => d.length)])
+                        .range([numericSpace, 0]);
+                    
+                    svg.selectAll("rect")
+                        .data(histData)
+                        .join("rect")
+                        .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.x0))
+                        .attr("width", binWidth)
+                        .attr("y", d => yScale(d.length))
+                        .attr("height", d => numericSpace - yScale(d.length))
+                        .attr("fill", (d) => {
+                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
+                        })
+                        // .attr("stroke", d => d.category ? "red" : "none")
+                        .attr("stroke", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? "red" : "none";
+                        })
+                        // .attr("stroke-width", d => d.category ? 1 : 0)
+                        .attr("stroke-width", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? 1 : 0
+                        })
+                        .attr("opacity", 0.8);
+                }
+                
+                svg
+                    .append("g")
+                    .attr("transform", `translate(0, ${numericSpace})`)
+                    .call(d3.axisBottom(xScale).tickFormat(d3.format(".2s")))
+                    .selectAll("text") 
+                    .style("text-anchor", "end") 
+                    .style("font-size", "8px")
+                    .attr("dx", "-0.5em") 
+                    .attr("dy", "0.5em")  
+                    .attr("transform", "rotate(-45)")
+                    .append("title")  
+                    .text(d => d);
+
+                if (uniqueCategories.length > 0) {
+                    svg.append("g")
+                        .attr("transform", `translate(10, ${numericSpace})`)
+                        .call(d3.axisBottom(categoricalScale))
+                        .selectAll("text")
+                        .style("text-anchor", "end") 
+                        .attr("transform", "rotate(-45)") 
+                        .style("font-size", "8px")
+                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                        .append("title")  
+                        .text(d => d);
+                }
+                svg.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
+
+            }
+            else{   // Data is all categorical
+                uniqueCategories = uniqueCategories.slice(1);
+                uniqueCategories = sortCategories(uniqueCategories);
+
+                const xScale = d3.scaleBand()
+                    .domain(uniqueCategories)
+                    .range([0, width]);
+
+                let yScale = null;
+
+                if (groupByAttribute) {
+                    const groups = Array.from(new Set(nonNumericData.map(d => d[groupByAttribute])));
+                    const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
+                    
+                    const stackedData = uniqueCategories.map(category => {
+                        const obj = {
+                            category: category,
+                            x0: xScale(category),
+                            x1: xScale(category) + xScale.bandwidth(),
+                            group: null,
+                            total: 0, 
+                            ids: [],  
+                            groupIDs: {}
+                        };
+                        groups.forEach(g => {
+                            const groupData = nonNumericData.filter(d => 
+                                String(d[xCol]) === category && d[groupByAttribute] === g
+                            );
+                            
+                            obj[g] = groupData.length;  
+                            obj.groupIDs[g] = groupData.map(d => d.ID);
+                            obj.group = g; 
+                            obj.total += groupData.length; 
+                            obj.ids.push(...groupData.map(d => d.ID)); 
+                        });
+                        return obj;
+                    });
+                    
+                    const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
+                    yScale = d3.scaleLinear().domain([0, yMax]).range([height, 0]);
+                    
+                    const stackGen = d3.stack().keys(groups);
+                    const series = stackGen(stackedData);
+                    
+                    svg.selectAll("g.series")
+                        .data(series)
+                        .join("g")
+                        .attr("class", "series")
+                        .attr("fill", d => colorScale(d.key))
+                        .attr("opacity", 0.8)
+                        .selectAll("rect")
+                        .data(d => d)
+                        .join("rect")
+                        .attr("x", d => xScale(d.data.category))
+                        .attr("y", d => yScale(d[1]))
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", d => yScale(d[0]) - yScale(d[1]));
+                }
+                else{
+                    const histData = [];
+
+                    uniqueCategories.forEach(category => {
+                        histData.push({
+                            x0: xScale(category),
+                            x1: xScale(category) + xScale.bandwidth(),
+                            length: nonNumericData.filter(d => String(d[xCol]) === category).length,
+                            ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
+                            category: category 
+                        });
+                    });
+                    
+                    yScale = d3.scaleLinear()
+                        .domain([0, d3.max(histData, (d) => d.length)])
+                        .range([height, 0]);
+                    
+                    svg.selectAll("rect")
+                        .data(histData)
+                        .join("rect")
+                        .attr("x", d => xScale(d.category))
+                        .attr("width", xScale.bandwidth())
+                        .attr("y", d => yScale(d.length))
+                        .attr("height", d => Math.max(0, height - yScale(d.length)))
+                        .attr("fill", (d) => {
+                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            return isSelected ? "gold" : "steelblue";
+                        })
+                        .attr("stroke", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? "red" : "none";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? 1 : 0
+                        })
+                        .attr("opacity", 0.8);
+                }
+                
+                svg
+                    .append("g")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale))
+                    .selectAll("text") 
+                    .style("text-anchor", "end") 
+                    .style("font-size", "8px")
+                    .attr("dx", "-0.5em") 
+                    .attr("dy", "0.5em")  
+                    .attr("transform", "rotate(-45)")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                    .append("title")  
+                    .text(d => d);
+
+                svg.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
+            }
+        }
+        /// Draw Heatmap ///
+        else{
+            const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
+
+            const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+
+            const gradientID = `legend-gradient-preview`;
+            let defs = svg.select("defs");
+            if (defs.empty()) {
+                defs = svg.append("defs");
+            }
+            svg.select(`#${gradientID}`).remove();
+
+            let xScale = null;
+            let yScale = null;
+
+            let data = [];
+
+            if(groupByAttribute)
+            {
+                data = givenData.select(["ID", xCol, yCol, groupByAttribute]).objects(); 
+            }
+            else{
+                data = givenData.select(["ID", xCol, yCol]).objects();
+            }
+
+            let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
+
+            uniqueXCategories = uniqueXCategories.slice(1);
+            uniqueYCategories = uniqueYCategories.slice(1);
+            uniqueXCategories = sortCategories(uniqueXCategories);
+            uniqueYCategories = sortCategories(uniqueYCategories);
+
+            const uniqueXStringBins = uniqueXCategories; 
+            const uniqueYStringBins = uniqueYCategories; 
+
+            let binXGenerator = d3.bin()
+                .domain([d3.min(nonNumericYData, (d) => d[xCol]), d3.max(nonNumericYData, (d) => d[xCol])])  
+                .thresholds(10);  
+
+            let binYGenerator = d3.bin()
+                .domain([d3.min(nonNumericXData, (d) => d[yCol]), d3.max(nonNumericXData, (d) => d[yCol])])  
+                .thresholds(10);  
+
+            let xBins = binXGenerator(numericData);
+            let xBinLabels = xBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+            let yBins = binYGenerator(numericData);
+            let yBinLabels = yBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+
+            let xCategories = [...xBinLabels, ...uniqueXStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+            let yCategories = [...yBinLabels, ...uniqueYStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+
+            /// All numeric plot ///
+            if(xIsNumeric && yIsNumeric)
+            {
+                binXGenerator = d3.bin()
+                    .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol])])  
+                    .thresholds(10);  
+
+                binYGenerator = d3.bin()
+                    .domain([d3.min(numericData, (d) => d[yCol]), d3.max(numericData, (d) => d[yCol])])  
+                    .thresholds(10);  
+
+                xBins = binXGenerator(numericData);
+                xBinLabels = xBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+                yBins = binYGenerator(numericData);
+                yBinLabels = yBins.map((d, i) => `${Math.round(d.x0)}-${Math.round(d.x1)}`);
+
+                data = data.map(d => ({
+                        ...d,
+                        binnedNumericalXCol: isNaN(d[xCol])
+                            ? String(d[xCol])
+                            : xBinLabels.find((label, i) => {
+                                return d[xCol] >= xBins[i].x0 && d[xCol] < xBins[i].x1;
+                            }) || xBinLabels[xBinLabels.length - 1],
+                        binnedNumericalYCol: isNaN(d[yCol])
+                            ? String(d[yCol])
+                            : yBinLabels.find((label, i) => {
+                                return d[yCol] >= yBins[i].x0 && d[yCol] < yBins[i].x1;
+                            }) || yBinLabels[yBinLabels.length - 1] 
+                }));
+
+                if(groupByAttribute){
+                    const groupedData = d3.rollups(
+                        data,
+                        v => {
+                            let groupCounts = {};
+                            let groupIDs = {};  
+                    
+                            v.forEach(d => {
+                                if (!groupCounts[d[groupByAttribute]]) {
+                                    groupCounts[d[groupByAttribute]] = 0;
+                                    groupIDs[d[groupByAttribute]] = []; 
+                                }
+                                groupCounts[d[groupByAttribute]] += 1;
+                                groupIDs[d[groupByAttribute]].push(d.ID); 
+                            });
+                    
+                            return { counts: groupCounts, ids: groupIDs };  
+                        },
+                        d => d.binnedNumericalXCol, 
+                        d => d.binnedNumericalYCol  
+                    );
+
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            groups: groupData.counts, 
+                            ids: groupData.ids
+                        }))
+                    );
+
+                    xCategories = [...xBinLabels, ...uniqueXStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+                    yCategories = [...yBinLabels, ...uniqueYStringBins].filter((v, i, self) => self.indexOf(v) === i); 
+
+                    xScale = d3.scaleBand().domain(xCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(yCategories).range([height, 0]).padding(0.05);
+
+                    svg.selectAll("g.cell-group")
+                        .data(heatmapData)
+                        .join("g")
+                        .attr("class", "cell-group")
+                        .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                        .each(function (d) {
+                            const g = d3.select(this);
+                            let yOffset = 0;
+                            const total = d3.sum(Object.values(d.groups));
+
+                            Object.entries(d.groups).forEach(([group, count]) => {
+                                g.append("rect")
+                                    .attr("x", 0)
+                                    .attr("y", yOffset) 
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)  
+                                    .attr("fill", groupColorScale(group))
+                                    .attr("stroke", "white")
+                                    .attr("data-group", group);
+
+                                yOffset += (yScale.bandwidth() * count) / total; 
+                            });
+                        });   
+                }
+                else{
+                    const groupedData = d3.rollups(
+                        data,
+                        v => ({
+                            count: v.length,  
+                            ids: v.map(d => d.ID) 
+                        }),  
+                        d => d.binnedNumericalXCol,   
+                        d => d.binnedNumericalYCol  
+                    );
+        
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            value: groupData.count,  
+                            ids: groupData.ids
+                        }))
+                    );
+        
+                    xScale = d3.scaleBand().domain(xCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(yCategories).range([height, 0]).padding(0.05);
+                    const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                        .domain([0, d3.max(heatmapData, d => d.value)]);
+                
+                    svg.selectAll("rect")
+                        .data(heatmapData)
+                        .join("rect")
+                        .attr("x", d => xScale(d.x))
+                        .attr("y", d => yScale(d.y))
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("fill", d => {
+                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+
+                            if (isSelected) {
+                                return "gold"; 
+                            }
+                            if (d.y === "NaN") {
+                                return "gray";
+                            }
+                            if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
+                                return "gray";
+                            }
+        
+                            return colorScale(d.value); 
+                        })
+                        // .attr("stroke", "gray")
+                        // .attr("stroke-width", 0.5)
+                        .attr("stroke", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? "red" : "gray";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? 1 : 0.5
+                        });
+        
+                    const legendHeight = height;
+                    const legendWidth = 10;
+                    const legendX = width + 5; 
+                    const legendY = 0;
+        
+                    const legendScale = d3.scaleLinear()
+                        .domain(colorScale.domain())
+                        .range([legendHeight, 0]);
+            
+                    const linearGradient = defs.append("linearGradient")
+                        .attr("id", gradientID)
+                        .attr("x1", "0%").attr("x2", "0%")
+                        .attr("y1", "100%").attr("y2", "0%");
+        
+                    const numGradientStops = 10;
+                    d3.range(numGradientStops).forEach(d => {
+                        linearGradient.append("stop")
+                            .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                            .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+                    });
+        
+                    svg.append("rect")
+                        .attr("x", legendX)
+                        .attr("y", legendY)
+                        .attr("width", legendWidth)
+                        .attr("height", legendHeight)
+                        .style("fill", `url(#${gradientID})`)
+                        .attr("stroke", "black");
+        
+                    svg.append("g")
+                        .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                        .call(d3.axisRight(legendScale)
+                            .ticks(5))
+                        .selectAll("text")
+                        .style("font-size", "8px");
+                }
+            }
+            /// Non numeric X plot ///
+            else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
+            {
+                data = data.map(d => ({
+                    ...d,
+                    binnedNumericalCol: isNaN(d[yCol])
+                        ? String(d[yCol])
+                        : yBinLabels.find((label, i) => d[yCol] >= yBins[i].x0 && d[yCol] < yBins[i].x1) || yBinLabels[yBinLabels.length - 1]
+                }));
+
+                if(groupByAttribute){
+                    const groupedData = d3.rollups(
+                        data,
+                        v => {
+                            let groupCounts = {};
+                            let groupIDs = {};  
+                    
+                            v.forEach(d => {
+                                if (!groupCounts[d[groupByAttribute]]) {
+                                    groupCounts[d[groupByAttribute]] = 0;
+                                    groupIDs[d[groupByAttribute]] = []; 
+                                }
+                                groupCounts[d[groupByAttribute]] += 1;
+                                groupIDs[d[groupByAttribute]].push(d.ID); 
+                            });
+                    
+                            return { counts: groupCounts, ids: groupIDs };  
+                        },
+                        d => d[xCol], 
+                        d => d.binnedNumericalCol  
+                    );
+
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            groups: groupData.counts, 
+                            ids: groupData.ids
+                        }))
+                    );
+
+                    xScale = d3.scaleBand().domain(uniqueXCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(yCategories).range([height, 0]).padding(0.05);
+
+                    svg.selectAll("g.cell-group")
+                        .data(heatmapData)
+                        .join("g")
+                        .attr("class", "cell-group")
+                        .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                        .each(function (d) {
+                            const g = d3.select(this);
+                            let yOffset = 0;
+                            const total = d3.sum(Object.values(d.groups));
+
+                            Object.entries(d.groups).forEach(([group, count]) => {
+                                g.append("rect")
+                                    .attr("x", 0)
+                                    .attr("y", yOffset) 
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)  
+                                    .attr("fill", groupColorScale(group))
+                                    .attr("stroke", "white")
+                                    .attr("data-group", group);
+
+                                yOffset += (yScale.bandwidth() * count) / total; 
+                            });
+                        });                
+                }
+                else{
+                    const groupedData = d3.rollups(
+                        data,
+                        v => ({
+                            count: v.length,  
+                            ids: v.map(d => d.ID) 
+                        }),
+                        d => d[xCol],   
+                        d => d.binnedNumericalCol  
+                    );
+
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            value: groupData.count,  
+                            ids: groupData.ids 
+                        }))
+                    );
+
+                    xScale = d3.scaleBand().domain(uniqueXCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(yCategories).range([height, 0]).padding(0.05);
+                    const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                        .domain([0, d3.max(heatmapData, d => d.value)]);
+
+                    svg.selectAll("rect")
+                        .data(heatmapData)
+                        .join("rect")
+                        .attr("x", d => xScale(d.x))
+                        .attr("y", d => yScale(d.y))
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("fill", d => {
+                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+
+                            if (isSelected) {
+                                return "gold"; 
+                            }
+                            if (d.y === "NaN") {
+                                return "gray";
+                            }
+                            if (uniqueYStringBins.includes(d.y)) {
+                                return "gray";
+                            }
+        
+                            return colorScale(d.value); 
+                        })
+                        // .attr("stroke", "gray")
+                        // .attr("stroke-width", 0.5)
+                        .attr("stroke", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? "red" : "gray";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? 1 : 0.5
+                        });
+
+                    const legendHeight = height;
+                    const legendWidth = 10;
+                    const legendX = width + 5; 
+                    const legendY = 0;
+
+                    const legendScale = d3.scaleLinear()
+                        .domain(colorScale.domain())
+                        .range([legendHeight, 0]);
+
+                    const linearGradient = defs.append("linearGradient")
+                        .attr("id", gradientID)
+                        .attr("x1", "0%").attr("x2", "0%")
+                        .attr("y1", "100%").attr("y2", "0%");
+
+                    const numGradientStops = 10;
+                    d3.range(numGradientStops).forEach(d => {
+                        linearGradient.append("stop")
+                            .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                            .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+                    });
+
+                    svg.append("rect")
+                        .attr("x", legendX)
+                        .attr("y", legendY)
+                        .attr("width", legendWidth)
+                        .attr("height", legendHeight)
+                        .style("fill", `url(#${gradientID})`)
+                        .attr("stroke", "black");
+
+                    svg.append("g")
+                        .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                        .call(d3.axisRight(legendScale)
+                            .ticks(5))
+                        .selectAll("text")
+                        .style("font-size", "8px");
+                }
+
+                svg.append("g")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end")
+                    .style("font-size", "8px")
+                    .attr("dx", "-0.5em")
+                    .attr("dy", "0.5em")
+                    .attr("transform", "rotate(-45)")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                    .append("title")  
+                    .text(d => d);
+        
+                svg.append("g")
+                    .call(d3.axisLeft(yScale).tickFormat(d => {
+                        if (typeof d === "string" && d.includes("-")) {
+                            const [min, max] = d.split("-").map(Number);
+                            return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                        }
+                        return d3.format(".3s")(d); 
+                    }))
+                    .selectAll("text")
+                    .style("font-size", "8px");
+            }
+
+            /// Non numeric Y plot ///
+            else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
+            {
+                data = data.map(d => ({
+                        ...d,
+                        binnedNumericalCol: isNaN(d[xCol])
+                            ? String(d[xCol]) // Keep non-numeric values as separate bins
+                            : xBinLabels.find((label, i) => {
+                                return d[xCol] >= xBins[i].x0 && d[xCol] < xBins[i].x1;
+                            }) || xBinLabels[xBinLabels.length - 1] // Default to last bin
+
+                }));
+
+                if(groupByAttribute){
+                    const groupedData = d3.rollups(
+                        data,
+                        v => {
+                            let groupCounts = {};
+                            let groupIDs = {};  
+                    
+                            v.forEach(d => {
+                                if (!groupCounts[d[groupByAttribute]]) {
+                                    groupCounts[d[groupByAttribute]] = 0;
+                                    groupIDs[d[groupByAttribute]] = [];  
+                                }
+                                groupCounts[d[groupByAttribute]] += 1;
+                                groupIDs[d[groupByAttribute]].push(d.ID); 
+                            });
+                    
+                            return { counts: groupCounts, ids: groupIDs }; 
+                        },
+                        d => d.binnedNumericalCol, 
+                        d => d[yCol] 
+                    );
+
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            groups: groupData.counts,  
+                            ids: groupData.ids 
+                        }))
+                    );
+
+                    xScale = d3.scaleBand().domain(xCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(uniqueYCategories).range([height, 0]).padding(0.05);
+
+                    svg.selectAll("g.cell-group")
+                        .data(heatmapData)
+                        .join("g")
+                        .attr("class", "cell-group")
+                        .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                        .each(function (d) {
+                            const g = d3.select(this);
+                            let yOffset = 0;
+                            const total = d3.sum(Object.values(d.groups));
+
+                            Object.entries(d.groups).forEach(([group, count]) => {
+                                g.append("rect")
+                                    .attr("x", 0)
+                                    .attr("y", yOffset) 
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)  
+                                    .attr("fill", groupColorScale(group))
+                                    .attr("stroke", "white")
+                                    .attr("data-group", group);
+
+                                yOffset += (yScale.bandwidth() * count) / total; 
+                            });
+                        });         
+
+                }
+                else{
+                    const groupedData = d3.rollups(
+                        data,
+                        v => ({
+                            count: v.length,  
+                            ids: v.map(d => d.ID) 
+                        }),   
+                        d => d.binnedNumericalCol,   
+                        d => d[yCol]  
+                    );
+
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            value: groupData.count,  
+                            ids: groupData.ids 
+                        }))
+                    );
+
+                    xScale = d3.scaleBand().domain(xCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(uniqueYCategories).range([height, 0]).padding(0.05);
+                    const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                        .domain([0, d3.max(heatmapData, d => d.value)]);
+
+                    svg.selectAll("rect")
+                        .data(heatmapData)
+                        .join("rect")
+                        .attr("x", d => xScale(d.x))
+                        .attr("y", d => yScale(d.y))
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("fill", d => {
+                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+
+                            if (isSelected) {
+                                return "gold"; 
+                            }
+                            if (d.y === "NaN") {
+                                return "gray";
+                            }
+                            if (uniqueXStringBins.includes(d.x)) {
+                                return "gray";
+                            }
+                            return colorScale(d.value); 
+                        })
+                        // .attr("stroke", "gray")
+                        // .attr("stroke-width", 0.5)    
+                        .attr("stroke", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? "red" : "gray";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? 1 : 0.5
+                        });
+
+                    const legendHeight = height;
+                    const legendWidth = 10;
+                    const legendX = width + 5; 
+                    const legendY = 0;
+
+                    const legendScale = d3.scaleLinear()
+                        .domain(colorScale.domain())
+                        .range([legendHeight, 0]);
+
+                    const linearGradient = defs.append("linearGradient")
+                        .attr("id", gradientID)
+                        .attr("x1", "0%").attr("x2", "0%")
+                        .attr("y1", "100%").attr("y2", "0%");
+
+                    const numGradientStops = 10;
+                    d3.range(numGradientStops).forEach(d => {
+                        linearGradient.append("stop")
+                            .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                            .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+                    });
+
+                    svg.append("rect")
+                        .attr("x", legendX)
+                        .attr("y", legendY)
+                        .attr("width", legendWidth)
+                        .attr("height", legendHeight)
+                        .style("fill", `url(#${gradientID})`)
+                        .attr("stroke", "black");
+
+                    svg.append("g")
+                        .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                        .call(d3.axisRight(legendScale)
+                            .ticks(5))
+                        .selectAll("text")
+                        .style("font-size", "8px");
+                }
+                svg.append("g")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale).tickFormat(d => {
+                        if (typeof d === "string" && d.includes("-")) {
+                            const [min, max] = d.split("-").map(Number);
+                            return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                        }
+                        return d3.format(".3s")(d); 
+                    }))                
+                    .selectAll("text")
+                    .style("text-anchor", "end")
+                    .style("font-size", "8px")
+                    .attr("dx", "-0.5em")
+                    .attr("dy", "0.5em")
+                    .attr("transform", "rotate(-45)");
+        
+                svg.append("g")
+                    .call(d3.axisLeft(yScale))
+                    .selectAll("text")
+                    .style("font-size", "8px")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                    .append("title")  
+                    .text(d => d);
+            }
+
+            /// All non numeric plot ///
+            else{   
+                if(groupByAttribute){
+                    const groupedData = d3.rollups(
+                        data,
+                        v => {
+                            let groupCounts = {};
+                            let groupIDs = {};  
+                    
+                            v.forEach(d => {
+                                if (!groupCounts[d[groupByAttribute]]) {
+                                    groupCounts[d[groupByAttribute]] = 0;
+                                    groupIDs[d[groupByAttribute]] = [];  
+                                }
+                                groupCounts[d[groupByAttribute]] += 1;
+                                groupIDs[d[groupByAttribute]].push(d.ID); 
+                            });
+                    
+                            return { counts: groupCounts, ids: groupIDs }; 
+                        },
+                        d => d[xCol], 
+                        d => d[yCol] 
+                    );
+
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            groups: groupData.counts, 
+                            ids: groupData.ids 
+                        }))
+                    );
+
+                    xScale = d3.scaleBand().domain(uniqueXCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(uniqueYCategories).range([height, 0]).padding(0.05);
+
+                    svg.selectAll("g.cell-group")
+                        .data(heatmapData)
+                        .join("g")
+                        .attr("class", "cell-group")
+                        .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`)
+                        .each(function (d) {
+                            const g = d3.select(this);
+                            let yOffset = 0;
+                            const total = d3.sum(Object.values(d.groups));
+
+                            Object.entries(d.groups).forEach(([group, count]) => {
+                                g.append("rect")
+                                    .attr("x", 0)
+                                    .attr("y", yOffset) 
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)  
+                                    .attr("fill", groupColorScale(group))
+                                    .attr("stroke", "white")
+                                    .attr("data-group", group);
+
+                                yOffset += (yScale.bandwidth() * count) / total; 
+                            });
+                        });
+
+                }
+                else{
+                    const groupedData = d3.rollups(
+                        data,
+                        v => ({
+                            count: v.length,  
+                            ids: v.map(d => d.ID) 
+                        }),  
+                        d => d[xCol],
+                        d => d[yCol]
+                    );
+        
+                    const heatmapData = groupedData.flatMap(([xKey, yValues]) =>
+                        yValues.map(([yKey, groupData]) => ({
+                            x: xKey,
+                            y: yKey,
+                            value: groupData.count,  
+                            ids: groupData.ids 
+                        }))
+                    );
+        
+                    xScale = d3.scaleBand().domain(uniqueXCategories).range([0, width]).padding(0.05);
+                    yScale = d3.scaleBand().domain(uniqueYCategories).range([height, 0]).padding(0.05);
+                    
+                    const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                        .domain([0, d3.max(heatmapData, d => d.value)]);
+                
+                    svg.selectAll("rect")
+                        .data(heatmapData)
+                        .join("rect")
+                        .attr("x", d => xScale(d.x))
+                        .attr("y", d => yScale(d.y))
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("fill", (d) => {
+                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            return isSelected ? "gold" : colorScale(d.value);
+                        })
+                        // .attr("stroke", "gray")
+                        // .attr("stroke-width", 0.5)    
+                        .attr("stroke", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? "red" : "gray";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
+                            return isPredicated ? 1 : 0.5
+                        });
+        
+        
+                    const legendHeight = height;
+                    const legendWidth = 10;
+                    const legendX = width + 5; 
+                    const legendY = 0;
+        
+                    const legendScale = d3.scaleLinear()
+                        .domain(colorScale.domain())
+                        .range([legendHeight, 0]);
+                
+                    const linearGradient = defs.append("linearGradient")
+                        .attr("id", gradientID)
+                        .attr("x1", "0%").attr("x2", "0%")
+                        .attr("y1", "100%").attr("y2", "0%");                
+        
+                    const numGradientStops = 10;
+                    d3.range(numGradientStops).forEach(d => {
+                        linearGradient.append("stop")
+                            .attr("offset", `${(d / (numGradientStops - 1)) * 100}%`)
+                            .attr("stop-color", colorScale(legendScale.domain()[0] + (d / (numGradientStops - 1)) * (legendScale.domain()[1] - legendScale.domain()[0])));
+                    });
+            
+                    svg.append("rect")
+                        .attr("x", legendX)
+                        .attr("y", legendY)
+                        .attr("width", legendWidth)
+                        .attr("height", legendHeight)
+                        .style("fill", `url(#${gradientID})`)
+                        .attr("stroke", "black");
+        
+                    svg.append("g")
+                        .attr("transform", `translate(${legendX + legendWidth}, ${legendY})`)
+                        .call(d3.axisRight(legendScale)
+                            .ticks(5))
+                        .selectAll("text")
+                        .style("font-size", "8px");
+                }
+                svg.append("g")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end")
+                    .style("font-size", "8px")
+                    .attr("dx", "-0.5em")
+                    .attr("dy", "0.5em")
+                    .attr("transform", "rotate(-45)")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                    .append("title")  
+                    .text(d => d);
+        
+                svg.append("g")
+                    .call(d3.axisLeft(yScale))
+                    .selectAll("text")
+                    .style("font-size", "8px")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
+                    .append("title")  
+                    .text(d => d);
+            }
+            // svg.append("g")
+            //     .attr("transform", `translate(0, ${height})`)  // Position at bottom
+            //     .call(d3.axisBottom(xScale).tickFormat(d => d.length > 10 ? d.substring(0, 10) + "…" : d))  
+            //     .selectAll("text")
+            //     .style("text-anchor", "end")
+            //     .style("font-size", "8px")
+            //     .attr("dx", "-0.5em")
+            //     .attr("dy", "0.5em")
+            //     .attr("transform", "rotate(-45)");
+
+            // // Add y-axis
+            // svg.append("g")
+            //     .attr("transform", `translate(-15, 0)`)  // Position at left
+            //     .call(d3.axisLeft(yScale))
+            //     .selectAll("text")
+            //     .style("font-size", "8px");
+        }
+
     }
 
     getScatterScale(data, column, size, isX = true) {

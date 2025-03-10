@@ -11,6 +11,7 @@ class DataModel {
     this.transformationPoints = [];
     this.selectedGroups = [];
     this.groupByAttribute = null;
+    this.previewData = this.data;
   }
 
   // New method to update the selected groups:
@@ -92,6 +93,10 @@ class DataModel {
     this.filteredData = this.filteredData.filter(aq.escape(condition));
   }
 
+  getPreviewData(condition) {
+    return this.filteredData.filter(aq.escape(condition));
+  }
+
   undoLastTransformation() {
     if (this.dataStates.length > 0) {
         this.redoStack.push(this.filteredData); 
@@ -156,13 +161,51 @@ class DataModel {
     this.filteredData = this.filteredData.derive({ 
       [column]: aq.escape(condition)
     });
+  }
 
-  }
-    setSelectedPoints(points) {
-      this.selectedPoints = points;
+  previewAverage(column) {
+    const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
+
+    const isNumeric = this.filteredData.array(column).some(v => typeof v === "number" && !isNaN(v));
+
+    let imputedValue;
+
+    /// Calculate numeric average ///
+    if(isNumeric){
+      const columnValues = this.filteredData.array(column).filter((v) => !isNaN(v) && v > 0);
+      console.log("Column values: ", columnValues);
+      imputedValue = columnValues.length > 0 
+          ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
+          : 0;
+        
+      console.log("Avg: ", imputedValue);
     }
-  
-    getSelectedPoints() {
-      return this.selectedPoints;
+    /// Calculate categorical mode ///
+    else{
+        const frequencyMap = this.filteredData.array(column).reduce((acc, val) => {
+            acc[val] = (acc[val] || 0) + 1;
+            return acc;
+        }, {});
+
+        imputedValue = Object.keys(frequencyMap).reduce((a, b) =>
+            frequencyMap[a] > frequencyMap[b] ? a : b
+        );
+
+        console.log("Computed Categorical Mode: ", imputedValue);
     }
+
+    let condition = (d) => selectedIds.has(d.ID) ? imputedValue : d[column];
+
+    return this.filteredData.derive({ 
+      [column]: aq.escape(condition)
+    });
   }
+
+  setSelectedPoints(points) {
+    this.selectedPoints = points;
+  }
+
+  getSelectedPoints() {
+    return this.selectedPoints;
+  }
+}

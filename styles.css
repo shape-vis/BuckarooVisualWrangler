@@ -95,9 +95,7 @@
 }
 
 .selected {
-    stroke: black !important;        
-    fill: red !important;
-    stroke-width: 2px !important; 
+    fill: gold !important;
 }
 
 .linechart-button,

@@ -23,7 +23,7 @@ const data = aq.table({
   });
 
 
-practiceController = new ScatterplotController(data, "#matrix-vis-practice");
+// practiceController = new ScatterplotController(data, "#matrix-vis-practice");
 
 // const data2 = aq.table({
 //     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],

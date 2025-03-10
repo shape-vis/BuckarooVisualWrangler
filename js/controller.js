@@ -6,7 +6,7 @@ class ScatterplotController {
       this.xCol = null;
       this.yCol = null;
 
-      this.updateSelectedAttributes(this.selectedAttributes);
+    //   this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
     }
 
@@ -132,35 +132,37 @@ class ScatterplotController {
     predicateFilter(column, operator, value, isNumeric)
     {
         let predicatePoints = [];
-        if (isNumeric){
-            this.model.getData().objects().forEach(row => {
-                const cellValue = row[column];
-        
-                let conditionMet = false;
-                switch (operator) {
-                    case "<": conditionMet = cellValue < value; break;
-                    case ">": conditionMet = cellValue > value; break;
-                    case "=": conditionMet = cellValue === value; break;
-                    case "!=": conditionMet = cellValue !== value; break;
-                }
-        
-                if (!conditionMet) predicatePoints.push(row);
-            });
+        if(column){
+            if (isNumeric){
+                this.model.getData().objects().forEach(row => {
+                    const cellValue = row[column];
+            
+                    let conditionMet = false;
+                    switch (operator) {
+                        case "<": conditionMet = cellValue < value; break;
+                        case ">": conditionMet = cellValue > value; break;
+                        case "=": conditionMet = cellValue === value; break;
+                        case "!=": conditionMet = cellValue !== value; break;
+                    }
+            
+                    if (!conditionMet) predicatePoints.push(row);
+                });
+            }
+            else {
+                this.model.getData().objects().forEach(row => {
+                    const cellValue = row[column];
+            
+                    let conditionMet = false;
+                    switch (operator) {
+                        case "=": conditionMet = cellValue === value; break;
+                        case "!=": conditionMet = cellValue !== value; break;
+                    }
+            
+                    if (!conditionMet) predicatePoints.push(row);
+                });
+            }
         }
-        else {
-            this.model.getData().objects().forEach(row => {
-                const cellValue = row[column];
         
-                let conditionMet = false;
-                switch (operator) {
-                    case "=": conditionMet = cellValue === value; break;
-                    case "!=": conditionMet = cellValue !== value; break;
-                }
-        
-                if (!conditionMet) predicatePoints.push(row);
-            });
-        }
-
         this.view.setPredicatePoints(predicatePoints);
 
         const selectionEnabled = false;
@@ -233,6 +235,7 @@ class ScatterplotController {
                
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
+        this.updatePreviews(selectedPoints, groupByAttribute, xCol, yCol);
         this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
   
@@ -256,6 +259,7 @@ class ScatterplotController {
 
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
+        this.updatePreviews(selectedPoints, groupByAttribute, column);
 
         const selectionEnabled = true;
         this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
@@ -286,6 +290,7 @@ class ScatterplotController {
 
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
+        this.updatePreviews(selectedPoints, groupByAttribute, xCol, yCol);
 
         const selectionEnabled = true;
         this.render(selectionEnabled);        
@@ -334,6 +339,36 @@ class ScatterplotController {
         const selectGroupsBtn = document.getElementById("select-groups-btn");
         if (selectGroupsBtn) {
             selectGroupsBtn.addEventListener("click", this.openGroupSelectionPopup.bind(this));
+        }
+    }
+
+    updatePreviews(selectedPoints, groupByAttribute, xCol, yCol){
+        const currData = this.model.getData();
+
+        if (selectedPoints.length === 0) {
+            document.getElementById("preview-remove").style.display = "none";
+            document.getElementById("preview-impute-average-x").style.display = "none";
+            document.getElementById("preview-impute-average-y").style.display = "none";
+            return;
+        }
+    
+        let isHistogram = false;
+        if(!yCol)   isHistogram = true;
+        const removedData = this.model.getPreviewData((row) => !selectedPoints.some((point) => point.ID === row.ID));
+        console.log("removedData", removedData);
+        this.view.drawPreviewPlot(removedData, "preview-remove", isHistogram, groupByAttribute, xCol, yCol);
+    
+        const imputedXData = this.model.previewAverage(xCol);
+        console.log("imputedXData", imputedXData);
+        this.view.drawPreviewPlot(imputedXData, "preview-impute-average-x", isHistogram, groupByAttribute, xCol, yCol);
+    
+        if(yCol){
+            const imputedYData = this.model.previewAverage(yCol);
+            console.log("imputedYData", imputedYData);
+            this.view.drawPreviewPlot(imputedYData, "preview-impute-average-y", isHistogram, groupByAttribute, xCol, yCol);
+        }
+        else{
+            document.getElementById("preview-impute-average-y").style.display = "none";
         }
     }
 }
@@ -410,7 +445,6 @@ function attachButtonEventListeners(){
         radio.addEventListener("change", (event) => {
             const controller = getActiveController();
             if (event.target.value === "selectData" && event.target.checked) {
-                // here instead of calling enableBrushing, try calling render() but pass in a selectionEnabled variable
                 const selectionEnabled = true;
                 controller.render(selectionEnabled);
                 // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
