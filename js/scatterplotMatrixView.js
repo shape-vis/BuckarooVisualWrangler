@@ -148,6 +148,12 @@ class ScatterplotMatrixView{
    
         const columnData = table.column(selectedColumn);
         const isNumeric = columnData.every(value => !isNaN(value));
+        const clearPredicateButton = document.createElement("button");
+        clearPredicateButton.textContent = "Clear Predicate";
+        clearPredicateButton.classList.add("clear-predicate-button"); 
+        clearPredicateButton.addEventListener("click", () => {
+            controller.predicateFilter(false); // Reset predicatePoints to [] and re-plot
+        });
     
         if (isNumeric) {
             const operatorDropdown = document.createElement("select");
@@ -171,6 +177,7 @@ class ScatterplotMatrixView{
             conditionContainer.appendChild(operatorDropdown);
             conditionContainer.appendChild(valueInput);
             conditionContainer.appendChild(applyButton);
+            conditionContainer.appendChild(clearPredicateButton);
             
         } else {
             const operatorDropdown = document.createElement("select");
@@ -192,6 +199,7 @@ class ScatterplotMatrixView{
     
             conditionContainer.appendChild(operatorDropdown);
             conditionContainer.appendChild(valueDropdown);
+            conditionContainer.appendChild(clearPredicateButton);
     
             valueDropdown.addEventListener("change", () => controller.predicateFilter(selectedColumn, operatorDropdown.value, valueDropdown.value, isNumeric));
             operatorDropdown.addEventListener("change", () => controller.predicateFilter(selectedColumn, operatorDropdown.value, valueDropdown.value, isNumeric));
@@ -364,7 +372,7 @@ class ScatterplotMatrixView{
             .text("Indicates groups > 2 Median Absolute Deviations (MAD) from dataset median");
     }
 
-    plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, handleBrush, handleBarClick, handleHeatmapClick) {  
+    plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {  
         console.log("matrix predicate points", this.predicatePoints);
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
@@ -512,7 +520,7 @@ class ScatterplotMatrixView{
                 
                         const tooltip = d3.select("#tooltip");
 
-                        cellGroup.selectAll("g.series")
+                        const bars = cellGroup.selectAll("g.series")
                             .data(series)
                             .join("g")
                             .attr("class", "series")
@@ -522,40 +530,50 @@ class ScatterplotMatrixView{
                             .data(d => d)
                             .join("rect")
                             .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
-                            .attr("y", d => yScale(d[1]))
-                            .attr("width", binWidth)
-                            .attr("height", d => yScale(d[0]) - yScale(d[1]))
-                            .on("mouseover", function(event, d) {
-                                const group = d3.select(this.parentNode).datum().key;
-                                const count = d[1] - d[0];
-                                const totalCount = d.data.total;
-                                d3.select(this).attr("opacity", 0.5);
-                                tooltip.style("display", "block")
-                                    .html(`<strong>Bin Range:</strong> ${d.data.x0.toFixed(2)} - ${d.data.x1.toFixed(2)}<br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
-                                    .style("left", `${event.pageX + 10}px`)
-                                    .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mousemove", function(event) {
-                                tooltip.style("left", `${event.pageX + 10}px`)
-                                    .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mouseout", function() {
-                                const group = d3.select(this.parentNode).datum().key;
-                                d3.select(this).attr("opacity", 0.8);
-                                tooltip.style("display", "none");
-                            })
-                            .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", function (event, d) {
-                                if (!selectionEnabled) return;
-                                d3.selectAll(".selected").classed("selected", false);
-                                d3.select(this).classed("selected", true)
-                                    .style("fill", "red") 
-                                    .style("stroke", "black")
-                                    .style("stroke-width", "2px");
+                            .attr("width", binWidth);
+                        if(animate){
+                            bars.attr("y", this.size)
+                            .attr("height", 0)
+                            .transition() 
+                            .duration(800)
+                            .ease(d3.easeCubicOut)
+                            .attr("y", d => yScale(d[1])) 
+                            .attr("height", d => yScale(d[0]) - yScale(d[1]));
+                        } else{
+                            bars.attr("y", d => yScale(d[1]))  
+                                .attr("height", d => yScale(d[0]) - yScale(d[1]));
+                        }
+                        bars.on("mouseover", function(event, d) {
+                            const group = d3.select(this.parentNode).datum().key;
+                            const count = d[1] - d[0];
+                            const totalCount = d.data.total;
+                            d3.select(this).attr("opacity", 0.5);
+                            tooltip.style("display", "block")
+                                .html(`<strong>Bin Range:</strong> ${d.data.x0.toFixed(2)} - ${d.data.x1.toFixed(2)}<br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
+                                .style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mousemove", function(event) {
+                            tooltip.style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mouseout", function() {
+                            const group = d3.select(this.parentNode).datum().key;
+                            d3.select(this).attr("opacity", 0.8);
+                            tooltip.style("display", "none");
+                        })
+                        .attr("data-ids", d => d.data.ids.join(","))
+                        .on("click", function (event, d) {
+                            if (!selectionEnabled) return;
+                            d3.selectAll(".selected").classed("selected", false);
+                            d3.select(this).classed("selected", true)
+                                .style("fill", "red") 
+                                .style("stroke", "black")
+                                .style("stroke-width", "2px");
 
-                                const group = d3.select(this.parentNode).datum().key;  
-                                handleBarClick(event, d, xCol, groupByAttribute, group)
-                            });
+                            const group = d3.select(this.parentNode).datum().key;  
+                            handleBarClick(event, d, xCol, groupByAttribute, group)
+                        });
                     }
                     else{
                         // No group by
@@ -591,13 +609,13 @@ class ScatterplotMatrixView{
                         
                         const tooltip = d3.select("#tooltip");
     
-                        cellGroup.selectAll("rect")
+                        const bars = cellGroup.selectAll("rect")
                             .data(histData)
                             .join("rect")
                             .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.x0))
                             .attr("width", binWidth)
-                            .attr("y", d => yScale(d.length))
-                            .attr("height", d => numericSpace - yScale(d.length))
+                            // .attr("y", d => yScale(d.length))
+                            // .attr("height", d => numericSpace - yScale(d.length))
                             .attr("fill", (d) => {
                                 const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                                 return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
@@ -613,33 +631,45 @@ class ScatterplotMatrixView{
                                 return isPredicated ? 1 : 0
                             })
                             .attr("opacity", 0.8)
-                            .attr("data-ids", d => d.ids.join(","))
-                            .on("mouseover", function(event, d) {
-                                d3.select(this).attr("opacity", 0.5);
-                                tooltip.style("display", "block")
-                                    .html(d.category
-                                        ? `<strong>${d.category} Count:</strong> ${d.length}`
-                                        : `<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count:</strong> ${d.length}`)
-                                    .style("left", `${event.pageX + 10}px`)
-                                    .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mousemove", function(event) {
-                                tooltip.style("left", `${event.pageX + 10}px`)
-                                    .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mouseout", function() {
-                                d3.select(this).attr("opacity", 0.8);
-                                tooltip.style("display", "none");
-                            })
-                            .attr("data-ids", d => d.ids.join(","))
-                            .on("click", function (event, d) {
-                                if (!selectionEnabled) return;
+                            .attr("data-ids", d => d.ids.join(","));
+                            if(animate){
+                                bars.attr("y", this.size)
+                                    .attr("height", 0)
+                                    .transition() 
+                                    .duration(800)
+                                    .ease(d3.easeCubicOut)
+                                    .attr("y", d => yScale(d.length)) 
+                                    .attr("height", d => Math.max(0, this.size - yScale(d.length)));
+                            } else{
+                                bars.attr("y", d => yScale(d.length)) 
+                                    .attr("height", d => Math.max(0, this.size - yScale(d.length)));
+                            }
+                            bars.on("mouseover", function(event, d) {
+                                    d3.select(this).attr("opacity", 0.5);
+                                    tooltip.style("display", "block")
+                                        .html(d.category
+                                            ? `<strong>${d.category} Count:</strong> ${d.length}`
+                                            : `<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count:</strong> ${d.length}`)
+                                        .style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mousemove", function(event) {
+                                    tooltip.style("left", `${event.pageX + 10}px`)
+                                        .style("top", `${event.pageY + 10}px`);
+                                })
+                                .on("mouseout", function() {
+                                    d3.select(this).attr("opacity", 0.8);
+                                    tooltip.style("display", "none");
+                                })
+                                .attr("data-ids", d => d.ids.join(","))
+                                .on("click", function (event, d) {
+                                    if (!selectionEnabled) return;
 
-                                d3.selectAll(".selected").classed("selected", false);
-                                d3.select(this).classed("selected", true)
-                                    .style("fill", "gold") 
-                                handleBarClick(event, d, xCol, groupByAttribute)
-                            });
+                                    d3.selectAll(".selected").classed("selected", false);
+                                    d3.select(this).classed("selected", true)
+                                        .style("fill", "gold") 
+                                    handleBarClick(event, d, xCol, groupByAttribute)
+                                });    
                     }
                     
                     cellGroup
@@ -732,7 +762,7 @@ class ScatterplotMatrixView{
                         const stackGen = d3.stack().keys(groups);
                         const series = stackGen(stackedData);
                         
-                        cellGroup.selectAll("g.series")
+                        const bars = cellGroup.selectAll("g.series")
                             .data(series)
                             .join("g")
                             .attr("class", "series")
@@ -742,41 +772,51 @@ class ScatterplotMatrixView{
                             .data(d => d)
                             .join("rect")
                             .attr("x", d => xScale(d.data.category))
-                            .attr("y", d => yScale(d[1]))
-                            .attr("width", xScale.bandwidth())
-                            .attr("height", d => yScale(d[0]) - yScale(d[1]))
-                            .on("mouseover", function(event, d) {
-                                const group = d3.select(this.parentNode).datum().key;
-                                const count = d[1] - d[0];
-                                const totalCount = groups.reduce((sum, key) => sum + (d.data[key] || 0), 0);
-                                d3.select(this).attr("opacity", 0.5);
-                                tooltip.style("display", "block")
-                                    .html(`<strong>${d.data.category}</strong><br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
-                                    .style("left", `${event.pageX + 10}px`)
+                            .attr("width", xScale.bandwidth());
+                        if(animate){
+                            bars.attr("y", this.size)
+                                .attr("height", 0)
+                                .transition() 
+                                .duration(800)
+                                .ease(d3.easeCubicOut)
+                                .attr("y", d => yScale(d[1])) 
+                                .attr("height", d => yScale(d[0]) - yScale(d[1]));
+                        } else{
+                            bars.attr("y", d => yScale(d[1])) 
+                                .attr("height", d => yScale(d[0]) - yScale(d[1]));
+                        }
+                        bars.on("mouseover", function(event, d) {
+                            const group = d3.select(this.parentNode).datum().key;
+                            const count = d[1] - d[0];
+                            const totalCount = groups.reduce((sum, key) => sum + (d.data[key] || 0), 0);
+                            d3.select(this).attr("opacity", 0.5);
+                            tooltip.style("display", "block")
+                                .html(`<strong>${d.data.category}</strong><br><strong>${group} Count:</strong> ${count}<br><strong>Total Bin Count:</strong> ${totalCount}`)
+                                .style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                            })
+                            .on("mousemove", function(event) {
+                            tooltip.style("left", `${event.pageX + 10}px`)
                                     .style("top", `${event.pageY + 10}px`);
-                                })
-                                .on("mousemove", function(event) {
-                                tooltip.style("left", `${event.pageX + 10}px`)
-                                        .style("top", `${event.pageY + 10}px`);
-                                })
-                                .on("mouseout", function() {
-                                const group = d3.select(this.parentNode).datum().key;
-                                d3.select(this).attr("opacity", 0.8);
-                                tooltip.style("display", "none");
-                                })
-                            .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", function (event, d) {
-                                if (!selectionEnabled) return;
+                            })
+                            .on("mouseout", function() {
+                            const group = d3.select(this.parentNode).datum().key;
+                            d3.select(this).attr("opacity", 0.8);
+                            tooltip.style("display", "none");
+                            })
+                        .attr("data-ids", d => d.data.ids.join(","))
+                        .on("click", function (event, d) {
+                            if (!selectionEnabled) return;
 
-                                d3.selectAll(".selected").classed("selected", false);
-                                d3.select(this).classed("selected", true)
-                                    .style("fill", "red") 
-                                    .style("stroke", "black")
-                                    .style("stroke-width", "2px");
+                            d3.selectAll(".selected").classed("selected", false);
+                            d3.select(this).classed("selected", true)
+                                .style("fill", "red") 
+                                .style("stroke", "black")
+                                .style("stroke-width", "2px");
 
-                                const group = d3.select(this.parentNode).datum().key;  
-                                handleBarClick(event, d, xCol, groupByAttribute, group);
-                            });
+                            const group = d3.select(this.parentNode).datum().key;  
+                            handleBarClick(event, d, xCol, groupByAttribute, group);
+                        });                            
                     }
                     else{
                         const histData = [];
@@ -797,13 +837,11 @@ class ScatterplotMatrixView{
                         
                         const tooltip = d3.select("#tooltip");
 
-                        cellGroup.selectAll("rect")
+                        const bars = cellGroup.selectAll("rect")
                             .data(histData)
                             .join("rect")
                             .attr("x", d => xScale(d.category))
                             .attr("width", xScale.bandwidth())
-                            .attr("y", d => yScale(d.length))
-                            .attr("height", d => Math.max(0, this.size - yScale(d.length)))
                             .attr("fill", (d) => {
                                 const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                                 return isSelected ? "gold" : "steelblue";
@@ -817,31 +855,43 @@ class ScatterplotMatrixView{
                                 return isPredicated ? 1 : 0
                             })
                             .attr("opacity", 0.8)
-                            .attr("data-ids", d => d.ids.join(","))
-                            .on("mouseover", function(event, d) {
-                                d3.select(this).attr("opacity", 0.5);
-                                tooltip.style("display", "block")
-                                    .html(`<strong>${d.category}</strong><br><strong>Count: </strong>${d.length}`)
-                                    .style("left", `${event.pageX + 10}px`)
-                                    .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mousemove", function(event) {
-                                tooltip.style("left", `${event.pageX + 10}px`)
-                                    .style("top", `${event.pageY + 10}px`);
-                            })
-                            .on("mouseout", function() {
-                                d3.select(this).attr("opacity", 0.8);
-                                tooltip.style("display", "none");
-                            })
-                            .attr("data-ids", d => d.ids.join(","))
-                            .on("click", function (event, d) {
-                                if (!selectionEnabled) return;
+                            .attr("data-ids", d => d.ids.join(","));
+                        if(animate){
+                            bars.attr("y", this.size)
+                                .attr("height", 0)
+                                .transition() 
+                                .duration(800)
+                                .ease(d3.easeCubicOut)
+                                .attr("y", d => yScale(d.length)) 
+                                .attr("height", d => Math.max(0, this.size - yScale(d.length)));
+                        } else{
+                            bars.attr("y", d => yScale(d.length)) 
+                                .attr("height", d => Math.max(0, this.size - yScale(d.length)));
+                        }
+                        bars.on("mouseover", function(event, d) {
+                            d3.select(this).attr("opacity", 0.5);
+                            tooltip.style("display", "block")
+                                .html(`<strong>${d.category}</strong><br><strong>Count: </strong>${d.length}`)
+                                .style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mousemove", function(event) {
+                            tooltip.style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mouseout", function() {
+                            d3.select(this).attr("opacity", 0.8);
+                            tooltip.style("display", "none");
+                        })
+                        .attr("data-ids", d => d.ids.join(","))
+                        .on("click", function (event, d) {
+                            if (!selectionEnabled) return;
 
-                                d3.selectAll(".selected").classed("selected", false);
-                                d3.select(this).classed("selected", true)
-                                    .style("fill", "gold") 
-                                handleBarClick(event, d, xCol, groupByAttribute)
-                            });
+                            d3.selectAll(".selected").classed("selected", false);
+                            d3.select(this).classed("selected", true)
+                                .style("fill", "gold") 
+                            handleBarClick(event, d, xCol, groupByAttribute)
+                        });
                     }
                     
                     cellGroup
@@ -913,7 +963,7 @@ class ScatterplotMatrixView{
 
                 
                 // this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute);
-                this.drawHeatMap(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick);
+                this.drawHeatMap(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);
 
             }
             });
@@ -1872,7 +1922,8 @@ class ScatterplotMatrixView{
         });
     }
 
-    drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick){
+    drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
+        console.log("animate", animate);
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
         const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
@@ -2006,24 +2057,37 @@ class ScatterplotMatrixView{
                         const total = d3.sum(Object.values(d.groups));
 
                         Object.entries(d.groups).forEach(([group, count]) => {
-                            g.append("rect")
+                            const rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("width", xScale.bandwidth())
-                                .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
-                                .attr("data-group", group)
-                                .on("mouseover", function (event) {
+                                .attr("data-group", group);
+                            if(animate){
+                                rect.attr("width", 0)
+                                    .attr("height", 0) 
+                                    .attr("opacity", 0)
+                                    .transition()
+                                    .duration(800)
+                                    .ease(d3.easeCubicOut)
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            } else{
+                                rect.attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            }
+                            rect.on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
                                     let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
-                                                          <strong>${yCol}:</strong> ${d.y} <br>
-                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                                        <strong>${yCol}:</strong> ${d.y} <br>
+                                                        <strong>Total Count:</strong> ${total} <br><hr>`;
                                     
                                     Object.entries(d.groups).forEach(([group, count]) => {
                                         tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
-                                                          <strong>${group}:</strong> ${count} <br>`;
+                                                        <strong>${group}:</strong> ${count} <br>`;
                                     });
                 
                                     tooltip.html(tooltipContent)
@@ -2082,13 +2146,11 @@ class ScatterplotMatrixView{
     
                 const tooltip = d3.select("#tooltip");
     
-                cellGroup.selectAll("rect")
+                const rect = cellGroup.selectAll("rect")
                     .data(heatmapData)
                     .join("rect")
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
-                    .attr("width", xScale.bandwidth())
-                    .attr("height", yScale.bandwidth())
                     .attr("fill", d => {
                         const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -2113,32 +2175,47 @@ class ScatterplotMatrixView{
                     .attr("stroke-width", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? 1 : 0.5
-                    })
-                    .on("mouseover", function (event, d) {
-                        d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
-                        tooltip.style("display", "block")
-                            .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function (event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function () {
-                        d3.select(this).attr("stroke", "gray").attr("stroke-width", 0.5);
-                        tooltip.style("display", "none");
-                    })
-                    .on("click", function (event, d) {
-                        if (!selectionEnabled) return; 
-                
-                        d3.selectAll(".selected").classed("selected", false); 
-                        d3.select(this).classed("selected", true); 
-                
-                        console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
-                        console.log("Selected row IDs:", d.ids);
-                        handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
                     });
+                    if(animate){
+                        rect.attr("width", 0)
+                            .attr("height", 0)
+                            .attr("opacity", 0)
+                            .transition()
+                            .duration(800)
+                            .ease(d3.easeCubicOut)
+                            .attr("width", xScale.bandwidth())
+                            .attr("height", yScale.bandwidth())
+                            .attr("opacity", 1);
+                    } else{
+                        rect.attr("width", xScale.bandwidth())
+                            .attr("height", yScale.bandwidth())
+                            .attr("opacity", 1);
+                    }
+                    rect.on("mouseover", function (event, d) {
+                            d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
+                            tooltip.style("display", "block")
+                                .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
+                                .style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mousemove", function (event) {
+                            tooltip.style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mouseout", function () {
+                            d3.select(this).attr("stroke", "gray").attr("stroke-width", 0.5);
+                            tooltip.style("display", "none");
+                        })
+                        .on("click", function (event, d) {
+                            if (!selectionEnabled) return; 
+                    
+                            d3.selectAll(".selected").classed("selected", false); 
+                            d3.select(this).classed("selected", true); 
+                    
+                            console.log(`Selected data: x=${d.x}, y=${d.y}, count=${d.value}`);
+                            console.log("Selected row IDs:", d.ids);
+                            handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
+                        });
     
                 const legendHeight = this.size;
                 const legendWidth = 10;
@@ -2234,24 +2311,37 @@ class ScatterplotMatrixView{
                         const total = d3.sum(Object.values(d.groups));
 
                         Object.entries(d.groups).forEach(([group, count]) => {
-                            g.append("rect")
+                            const rect = g.append("rect")
                                 .attr("x", 0)
-                                .attr("y", yOffset) 
-                                .attr("width", xScale.bandwidth())
-                                .attr("height", (yScale.bandwidth() * count) / total)  
+                                .attr("y", yOffset)                                  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
-                                .attr("data-group", group)
-                                .on("mouseover", function (event) {
+                                .attr("data-group", group);
+                            if(animate){
+                                rect.attr("width", 0)
+                                    .attr("height", 0)
+                                    .attr("opacity", 0)
+                                    .transition()
+                                    .duration(800)
+                                    .ease(d3.easeCubicOut)
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            } else{
+                                rect.attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            }
+                            rect.on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
                                     let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
-                                                          <strong>${yCol}:</strong> ${d.y} <br>
-                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                                        <strong>${yCol}:</strong> ${d.y} <br>
+                                                        <strong>Total Count:</strong> ${total} <br><hr>`;
                                     
                                     Object.entries(d.groups).forEach(([group, count]) => {
                                         tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
-                                                          <strong>${group}:</strong> ${count} <br>`;
+                                                        <strong>${group}:</strong> ${count} <br>`;
                                     });
                 
                                     tooltip.html(tooltipContent)
@@ -2310,13 +2400,11 @@ class ScatterplotMatrixView{
 
                 const tooltip = d3.select("#tooltip");
 
-                cellGroup.selectAll("rect")
+                const rect = cellGroup.selectAll("rect")
                     .data(heatmapData)
                     .join("rect")
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
-                    .attr("width", xScale.bandwidth())
-                    .attr("height", yScale.bandwidth())
                     .attr("fill", d => {
                         const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -2341,8 +2429,23 @@ class ScatterplotMatrixView{
                     .attr("stroke-width", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? 1 : 0.5
-                    })
-                    .on("mouseover", function (event, d) {
+                    });
+                if(animate){
+                    rect.attr("width", 0)
+                        .attr("height", 0)
+                        .attr("opacity", 0)
+                        .transition()
+                        .duration(800)
+                        .ease(d3.easeCubicOut)
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("opacity", 1);
+                } else{
+                    rect.attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("opacity", 1);
+                }
+                rect.on("mouseover", function (event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
                             .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
@@ -2490,24 +2593,37 @@ class ScatterplotMatrixView{
                         const total = d3.sum(Object.values(d.groups));
 
                         Object.entries(d.groups).forEach(([group, count]) => {
-                            g.append("rect")
+                            const rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("width", xScale.bandwidth())
-                                .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
-                                .attr("data-group", group)
-                                .on("mouseover", function (event) {
+                                .attr("data-group", group);
+                            if(animate){
+                                rect.attr("width", 0)
+                                    .attr("height", 0)  
+                                    .attr("opacity", 0)
+                                    .transition()
+                                    .duration(800)
+                                    .ease(d3.easeCubicOut)
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            } else{
+                                rect.attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            }
+                            rect.on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
                                     let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
-                                                          <strong>${yCol}:</strong> ${d.y} <br>
-                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                                        <strong>${yCol}:</strong> ${d.y} <br>
+                                                        <strong>Total Count:</strong> ${total} <br><hr>`;
                                     
                                     Object.entries(d.groups).forEach(([group, count]) => {
                                         tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
-                                                          <strong>${group}:</strong> ${count} <br>`;
+                                                        <strong>${group}:</strong> ${count} <br>`;
                                     });
                 
                                     tooltip.html(tooltipContent)
@@ -2567,13 +2683,11 @@ class ScatterplotMatrixView{
 
                 const tooltip = d3.select("#tooltip");
 
-                cellGroup.selectAll("rect")
+                const rect = cellGroup.selectAll("rect")
                     .data(heatmapData)
                     .join("rect")
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
-                    .attr("width", xScale.bandwidth())
-                    .attr("height", yScale.bandwidth())
                     .attr("fill", d => {
                         const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -2597,8 +2711,23 @@ class ScatterplotMatrixView{
                     .attr("stroke-width", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? 1 : 0.5
-                    })            
-                    .on("mouseover", function (event, d) {
+                    });
+                if(animate){
+                    rect.attr("width", 0)
+                        .attr("height", 0)
+                        .attr("opacity", 0)
+                        .transition()
+                        .duration(800)
+                        .ease(d3.easeCubicOut)
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", (yScale.bandwidth()))
+                        .attr("opacity", 1);
+                } else{
+                    rect.attr("width", xScale.bandwidth())
+                        .attr("height", (yScale.bandwidth()))
+                        .attr("opacity", 1);
+                }
+                rect.on("mouseover", function (event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
                             .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
@@ -2734,24 +2863,39 @@ class ScatterplotMatrixView{
                         const total = d3.sum(Object.values(d.groups));
 
                         Object.entries(d.groups).forEach(([group, count]) => {
-                            g.append("rect")
+                            const rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("width", xScale.bandwidth())
-                                .attr("height", (yScale.bandwidth() * count) / total)  
+                                // .attr("width", xScale.bandwidth())
+                                // .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", groupColorScale(group))
                                 .attr("stroke", "white")
-                                .attr("data-group", group)
-                                .on("mouseover", function (event) {
+                                .attr("data-group", group);
+                            if(animate){
+                                rect.attr("width", 0)
+                                    .attr("height", 0)  
+                                    .attr("opacity", 0)
+                                    .transition()
+                                    .duration(800)
+                                    .ease(d3.easeCubicOut)
+                                    .attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            } else{
+                                rect.attr("width", xScale.bandwidth())
+                                    .attr("height", (yScale.bandwidth() * count) / total)
+                                    .attr("opacity", 1);
+                            }
+                            rect.on("mouseover", function (event) {
                                     d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                 
                                     let tooltipContent = `<strong>${xCol}:</strong> ${d.x} <br>
-                                                          <strong>${yCol}:</strong> ${d.y} <br>
-                                                          <strong>Total Count:</strong> ${total} <br><hr>`;
+                                                        <strong>${yCol}:</strong> ${d.y} <br>
+                                                        <strong>Total Count:</strong> ${total} <br><hr>`;
                                     
                                     Object.entries(d.groups).forEach(([group, count]) => {
                                         tooltipContent += `<span style="color:${groupColorScale(group)}">&#9632;</span> 
-                                                          <strong>${group}:</strong> ${count} <br>`;
+                                                        <strong>${group}:</strong> ${count} <br>`;
                                     });
                 
                                     tooltip.html(tooltipContent)
@@ -2812,13 +2956,11 @@ class ScatterplotMatrixView{
     
                 const tooltip = d3.select("#tooltip"); 
     
-                cellGroup.selectAll("rect")
+                const rect = cellGroup.selectAll("rect")
                     .data(heatmapData)
                     .join("rect")
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
-                    .attr("width", xScale.bandwidth())
-                    .attr("height", yScale.bandwidth())
                     .attr("fill", (d) => {
                         const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                         return isSelected ? "gold" : colorScale(d.value);
@@ -2832,8 +2974,23 @@ class ScatterplotMatrixView{
                     .attr("stroke-width", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? 1 : 0.5
-                    })            
-                    .on("mouseover", function(event, d) {
+                    });
+                if(animate){
+                    rect.attr("width", 0)
+                        .attr("height", 0)
+                        .attr("opacity", 0)
+                        .transition()
+                        .duration(800)
+                        .ease(d3.easeCubicOut)
+                        .attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("opacity", 1);
+                } else{
+                    rect.attr("width", xScale.bandwidth())
+                        .attr("height", yScale.bandwidth())
+                        .attr("opacity", 1);
+                }
+                rect.on("mouseover", function(event, d) {
                         d3.select(this).attr("stroke", "black").attr("stroke-width", 1);
                         tooltip.style("display", "block")
                             .html(`<strong>${xCol}:</strong> ${d.x}<br><strong>${yCol}:</strong> ${d.y}<br><strong>Count:</strong> ${d.value}`)
@@ -2859,7 +3016,6 @@ class ScatterplotMatrixView{
                         
                         handleHeatmapClick(event, d, xCol, yCol, groupByAttribute);
                     });
-    
     
                 const legendHeight = this.size;
                 const legendWidth = 10;
@@ -3623,6 +3779,12 @@ class ScatterplotMatrixView{
 
             let groupedData;
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
+                (p[yCol] === d[yCol] || isNaN(d[yCol]))
+            );
+
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
@@ -3639,8 +3801,10 @@ class ScatterplotMatrixView{
                 cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    .attr("stroke", "steelblue")
-                    .attr("stroke-width", 2)
+                    // .attr("stroke", "steelblue")
+                    // .attr("stroke-width", 2)
+                    .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
+                    .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
                     .attr("d", line);
             }
 
@@ -3752,6 +3916,12 @@ class ScatterplotMatrixView{
             
             let groupedData;
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol]) &&
+                (p[yCol] === d[yCol] || isNaN(d[yCol]))
+            );
+
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
@@ -3768,8 +3938,10 @@ class ScatterplotMatrixView{
                 cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    .attr("stroke", "steelblue")
-                    .attr("stroke-width", 2)
+                    // .attr("stroke", "steelblue")
+                    // .attr("stroke-width", 2)
+                    .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
+                    .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
                     .attr("d", line);
             }
 
@@ -3868,6 +4040,12 @@ class ScatterplotMatrixView{
 
             let groupedData;
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
+                (p[yCol] === d[yCol])
+            );
+
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
@@ -3884,8 +4062,10 @@ class ScatterplotMatrixView{
                 cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    .attr("stroke", "steelblue")
-                    .attr("stroke-width", 2)
+                    // .attr("stroke", "steelblue")
+                    // .attr("stroke-width", 2)
+                    .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
+                    .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
                     .attr("d", line);
             }
 
@@ -3964,6 +4144,12 @@ class ScatterplotMatrixView{
 
             let groupedData;
 
+            const isPredicated = (d) => this.predicatePoints.some(p => 
+                (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
+                (p[xCol] === d[xCol]) &&
+                (p[yCol] === d[yCol])
+            );
+
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
@@ -3980,8 +4166,14 @@ class ScatterplotMatrixView{
                 cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    .attr("stroke", "steelblue")
-                    .attr("stroke-width", 2)
+                    // .attr("stroke", "steelblue")
+                    // .attr("stroke-width", 2)
+                    .attr("stroke", d => {
+                        let result = isPredicated(d);
+                        console.log(`isPredicated(${d}):`, result);
+                        return result ? "red" : "steelblue";
+                    })
+                    .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
                     .attr("d", line);
             }
 
@@ -4100,7 +4292,7 @@ class ScatterplotMatrixView{
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, handleHeatmapClick);  
+        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, true, handleHeatmapClick);  
 
         d3.select(this.parentNode).selectAll(".linechart-button, .scatterplot-button").classed("active", false);
 

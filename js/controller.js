@@ -14,7 +14,7 @@ class ScatterplotController {
     updateSelectedAttributes(attributes) {
         this.selectedAttributes = ["ID", ...attributes];
         this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes)); 
-        this.render();
+        this.render(false, true);
     }
 
     // Update the 1 group by attribute the user selects
@@ -29,7 +29,7 @@ class ScatterplotController {
         }
 
         this.model.setFilteredData(this.model.getFullData().select([...selectedColumns]));
-        this.render();
+        this.render(false, true);
     }
 
     // Pop up window for avg aggregations
@@ -110,7 +110,7 @@ class ScatterplotController {
                                 .map(cb => cb.value);
 
             this.model.setSelectedGroups(selected, this.selectedAttributes);
-            this.render();
+            this.render(false, true);
             popup.style.display = "none";
         };
 
@@ -119,13 +119,13 @@ class ScatterplotController {
         };
       }
   
-    render(selectionEnabled, handleBrush, handleBarClick, handleHeatmapClick) {
+    render(selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {
         if(selectionEnabled)
         {
-            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
+            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, animate, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
         }
         else{
-            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled);
+            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, animate);
         }
     }
 
@@ -262,7 +262,7 @@ class ScatterplotController {
         this.updatePreviews(selectedPoints, groupByAttribute, column);
 
         const selectionEnabled = true;
-        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
+        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, false, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
 
         barX0 = barData.x0;
         barX1 = barData.x1;
@@ -293,7 +293,7 @@ class ScatterplotController {
         this.updatePreviews(selectedPoints, groupByAttribute, xCol, yCol);
 
         const selectionEnabled = true;
-        this.render(selectionEnabled);        
+        this.render(selectionEnabled, false);        
         // this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
 
@@ -418,7 +418,7 @@ function attachButtonEventListeners(){
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
     d3.select("#impute-average-x").on("click", () => {
@@ -427,7 +427,7 @@ function attachButtonEventListeners(){
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
     d3.select("#impute-average-y").on("click", () => {
@@ -436,7 +436,7 @@ function attachButtonEventListeners(){
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
     const radioButtons = document.querySelectorAll("input[name='options']");
@@ -446,10 +446,12 @@ function attachButtonEventListeners(){
             const controller = getActiveController();
             if (event.target.value === "selectData" && event.target.checked) {
                 const selectionEnabled = true;
-                controller.render(selectionEnabled);
+                controller.render(selectionEnabled, false);
                 // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
             } else {
-                controller.render();
+                const selectionEnabled = false;
+                const animate = true;
+                controller.render(selectionEnabled, animate);
             }
         });
     });
