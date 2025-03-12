@@ -939,7 +939,7 @@ class ScatterplotMatrixView{
                 .attr("height", 25)
                 .attr("xlink:href", "icons/heatmap.png")
                 .attr("cursor", "pointer")
-                .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+                .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     
                 const scatterViewButton = cellGroup.append("image")
                     .attr("class", "scatterplot-button")
@@ -949,7 +949,7 @@ class ScatterplotMatrixView{
                     .attr("height", 25)
                     .attr("xlink:href", "icons/scatterplot.png")
                     .attr("cursor", "pointer")
-                    .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+                    .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
                 const lineViewButton = cellGroup.append("image")
                     .attr("class", "linechart-button")
@@ -959,7 +959,7 @@ class ScatterplotMatrixView{
                     .attr("height", 25)
                     .attr("xlink:href", "icons/linechart.png")
                     .attr("cursor", "pointer")
-                    .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+                    .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
                 
                 // this.drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute);
@@ -3089,7 +3089,7 @@ class ScatterplotMatrixView{
             .text(yCol);
     }
 
-    drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick){
+    drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
@@ -3142,7 +3142,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol] || isNaN(d[yCol]))
             );
 
-            cellGroup.selectAll("circle")
+            const circles = cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
                 .attr("cx", d => {
@@ -3155,7 +3155,6 @@ class ScatterplotMatrixView{
                     if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
                     return yScale(d[yCol]);
                 })
-                .attr("r", d => (d.type.includes("nan") ? 4 : 3))
                 // .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
                 .attr("fill", d => {
                     if (groupByAttribute) {
@@ -3167,33 +3166,44 @@ class ScatterplotMatrixView{
                 // .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
                 // .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
-                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
-                    let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
-                    if (groupByAttribute) {
-                        tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
-                    }
-                    tooltip.style("display", "block")
-                        .html(tooltipContent)
-                        .style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mousemove", function(event) {
-                    tooltip.style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY + 10}px`);
-                })
-                .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
+                if(animate){
+                    circles.attr("r", 0) 
+                        .attr("opacity", 0)
+                        .transition()
+                        .duration(800)
+                        .ease(d3.easeCubicOut)
+                        .attr("r", d => (d.type.includes("nan") ? 4 : 3)) 
+                        .attr("opacity", 0.6);
+                } else{
+                    circles.attr("r", d => (d.type.includes("nan") ? 4 : 3))
+                        .attr("opacity", 0.6);
+                }  
+                circles.on("mouseover", function(event, d) {
+                        d3.select(this).attr("fill", "gold");
+                        let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                         if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return d.type === "numeric" ? "steelblue" : "gray"; 
+                            tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
                         }
+                        tooltip.style("display", "block")
+                            .html(tooltipContent)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mousemove", function(event) {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", function() {
+                        d3.select(this).attr("fill", d => {
+                            if (groupByAttribute) {
+                                return colorScale(d[groupByAttribute]);
+                            } else {
+                                return d.type === "numeric" ? "steelblue" : "gray"; 
+                            }
+                        });
+                        tooltip.style("display", "none");
                     });
-                    tooltip.style("display", "none");
-                });
 
             cellGroup
                 .append("g")
@@ -3299,7 +3309,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol] || isNaN(d[yCol]))
             );
 
-            cellGroup.selectAll("circle")
+            const circles = cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
                 .attr("cx", d => xScale(d[xCol]))
@@ -3308,7 +3318,6 @@ class ScatterplotMatrixView{
                     if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
                     return yScale(d[yCol]);
                 })
-                .attr("r", d => (d.type === "nan-y" ? 4 : 3))
                 // .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
                 .attr("fill", d => {
                     if (groupByAttribute) {
@@ -3320,10 +3329,21 @@ class ScatterplotMatrixView{
                 // .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
                 // .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
-                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
+            if(animate){
+                circles.attr("r", 0) 
+                    .attr("opacity", 0)
+                    .transition()
+                    .duration(800)
+                    .ease(d3.easeCubicOut)
+                    .attr("r", d => (d.type === "nan-y" ? 4 : 3)) 
+                    .attr("opacity", 0.6);
+            } else{
+                circles.attr("r", d => (d.type === "nan-y" ? 4 : 3))
+                    .attr("opacity", 0.6);
+            }  
+            circles.on("mouseover", function(event, d) {
+                    d3.select(this).attr("fill", "gold");
                     let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                     if (groupByAttribute) {
                         tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3450,7 +3470,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol])
             );
 
-            cellGroup.selectAll("circle")
+            const circles = cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
                 .attr("cx", d => {
@@ -3459,7 +3479,6 @@ class ScatterplotMatrixView{
                     return xScale(d[xCol]); 
                 })
                 .attr("cy", d => yScale(d[yCol]))
-                .attr("r", d => (d.type === "nan-x" ? 4 : 3))
                 // .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
                 .attr("fill", d => {
                     if (groupByAttribute) {
@@ -3471,10 +3490,21 @@ class ScatterplotMatrixView{
                 // .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
                 // .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
-                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
+            if(animate){
+                circles.attr("r", 0) 
+                    .attr("opacity", 0)
+                    .transition()
+                    .duration(800)
+                    .ease(d3.easeCubicOut)
+                    .attr("r", d => (d.type === "nan-x" ? 4 : 3)) 
+                    .attr("opacity", 0.6);
+            } else{
+                circles.attr("r", d => (d.type === "nan-x" ? 4 : 3))
+                    .attr("opacity", 0.6);
+            }  
+            circles.on("mouseover", function(event, d) {
+                    d3.select(this).attr("fill", "gold");
                     let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                     if (groupByAttribute) {
                         tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3585,12 +3615,11 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol])
             );
 
-            cellGroup.selectAll("circle")
+            const circles = cellGroup.selectAll("circle")
                 .data(combinedData)
                 .join("circle")
                 .attr("cx", d => xScale(d[xCol]))
                 .attr("cy", d => yScale(d[yCol]))
-                .attr("r", 3)
                 // .attr("fill", "steelblue")
                 .attr("fill", d => {
                     if (groupByAttribute) {
@@ -3600,10 +3629,21 @@ class ScatterplotMatrixView{
                     }
                 })
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
-                .attr("stroke-width", d => isPredicated(d) ? 1 : 0)
-                .attr("opacity", 0.6)
-                .on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "orange");
+                .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
+            if(animate){
+                circles.attr("r", 0) 
+                    .attr("opacity", 0)
+                    .transition()
+                    .duration(800)
+                    .ease(d3.easeCubicOut)
+                    .attr("r", 3) 
+                    .attr("opacity", 0.6);
+            } else{
+                circles.attr("r", 3)
+                    .attr("opacity", 0.6);
+            }                
+            circles.on("mouseover", function(event, d) {
+                    d3.select(this).attr("fill", "gold");
                     let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                     if (groupByAttribute) {
                         tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3690,7 +3730,7 @@ class ScatterplotMatrixView{
         
     }
 
-    switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
+    switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`);  // Hardcoded for stackoverflow tab, need to make dynamic later
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
 
@@ -3788,24 +3828,46 @@ class ScatterplotMatrixView{
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
-                    cellGroup.append("path")
+                    const path = cellGroup.append("path")
                       .datum(groupArray)
                       .attr("class", "line")
                       .attr("d", line)
                       .attr("stroke", colorScale(key))
                       .attr("fill", "none")
-                      .attr("stroke-width", 2);
+                      .attr("stroke-width", 2)
+                      .attr("stroke-dasharray", function() { return this.getTotalLength(); }) 
+                      .attr("stroke-dashoffset", function() { return this.getTotalLength(); }) 
+
+                    if (animate) {
+                        path.transition()
+                            .duration(800) 
+                            .ease(d3.easeLinear)
+                            .attr("stroke-dashoffset", 0); 
+                    } else{
+                        path.attr("stroke-dashoffset", 0); 
+                    }
                   });
             }
             else{
-                cellGroup.append("path")
+                const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
                     // .attr("stroke", "steelblue")
                     // .attr("stroke-width", 2)
                     .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
                     .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
-                    .attr("d", line);
+                    .attr("d", line)
+                    .attr("stroke-dasharray", function() { return this.getTotalLength(); })
+                    .attr("stroke-dashoffset", function() { return this.getTotalLength(); });
+
+                if (animate) {
+                    path.transition()
+                        .duration(800)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", 0);
+                } else{
+                    path.attr("stroke-dashoffset", 0);
+                }
             }
 
             cellGroup
@@ -3925,24 +3987,46 @@ class ScatterplotMatrixView{
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
-                    cellGroup.append("path")
+                    const path = cellGroup.append("path")
                       .datum(groupArray)
                       .attr("class", "line")
                       .attr("d", line)
                       .attr("stroke", colorScale(key))
                       .attr("fill", "none")
-                      .attr("stroke-width", 2);
+                      .attr("stroke-width", 2)
+                      .attr("stroke-dasharray", function() { return this.getTotalLength(); }) 
+                      .attr("stroke-dashoffset", function() { return this.getTotalLength(); }) 
+
+                    if (animate) {
+                        path.transition()
+                            .duration(800) 
+                            .ease(d3.easeLinear)
+                            .attr("stroke-dashoffset", 0); 
+                    } else{
+                        path.attr("stroke-dashoffset", 0); 
+                    }
                   });
             }
             else{
-                cellGroup.append("path")
+                const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
                     // .attr("stroke", "steelblue")
                     // .attr("stroke-width", 2)
                     .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
                     .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
-                    .attr("d", line);
+                    .attr("d", line)
+                    .attr("stroke-dasharray", function() { return this.getTotalLength(); })
+                    .attr("stroke-dashoffset", function() { return this.getTotalLength(); });
+
+                if (animate) {
+                    path.transition()
+                        .duration(800)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", 0);
+                } else{
+                    path.attr("stroke-dashoffset", 0);
+                }
             }
 
             cellGroup
@@ -4049,24 +4133,46 @@ class ScatterplotMatrixView{
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
-                    cellGroup.append("path")
+                    const path = cellGroup.append("path")
                       .datum(groupArray)
                       .attr("class", "line")
                       .attr("d", line)
                       .attr("stroke", colorScale(key))
                       .attr("fill", "none")
-                      .attr("stroke-width", 2);
+                      .attr("stroke-width", 2)
+                      .attr("stroke-dasharray", function() { return this.getTotalLength(); }) 
+                      .attr("stroke-dashoffset", function() { return this.getTotalLength(); }) 
+
+                    if (animate) {
+                        path.transition()
+                            .duration(800) 
+                            .ease(d3.easeLinear)
+                            .attr("stroke-dashoffset", 0); 
+                    } else{
+                        path.attr("stroke-dashoffset", 0); 
+                    }
                   });
             }
             else{
-                cellGroup.append("path")
+                const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
                     // .attr("stroke", "steelblue")
                     // .attr("stroke-width", 2)
                     .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
                     .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
-                    .attr("d", line);
+                    .attr("d", line)
+                    .attr("stroke-dasharray", function() { return this.getTotalLength(); })
+                    .attr("stroke-dashoffset", function() { return this.getTotalLength(); });
+
+                if (animate) {
+                    path.transition()
+                        .duration(800)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", 0);
+                } else{
+                    path.attr("stroke-dashoffset", 0);
+                }
             }
 
             cellGroup
@@ -4110,7 +4216,6 @@ class ScatterplotMatrixView{
 
         /// All non numeric plot ///
         else{   
-            console.log("here in non numeric plot");
             uniqueXCategories = uniqueXCategories.slice(1);
             uniqueYCategories = uniqueYCategories.slice(1);
             uniqueXCategories = sortCategories(uniqueXCategories);
@@ -4153,17 +4258,28 @@ class ScatterplotMatrixView{
             if(groupByAttribute){
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
-                    cellGroup.append("path")
+                    const path = cellGroup.append("path")
                       .datum(groupArray)
                       .attr("class", "line")
                       .attr("d", line)
                       .attr("stroke", colorScale(key))
                       .attr("fill", "none")
-                      .attr("stroke-width", 2);
+                      .attr("stroke-width", 2)
+                      .attr("stroke-dasharray", function() { return this.getTotalLength(); }) 
+                      .attr("stroke-dashoffset", function() { return this.getTotalLength(); }) 
+
+                    if (animate) {
+                        path.transition()
+                            .duration(800) 
+                            .ease(d3.easeLinear)
+                            .attr("stroke-dashoffset", 0); 
+                    } else{
+                        path.attr("stroke-dashoffset", 0); 
+                    }
                   });
             }
             else{
-                cellGroup.append("path")
+                const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
                     // .attr("stroke", "steelblue")
@@ -4174,7 +4290,18 @@ class ScatterplotMatrixView{
                         return result ? "red" : "steelblue";
                     })
                     .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
-                    .attr("d", line);
+                    .attr("d", line)
+                    .attr("stroke-dasharray", function() { return this.getTotalLength(); })
+                    .attr("stroke-dashoffset", function() { return this.getTotalLength(); });
+
+                if (animate) {
+                    path.transition()
+                        .duration(800)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", 0);
+                } else{
+                    path.attr("stroke-dashoffset", 0);
+                }
             }
 
             cellGroup
@@ -4226,7 +4353,7 @@ class ScatterplotMatrixView{
         .attr("height", 25)
         .attr("xlink:href", "icons/heatmap.png")
         .attr("cursor", "pointer")
-        .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+        .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
         const scatterViewButton = cellGroup.append("image")
             .attr("class", "scatterplot-button")
@@ -4236,7 +4363,7 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/scatterplot.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
         const lineViewButton = cellGroup.append("image")
             .attr("class", "linechart-button active")
@@ -4246,14 +4373,14 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
-    restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
+    restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, handleHeatmapClick);  
+        this.drawScatterplot(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
 
         d3.select(this.parentNode).selectAll(".linechart-button, .heatmap-button").classed("active", false);
 
@@ -4265,7 +4392,7 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/heatmap.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
         const scatterViewButton = cellGroup.append("image")
             .attr("class", "scatterplot-button active")
@@ -4275,7 +4402,7 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/scatterplot.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
         const lineViewButton = cellGroup.append("image")
             .attr("class", "linechart-button")
@@ -4285,14 +4412,14 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
-    restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick) {
+    restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, true, handleHeatmapClick);  
+        this.drawHeatMap(cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
 
         d3.select(this.parentNode).selectAll(".linechart-button, .scatterplot-button").classed("active", false);
 
@@ -4305,7 +4432,7 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/heatmap.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
         const scatterViewButton = cellGroup.append("image")
             .attr("class", "scatterplot-button")
@@ -4315,7 +4442,7 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/scatterplot.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
         const lineViewButton = cellGroup.append("image")
             .attr("class", "linechart-button")
@@ -4325,7 +4452,7 @@ class ScatterplotMatrixView{
             .attr("height", 25)
             .attr("xlink:href", "icons/linechart.png")
             .attr("cursor", "pointer")
-            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, handleHeatmapClick));
+            .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
     drawPreviewPlot(givenData, containerId, isHistogram, groupByAttribute, xCol, yCol){
