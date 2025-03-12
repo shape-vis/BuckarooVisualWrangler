@@ -13,9 +13,9 @@ class ScatterplotMatrixView{
         this.labelPadding = 60;
 
         this.leftMargin = 115;
-        this.topMargin = 30;
+        this.topMargin = 0;
         this.bottomMargin = 125; 
-        this.rightMargin = 60; 
+        this.rightMargin = 0; 
 
         this.selection = null;
 
@@ -230,7 +230,7 @@ class ScatterplotMatrixView{
           legendItem.append("span")
             .text(group);
         });
-      }
+    }
     
     drawBoxPlots(groupStats, onSelectGroups, overallMedian, selectedGroups, significantGroups) {
         console.log("significant groups", significantGroups);
@@ -4457,18 +4457,16 @@ class ScatterplotMatrixView{
 
     drawPreviewPlot(givenData, containerId, isHistogram, groupByAttribute, xCol, yCol){
         const container = document.getElementById(containerId);
-        container.innerHTML = ""; // Clear existing preview
-
-        console.log("givenData", givenData);
+        container.innerHTML = ""; 
 
         if (givenData.length === 0) {
-            container.style.display = "none"; // Hide if no data
+            container.style.display = "none"; 
             return;
         }
 
-        container.style.display = "block"; // Show container
+        container.style.display = "block"; 
 
-        const margin = { top: 10, right: 40, bottom: 50, left: 60 };
+        const margin = { top: 20, right: 40, bottom: 50, left: 60 };
         const width = 250 - margin.left - margin.right;
         const height = 250 - margin.top - margin.bottom;
 
@@ -4478,6 +4476,16 @@ class ScatterplotMatrixView{
             .attr("height", height + margin.top + margin.bottom)
             .append("g")
             .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+        svg.append("text")
+            .attr("x", width / 2)
+            .attr("y", -10) 
+            .attr("text-anchor", "middle")
+            .attr("font-size", "12px")
+            .attr("font-weight", "bold")
+            .text(containerId === "preview-remove" ? "Preview of Removing Selected Data" :
+                  containerId === "preview-impute-average-x" ? `Preview of Imputing by Avg ${xCol}` :
+                  `Preview of Imputing by Avg ${yCol}`);
 
         if(isHistogram)
         {
