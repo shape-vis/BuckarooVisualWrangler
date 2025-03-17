@@ -22,81 +22,85 @@
         <button class="tab-button active" data-target="tab2">StackOverflow Data</button>
     </div>
 
-    <div class="dropdown-container">
-        <div id="attribute-dropdown" class="dropdown">
-            <button id="dropdown-button">Select Attributes (3/3)</button>
-            <div id="dropdown-menu" class="dropdown-content">
-            </div>
-        </div>
-    
-        <div id="group-dropdown-container">
-            <label for="group-dropdown">Group by:</label>
-            <select id="group-dropdown">
-                <option value="">None</option>
-            </select>
-    
-            <div id="group-selection-popup" class="modal" style="display: none;">
-                <div class="modal-content">
-                <h3 id="overall-average">Overall Salary Average: $XYZ</h3>
-                <ul id="group-list"></ul>
-                <div class="modal-buttons">
-                    <button id="plot-groups">Plot Selected Groups</button>
-                    <button id="close-popup">Cancel</button>
-                </div>
+    <div class="matrix-and-dropdown-container">
+        <div class="dropdown-container">
+            <div id="attribute-dropdown" class="dropdown">
+                <button id="dropdown-button">Select Attributes (3/3)</button>
+                <div id="dropdown-menu" class="dropdown-content">
                 </div>
             </div>
-    
-            <button id="select-groups-btn">Select Groups</button>
+        
+            <div id="group-dropdown-container">
+                <label for="group-dropdown">Group by:</label>
+                <select id="group-dropdown">
+                    <option value="">None</option>
+                </select>
+        
+                <div id="group-selection-popup" class="modal" style="display: none;">
+                    <div class="modal-content">
+                    <h3 id="overall-average">Overall Salary Average: $XYZ</h3>
+                    <ul id="group-list"></ul>
+                    <div class="modal-buttons">
+                        <button id="plot-groups">Plot Selected Groups</button>
+                        <button id="close-popup">Cancel</button>
+                    </div>
+                    </div>
+                </div>
+        
+                <button id="select-groups-btn">Select Groups</button>
+            </div>
+        
+            <div id="predicate-dropdown-container">
+                <label for="predicate-dropdown">Add a Predicate to a Column:</label>
+                <select id="predicate-dropdown">
+                    <option value="">None</option>
+                </select>
+        
+                <div id="condition-container"></div>
+            </div>
         </div>
     
-        <div id="predicate-dropdown-container">
-            <label for="predicate-dropdown">Add a Predicate to a Column:</label>
-            <select id="predicate-dropdown">
-                <option value="">None</option>
-            </select>
+        <div id="tooltip" class="tooltip"></div>
     
-            <div id="condition-container"></div>
-        </div>
-    </div>
-
-    <div id="tooltip" class="tooltip"></div>
-
-    <div id="container">
-        <div id="legend"></div>
-        <div class="matrix-and-toolbox">
-            <div id="tab1" class="tab-content">
-                <div id="matrix-vis-practice"></div>
-            </div>
-            <div id="tab2" class="tab-content active">
-                <div id="matrix-vis-stackoverflow"></div>
-            </div>
-            <div class="toolbox-wrapper">
-                <div id="toolbox">
-                    <form id="radio-buttons-form">
-                        <p>Select an option:</p>
-                        <label>
-                            <input type="radio" name="options" value="allData" checked />
-                            View all data
-                        </label>
-                        <label>
-                            <input type="radio" name="options" value="selectData" />
-                            Select data
-                        </label>
-                    </form>
-                    <button id="undo" >Undo</button>
-                    <button id="redo">Redo</button>
-                    <button id="clear-selection">Clear Selection</button>
-                    <button id="remove-selected-data">Remove Selected Data</button>
-                    <div id="preview-remove"></div>
-                    <button id="impute-average-x">Impute selected data with average for X</button>
-                    <div id="preview-impute-average-x"></div>
-                    <button id="impute-average-y">Impute selected data with average for Y</button>
-                    <div id="preview-impute-average-y"></div>
-
+        <div id="container">
+            <div id="legend"></div>
+            <div class="matrix-and-toolbox">
+                <div id="tab1" class="tab-content">
+                    <div id="matrix-vis-practice"></div>
+                </div>
+                <div id="tab2" class="tab-content active">
+                    <div id="matrix-vis-stackoverflow"></div>
+                </div>
+                <div class="toolbox-wrapper">
+                    <div id="toolbox">
+                        <form id="radio-buttons-form">
+                            <p>Select an option:</p>
+                            <label>
+                                <input type="radio" name="options" value="allData" checked />
+                                View all data
+                            </label>
+                            <label>
+                                <input type="radio" name="options" value="selectData" />
+                                Select data
+                            </label>
+                        </form>
+                        <div class="undo-redo-container">
+                            <button id="undo" >Undo</button>
+                            <button id="redo">Redo</button>
+                            <button id="clear-selection">Clear Selection</button>
+                        </div>
+                        <button id="remove-selected-data">Remove Selected Data</button>
+                        <div id="preview-remove"></div>
+                        <button id="impute-average-x">Impute selected data with average for X</button>
+                        <div id="preview-impute-average-x"></div>
+                        <button id="impute-average-y">Impute selected data with average for Y</button>
+                        <div id="preview-impute-average-y"></div>
+    
+                    </div>
                 </div>
             </div>
-        </div>
-  </div>
+      </div>
+    </div>  
 </body>
 <script src="js/dataModel.js"></script>
 <script src="js/scatterplotMatrixView.js"></script>

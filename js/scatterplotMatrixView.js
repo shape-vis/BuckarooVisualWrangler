@@ -189,6 +189,7 @@ class ScatterplotMatrixView{
             });
     
             const valueDropdown = document.createElement("select");
+            valueDropdown.classList.add("value-dropdown");
             const categories = sortCategories([...new Set(columnData)])
             categories.forEach(value => {
                 let option = document.createElement("option");
