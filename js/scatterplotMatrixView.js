@@ -4684,11 +4684,26 @@ class ScatterplotMatrixView{
                         .data(series)
                         .join("g")
                         .attr("class", "series")
-                        .attr("fill", d => d.category ? "gray" : colorScale(d.key))
+                        .attr("data-group", d => d.key)
                         .attr("opacity", 0.8)
                         .selectAll("rect")
-                        .data(d => d)
+                        .data(d => {
+                            d.forEach(item => item.group = d.key);  
+                            return d;
+                        })                        
                         .join("rect")
+                        .attr("fill", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            return isSelected ? "gold" : (d.category ? "gray" : colorScale(d.group));
+                        })
+                        .attr("stroke", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                            return isSelected ? "black" : "none";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                            return isSelected ? 3 : 0;
+                        })
                         .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
                         .attr("y", d => yScale(d[1]))
                         .attr("width", binWidth)
@@ -4826,11 +4841,26 @@ class ScatterplotMatrixView{
                         .data(series)
                         .join("g")
                         .attr("class", "series")
-                        .attr("fill", d => colorScale(d.key))
+                        .attr("data-group", d => d.key)
                         .attr("opacity", 0.8)
                         .selectAll("rect")
-                        .data(d => d)
+                        .data(d => {
+                            d.forEach(item => item.group = d.key);  
+                            return d;
+                        })                        
                         .join("rect")
+                        .attr("fill", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                        
+                            return isSelected ? "gold" : colorScale(d.group);
+                        })
+                        .attr("stroke", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                            return isSelected ? "black" : "none";
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                            return isSelected ? 3 : 0;
+                        })
                         .attr("x", d => xScale(d.data.category))
                         .attr("y", d => yScale(d[1]))
                         .attr("width", xScale.bandwidth())
@@ -5010,6 +5040,7 @@ class ScatterplotMatrixView{
 
                     xScale = d3.scaleBand().domain(xCategories).range([0, width]).padding(0.05);
                     yScale = d3.scaleBand().domain(yCategories).range([height, 0]).padding(0.05);
+                    const self = this; 
 
                     svg.selectAll("g.cell-group")
                         .data(heatmapData)
@@ -5027,8 +5058,18 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
-                                    .attr("stroke", "white")
+                                    .attr("fill", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "gold": groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "black" : "white";
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? 3 : 0;
+                                    })
                                     .attr("data-group", group);
 
                                 yOffset += (yScale.bandwidth() * count) / total; 
@@ -5173,6 +5214,7 @@ class ScatterplotMatrixView{
 
                     xScale = d3.scaleBand().domain(uniqueXCategories).range([0, width]).padding(0.05);
                     yScale = d3.scaleBand().domain(yCategories).range([height, 0]).padding(0.05);
+                    const self = this; 
 
                     svg.selectAll("g.cell-group")
                         .data(heatmapData)
@@ -5190,8 +5232,18 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
-                                    .attr("stroke", "white")
+                                    .attr("fill", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "gold": groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "black" : "white";
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? 3 : 0;
+                                    })
                                     .attr("data-group", group);
 
                                 yOffset += (yScale.bandwidth() * count) / total; 
@@ -5364,6 +5416,7 @@ class ScatterplotMatrixView{
 
                     xScale = d3.scaleBand().domain(xCategories).range([0, width]).padding(0.05);
                     yScale = d3.scaleBand().domain(uniqueYCategories).range([height, 0]).padding(0.05);
+                    const self = this; 
 
                     svg.selectAll("g.cell-group")
                         .data(heatmapData)
@@ -5381,8 +5434,18 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
-                                    .attr("stroke", "white")
+                                    .attr("fill", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "gold": groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "black" : "white";
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? 3 : 0;
+                                    })
                                     .attr("data-group", group);
 
                                 yOffset += (yScale.bandwidth() * count) / total; 
@@ -5543,6 +5606,7 @@ class ScatterplotMatrixView{
 
                     xScale = d3.scaleBand().domain(uniqueXCategories).range([0, width]).padding(0.05);
                     yScale = d3.scaleBand().domain(uniqueYCategories).range([height, 0]).padding(0.05);
+                    const self = this; 
 
                     svg.selectAll("g.cell-group")
                         .data(heatmapData)
@@ -5560,8 +5624,18 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
-                                    .attr("stroke", "white")
+                                    .attr("fill", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "gold": groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? "black" : "white";
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                        return isSelected ? 3 : 0;
+                                    })
                                     .attr("data-group", group);
 
                                 yOffset += (yScale.bandwidth() * count) / total; 
@@ -5715,6 +5789,14 @@ class ScatterplotMatrixView{
 }
 
 function sortCategories(categories) {
+    // Sorting logic for scale categories that are not alphabetical or numerical
+    const scaleCategories = ['Low', 'Medium', 'High'];
+
+    if (scaleCategories.every(cat => categories.includes(cat))) {
+        return scaleCategories;  
+    }
+
+    // Sorting logic for alphabetical and numerical categories
     return categories
         .filter(d => d !== undefined && d !== null)  
         .sort((a, b) => {
