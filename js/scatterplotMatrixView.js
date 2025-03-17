@@ -524,11 +524,20 @@ class ScatterplotMatrixView{
                             .data(series)
                             .join("g")
                             .attr("class", "series")
-                            .attr("fill", d => d.category ? "gray" : colorScale(d.key))
+                            // .attr("fill", d => d.category ? "gray" : colorScale(d.key))
+                            .attr("data-group", d => d.key)  
                             .attr("opacity", 0.8)
                             .selectAll("rect")
-                            .data(d => d)
+                            .data(d => {
+                                d.forEach(item => item.group = d.key);  
+                                return d;
+                            })
                             .join("rect")
+                            .attr("fill", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            
+                                return isSelected ? "gold" : (d.category ? "gray" : colorScale(d.group));
+                            })
                             .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
                             .attr("width", binWidth);
                         if(animate){
@@ -754,7 +763,7 @@ class ScatterplotMatrixView{
                             });
                             return obj;
                         });
-                        
+            
                         const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
                         yScale = d3.scaleLinear().domain([0, yMax]).range([this.size, 0]);
                         const tooltip = d3.select("#tooltip");
@@ -766,11 +775,20 @@ class ScatterplotMatrixView{
                             .data(series)
                             .join("g")
                             .attr("class", "series")
-                            .attr("fill", d => colorScale(d.key))
+                            // .attr("fill", d => colorScale(d.key))
+                            .attr("data-group", d => d.key)  
                             .attr("opacity", 0.8)
                             .selectAll("rect")
-                            .data(d => d)
+                            .data(d => {
+                                d.forEach(item => item.group = d.key);  
+                                return d;
+                            })
                             .join("rect")
+                            .attr("fill", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            
+                                return isSelected ? "gold" : colorScale(d.group);
+                            })
                             .attr("x", d => xScale(d.data.category))
                             .attr("width", xScale.bandwidth());
                         if(animate){
@@ -2045,6 +2063,7 @@ class ScatterplotMatrixView{
                 yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
 
                 const tooltip = d3.select("#tooltip");
+                const self = this;
 
                 cellGroup.selectAll("g.cell-group")
                     .data(heatmapData)
@@ -2060,7 +2079,11 @@ class ScatterplotMatrixView{
                             const rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("fill", groupColorScale(group))
+                                // .attr("fill", groupColorScale(group))
+                                .attr("fill", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "gold": groupColorScale(group);
+                                })
                                 .attr("stroke", "white")
                                 .attr("data-group", group);
                             if(animate){
@@ -2299,6 +2322,7 @@ class ScatterplotMatrixView{
                 yScale = d3.scaleBand().domain(yCategories).range([this.size, 0]).padding(0.05);
 
                 const tooltip = d3.select("#tooltip");
+                const self = this;
 
                 cellGroup.selectAll("g.cell-group")
                     .data(heatmapData)
@@ -2314,7 +2338,11 @@ class ScatterplotMatrixView{
                             const rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset)                                  
-                                .attr("fill", groupColorScale(group))
+                                // .attr("fill", groupColorScale(group))
+                                .attr("fill", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "gold": groupColorScale(group);
+                                })
                                 .attr("stroke", "white")
                                 .attr("data-group", group);
                             if(animate){
@@ -2581,6 +2609,7 @@ class ScatterplotMatrixView{
                 yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
 
                 const tooltip = d3.select("#tooltip");
+                const self = this;
 
                 cellGroup.selectAll("g.cell-group")
                     .data(heatmapData)
@@ -2596,7 +2625,11 @@ class ScatterplotMatrixView{
                             const rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("fill", groupColorScale(group))
+                                // .attr("fill", groupColorScale(group))
+                                .attr("fill", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "gold": groupColorScale(group);
+                                })
                                 .attr("stroke", "white")
                                 .attr("data-group", group);
                             if(animate){
@@ -2851,6 +2884,7 @@ class ScatterplotMatrixView{
                 yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
 
                 const tooltip = d3.select("#tooltip");
+                const self = this; 
 
                 cellGroup.selectAll("g.cell-group")
                     .data(heatmapData)
@@ -2868,7 +2902,11 @@ class ScatterplotMatrixView{
                                 .attr("y", yOffset) 
                                 // .attr("width", xScale.bandwidth())
                                 // .attr("height", (yScale.bandwidth() * count) / total)  
-                                .attr("fill", groupColorScale(group))
+                                // .attr("fill", groupColorScale(group))
+                                .attr("fill", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "gold": groupColorScale(group);
+                                })
                                 .attr("stroke", "white")
                                 .attr("data-group", group);
                             if(animate){
