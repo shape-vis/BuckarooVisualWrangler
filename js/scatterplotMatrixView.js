@@ -535,8 +535,15 @@ class ScatterplotMatrixView{
                             .join("rect")
                             .attr("fill", (d) => {
                                 const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            
                                 return isSelected ? "gold" : (d.category ? "gray" : colorScale(d.group));
+                            })
+                            .attr("stroke", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                                return isSelected ? "black" : "none";
+                            })
+                            .attr("stroke-width", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                                return isSelected ? 3 : 0;
                             })
                             .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
                             .attr("width", binWidth);
@@ -785,9 +792,16 @@ class ScatterplotMatrixView{
                             })
                             .join("rect")
                             .attr("fill", (d) => {
-                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                        
                                 return isSelected ? "gold" : colorScale(d.group);
+                            })
+                            .attr("stroke", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                                return isSelected ? "black" : "none";
+                            })
+                            .attr("stroke-width", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                                return isSelected ? 3 : 0;
                             })
                             .attr("x", d => xScale(d.data.category))
                             .attr("width", xScale.bandwidth());
@@ -2084,7 +2098,14 @@ class ScatterplotMatrixView{
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     return isSelected ? "gold": groupColorScale(group);
                                 })
-                                .attr("stroke", "white")
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "black" : "white";
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? 3 : 0;
+                                })
                                 .attr("data-group", group);
                             if(animate){
                                 rect.attr("width", 0)
@@ -2343,7 +2364,14 @@ class ScatterplotMatrixView{
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     return isSelected ? "gold": groupColorScale(group);
                                 })
-                                .attr("stroke", "white")
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "black" : "white";
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? 3 : 0;
+                                })
                                 .attr("data-group", group);
                             if(animate){
                                 rect.attr("width", 0)
@@ -2630,7 +2658,14 @@ class ScatterplotMatrixView{
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     return isSelected ? "gold": groupColorScale(group);
                                 })
-                                .attr("stroke", "white")
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "black" : "white";
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? 3 : 0;
+                                })
                                 .attr("data-group", group);
                             if(animate){
                                 rect.attr("width", 0)
@@ -2907,7 +2942,14 @@ class ScatterplotMatrixView{
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     return isSelected ? "gold": groupColorScale(group);
                                 })
-                                .attr("stroke", "white")
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? "black" : "white";
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                    return isSelected ? 3 : 0;
+                                })
                                 .attr("data-group", group);
                             if(animate){
                                 rect.attr("width", 0)
