@@ -3,7 +3,7 @@ let practiceController, stackoverflowController;
 
 let data2 = null;
 // May need to change 'id' to 'ID'
-d3.csv("data/stackoverflow_db.csv").then(inputData => {
+d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
   data2 = aq.from(inputData).slice(0, 100);
 
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
