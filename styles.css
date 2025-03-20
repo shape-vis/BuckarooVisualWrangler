@@ -33,9 +33,34 @@
     min-width: 1050px;
 }
 
+.legend-toolbox-container {
+    display: flex;
+    flex-direction: column; 
+    align-items: center;  
+}
+
+#error-legend {
+    width: 250px; 
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 2px solid #ccc;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.error-legend-color {
+    width: 15px;
+    height: 15px;
+    margin-right: 10px;
+    border: 1px solid black;
+    flex-shrink: 0;
+}
+
 .toolbox-wrapper {
     display: flex;
     flex-direction: column;
+    margin-top: 20px;
 }
 
 #toolbox {
@@ -196,7 +221,7 @@
 #legend {
     position: absolute;
     left: 10px; 
-    top: 290px; 
+    top: 300px; 
     background: white;
     padding: 10px;
     border: 1px solid #ccc;

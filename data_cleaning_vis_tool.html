@@ -71,33 +71,45 @@
                 <div id="tab2" class="tab-content active">
                     <div id="matrix-vis-stackoverflow"></div>
                 </div>
-                <div class="toolbox-wrapper">
-                    <div id="toolbox">
-                        <form id="radio-buttons-form">
-                            <p>Select an option:</p>
-                            <label>
-                                <input type="radio" name="options" value="allData" checked />
-                                View all data
-                            </label>
-                            <label>
-                                <input type="radio" name="options" value="selectData" />
-                                Select data
-                            </label>
-                        </form>
-                        <div class="undo-redo-container">
-                            <button id="undo" >Undo</button>
-                            <button id="redo">Redo</button>
-                            <button id="clear-selection">Clear Selection</button>
-                        </div>
-                        <button id="remove-selected-data">Remove Selected Data</button>
-                        <div id="preview-remove"></div>
-                        <button id="impute-average-x">Impute selected data with average for X</button>
-                        <div id="preview-impute-average-x"></div>
-                        <button id="impute-average-y">Impute selected data with average for Y</button>
-                        <div id="preview-impute-average-y"></div>
-    
+
+                <div class="legend-toolbox-container">
+                    <div id="error-legend">
+                        <h3>Data Error Types</h3>
+                        <ul>
+                            <li><span class="error-legend-color" style="background-color: blue;"></span> Missing Value </li>
+                            <li><span class="error-legend-color" style="background-color: red;"></span> Type Error </li>
+                            <li><span class="error-legend-color" style="background-color: green;"></span> Data Type Mismatch </li>
+                            <li><span class="error-legend-color" style="background-color: yellow;"></span> Average Anomaly </li>
+                        </ul>
                     </div>
-                </div>
+
+                    <div class="toolbox-wrapper">
+                        <div id="toolbox">
+                            <form id="radio-buttons-form">
+                                <p>Select an option:</p>
+                                <label>
+                                    <input type="radio" name="options" value="allData" checked />
+                                    View all data
+                                </label>
+                                <label>
+                                    <input type="radio" name="options" value="selectData" />
+                                    Select data
+                                </label>
+                            </form>
+                            <div class="undo-redo-container">
+                                <button id="undo" >Undo</button>
+                                <button id="redo">Redo</button>
+                                <button id="clear-selection">Clear Selection</button>
+                            </div>
+                            <button id="remove-selected-data">Remove Selected Data</button>
+                            <div id="preview-remove"></div>
+                            <button id="impute-average-x">Impute selected data with average for X</button>
+                            <div id="preview-impute-average-x"></div>
+                            <button id="impute-average-y">Impute selected data with average for Y</button>
+                            <div id="preview-impute-average-y"></div>
+        
+                        </div>
+                    </div>
             </div>
       </div>
     </div>  

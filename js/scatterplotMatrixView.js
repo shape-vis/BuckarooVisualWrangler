@@ -504,7 +504,7 @@ class ScatterplotMatrixView{
                                 groupIDs: {}   
                             };
                             groups.forEach(g => {
-                                const groupData = binData.filter(d => d[groupByAttribute] === g);
+                                const groupData = catData.filter(d => d[groupByAttribute] === g);
                                 obj[g] = groupData.length;  
                                 obj.group = g;
                                 obj.groupIDs[g] = groupData.map(d => d.ID);
@@ -515,7 +515,7 @@ class ScatterplotMatrixView{
                         const yMax = d3.max(stackedData, d => d.total);
                         yScale = d3.scaleLinear()
                             .domain([0, yMax])
-                            .range([numericSpace, 0]);
+                            .range([this.size, 0]);
                 
                         const stackGen = d3.stack().keys(groups);
                         const series = stackGen(stackedData);
@@ -632,6 +632,7 @@ class ScatterplotMatrixView{
                             .append("title")  
                             .text(d => d);
                     }
+
                     cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
 
                     svg
@@ -653,7 +654,7 @@ class ScatterplotMatrixView{
                         .text("count");
                 }
                 else{   // Data is all categorical
-                    uniqueCategories = uniqueCategories.slice(1);
+                    // uniqueCategories = uniqueCategories.slice(1);
                     uniqueCategories = sortCategories(uniqueCategories);
 
                     const xScale = d3.scaleBand()
