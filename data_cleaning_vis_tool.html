@@ -63,7 +63,17 @@
         <div id="tooltip" class="tooltip"></div>
     
         <div id="container">
-            <div id="legend"></div>
+            <div id="legend">
+                <div class="legend-radio-buttons">
+                    <input type="radio" name="legend-toggle" id="view-errors" value="errors" checked>
+                    <label for="view-errors">View Errors</label>
+            
+                    <input type="radio" name="legend-toggle" id="view-groups" value="groups">
+                    <label for="view-groups">View Groups</label>
+                </div>
+                <div id="legend-content"></div>
+            </div>
+
             <div class="matrix-and-toolbox">
                 <div id="tab1" class="tab-content">
                     <div id="matrix-vis-practice"></div>
