@@ -635,6 +635,7 @@ class ScatterplotMatrixView{
                         const values = numericData.map(d => d[xCol]).filter(v => !isNaN(v));
                         const mean = d3.mean(values);
                         const stdDev = d3.deviation(values);
+                        console.log("mean", mean);
                             
                         bars = cellGroup.selectAll("rect")
                             .data(histData)
@@ -647,7 +648,7 @@ class ScatterplotMatrixView{
                             //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                             //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
                             // })
-                            .attr("fill", d => getFillColorNoGroupby(d, numericData, xCol, mean, stdDev, this.selectedPoints))
+                            .attr("fill", d => getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints))
                             // .attr("stroke", d => d.category ? "red" : "none")
                             .attr("stroke", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
@@ -801,10 +802,11 @@ class ScatterplotMatrixView{
                             .join("rect")
                             .attr("x", d => xScale(d.category))
                             .attr("width", xScale.bandwidth())
-                            .attr("fill", (d) => {
-                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                                return isSelected ? "gold" : "steelblue";
-                            })
+                            .attr("fill", d => getFillColorNoGroupbyCategorical(d, this.selectedPoints))
+                            // .attr("fill", (d) => {
+                            //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            //     return isSelected ? "gold" : "steelblue";
+                            // })
                             .attr("stroke", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                                 return isPredicated ? "red" : "none";
@@ -1945,6 +1947,14 @@ class ScatterplotMatrixView{
 
         let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
 
+        const numericXValues = nonNumericYData.map(d => d[xCol]).filter(v => !isNaN(v));
+        const numericYValues = nonNumericXData.map(d => d[yCol]).filter(v => !isNaN(v));
+
+        const meanX = d3.mean(numericXValues);
+        const stdDevX = d3.deviation(numericXValues);
+        const meanY = d3.mean(numericYValues);
+        const stdDevY = d3.deviation(numericYValues);
+
         const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
         const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
 
@@ -2162,21 +2172,22 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => {
-                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    // .attr("fill", d => {
+                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
-                        if (isSelected) {
-                            return "gold"; 
-                        }
-                        if (d.y === "NaN") {
-                            return "gray";
-                        }
-                        if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
-                            return "gray";
-                        }
+                    //     if (isSelected) {
+                    //         return "gold"; 
+                    //     }
+                    //     if (d.y === "NaN") {
+                    //         return "gray";
+                    //     }
+                    //     if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
+                    //         return "gray";
+                    //     }
     
-                        return colorScale(d.value); 
-                    })
+                    //     return colorScale(d.value); 
+                    // })
                     // .attr("stroke", "gray")
                     // .attr("stroke-width", 0.5)
                     .attr("stroke", (d) => {
@@ -2351,21 +2362,22 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr('opactiy', 0.8)
-                    .attr("fill", d => {
-                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    // .attr("fill", d => {
+                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
-                        if (isSelected) {
-                            return "gold"; 
-                        }
-                        if (d.y === "NaN") {
-                            return "gray";
-                        }
-                        if (uniqueYStringBins.includes(d.y)) {
-                            return "gray";
-                        }
+                    //     if (isSelected) {
+                    //         return "gold"; 
+                    //     }
+                    //     if (d.y === "NaN") {
+                    //         return "gray";
+                    //     }
+                    //     if (uniqueYStringBins.includes(d.y)) {
+                    //         return "gray";
+                    //     }
     
-                        return colorScale(d.value); 
-                    })
+                    //     return colorScale(d.value); 
+                    // })
                     // .attr("stroke", "gray")
                     // .attr("stroke-width", 0.5)
                     .attr("stroke", (d) => {
@@ -2577,20 +2589,21 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => {
-                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    // .attr("fill", d => {
+                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
-                        if (isSelected) {
-                            return "gold"; 
-                        }
-                        if (d.y === "NaN") {
-                            return "gray";
-                        }
-                        if (uniqueXStringBins.includes(d.x)) {
-                            return "gray";
-                        }
-                        return colorScale(d.value); 
-                    })
+                    //     if (isSelected) {
+                    //         return "gold"; 
+                    //     }
+                    //     if (d.y === "NaN") {
+                    //         return "gray";
+                    //     }
+                    //     if (uniqueXStringBins.includes(d.x)) {
+                    //         return "gray";
+                    //     }
+                    //     return colorScale(d.value); 
+                    // })
                     // .attr("stroke", "gray")
                     // .attr("stroke-width", 0.5)    
                     .attr("stroke", (d) => {
@@ -2788,10 +2801,11 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", (d) => {
-                        const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                        return isSelected ? "gold" : colorScale(d.value);
-                    })
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    // .attr("fill", (d) => {
+                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                    //     return isSelected ? "gold" : colorScale(d.value);
+                    // })
                     // .attr("stroke", "gray")
                     // .attr("stroke-width", 0.5)    
                     .attr("stroke", (d) => {
@@ -4420,7 +4434,7 @@ class ScatterplotMatrixView{
                     const yMax = d3.max(stackedData, d => d.total);
                     yScale = d3.scaleLinear()
                         .domain([0, yMax])
-                        .range([numericSpace, 0]);
+                        .range([height, 0]);
             
                     const stackGen = d3.stack().keys(groups);
                     const series = stackGen(stackedData);
@@ -4484,7 +4498,11 @@ class ScatterplotMatrixView{
 
                     yScale = d3.scaleLinear()
                         .domain([0, d3.max(histData, (d) => d.length)])
-                        .range([numericSpace, 0]);
+                        .range([height, 0]);
+
+                    const values = numericData.map(d => d[xCol]).filter(v => !isNaN(v));
+                    const mean = d3.mean(values);
+                    const stdDev = d3.deviation(values);
                     
                     svg.selectAll("rect")
                         .data(histData)
@@ -4492,11 +4510,12 @@ class ScatterplotMatrixView{
                         .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.x0))
                         .attr("width", binWidth)
                         .attr("y", d => yScale(d.length))
-                        .attr("height", d => numericSpace - yScale(d.length))
-                        .attr("fill", (d) => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
-                        })
+                        .attr("height", d => height - yScale(d.length))
+                        .attr("fill", d => getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints))
+                        // .attr("fill", (d) => {
+                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
+                        // })
                         // .attr("stroke", d => d.category ? "red" : "none")
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
@@ -4512,7 +4531,7 @@ class ScatterplotMatrixView{
                 
                 svg
                     .append("g")
-                    .attr("transform", `translate(0, ${numericSpace})`)
+                    .attr("transform", `translate(0, ${height})`)
                     .call(d3.axisBottom(xScale).tickFormat(d3.format(".2s")))
                     .selectAll("text") 
                     .style("text-anchor", "end") 
@@ -4525,7 +4544,7 @@ class ScatterplotMatrixView{
 
                 if (uniqueCategories.length > 0) {
                     svg.append("g")
-                        .attr("transform", `translate(10, ${numericSpace})`)
+                        .attr("transform", `translate(10, ${height})`)
                         .call(d3.axisBottom(categoricalScale))
                         .selectAll("text")
                         .style("text-anchor", "end") 
@@ -4635,10 +4654,11 @@ class ScatterplotMatrixView{
                         .attr("width", xScale.bandwidth())
                         .attr("y", d => yScale(d.length))
                         .attr("height", d => Math.max(0, height - yScale(d.length)))
-                        .attr("fill", (d) => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            return isSelected ? "gold" : "steelblue";
-                        })
+                        .attr("fill", d => getFillColorNoGroupbyCategorical(d, this.selectedPoints))
+                        // .attr("fill", (d) => {
+                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        //     return isSelected ? "gold" : "steelblue";
+                        // })
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "none";
@@ -4694,6 +4714,14 @@ class ScatterplotMatrixView{
             }
 
             let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
+
+            const numericXValues = nonNumericYData.map(d => d[xCol]).filter(v => !isNaN(v));
+            const numericYValues = nonNumericXData.map(d => d[yCol]).filter(v => !isNaN(v));
+
+            const meanX = d3.mean(numericXValues);
+            const stdDevX = d3.deviation(numericXValues);
+            const meanY = d3.mean(numericYValues);
+            const stdDevY = d3.deviation(numericYValues);
 
             uniqueXCategories = uniqueXCategories.slice(1);
             uniqueYCategories = uniqueYCategories.slice(1);
@@ -4854,21 +4882,22 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        // .attr("fill", d => {
+                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
-                            if (isSelected) {
-                                return "gold"; 
-                            }
-                            if (d.y === "NaN") {
-                                return "gray";
-                            }
-                            if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
-                                return "gray";
-                            }
+                        //     if (isSelected) {
+                        //         return "gold"; 
+                        //     }
+                        //     if (d.y === "NaN") {
+                        //         return "gray";
+                        //     }
+                        //     if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
+                        //         return "gray";
+                        //     }
         
-                            return colorScale(d.value); 
-                        })
+                        //     return colorScale(d.value); 
+                        // })
                         // .attr("stroke", "gray")
                         // .attr("stroke-width", 0.5)
                         .attr("stroke", (d) => {
@@ -5029,21 +5058,22 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        // .attr("fill", d => {
+                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
-                            if (isSelected) {
-                                return "gold"; 
-                            }
-                            if (d.y === "NaN") {
-                                return "gray";
-                            }
-                            if (uniqueYStringBins.includes(d.y)) {
-                                return "gray";
-                            }
+                        //     if (isSelected) {
+                        //         return "gold"; 
+                        //     }
+                        //     if (d.y === "NaN") {
+                        //         return "gray";
+                        //     }
+                        //     if (uniqueYStringBins.includes(d.y)) {
+                        //         return "gray";
+                        //     }
         
-                            return colorScale(d.value); 
-                        })
+                        //     return colorScale(d.value); 
+                        // })
                         // .attr("stroke", "gray")
                         // .attr("stroke-width", 0.5)
                         .attr("stroke", (d) => {
@@ -5233,20 +5263,21 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        // .attr("fill", d => {
+                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
-                            if (isSelected) {
-                                return "gold"; 
-                            }
-                            if (d.y === "NaN") {
-                                return "gray";
-                            }
-                            if (uniqueXStringBins.includes(d.x)) {
-                                return "gray";
-                            }
-                            return colorScale(d.value); 
-                        })
+                        //     if (isSelected) {
+                        //         return "gold"; 
+                        //     }
+                        //     if (d.y === "NaN") {
+                        //         return "gray";
+                        //     }
+                        //     if (uniqueXStringBins.includes(d.x)) {
+                        //         return "gray";
+                        //     }
+                        //     return colorScale(d.value); 
+                        // })
                         // .attr("stroke", "gray")
                         // .attr("stroke-width", 0.5)    
                         .attr("stroke", (d) => {
@@ -5425,10 +5456,11 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", (d) => {
-                            const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            return isSelected ? "gold" : colorScale(d.value);
-                        })
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        // .attr("fill", (d) => {
+                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                        //     return isSelected ? "gold" : colorScale(d.value);
+                        // })
                         // .attr("stroke", "gray")
                         // .attr("stroke-width", 0.5)    
                         .attr("stroke", (d) => {
@@ -5638,7 +5670,7 @@ function splitData (data, xCol, yCol){
     return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace};
 }
 
-function getFillColorNoGroupby(d, numericData, xCol, mean, stdDev, selectedPoints) {
+function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
@@ -5662,4 +5694,44 @@ function getFillColorNoGroupby(d, numericData, xCol, mean, stdDev, selectedPoint
     }
 
     return "steelblue"; // Default color
+}
+
+function getFillColorNoGroupbyCategorical(d, selectedPoints) {
+    const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const category = String(d.category); // Normalize category value
+
+    // Handle missing values
+    if (category === "none" || category === "" || category === "null") return "gray";
+
+    // Handle special cases
+    if (category === "0 years old") return "pink";
+    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+
+    return "steelblue"; // Default color
+}
+
+function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+    const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const categoryX = typeof d.x === "string" ? String(d.x) : null;
+    const categoryY = typeof d.y === "string" ? String(d.y) : null;
+
+    // Handle categorical cases
+    if (categoryX || categoryY) {
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
+        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
+        if (["billion", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billion", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+    }
+
+    // Handle numeric outliers
+    const valueX = parseFloat(d.x);
+    const valueY = parseFloat(d.y);
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+
+    // Default to the color scale for numerical density
+    return colorScale(d.value);
 }
