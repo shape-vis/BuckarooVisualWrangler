@@ -33,34 +33,9 @@
     min-width: 1050px;
 }
 
-.legend-toolbox-container {
-    display: flex;
-    flex-direction: column; 
-    align-items: center;  
-}
-
-#error-legend {
-    width: 250px; 
-    padding: 15px;
-    background-color: #f9f9f9;
-    border: 2px solid #ccc;
-    border-radius: 5px;
-    text-align: center;
-    font-size: 14px;
-}
-
-.error-legend-color {
-    width: 15px;
-    height: 15px;
-    margin-right: 10px;
-    border: 1px solid black;
-    flex-shrink: 0;
-}
-
 .toolbox-wrapper {
     display: flex;
     flex-direction: column;
-    margin-top: 20px;
 }
 
 #toolbox {
@@ -227,7 +202,7 @@
     border: 1px solid #ccc;
     border-radius: 5px;
     box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-    max-width: 200px; 
+    max-width: 250px; 
     word-wrap: break-word; 
     overflow-wrap: break-word; 
 }

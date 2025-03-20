@@ -209,28 +209,79 @@ class ScatterplotMatrixView{
 
     updateLegend(groupByAttribute, givenData) {
         const legendContainer = d3.select("#legend");
-        legendContainer.html("");
-      
-        if (!groupByAttribute) {
-          legendContainer.style("display", "none");
-          return;
-        }
-        legendContainer.style("display", "block");
-      
-        const uniqueGroups = Array.from(new Set(givenData.objects().map(d => d[groupByAttribute])));
-        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
-      
-        uniqueGroups.forEach(group => {
-          const legendItem = legendContainer.append("div")
-            .attr("class", "legend-item");
-      
-          legendItem.append("span")
-            .attr("class", "legend-color")
-            .style("background-color", colorScale(group));
-      
-          legendItem.append("span")
-            .text(group);
+        legendContainer.html(""); 
+    
+        const radioContainer = legendContainer.append("div")
+            .attr("class", "legend-radio-buttons");
+    
+        radioContainer.append("input")
+            .attr("type", "radio")
+            .attr("name", "legend-toggle")
+            .attr("id", "view-errors")
+            .attr("value", "errors")
+            .property("checked", true); 
+    
+        radioContainer.append("label")
+            .attr("for", "view-errors")
+            .text("View Errors");
+    
+        radioContainer.append("input")
+            .attr("type", "radio")
+            .attr("name", "legend-toggle")
+            .attr("id", "view-groups")
+            .attr("value", "groups");
+    
+        radioContainer.append("label")
+            .attr("for", "view-groups")
+            .text("View Groups");
+    
+        d3.selectAll("input[name='legend-toggle']").on("change", () => {
+            const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
+            this.updateLegendContent(selectedValue, groupByAttribute, givenData);
         });
+    
+        this.updateLegendContent("errors", groupByAttribute, givenData);
+    }
+    
+    updateLegendContent(type, groupByAttribute, givenData) {
+        const legendContainer = d3.select("#legend");
+        legendContainer.selectAll(".legend-item").remove(); 
+    
+        if (type === "errors") {
+            const errorTypes = ["Missing Values", "Type Errors", "Data Type Mismatch", "Average Anomalies (Outliers)"];
+            const errorColors = d3.scaleOrdinal()
+                .domain(errorTypes)
+                .range(["gray", "pink", "orange", "red"]);
+    
+            errorTypes.forEach(error => {
+                const legendItem = legendContainer.append("div")
+                    .attr("class", "legend-item");
+    
+                legendItem.append("span")
+                    .attr("class", "legend-color")
+                    .style("background-color", errorColors(error));
+    
+                legendItem.append("span")
+                    .text(error);
+            });
+    
+        } else if (type === "groups" && groupByAttribute) {
+            console.log("here in groups");
+            const uniqueGroups = Array.from(new Set(givenData.objects().map(d => d[groupByAttribute])));
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+    
+            uniqueGroups.forEach(group => {
+                const legendItem = legendContainer.append("div")
+                    .attr("class", "legend-item");
+    
+                legendItem.append("span")
+                    .attr("class", "legend-color")
+                    .style("background-color", colorScale(group));
+    
+                legendItem.append("span")
+                    .text(group);
+            });
+        }
     }
     
     drawBoxPlots(groupStats, onSelectGroups, overallMedian, selectedGroups, significantGroups) {
@@ -374,7 +425,6 @@ class ScatterplotMatrixView{
     }
 
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {  
-        console.log("matrix predicate points", this.predicatePoints);
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
         let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
@@ -582,6 +632,10 @@ class ScatterplotMatrixView{
                             .domain([0, d3.max(histData, (d) => d.length)])
                             .range([this.size, 0]);
                             
+                        const values = numericData.map(d => d[xCol]).filter(v => !isNaN(v));
+                        const mean = d3.mean(values);
+                        const stdDev = d3.deviation(values);
+                            
                         bars = cellGroup.selectAll("rect")
                             .data(histData)
                             .join("rect")
@@ -589,10 +643,11 @@ class ScatterplotMatrixView{
                             .attr("width", binWidth)
                             // .attr("y", d => yScale(d.length))
                             // .attr("height", d => numericSpace - yScale(d.length))
-                            .attr("fill", (d) => {
-                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                                return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
-                            })
+                            // .attr("fill", (d) => {
+                            //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
+                            // })
+                            .attr("fill", d => getFillColorNoGroupby(d, numericData, xCol, mean, stdDev, this.selectedPoints))
                             // .attr("stroke", d => d.category ? "red" : "none")
                             .attr("stroke", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
@@ -5581,4 +5636,30 @@ function splitData (data, xCol, yCol){
     const numericSpace = this.size - categorySpace;
 
     return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace};
+}
+
+function getFillColorNoGroupby(d, numericData, xCol, mean, stdDev, selectedPoints) {
+    const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    if (d.category) {
+        // Check for missing values
+        if (d.category === null || d.category === "none" || d.category === "") return "gray";
+        // Check for '0 years of age'
+        if (d.category === "0 years of age") return "pink";
+        // Check for specific categorical values
+        if (["billions", "seventy", "0", "21.5"].includes(d.category)) return "orange";
+    } else {
+        // Check for numeric outliers
+        const avgValue = d3.mean(d.ids.map(id => {
+            const found = numericData.find(n => n.ID === id);
+            return found ? found[xCol] : undefined;
+        }).filter(v => !isNaN(v)));
+
+        if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
+            return "red";
+        }
+    }
+
+    return "steelblue"; // Default color
 }
