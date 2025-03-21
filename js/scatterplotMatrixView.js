@@ -5639,4 +5639,196 @@ function splitData (data, xCol, yCol){
     const xIsNumeric = isNumeric(xCol);
     const yIsNumeric = isNumeric(yCol);
 
+    const numericData = data.filter(d => 
+        typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+    );
     
+    const nonNumericXData = data.filter(d => 
+        (typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])
+    ).map(d => ({
+        ...d,
+        [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
+    }));
+    
+    const nonNumericYData = data.filter(d => 
+        typeof d[xCol] === "number" && !isNaN(d[xCol]) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+    ).map(d => ({
+        ...d,
+        [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] 
+    }));
+    
+    const nonNumericData = data.filter(d => 
+        (typeof d[xCol] !== "number" || isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))
+    ).map(d => ({
+        ...d,
+        [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol],
+        [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol]
+    }));
+
+    const combinedData = [
+        ...numericData.map(d => ({ ...d, type: "numeric" })),
+        ...nonNumericXData.map(d => ({ ...d, type: "nan-x" })),
+        ...nonNumericYData.map(d => ({ ...d, type: "nan-y" })),
+        ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
+    ];
+
+    const allNonNumericX = [...nonNumericXData, ...nonNumericData].filter(d =>
+        typeof d[xCol] !== "number" || isNaN(d[xCol])
+    ).map(d => ({
+        ...d,
+        [xCol]: (typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol])
+    }));
+
+    const allNonNumericY = [...nonNumericYData, ...nonNumericData].filter(d =>
+        typeof d[yCol] !== "number" || isNaN(d[yCol])
+    ).map(d => ({
+        ...d,
+        [yCol]: (typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol])
+    }));
+
+
+    const groupedXCategories = d3.group(allNonNumericX, d => String(d[xCol]));
+    const groupedYCategories = d3.group(allNonNumericY, d => String(d[yCol]));
+
+    let uniqueXCategories, uniqueYCategories;
+
+    if (numericData.length === data.length)
+    {
+        uniqueXCategories = [];
+        uniqueYCategories = [];
+    }else{
+        uniqueXCategories = ["NaN",...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+        uniqueYCategories = ["NaN",...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+    }
+
+    const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
+    const numericSpace = this.size - categorySpace;
+
+    return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace};
+}
+
+function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, selectedPoints) {
+    const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    if (d.category) {
+        // Check for missing values
+        if (d.category === null || d.category === "none" || d.category === "") return "gray";
+        // Check for '0 years of age'
+        if (d.category === "0 years of age") return "pink";
+        // Check for specific categorical values
+        if (["billions", "seventy", "0", "21.5"].includes(d.category)) return "orange";
+    } else {
+        // Check for numeric outliers
+        const avgValue = d3.mean(d.ids.map(id => {
+            const found = numericData.find(n => n.ID === id);
+            return found ? found[xCol] : undefined;
+        }).filter(v => !isNaN(v)));
+
+        if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
+            return "red";
+        }
+    }
+
+    return "steelblue"; // Default color
+}
+
+function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints) {
+    const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));                            
+    if (isSelected) return "gold";
+
+    const category = d.data.category;
+
+    if (category) {
+        // Check for missing values
+        if (category === "null" || category === "none" || category === "") return "gray";
+        // Check for '0 years of age'
+        if (category === "0 years old") return "pink";
+        // Check for specific categorical values
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+    } else {
+        // Check for numeric outliers
+        const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
+            const found = numericData.find(n => n.ID === id);
+            return found ? found[xCol] : undefined;
+        }).filter(v => !isNaN(v)));
+
+        if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
+            return "red";
+        }
+    }
+
+    return "steelblue"; 
+}
+
+function getFillColorNoGroupbyCategorical(d, selectedPoints) {
+    const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const category = String(d.category); 
+
+    if (category === "none" || category === "" || category === "null") return "gray";
+
+    if (category === "0 years old") return "pink";
+    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+
+    return "steelblue"; 
+}
+
+function getFillColorCategorical(d, selectedPoints) {
+    const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const category = d.data.category;
+
+    if (category === "none" || category === "" || category === "null") return "gray";
+
+    if (category === "0 years old") return "pink";
+    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+
+    return "steelblue"; 
+}
+
+function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+    const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const categoryX = typeof d.x === "string" ? String(d.x) : null;
+    const categoryY = typeof d.y === "string" ? String(d.y) : null;
+
+    if (categoryX || categoryY) {
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
+        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+    }
+
+    const valueX = parseFloat(d.x);
+    const valueY = parseFloat(d.y);
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+
+    return colorScale(d.value);
+}
+
+function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+    const isSelected = d.ids[group].some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const categoryX = typeof d.x === "string" ? String(d.x) : null;
+    const categoryY = typeof d.y === "string" ? String(d.y) : null;
+
+    if (categoryX || categoryY) {
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
+        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+    }
+
+    const valueX = parseFloat(d.x);
+    const valueY = parseFloat(d.y);
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+
+    return "steelblue"; 
+
+    // return colorScale(d.value);
+}
