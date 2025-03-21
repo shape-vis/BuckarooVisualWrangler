@@ -498,43 +498,4 @@ function attachButtonEventListeners(){
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
-        const controller = getActiveController();
-        controller.model.imputeAverage(controller.xCol);
-        controller.view.setSelectedPoints([]);
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
-    });
-
-    d3.select("#impute-average-y").on("click", () => {
-        document.getElementById("preview-remove").style.display = "none";
-        document.getElementById("preview-impute-average-x").style.display = "none";
-        document.getElementById("preview-impute-average-y").style.display = "none";
-        const controller = getActiveController();
-        controller.model.imputeAverage(controller.yCol);
-        controller.view.setSelectedPoints([]);
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
-    });
-
-    const radioButtons = document.querySelectorAll("input[name='options']");
-
-    radioButtons.forEach((radio) => {
-        radio.addEventListener("change", (event) => {
-            const controller = getActiveController();
-            if (event.target.value === "selectData" && event.target.checked) {
-                const selectionEnabled = true;
-                controller.render(selectionEnabled, false);
-                // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-            } else {
-                const selectionEnabled = false;
-                const animate = true;
-                controller.render(selectionEnabled, animate);
-            }
-        });
-    });
-}
-
-    
-       
+        con
