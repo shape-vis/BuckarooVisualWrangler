@@ -26,7 +26,7 @@ class ScatterplotMatrixView{
 
         this.selectedPoints = [];
         this.predicatePoints = [];
-        this.viewGroupsButton;
+        this.viewGroupsButton = false;
     }
 
     setSelectedPoints(points) {
@@ -211,86 +211,6 @@ class ScatterplotMatrixView{
             operatorDropdown.addEventListener("change", () => controller.predicateFilter(selectedColumn, operatorDropdown.value, valueDropdown.value, isNumeric));
         }
     }
-
-    // updateLegend(groupByAttribute, givenData) {
-    //     const legendContainer = d3.select("#legend");
-    //     legendContainer.html(""); 
-    
-    //     const radioContainer = legendContainer.append("div")
-    //         .attr("class", "legend-radio-buttons");
-    
-    //     radioContainer.append("input")
-    //         .attr("type", "radio")
-    //         .attr("name", "legend-toggle")
-    //         .attr("id", "view-errors")
-    //         .attr("value", "errors")
-    //         .property("checked", true); 
-    
-    //     radioContainer.append("label")
-    //         .attr("for", "view-errors")
-    //         .text("View Errors");
-    
-    //     radioContainer.append("input")
-    //         .attr("type", "radio")
-    //         .attr("name", "legend-toggle")
-    //         .attr("id", "view-groups")
-    //         .attr("value", "groups");
-    
-    //     radioContainer.append("label")
-    //         .attr("for", "view-groups")
-    //         .text("View Groups");
-    
-    //     d3.selectAll("input[name='legend-toggle']").on("change", () => {
-    //         const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
-    //         this.updateLegendContent(selectedValue, groupByAttribute, givenData);
-    //     });
-    
-    //     this.updateLegendContent("errors", groupByAttribute, givenData);
-    // }
-    
-    // updateLegendContent(type, groupByAttribute, givenData) {
-    //     const legendContainer = d3.select("#legend");
-    //     legendContainer.selectAll(".legend-item").remove(); 
-    
-    //     if (type === "errors") {
-    //         const errorTypes = ["Missing Values", "Type Errors", "Data Type Mismatch", "Average Anomalies (Outliers)"];
-    //         const errorColors = d3.scaleOrdinal()
-    //             .domain(errorTypes)
-    //             .range(["gray", "pink", "orange", "red"]);
-    
-    //         errorTypes.forEach(error => {
-    //             const legendItem = legendContainer.append("div")
-    //                 .attr("class", "legend-item");
-    
-    //             legendItem.append("span")
-    //                 .attr("class", "legend-color")
-    //                 .style("background-color", errorColors(error));
-    
-    //             legendItem.append("span")
-    //                 .text(error);
-    //         });
-
-    //         this.viewGroupsButton = false;
-    //     } else if (type === "groups" && groupByAttribute) {
-    //         console.log("here in groups");
-    //         const uniqueGroups = Array.from(new Set(givenData.objects().map(d => d[groupByAttribute])));
-    //         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
-    
-    //         uniqueGroups.forEach(group => {
-    //             const legendItem = legendContainer.append("div")
-    //                 .attr("class", "legend-item");
-    
-    //             legendItem.append("span")
-    //                 .attr("class", "legend-color")
-    //                 .style("background-color", colorScale(group));
-    
-    //             legendItem.append("span")
-    //                 .text(group);
-    //         });
-
-    //         this.viewGroupsButton = true;
-    //     }
-    // }
     
     drawBoxPlots(groupStats, onSelectGroups, overallMedian, selectedGroups, significantGroups) {
         console.log("significant groups", significantGroups);
@@ -594,27 +514,27 @@ class ScatterplotMatrixView{
                                 return d;
                             })
                             .join("rect")
+                            // .attr("fill", d => d.category ? "gray" : colorScale(d.group))
                             .attr("fill", d => {
                                 if (!this.viewGroupsButton){
                                     return getFillColorNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints); 
                                 }
-                                return d.category ? "gray" : colorScale(d.group);
+                                return d.data.category ? "gray" : colorScale(d.group);
                             })
-                            // .attr("fill", d => d.category ? "gray" : colorScale(d.group))
                             .attr("stroke", (d) => {
                                 const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
                                 return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
                             })
                             .attr("stroke-width", (d) => {
                                 const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                                return isSelected ? 3 : 0.5;
+                                return isSelected ? 2 : 0.5;
                             })
                             .attr("opacity", (d) => {
                                 const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
                                 if(selectionEnabled) {return isSelected ? 1 : 0.7;}
                                 else {return 1;}
                             })
-                            .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
+                            .attr("x", d => d.data.category ? categoricalScale(d.data.category) : xScale(d.data.x0))
                             .attr("width", binWidth);
                     }
                     else{
@@ -644,8 +564,7 @@ class ScatterplotMatrixView{
                                 category: category 
                             });
                         });
-                        console.log("uniqueCat", uniqueCategories);
-    
+
                         yScale = d3.scaleLinear()
                             .domain([0, d3.max(histData, (d) => d.length)])
                             .range([this.size, 0]);
@@ -776,19 +695,25 @@ class ScatterplotMatrixView{
                                 return d;
                             })
                             .join("rect")
-                            .attr("fill", d => colorScale(d.group))
+                            // .attr("fill", d => colorScale(d.group))
+                            .attr("fill", d => {
+                                if (!this.viewGroupsButton){
+                                    return getFillColorCategorical(d, this.selectedPoints); 
+                                }
+                                return colorScale(d.group);
+                            })
+                            .attr("stroke", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                                return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                            })
+                            .attr("stroke-width", (d) => {
+                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                                return isSelected ? 2 : 0.5;
+                            })
                             .attr("opacity", (d) => {
                                 const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
                                 if(selectionEnabled) {return isSelected ? 1 : 0.7;}
                                 else {return 1;}
-                            })
-                            .attr("stroke", (d) => {
-                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                                return isSelected ? "black" : "none";
-                            })
-                            .attr("stroke-width", (d) => {
-                                const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                                return isSelected ? 2 : 0;
                             })
                             .attr("x", d => xScale(d.data.category))
                             .attr("width", xScale.bandwidth());                          
@@ -1978,7 +1903,6 @@ class ScatterplotMatrixView{
 
         const uniqueXStringBins = uniqueXCategories; 
         const uniqueYStringBins = uniqueYCategories; 
-        console.log("uniqueXStringBins", uniqueXStringBins);
 
         let binXGenerator = d3.bin()
             .domain([d3.min(nonNumericYData, (d) => d[xCol]), d3.max(nonNumericYData, (d) => d[xCol])])  
@@ -2081,19 +2005,33 @@ class ScatterplotMatrixView{
                             rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("fill", groupColorScale(group))
+                                // .attr("fill", groupColorScale(group))
+                                .attr("fill", d => {
+                                    if (!self.viewGroupsButton){
+                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                    }
+                                    return groupColorScale(group);
+                                })
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? 2 : 0.5;
+                                })
+                                // .attr("stroke", (d) => {
+                                //     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                //     return isSelected ? "black" : "white";
+                                // })
+                                // .attr("stroke-width", (d) => {
+                                //     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
+                                //     return isSelected ? 2 : 0;
+                                // })
                                 .attr("opacity", (d) => {
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     if(selectionEnabled) {return isSelected ? 1 : 0.7;}
                                     else {return 1;}
-                                })
-                                .attr("stroke", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? "black" : "white";
-                                })
-                                .attr("stroke-width", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? 2 : 0;
                                 })
                                 .attr("data-group", group);
                             if(animate){
@@ -2271,19 +2209,25 @@ class ScatterplotMatrixView{
                             rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset)                                  
-                                .attr("fill", groupColorScale(group))
+                                // .attr("fill", groupColorScale(group))
+                                .attr("fill", d => {
+                                    if (!self.viewGroupsButton){
+                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                    }
+                                    return groupColorScale(group);
+                                })
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? 2 : 0.5;
+                                })
                                 .attr("opacity", (d) => {
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     if(selectionEnabled) {return isSelected ? 1 : 0.7;}
                                     else {return 1;}
-                                })
-                                .attr("stroke", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? "black" : "white";
-                                })
-                                .attr("stroke-width", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? 2 : 0;
                                 })
                                 .attr("data-group", group);
                             if(animate){
@@ -2496,19 +2440,24 @@ class ScatterplotMatrixView{
                             rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                .attr("fill", groupColorScale(group))
+                                .attr("fill", d => {
+                                    if (!self.viewGroupsButton){
+                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                    }
+                                    return groupColorScale(group);
+                                })
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? 2 : 0.5;
+                                })
                                 .attr("opacity", (d) => {
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     if(selectionEnabled) {return isSelected ? 1 : 0.7;}
                                     else {return 1;}
-                                })
-                                .attr("stroke", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? "black" : "white";
-                                })
-                                .attr("stroke-width", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? 2 : 0;
                                 })
                                 .attr("data-group", group);
                             if(animate){
@@ -2591,7 +2540,6 @@ class ScatterplotMatrixView{
                 );
 
                 xScale = d3.scaleBand().domain(xCategories).range([0, this.size]).padding(0.05);
-                console.log("xCategories", xCategories);
                 yScale = d3.scaleBand().domain(uniqueYCategories).range([this.size, 0]).padding(0.05);
                 colorScale = d3.scaleSequential(d3.interpolateBlues)
                     .domain([0, d3.max(heatmapData, d => d.value)]);
@@ -2708,19 +2656,24 @@ class ScatterplotMatrixView{
                                 .attr("y", yOffset) 
                                 // .attr("width", xScale.bandwidth())
                                 // .attr("height", (yScale.bandwidth() * count) / total)  
-                                .attr("fill", groupColorScale(group))
+                                .attr("fill", d => {
+                                    if (!self.viewGroupsButton){
+                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                    }
+                                    return groupColorScale(group);
+                                })
+                                .attr("stroke", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                })
+                                .attr("stroke-width", (d) => {
+                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                    return isSelected ? 2 : 0.5;
+                                })
                                 .attr("opacity", (d) => {
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     if(selectionEnabled) {return isSelected ? 1 : 0.7;}
                                     else {return 1;}
-                                })
-                                .attr("stroke", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? "black" : "white";
-                                })
-                                .attr("stroke-width", (d) => {
-                                    const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                    return isSelected ? 2 : 0;
                                 })
                                 .attr("data-group", group);
                             if(animate){
@@ -4395,6 +4348,10 @@ class ScatterplotMatrixView{
 
                 const bins = histogramGenerator(numericData.map(d => d[xCol]));
 
+                const values = numericData.map(d => d[xCol]).filter(v => !isNaN(v));
+                const mean = d3.mean(values);
+                const stdDev = d3.deviation(values);
+
                 if (groupByAttribute) {
                     const groups = Array.from(new Set(numericData.map(d => d[groupByAttribute])));
                     const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
@@ -4436,7 +4393,7 @@ class ScatterplotMatrixView{
                             groupIDs: {}   
                         };
                         groups.forEach(g => {
-                            const groupData = binData.filter(d => d[groupByAttribute] === g);
+                            const groupData = catData.filter(d => d[groupByAttribute] === g);
                             obj[g] = groupData.length;  
                             obj.group = g;
                             obj.groupIDs[g] = groupData.map(d => d.ID);
@@ -4463,20 +4420,25 @@ class ScatterplotMatrixView{
                             return d;
                         })                        
                         .join("rect")
-                        .attr("fill", d => d.category ? "gray" : colorScale(d.group))
+                        .attr("fill", d => {
+                            if (!this.viewGroupsButton){
+                                return getFillColorNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints); 
+                            }
+                            return d.data.category ? "gray" : colorScale(d.group);
+                        })
+                        .attr("stroke", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                            return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                        })
+                        .attr("stroke-width", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
+                            return isSelected ? 2 : 0.5;
+                        })
                         .attr("opacity", (d) => {
                             const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
                             return isSelected ? 1 : 0.7;
                         })
-                        .attr("stroke", (d) => {
-                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                            return isSelected ? "black" : "none";
-                        })
-                        .attr("stroke-width", (d) => {
-                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                            return isSelected ? 2 : 0;
-                        })
-                        .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
+                        .attr("x", d => d.data.category ? categoricalScale(d.data.category) : xScale(d.data.x0))
                         .attr("y", d => yScale(d[1]))
                         .attr("width", binWidth)
                         .attr("height", d => yScale(d[0]) - yScale(d[1]));
@@ -4512,10 +4474,6 @@ class ScatterplotMatrixView{
                     yScale = d3.scaleLinear()
                         .domain([0, d3.max(histData, (d) => d.length)])
                         .range([height, 0]);
-
-                    const values = numericData.map(d => d[xCol]).filter(v => !isNaN(v));
-                    const mean = d3.mean(values);
-                    const stdDev = d3.deviation(values);
                     
                     svg.selectAll("rect")
                         .data(histData)
@@ -4625,18 +4583,23 @@ class ScatterplotMatrixView{
                             return d;
                         })                        
                         .join("rect")
-                        .attr("fill", d => colorScale(d.group))
-                        .attr("opacity", (d) => {
-                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            return isSelected ? 1 : 0.7;
+                        .attr("fill", d => {
+                            if (!this.viewGroupsButton){
+                                return getFillColorCategorical(d, this.selectedPoints); 
+                            }
+                            return colorScale(d.group);
                         })
                         .attr("stroke", (d) => {
                             const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                            return isSelected ? "black" : "none";
+                            return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
                         })
                         .attr("stroke-width", (d) => {
                             const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));                            
-                            return isSelected ? 2 : 0;
+                            return isSelected ? 2 : 0.5;
+                        })
+                        .attr("opacity", (d) => {
+                            const isSelected = d.data.groupIDs[d.group].some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            return isSelected ? 1 : 0.7;
                         })
                         .attr("x", d => xScale(d.data.category))
                         .attr("y", d => yScale(d[1]))
@@ -4844,18 +4807,23 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
+                                    .attr("fill", d => {
+                                        if (!self.viewGroupsButton){
+                                            return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        }
+                                        return groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? 2 : 0.5;
+                                    })
                                     .attr("opacity", (d) => {
                                         const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                         return isSelected ? 1 : 0.7;
-                                    })
-                                    .attr("stroke", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? "black" : "white";
-                                    })
-                                    .attr("stroke-width", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? 2 : 0;
                                     })
                                     .attr("data-group", group);
 
@@ -5020,18 +4988,23 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
+                                    .attr("fill", d => {
+                                        if (!self.viewGroupsButton){
+                                            return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        }
+                                        return groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? 2 : 0.5;
+                                    })
                                     .attr("opacity", (d) => {
                                         const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                         return isSelected ? 1 : 0.7;
-                                    })
-                                    .attr("stroke", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? "black" : "white";
-                                    })
-                                    .attr("stroke-width", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? 2 : 0;
                                     })
                                     .attr("data-group", group);
 
@@ -5224,18 +5197,23 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
+                                    .attr("fill", d => {
+                                        if (!self.viewGroupsButton){
+                                            return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        }
+                                        return groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? 2 : 0.5;
+                                    })
                                     .attr("opacity", (d) => {
                                         const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                         return isSelected ? 1 : 0.7;
-                                    })
-                                    .attr("stroke", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? "black" : "white";
-                                    })
-                                    .attr("stroke-width", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? 2 : 0;
                                     })
                                     .attr("data-group", group);
 
@@ -5416,18 +5394,23 @@ class ScatterplotMatrixView{
                                     .attr("y", yOffset) 
                                     .attr("width", xScale.bandwidth())
                                     .attr("height", (yScale.bandwidth() * count) / total)  
-                                    .attr("fill", groupColorScale(group))
+                                    .attr("fill", d => {
+                                        if (!self.viewGroupsButton){
+                                            return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        }
+                                        return groupColorScale(group);
+                                    })
+                                    .attr("stroke", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? "black" : (this.viewGroupsButton ? "none" : "white");
+                                    })
+                                    .attr("stroke-width", (d) => {
+                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
+                                        return isSelected ? 2 : 0.5;
+                                    })
                                     .attr("opacity", (d) => {
                                         const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                         return isSelected ? 1 : 0.7;
-                                    })
-                                    .attr("stroke", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? "black" : "white";
-                                    })
-                                    .attr("stroke-width", (d) => {
-                                        const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                        return isSelected ? 2 : 0;
                                     })
                                     .attr("data-group", group);
 
@@ -5656,7 +5639,7 @@ function splitData (data, xCol, yCol){
     }));
 
     const allNonNumericY = [...nonNumericYData, ...nonNumericData].filter(d =>
-        typeof d[xCol] !== "number" || isNaN(d[yCol])
+        typeof d[yCol] !== "number" || isNaN(d[yCol])
     ).map(d => ({
         ...d,
         [yCol]: (typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol])
@@ -5713,13 +5696,15 @@ function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints)
     const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));                            
     if (isSelected) return "gold";
 
-    if (d.category) {
+    const category = d.data.category;
+
+    if (category) {
         // Check for missing values
-        if (d.category === "null" || d.category === "none" || d.category === "") return "gray";
+        if (category === "null" || category === "none" || category === "") return "gray";
         // Check for '0 years of age'
-        if (d.category === "0 years old") return "pink";
+        if (category === "0 years old") return "pink";
         // Check for specific categorical values
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(d.category)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
     } else {
         // Check for numeric outliers
         const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
@@ -5732,23 +5717,35 @@ function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints)
         }
     }
 
-    return "steelblue"; // Default color
+    return "steelblue"; 
 }
 
 function getFillColorNoGroupbyCategorical(d, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    const category = String(d.category); // Normalize category value
+    const category = String(d.category); 
 
-    // Handle missing values
     if (category === "none" || category === "" || category === "null") return "gray";
 
-    // Handle special cases
     if (category === "0 years old") return "pink";
     if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
 
-    return "steelblue"; // Default color
+    return "steelblue"; 
+}
+
+function getFillColorCategorical(d, selectedPoints) {
+    const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const category = d.data.category;
+
+    if (category === "none" || category === "" || category === "null") return "gray";
+
+    if (category === "0 years old") return "pink";
+    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+
+    return "steelblue"; 
 }
 
 function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
@@ -5770,4 +5767,27 @@ function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX
     if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
 
     return colorScale(d.value);
+}
+
+function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+    const isSelected = d.ids[group].some(ID => selectedPoints.some(p => p.ID === ID));
+    if (isSelected) return "gold";
+
+    const categoryX = typeof d.x === "string" ? String(d.x) : null;
+    const categoryY = typeof d.y === "string" ? String(d.y) : null;
+
+    if (categoryX || categoryY) {
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
+        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
+        if (["billion", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billion", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+    }
+
+    const valueX = parseFloat(d.x);
+    const valueY = parseFloat(d.y);
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+
+    return "steelblue"; 
+
+    // return colorScale(d.value);
 }

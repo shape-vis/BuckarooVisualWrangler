@@ -7,11 +7,9 @@ class ScatterplotController {
       this.yCol = null;
       this.viewGroupsButton = false;
 
-
     //   this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
       this.updateLegend(this.model.getGroupByAttribute()); 
-
     }
 
     // Update the 1-3 columns the user selects
