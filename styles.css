@@ -50,6 +50,24 @@
     width: 260px;
     min-height: 200px; 
 }
+
+#export-script {
+    padding: 0.6rem 1.2rem;
+    background-color: #d9d4d4;
+    border: 2px solid #ccc;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-bottom: 20px;
+    width: 175px;
+    align-self: flex-end;
+  }
+  
+  #export-script:hover {
+    background-color: #c6c6c6; 
+  }
+  
+
 #radio-buttons-form p {
     margin-top: 0; 
 }
@@ -59,11 +77,23 @@
     gap: 10px;     
 }
 
-.tabs {
+.file-upload {
     display: flex;
-    justify-content: left;
-    margin-bottom: 10px;
-}
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+    width: fit-content;
+    height: auto;
+    margin: 1rem 0 10px 0;
+  }
+
+.file-upload label {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
 
 .tab-button {
     padding: 5px 10px;
@@ -72,7 +102,6 @@
     cursor: pointer;
     font-size: 12px;
     outline: none;
-    margin-right: 5px;
 }
 
 .tab-button.active {
@@ -103,10 +132,6 @@
 
 .tooltip.visible {
     display: block;
-}
-
-.selected {
-    fill: gold !important;
 }
 
 .linechart-button,
@@ -196,7 +221,7 @@
 #legend {
     position: absolute;
     left: 10px; 
-    top: 300px; 
+    top: 320px; 
     background: white;
     padding: 10px;
     border: 1px solid #ccc;

@@ -17,10 +17,15 @@
         <h1>Buckaroo Visual Wrangler</h1>
     </div>
 
-    <div class="tabs">
+    <div class="file-upload">
+        <label for="fileInput">Upload File:</label>
+        <input type="file" id="fileInput" accept=".csv" />
+    </div>
+
+    <!-- <div class="tabs">
         <button class="tab-button" data-target="tab1">Practice Data</button>
         <button class="tab-button active" data-target="tab2">StackOverflow Data</button>
-    </div>
+    </div> -->
 
     <div class="matrix-and-dropdown-container">
         <div class="dropdown-container">
@@ -83,6 +88,9 @@
                 </div>
 
                 <div class="toolbox-wrapper">
+
+                    <button id="export-script">Export Cleaning Script</button>
+
                     <div id="toolbox">
                         <form id="radio-buttons-form">
                             <p>Select an option:</p>

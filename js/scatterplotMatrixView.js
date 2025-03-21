@@ -5758,7 +5758,7 @@ function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX
     if (categoryX || categoryY) {
         if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
         if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billion", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billion", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
     }
 
     const valueX = parseFloat(d.x);
@@ -5779,7 +5779,7 @@ function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, 
     if (categoryX || categoryY) {
         if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
         if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billion", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billion", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
     }
 
     const valueX = parseFloat(d.x);
