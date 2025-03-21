@@ -62,42 +62,4 @@ df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], err
 df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
 
 # Save cleaned dataset
-df_cleaned.to_csv('stackoverflow_db_cleaned.csv', index=False)
-`;
-
-  const blob = new Blob([scriptContent], { type: "text/x-python" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "stackoverflow_db_cleaned.py";
-  a.click();
-
-  URL.revokeObjectURL(url); 
-});
-
-
-
-
-
-
-
-// const data = aq.table({
-//     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-//     age:        ["sixty", 22, true, 99, 45, 45, 0, 89, NaN, 55],
-//     "salary (k)": [NaN, 65, '$', 70, "fifty", 70, 0, 99, 85, 89],
-//     employees: [0, 5, "None", NaN, 15, 15, 25, 30, 0, 89],
-//   });
-
-
-// practiceController = new ScatterplotController(data, "#matrix-vis-practice");
-
-// const data2 = aq.table({
-//     ID: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-//     age: [25, 0, 35, 0, 40, 45, 0, 89, 72, 55],
-//     "salary (k)": [40, 65, 55, 70, 15, 75, 0, 80, 85, 89],
-//     employees: [0, 5, 10, 55, 15, 20, 25, 30, 0, 89],
-//   });
-
-
-
+df_cleaned.to_cs

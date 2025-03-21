@@ -208,4 +208,48 @@ class DataModel {
   getSelectedPoints() {
     return this.selectedPoints;
   }
+
+  getColumnErrors() {
+    const data = this.filteredData.objects();
+    const columns = this.filteredData.columnNames().slice(1); 
+    const errorsPerColumn = {};
+  
+    columns.forEach(col => {
+      const values = data.map(row => row[col]);
+      const errors = new Set();
+  
+      if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
+        errors.add("missing");
+      }
+  
+      // const types = values.map(v => typeof v);
+      // if (new Set(types).size > 1) {
+      //   errors.add("typeError");
+      // }
+      if (values.some(v => String(v) === "0 years old")) {
+        errors.add("typeError");
+      }
+  
+      // const firstType = typeof values.find(v => v !== null && v !== undefined);
+      // if (values.some(v => typeof v !== firstType)) {
+      //   errors.add("mismatch");
+      // }
+      if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
+        errors.add("mismatch");
+      }
+  
+      const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
+      if (numericValues.length > 0) {
+        const mean = d3.mean(numericValues);
+        const std = d3.deviation(numericValues);
+        if (numericValues.some(v => Math.abs(v - mean) > 2 * std)) {
+          errors.add("anomaly");
+        }
+      }
+  
+      errorsPerColumn[col] = Array.from(errors);
+    });
+  
+    return errorsPerColumn;
+  }
 }
