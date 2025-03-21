@@ -181,6 +181,50 @@ class ScatterplotMatrixView{
         updateDropdownButton();
     }
 
+    updateColumnErrorIndicators(table, controller) {
+        const columnErrors = controller.model.getColumnErrors(); 
+        const attributes = table.columnNames().slice(1).sort(); 
+      
+        const columnListContainer = document.getElementById("attribute-list");
+        if (columnListContainer) {
+          columnListContainer.innerHTML = "<h4>Columns</h4>";
+          const ul = document.createElement("ul");
+      
+          attributes.forEach(attr => {
+            const li = document.createElement("li");
+            li.textContent = attr;
+            li.style.display = "flex";
+            li.style.alignItems = "center";
+            li.style.gap = "5px";
+      
+            const errorTypes = columnErrors[attr] || [];
+      
+            errorTypes.forEach(type => {
+              const box = document.createElement("span");
+              box.classList.add("error-scent");
+              box.title = type;
+              box.style.width = "10px";
+              box.style.height = "10px";
+              box.style.borderRadius = "2px";
+              box.style.display = "inline-block";
+      
+              switch (type) {
+                case "missing": box.style.backgroundColor = "gray"; break;
+                case "typeError": box.style.backgroundColor = "pink"; break;
+                case "mismatch": box.style.backgroundColor = "orange"; break;
+                case "anomaly": box.style.backgroundColor = "red"; break;
+              }
+      
+              li.appendChild(box);
+            });
+      
+            ul.appendChild(li);
+          });
+      
+          columnListContainer.appendChild(ul);
+        }
+    }
+
     handlePredicateChange(table, controller) {
         const predicateDropdown = document.getElementById("predicate-dropdown");
         const conditionContainer = document.getElementById("condition-container"); 

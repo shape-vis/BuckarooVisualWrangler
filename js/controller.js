@@ -489,8 +489,9 @@ function attachButtonEventListeners(){
         const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
+
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        controller.view.populateDropdownFromTable(controller.model.getFullData(), controller);
+        controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
@@ -503,7 +504,7 @@ function attachButtonEventListeners(){
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        controller.view.populateDropdownFromTable(controller.model.getFullData(), controller);
+        controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
@@ -516,7 +517,7 @@ function attachButtonEventListeners(){
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        controller.view.populateDropdownFromTable(controller.model.getFullData(), controller);
+        controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
