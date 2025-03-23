@@ -78,44 +78,119 @@ class ScatterplotMatrixView{
         // Populate list of columns legend (attribute-list)
         const columnListContainer = document.getElementById("attribute-list");
         if (columnListContainer) {
-            columnListContainer.innerHTML = "<h4>Columns</h4>";
+            columnListContainer.innerHTML = "<h4>Attributes</h4>";
             const ul = document.createElement("ul");
-
+        
             const columnErrors = controller.model.getColumnErrors(); 
-
+        
             attributes.forEach(attr => {
-            const li = document.createElement("li");
-            li.textContent = attr;
-            li.style.display = "flex";
-            li.style.alignItems = "center";
-            li.style.gap = "5px";
+                const li = document.createElement("li");
+                li.style.display = "flex";
+                li.style.flexDirection = "column";
+                li.style.gap = "4px";
+                li.style.marginBottom = "16px";
 
-            const errorTypes = columnErrors[attr] || [];
+                const topRow = document.createElement("div");
+                topRow.style.display = "flex";
+                topRow.style.alignItems = "center";
+                topRow.style.gap = "6px";
 
-            errorTypes.forEach(type => {
-                const box = document.createElement("span");
-                box.style.width = "10px";
-                box.style.height = "10px";
-                box.style.display = "inline-block";
-                box.style.borderRadius = "2px";
-                box.title = type;
+                const label = document.createElement("span");
+                label.textContent = attr;
+                label.style.fontSize = "16px";
+                label.style.fontWeight = "1000";
+                label.style.marginRight = "10px";
+                topRow.appendChild(label);
+        
+                const errorTypes = columnErrors[attr] || {};
+        
+                Object.entries(errorTypes).forEach(([type, pct]) => {
+                    const box = document.createElement("span");
+                    box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
+                    box.classList.add("error-scent");
+        
+                    switch (type) {
+                        case "missing": box.style.backgroundColor = "gray"; break;
+                        case "typeError": box.style.backgroundColor = "pink"; break;
+                        case "mismatch": box.style.backgroundColor = "orange"; break;
+                        case "anomaly": box.style.backgroundColor = "red"; break;
+                    }
+                
+                    const percentText = document.createElement("span");
+                    percentText.textContent = `${Math.round(pct * 100)}%`;
+                    percentText.style.fontSize = "10px";
+                    percentText.style.fontWeight = "bold";
+                    percentText.style.color = "black";
+                    percentText.style.position = "absolute";
+                    percentText.style.top = "0";
+                    percentText.style.right = "0";
+                    percentText.style.transform = "translate(75%, 15%)";
+                    box.appendChild(percentText);
+        
+                    topRow.appendChild(box);
+                });
 
-                switch (type) {
-                case "missing": box.style.backgroundColor = "gray"; break;
-                case "typeError": box.style.backgroundColor = "pink"; break;
-                case "mismatch": box.style.backgroundColor = "orange"; break;
-                case "anomaly": box.style.backgroundColor = "red"; break;
+                li.appendChild(topRow);
+
+                const columnData = table.array(attr).filter(d => d !== "" && d !== null && d !== undefined);
+                const isNumeric = columnData.some(v => typeof v === "number" && !isNaN(v));
+
+                const stats = document.createElement("div");
+                stats.classList.add("column-stats");
+
+                if (isNumeric) {
+                const mean = d3.mean(columnData);
+                stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>`;
+                } else {
+                const mode = [...d3.rollup(columnData, v => v.length, d => d)]
+                    .sort((a, b) => b[1] - a[1])[0][0];
+
+                stats.innerHTML = `<div>Mode: ${mode}</div>`;
                 }
 
-                li.appendChild(box);
-            });
+                li.appendChild(stats);
 
-            ul.appendChild(li);
-            });
+                const totalRows = table.objects().length;
+                const errorEntries = Object.entries(errorTypes);
+                const errorSum = errorEntries.reduce((sum, [_, pct]) => sum + pct, 0);
+                const cleanPct = Math.max(0, 1 - errorSum);
 
+                const barContainer = document.createElement("div");
+                barContainer.classList.add("error-bar-container");
+
+                errorEntries.forEach(([type, pct]) => {
+                const segment = document.createElement("div");
+                segment.classList.add("bar-segment");
+                segment.style.width = `${pct * 100}%`;
+                segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
+
+                switch (type) {
+                    case "missing": segment.style.backgroundColor = "gray"; break;
+                    case "typeError": segment.style.backgroundColor = "pink"; break;
+                    case "mismatch": segment.style.backgroundColor = "orange"; break;
+                    case "anomaly": segment.style.backgroundColor = "red"; break;
+                }
+
+                barContainer.appendChild(segment);
+                });
+
+                if (cleanPct > 0) {
+                const cleanSegment = document.createElement("div");
+                cleanSegment.classList.add("bar-segment");
+                cleanSegment.style.backgroundColor = "steelblue";
+                cleanSegment.style.width = `${cleanPct * 100}%`;
+                cleanSegment.title = `Clean: ${(cleanPct * 100).toFixed(1)}%`;
+                barContainer.appendChild(cleanSegment);
+                }
+
+                li.appendChild(barContainer);
+        
+                ul.appendChild(li);
+            });
+        
             columnListContainer.appendChild(ul);
         }
-    
+        
         attributes.forEach((attr, index) => {
             let label = document.createElement("label");
             let checkbox = document.createElement("input");
@@ -181,49 +256,166 @@ class ScatterplotMatrixView{
         updateDropdownButton();
     }
 
+    // updateColumnErrorIndicators(table, controller) {
+    //     const columnErrors = controller.model.getColumnErrors(); 
+    //     const attributes = table.columnNames().slice(1).sort(); 
+      
+    //     const columnListContainer = document.getElementById("attribute-list");
+    //     if (columnListContainer) {
+    //       columnListContainer.innerHTML = "<h4>Columns</h4>";
+    //       const ul = document.createElement("ul");
+      
+    //       attributes.forEach(attr => {
+    //         const li = document.createElement("li");
+    //         li.textContent = attr;
+    //         li.style.display = "flex";
+    //         li.style.alignItems = "center";
+    //         li.style.gap = "5px";
+      
+    //         const errorTypes = columnErrors[attr] || [];
+      
+    //         errorTypes.forEach(type => {
+    //           const box = document.createElement("span");
+    //           box.classList.add("error-scent");
+    //           box.title = type;
+    //           box.style.width = "10px";
+    //           box.style.height = "10px";
+    //           box.style.borderRadius = "2px";
+    //           box.style.display = "inline-block";
+      
+    //           switch (type) {
+    //             case "missing": box.style.backgroundColor = "gray"; break;
+    //             case "typeError": box.style.backgroundColor = "pink"; break;
+    //             case "mismatch": box.style.backgroundColor = "orange"; break;
+    //             case "anomaly": box.style.backgroundColor = "red"; break;
+    //           }
+      
+    //           li.appendChild(box);
+    //         });
+      
+    //         ul.appendChild(li);
+    //       });
+      
+    //       columnListContainer.appendChild(ul);
+    //     }
+    // }
+
     updateColumnErrorIndicators(table, controller) {
         const columnErrors = controller.model.getColumnErrors(); 
         const attributes = table.columnNames().slice(1).sort(); 
       
-        const columnListContainer = document.getElementById("attribute-list");
-        if (columnListContainer) {
-          columnListContainer.innerHTML = "<h4>Columns</h4>";
-          const ul = document.createElement("ul");
+        const container = document.getElementById("attribute-list");
+        if (!container) return;
+        container.innerHTML = "<h4>Columns</h4>";
+        const ul = document.createElement("ul");
       
-          attributes.forEach(attr => {
+        attributes.forEach(attr => {
             const li = document.createElement("li");
-            li.textContent = attr;
             li.style.display = "flex";
-            li.style.alignItems = "center";
-            li.style.gap = "5px";
-      
-            const errorTypes = columnErrors[attr] || [];
-      
-            errorTypes.forEach(type => {
-              const box = document.createElement("span");
-              box.classList.add("error-scent");
-              box.title = type;
-              box.style.width = "10px";
-              box.style.height = "10px";
-              box.style.borderRadius = "2px";
-              box.style.display = "inline-block";
-      
-              switch (type) {
-                case "missing": box.style.backgroundColor = "gray"; break;
-                case "typeError": box.style.backgroundColor = "pink"; break;
-                case "mismatch": box.style.backgroundColor = "orange"; break;
-                case "anomaly": box.style.backgroundColor = "red"; break;
-              }
-      
-              li.appendChild(box);
+            li.style.flexDirection = "column";
+            li.style.gap = "4px";
+            li.style.marginBottom = "16px";
+
+            const topRow = document.createElement("div");
+            topRow.style.display = "flex";
+            topRow.style.alignItems = "center";
+            topRow.style.gap = "6px";
+
+            const label = document.createElement("span");
+            label.textContent = attr;
+            label.style.fontSize = "16px";
+            label.style.fontWeight = "1000";
+            label.style.marginRight = "10px";
+            topRow.appendChild(label);
+    
+            const errorTypes = columnErrors[attr] || {};
+    
+            Object.entries(errorTypes).forEach(([type, pct]) => {
+                const box = document.createElement("span");
+                box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
+                box.classList.add("error-scent");
+    
+                switch (type) {
+                    case "missing": box.style.backgroundColor = "gray"; break;
+                    case "typeError": box.style.backgroundColor = "pink"; break;
+                    case "mismatch": box.style.backgroundColor = "orange"; break;
+                    case "anomaly": box.style.backgroundColor = "red"; break;
+                }
+            
+                const percentText = document.createElement("span");
+                percentText.textContent = `${Math.round(pct * 100)}%`;
+                percentText.style.fontSize = "10px";
+                percentText.style.fontWeight = "bold";
+                percentText.style.color = "black";
+                percentText.style.position = "absolute";
+                percentText.style.top = "0";
+                percentText.style.right = "0";
+                percentText.style.transform = "translate(75%, 15%)";
+                box.appendChild(percentText);
+    
+                topRow.appendChild(box);
             });
-      
+
+            li.appendChild(topRow);
+
+            const columnData = table.array(attr).filter(d => d !== "" && d !== null && d !== undefined);
+            const isNumeric = columnData.some(v => typeof v === "number" && !isNaN(v));
+
+            const stats = document.createElement("div");
+            stats.classList.add("column-stats");
+
+            if (isNumeric) {
+            const mean = d3.mean(columnData);
+            stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>`;
+            } else {
+            const mode = [...d3.rollup(columnData, v => v.length, d => d)]
+                .sort((a, b) => b[1] - a[1])[0][0];
+
+            stats.innerHTML = `<div>Mode: ${mode}</div>`;
+            }
+
+            li.appendChild(stats);
+
+            const totalRows = table.objects().length;
+            const errorEntries = Object.entries(errorTypes);
+            const errorSum = errorEntries.reduce((sum, [_, pct]) => sum + pct, 0);
+            const cleanPct = Math.max(0, 1 - errorSum);
+
+            const barContainer = document.createElement("div");
+            barContainer.classList.add("error-bar-container");
+
+            errorEntries.forEach(([type, pct]) => {
+            const segment = document.createElement("div");
+            segment.classList.add("bar-segment");
+            segment.style.width = `${pct * 100}%`;
+            segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
+
+            switch (type) {
+                case "missing": segment.style.backgroundColor = "gray"; break;
+                case "typeError": segment.style.backgroundColor = "pink"; break;
+                case "mismatch": segment.style.backgroundColor = "orange"; break;
+                case "anomaly": segment.style.backgroundColor = "red"; break;
+            }
+
+            barContainer.appendChild(segment);
+            });
+
+            if (cleanPct > 0) {
+            const cleanSegment = document.createElement("div");
+            cleanSegment.classList.add("bar-segment");
+            cleanSegment.style.backgroundColor = "steelblue";
+            cleanSegment.style.width = `${cleanPct * 100}%`;
+            cleanSegment.title = `Clean: ${(cleanPct * 100).toFixed(1)}%`;
+            barContainer.appendChild(cleanSegment);
+            }
+
+            li.appendChild(barContainer);
+    
             ul.appendChild(li);
-          });
-      
-          columnListContainer.appendChild(ul);
-        }
-    }
+        });
+    
+        container.appendChild(ul);
+      }
 
     handlePredicateChange(table, controller) {
         const predicateDropdown = document.getElementById("predicate-dropdown");

@@ -216,39 +216,63 @@ class DataModel {
   
     columns.forEach(col => {
       const values = data.map(row => row[col]);
-      const errors = new Set();
+      const errors = {};
+
+      const total = values.length;
   
-      if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
-        errors.add("missing");
-      }
+      // if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
+      //   errors.add("missing");
+      // }
+
+      const missingCount = values.filter(v => String(v) === "null" || String(v) === "none" || String(v) === "").length;
+      if (missingCount > 0) errors.missing = missingCount / total;
   
       // const types = values.map(v => typeof v);
       // if (new Set(types).size > 1) {
       //   errors.add("typeError");
       // }
-      if (values.some(v => String(v) === "0 years old")) {
-        errors.add("typeError");
-      }
+      // if (values.some(v => String(v) === "0 years old")) {
+      //   errors.add("typeError");
+      // }
+
+      // const types = values.map(v => typeof v);
+      // const majorityType = types.sort((a,b) =>
+      //   types.filter(t => t === a).length - types.filter(t => t === b).length
+      // ).pop();
+      const typeErrorCount = values.filter(v => String(v) === "0 years old").length;
+      if (typeErrorCount > 0) errors.typeError = typeErrorCount / total;
   
       // const firstType = typeof values.find(v => v !== null && v !== undefined);
       // if (values.some(v => typeof v !== firstType)) {
       //   errors.add("mismatch");
       // }
-      if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
-        errors.add("mismatch");
-      }
+      // if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
+      //   errors.add("mismatch");
+      // }
+      const mismatchCount = values.filter(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v)).length;
+      if (mismatchCount > 0) errors.mismatch = mismatchCount / total;
   
-      const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
-      if (numericValues.length > 0) {
-        const mean = d3.mean(numericValues);
-        const std = d3.deviation(numericValues);
-        if (numericValues.some(v => Math.abs(v - mean) > 2 * std)) {
-          errors.add("anomaly");
-        }
-      }
+    //   const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
+    //   if (numericValues.length > 0) {
+    //     const mean = d3.mean(numericValues);
+    //     const std = d3.deviation(numericValues);
+    //     if (numericValues.some(v => Math.abs(v - mean) > 2 * std)) {
+    //       errors.add("anomaly");
+    //     }
+    //   }
   
-      errorsPerColumn[col] = Array.from(errors);
-    });
+    //   errorsPerColumn[col] = Array.from(errors);
+    // });
+    const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
+    if (numericValues.length > 0) {
+      const mean = d3.mean(numericValues);
+      const std = d3.deviation(numericValues);
+      const anomalyCount = numericValues.filter(v => Math.abs(v - mean) > 2 * std).length;
+      if (anomalyCount > 0) errors.anomaly = anomalyCount / total;
+    }
+
+    errorsPerColumn[col] = errors;
+  });
   
     return errorsPerColumn;
   }

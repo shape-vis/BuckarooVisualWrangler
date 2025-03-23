@@ -28,9 +28,31 @@
 }
 
 #attribute-list ul {
-    padding-left: 1rem;
+    padding-left: 0;
     margin: 0;
     list-style-type: disc;
+}
+
+#attribute-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+#attribute-list li span:first-child {
+    font-size: 16px;
+    font-weight: 500;
+    margin-right: 10px;
+  }
+
+.error-scent {
+    width: 15px;
+    height: 15px;
+    border-radius: 2px;
+    position: relative;
+    cursor: help;
+    transition: transform 0.1s ease;
 }
 
 .error-color-box {
@@ -40,6 +62,27 @@
     margin-right: 8px;
     border-radius: 2px;
     vertical-align: middle;
+}
+
+.column-stats {
+    font-size: 12px;
+    color: #555;
+    margin-left: 4px;
+    line-height: 1.2em;
+}
+
+.error-bar-container {
+    display: flex;
+    width: 100%;
+    height: 12px;
+    margin-top: 4px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    overflow: hidden;
+}
+  
+.bar-segment {
+    height: 100%;
 }
 
 .matrix-and-dropdown-container {
