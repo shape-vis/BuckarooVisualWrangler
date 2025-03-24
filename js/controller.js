@@ -455,6 +455,7 @@ function attachButtonEventListeners(){
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
@@ -463,6 +464,7 @@ function attachButtonEventListeners(){
         const controller = getActiveController();
         controller.model.redoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
@@ -491,7 +493,7 @@ function attachButtonEventListeners(){
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
+        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
@@ -504,7 +506,7 @@ function attachButtonEventListeners(){
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
+        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
@@ -517,7 +519,7 @@ function attachButtonEventListeners(){
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
-        controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
+        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });

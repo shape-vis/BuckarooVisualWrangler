@@ -12,6 +12,7 @@ class DataModel {
     this.selectedGroups = [];
     this.groupByAttribute = null;
     this.previewData = this.data;
+    this.fullFilteredData = this.data;
   }
 
   // New method to update the selected groups:
@@ -46,6 +47,10 @@ class DataModel {
 
   getFullData() {
     return this.data;
+  }
+
+  getFullFilteredData(){
+    return this.fullFilteredData;
   }
 
   setFilteredData(filteredData) {
@@ -91,6 +96,9 @@ class DataModel {
     this.dataTransformations.push(condition);
     this.transformationPoints.push(this.selectedPoints);
     this.filteredData = this.filteredData.filter(aq.escape(condition));
+
+    // Filter the data but keep all the columns in this dataset
+    this.fullFilteredData = this.fullFilteredData.filter(aq.escape(condition));
   }
 
   getPreviewData(condition) {

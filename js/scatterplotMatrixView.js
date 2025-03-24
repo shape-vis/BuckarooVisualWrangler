@@ -78,7 +78,7 @@ class ScatterplotMatrixView{
         // Populate list of columns legend (attribute-list)
         const columnListContainer = document.getElementById("attribute-list");
         if (columnListContainer) {
-            columnListContainer.innerHTML = "<h4>Attributes</h4>";
+            columnListContainer.innerHTML = "<h4>Attribute Summaries</h4>";
             const ul = document.createElement("ul");
         
             const columnErrors = controller.model.getColumnErrors(); 
@@ -139,13 +139,20 @@ class ScatterplotMatrixView{
                 stats.classList.add("column-stats");
 
                 if (isNumeric) {
-                const mean = d3.mean(columnData);
-                stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>`;
+                    const mean = d3.mean(columnData);
+                    const min = d3.min(columnData);
+                    const max = d3.max(columnData);
+                    stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>
+                                        <div>Range: ${min} - ${max}</div>`;
                 } else {
-                const mode = [...d3.rollup(columnData, v => v.length, d => d)]
-                    .sort((a, b) => b[1] - a[1])[0][0];
+                    const mode = [...d3.rollup(columnData, v => v.length, d => d)]
+                        .sort((a, b) => b[1] - a[1])[0][0];
+                    const sortedVals = sortCategories(columnData.slice());
+                    const min = sortedVals[0];
+                    const max = sortedVals[sortedVals.length - 1];
 
-                stats.innerHTML = `<div>Mode: ${mode}</div>`;
+                    stats.innerHTML = `<div>Mode: ${mode}</div>
+                                        <div>Range: ${min} - ${max}</div>`;
                 }
 
                 li.appendChild(stats);
@@ -256,57 +263,13 @@ class ScatterplotMatrixView{
         updateDropdownButton();
     }
 
-    // updateColumnErrorIndicators(table, controller) {
-    //     const columnErrors = controller.model.getColumnErrors(); 
-    //     const attributes = table.columnNames().slice(1).sort(); 
-      
-    //     const columnListContainer = document.getElementById("attribute-list");
-    //     if (columnListContainer) {
-    //       columnListContainer.innerHTML = "<h4>Columns</h4>";
-    //       const ul = document.createElement("ul");
-      
-    //       attributes.forEach(attr => {
-    //         const li = document.createElement("li");
-    //         li.textContent = attr;
-    //         li.style.display = "flex";
-    //         li.style.alignItems = "center";
-    //         li.style.gap = "5px";
-      
-    //         const errorTypes = columnErrors[attr] || [];
-      
-    //         errorTypes.forEach(type => {
-    //           const box = document.createElement("span");
-    //           box.classList.add("error-scent");
-    //           box.title = type;
-    //           box.style.width = "10px";
-    //           box.style.height = "10px";
-    //           box.style.borderRadius = "2px";
-    //           box.style.display = "inline-block";
-      
-    //           switch (type) {
-    //             case "missing": box.style.backgroundColor = "gray"; break;
-    //             case "typeError": box.style.backgroundColor = "pink"; break;
-    //             case "mismatch": box.style.backgroundColor = "orange"; break;
-    //             case "anomaly": box.style.backgroundColor = "red"; break;
-    //           }
-      
-    //           li.appendChild(box);
-    //         });
-      
-    //         ul.appendChild(li);
-    //       });
-      
-    //       columnListContainer.appendChild(ul);
-    //     }
-    // }
-
     updateColumnErrorIndicators(table, controller) {
         const columnErrors = controller.model.getColumnErrors(); 
         const attributes = table.columnNames().slice(1).sort(); 
       
         const container = document.getElementById("attribute-list");
         if (!container) return;
-        container.innerHTML = "<h4>Columns</h4>";
+        container.innerHTML = "<h4>Attribute Summaries</h4>";
         const ul = document.createElement("ul");
       
         attributes.forEach(attr => {
@@ -365,13 +328,20 @@ class ScatterplotMatrixView{
             stats.classList.add("column-stats");
 
             if (isNumeric) {
-            const mean = d3.mean(columnData);
-            stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>`;
+                const mean = d3.mean(columnData);
+                const min = d3.min(columnData);
+                const max = d3.max(columnData);
+                stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>
+                                    <div>Range: ${min} - ${max}</div>`;
             } else {
-            const mode = [...d3.rollup(columnData, v => v.length, d => d)]
-                .sort((a, b) => b[1] - a[1])[0][0];
+                const mode = [...d3.rollup(columnData, v => v.length, d => d)]
+                    .sort((a, b) => b[1] - a[1])[0][0];
+                const sortedVals = sortCategories(columnData.slice());
+                const min = sortedVals[0];
+                const max = sortedVals[sortedVals.length - 1];
 
-            stats.innerHTML = `<div>Mode: ${mode}</div>`;
+                stats.innerHTML = `<div>Mode: ${mode}</div>
+                                    <div>Range: ${min} - ${max}</div>`;
             }
 
             li.appendChild(stats);
@@ -3188,6 +3158,13 @@ class ScatterplotMatrixView{
 
         let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
 
+        const numericXValues = nonNumericYData.map(d => d[xCol]).filter(v => !isNaN(v));
+        const numericYValues = nonNumericXData.map(d => d[yCol]).filter(v => !isNaN(v));
+        const meanX = d3.mean(numericXValues);
+        const stdDevX = d3.deviation(numericXValues);
+        const meanY = d3.mean(numericYValues);
+        const stdDevY = d3.deviation(numericYValues);
+
         /// All numeric plot ///
         if(xIsNumeric && yIsNumeric)
         {
@@ -3403,9 +3380,12 @@ class ScatterplotMatrixView{
                 // .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
                 .attr("fill", d => {
                     if (groupByAttribute) {
+                        if (!this.viewGroupsButton){
+                            return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                        }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return d.type === "nan-y" ? "gray" : "steelblue"; 
+                        return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
                     }
                 })
                 // .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
@@ -3473,14 +3453,20 @@ class ScatterplotMatrixView{
             //     .attr("transform", "rotate(-45)") 
             //     .style("font-size", "10px"); 
             // }
-
+            
             cellGroup.append("g")
-                .call(d3.axisLeft(yScale))
-                .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title")  
-                .text(d => d); 
+                .call(d3.axisLeft(yScale).tickFormat(d => {
+                    if (typeof d === "string") {
+                        if (d.includes("-")) {
+                            const [min, max] = d.split("-").map(Number);
+                            return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                        } 
+                        return d;
+                    }                    
+                    return d3.format(".3s")(d);  
+                }))
+                    .selectAll("text")
+                    .style("font-size", "8px");
 
             if (uniqueYCategories.length > 0) {
             cellGroup.append("g")
@@ -3564,9 +3550,12 @@ class ScatterplotMatrixView{
                 // .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
                 .attr("fill", d => {
                     if (groupByAttribute) {
+                        if (!this.viewGroupsButton){
+                            return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                        }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return d.type === "nan-x" ? "gray" : "steelblue"; 
+                        return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
                     }
                 })
                 // .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
@@ -3610,24 +3599,29 @@ class ScatterplotMatrixView{
                     });
                     tooltip.style("display", "none");
                 });
-
-            cellGroup
-                .append("g")
+            
+            cellGroup.append("g")
                 .attr("transform", `translate(0, ${this.size})`)
-                .call(d3.axisBottom(xScale))
-                .selectAll("text") 
-                .style("text-anchor", "end") 
+                .call(d3.axisBottom(xScale).tickFormat(d => {
+                    if (typeof d === "string") {
+                        if (d.includes("-")) {
+                            const [min, max] = d.split("-").map(Number);
+                            return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                        } 
+                        return d;
+                    } 
+                    return d3.format(".3s")(d);  
+                }))                
+                .selectAll("text")
+                .style("text-anchor", "end")
                 .style("font-size", "8px")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .attr("transform", "rotate(-45)")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                .append("title") 
-                .text(d => d);
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
 
             if (uniqueXCategories.length > 0) {
             cellGroup.append("g")
-                .attr("transform", `translate(0, ${numericSpace})`)
+                .attr("transform", `translate(0, ${this.size})`)
                 .call(d3.axisBottom(categoricalXScale))
                 .selectAll("text")
                 .style("text-anchor", "end") 
@@ -3705,9 +3699,12 @@ class ScatterplotMatrixView{
                 // .attr("fill", "steelblue")
                 .attr("fill", d => {
                     if (groupByAttribute) {
+                        if (!this.viewGroupsButton){
+                            return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                        }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return "steelblue"; 
+                        return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
                     }
                 })
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
@@ -4124,12 +4121,19 @@ class ScatterplotMatrixView{
                 .text(d => d); 
 
             cellGroup.append("g")
-                .call(d3.axisLeft(yScale))
-                .selectAll("text")
-                .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                .append("title")  
-                .text(d => d);
+                .call(d3.axisLeft(yScale).tickFormat(d => {
+                    if (typeof d === "string") {
+                        if (d.includes("-")) {
+                            const [min, max] = d.split("-").map(Number);
+                            return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                        } 
+                        return d;
+                    } 
+                    
+                    return d3.format(".3s")(d);  
+                }))
+                    .selectAll("text")
+                    .style("font-size", "8px");
 
             if (uniqueYCategories.length > 0) {
             cellGroup.append("g")
@@ -4257,17 +4261,37 @@ class ScatterplotMatrixView{
                 }
             }
 
-            cellGroup
-                .append("g")
+            cellGroup.append("g")
                 .attr("transform", `translate(0, ${this.size})`)
-                .call(d3.axisBottom(xScale))
+                .call(d3.axisBottom(xScale).tickFormat(d => {
+                    if (typeof d === "string") {
+                        if (d.includes("-")) {
+                            const [min, max] = d.split("-").map(Number);
+                            return `${d3.format(".3s")(min)}-${d3.format(".3s")(max)}`;
+                        } 
+                        return d;
+                    } 
+                    return d3.format(".3s")(d);  
+                }))                
                 .selectAll("text")
-                .style("text-anchor", "end") 
-                .attr("transform", "rotate(-45)") 
+                .style("text-anchor", "end")
                 .style("font-size", "8px")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)
-                .append("title") 
-                .text(d => d); 
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.5em")
+                .attr("transform", "rotate(-45)");
+
+            if (uniqueXCategories.length > 0) {
+                cellGroup.append("g")
+                    .attr("transform", `translate(0, ${this.size})`)
+                    .call(d3.axisBottom(categoricalXScale))
+                    .selectAll("text")
+                    .style("text-anchor", "end") 
+                    .attr("transform", "rotate(-45)") 
+                    .style("font-size", "8px")
+                    .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
+                    .append("title") 
+                    .text(d => d); 
+                }
 
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale))
@@ -6068,3 +6092,22 @@ function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, 
 
     // return colorScale(d.value);
 }
+
+function getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+    const categoryX = typeof d[xCol] === "string" ? String(d[xCol]) : null;
+    const categoryY = typeof d[yCol] === "string" ? String(d[yCol]) : null;
+
+    if (categoryX || categoryY) {
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
+        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+    }
+
+    const valueX = parseFloat(d[xCol]);
+    const valueY = parseFloat(d[yCol]);
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+
+    return "steelblue"; 
+}
+
