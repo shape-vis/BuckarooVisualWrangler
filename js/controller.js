@@ -388,10 +388,10 @@ class ScatterplotController {
         legendContainer.selectAll(".legend-item").remove();
 
         if (type === "errors") {
-            const errorTypes = ["Missing Values", "Type Errors", "Data Type Mismatch", "Average Anomalies (Outliers)"];
+            const errorTypes = ["Missing Values", "Data Type Mismatch", "Average Anomalies (Outliers)", "Incomplete Data (< 3 points)", "Clean"];
             const errorColors = d3.scaleOrdinal()
                 .domain(errorTypes)
-                .range(["gray", "pink", "orange", "red"]);
+                .range(["gray", "burlywood", "firebrick", "pink", "steelblue"]);
 
             errorTypes.forEach(error => {
                 const legendItem = legendContainer.append("div")

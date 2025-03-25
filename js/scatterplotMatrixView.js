@@ -78,7 +78,7 @@ class ScatterplotMatrixView{
         // Populate list of columns legend (attribute-list)
         const columnListContainer = document.getElementById("attribute-list");
         if (columnListContainer) {
-            columnListContainer.innerHTML = "<h4>Attribute Summaries</h4>";
+            columnListContainer.innerHTML = "<h3>Attribute Summaries</h3>";
             const ul = document.createElement("ul");
         
             const columnErrors = controller.model.getColumnErrors(); 
@@ -111,9 +111,9 @@ class ScatterplotMatrixView{
         
                     switch (type) {
                         case "missing": box.style.backgroundColor = "gray"; break;
-                        case "typeError": box.style.backgroundColor = "pink"; break;
-                        case "mismatch": box.style.backgroundColor = "orange"; break;
-                        case "anomaly": box.style.backgroundColor = "red"; break;
+                        case "incomplete": box.style.backgroundColor = "pink"; break;
+                        case "mismatch": box.style.backgroundColor = "burlywood"; break;
+                        case "anomaly": box.style.backgroundColor = "firebrick"; break;
                     }
                 
                     const percentText = document.createElement("span");
@@ -173,9 +173,9 @@ class ScatterplotMatrixView{
 
                 switch (type) {
                     case "missing": segment.style.backgroundColor = "gray"; break;
-                    case "typeError": segment.style.backgroundColor = "pink"; break;
-                    case "mismatch": segment.style.backgroundColor = "orange"; break;
-                    case "anomaly": segment.style.backgroundColor = "red"; break;
+                    case "incomplete": segment.style.backgroundColor = "pink"; break;
+                    case "mismatch": segment.style.backgroundColor = "burlywood"; break;
+                    case "anomaly": segment.style.backgroundColor = "firebrick"; break;
                 }
 
                 barContainer.appendChild(segment);
@@ -269,7 +269,7 @@ class ScatterplotMatrixView{
       
         const container = document.getElementById("attribute-list");
         if (!container) return;
-        container.innerHTML = "<h4>Attribute Summaries</h4>";
+        container.innerHTML = "<h3>Attribute Summaries</h3>";
         const ul = document.createElement("ul");
       
         attributes.forEach(attr => {
@@ -300,9 +300,9 @@ class ScatterplotMatrixView{
     
                 switch (type) {
                     case "missing": box.style.backgroundColor = "gray"; break;
-                    case "typeError": box.style.backgroundColor = "pink"; break;
-                    case "mismatch": box.style.backgroundColor = "orange"; break;
-                    case "anomaly": box.style.backgroundColor = "red"; break;
+                    case "incomplete": box.style.backgroundColor = "pink"; break;
+                    case "mismatch": box.style.backgroundColor = "burlywood"; break;
+                    case "anomaly": box.style.backgroundColor = "firebrick"; break;
                 }
             
                 const percentText = document.createElement("span");
@@ -362,9 +362,9 @@ class ScatterplotMatrixView{
 
             switch (type) {
                 case "missing": segment.style.backgroundColor = "gray"; break;
-                case "typeError": segment.style.backgroundColor = "pink"; break;
-                case "mismatch": segment.style.backgroundColor = "orange"; break;
-                case "anomaly": segment.style.backgroundColor = "red"; break;
+                case "incomplete": segment.style.backgroundColor = "pink"; break;
+                case "mismatch": segment.style.backgroundColor = "burlywood"; break;
+                case "anomaly": segment.style.backgroundColor = "firebrick"; break;
             }
 
             barContainer.appendChild(segment);
@@ -5977,7 +5977,7 @@ function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, select
         // Check for '0 years of age'
         if (d.category === "0 years of age") return "pink";
         // Check for specific categorical values
-        if (["billions", "seventy", "0", "21.5"].includes(d.category)) return "orange";
+        if (["billions", "seventy", "0", "21.5"].includes(d.category)) return "burlywood";
     } else {
         // Check for numeric outliers
         const avgValue = d3.mean(d.ids.map(id => {
@@ -5986,7 +5986,7 @@ function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, select
         }).filter(v => !isNaN(v)));
 
         if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-            return "red";
+            return "firebrick";
         }
     }
 
@@ -6005,7 +6005,7 @@ function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints)
         // Check for '0 years of age'
         if (category === "0 years old") return "pink";
         // Check for specific categorical values
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(category)) return "burlywood";
     } else {
         // Check for numeric outliers
         const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
@@ -6014,7 +6014,7 @@ function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints)
         }).filter(v => !isNaN(v)));
 
         if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-            return "red";
+            return "firebrick";
         }
     }
 
@@ -6030,7 +6030,7 @@ function getFillColorNoGroupbyCategorical(d, selectedPoints) {
     if (category === "none" || category === "" || category === "null") return "gray";
 
     if (category === "0 years old") return "pink";
-    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "burlywood";
 
     return "steelblue"; 
 }
@@ -6044,7 +6044,7 @@ function getFillColorCategorical(d, selectedPoints) {
     if (category === "none" || category === "" || category === "null") return "gray";
 
     if (category === "0 years old") return "pink";
-    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "orange";
+    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "burlywood";
 
     return "steelblue"; 
 }
@@ -6059,13 +6059,13 @@ function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX
     if (categoryX || categoryY) {
         if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
         if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "burlywood";
     }
 
     const valueX = parseFloat(d.x);
     const valueY = parseFloat(d.y);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "firebrick";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "firebrick";
 
     return colorScale(d.value);
 }
@@ -6080,13 +6080,13 @@ function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, 
     if (categoryX || categoryY) {
         if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
         if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "burlywood";
     }
 
     const valueX = parseFloat(d.x);
     const valueY = parseFloat(d.y);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "firebrick";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "firebrick";
 
     return "steelblue"; 
 
@@ -6100,13 +6100,13 @@ function getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, 
     if (categoryX || categoryY) {
         if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
         if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "orange";
+        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "burlywood";
     }
 
     const valueX = parseFloat(d[xCol]);
     const valueY = parseFloat(d[yCol]);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "firebrick";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "firebrick";
 
     return "steelblue"; 
 }

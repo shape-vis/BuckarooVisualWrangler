@@ -57,9 +57,53 @@ df_cleaned = df.dropna()
 
 # Convert 'ConvertedSalary' to numeric, coercing errors
 df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-
 # Fill missing values with column means
 df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+# Convert 'ConvertedSalary' to numeric, coercing errors
+df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
+# Fill missing values with column means
+df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
+
 
 # Save cleaned dataset
 df_cleaned.to_csv('stackoverflow_db_cleaned.csv', index=False)

@@ -237,18 +237,18 @@ class DataModel {
   
       // const types = values.map(v => typeof v);
       // if (new Set(types).size > 1) {
-      //   errors.add("typeError");
+      //   errors.add("incomplete");
       // }
       // if (values.some(v => String(v) === "0 years old")) {
-      //   errors.add("typeError");
+      //   errors.add("incomplete");
       // }
 
       // const types = values.map(v => typeof v);
       // const majorityType = types.sort((a,b) =>
       //   types.filter(t => t === a).length - types.filter(t => t === b).length
       // ).pop();
-      const typeErrorCount = values.filter(v => String(v) === "0 years old").length;
-      if (typeErrorCount > 0) errors.typeError = typeErrorCount / total;
+      const incompleteCount = values.filter(v => String(v) === "0 years old").length;
+      if (incompleteCount > 0) errors.incomplete = incompleteCount / total;
   
       // const firstType = typeof values.find(v => v !== null && v !== undefined);
       // if (values.some(v => typeof v !== firstType)) {
