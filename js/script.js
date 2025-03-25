@@ -4,7 +4,7 @@ let practiceController, stackoverflowController;
 let data2 = null;
 // May need to change 'id' to 'ID'
 d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
-  data2 = aq.from(inputData).slice(0, 100);
+  data2 = aq.from(inputData).slice(0, 200);
 
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
 
@@ -27,7 +27,7 @@ d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
 
 //     // Parse CSV using d3.csvParse
 //     const parsedData = d3.csvParse(contents);
-//     const table = aq.from(parsedData).slice(0,100);
+//     const table = aq.from(parsedData).slice(0,200);
 
 //     // Clear the existing visualization container
 //     d3.select("#matrix-vis-stackoverflow").html("");

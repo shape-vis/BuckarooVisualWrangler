@@ -110,10 +110,10 @@ class ScatterplotMatrixView{
                     box.classList.add("error-scent");
         
                     switch (type) {
-                        case "missing": box.style.backgroundColor = "gray"; break;
-                        case "incomplete": box.style.backgroundColor = "pink"; break;
-                        case "mismatch": box.style.backgroundColor = "burlywood"; break;
-                        case "anomaly": box.style.backgroundColor = "firebrick"; break;
+                        case "missing": box.style.backgroundColor = "saddlebrown"; break;
+                        case "incomplete": box.style.backgroundColor = "gray"; break;
+                        case "mismatch": box.style.backgroundColor = "hotpink"; break;
+                        case "anomaly": box.style.backgroundColor = "red"; break;
                     }
                 
                     const percentText = document.createElement("span");
@@ -172,10 +172,10 @@ class ScatterplotMatrixView{
                 segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
                 switch (type) {
-                    case "missing": segment.style.backgroundColor = "gray"; break;
-                    case "incomplete": segment.style.backgroundColor = "pink"; break;
-                    case "mismatch": segment.style.backgroundColor = "burlywood"; break;
-                    case "anomaly": segment.style.backgroundColor = "firebrick"; break;
+                    case "missing": segment.style.backgroundColor = "saddlebrown"; break;
+                    case "incomplete": segment.style.backgroundColor = "gray"; break;
+                    case "mismatch": segment.style.backgroundColor = "hotpink"; break;
+                    case "anomaly": segment.style.backgroundColor = "red"; break;
                 }
 
                 barContainer.appendChild(segment);
@@ -299,10 +299,10 @@ class ScatterplotMatrixView{
                 box.classList.add("error-scent");
     
                 switch (type) {
-                    case "missing": box.style.backgroundColor = "gray"; break;
-                    case "incomplete": box.style.backgroundColor = "pink"; break;
-                    case "mismatch": box.style.backgroundColor = "burlywood"; break;
-                    case "anomaly": box.style.backgroundColor = "firebrick"; break;
+                    case "missing": box.style.backgroundColor = "saddlebrown"; break;
+                    case "incomplete": box.style.backgroundColor = "gray"; break;
+                    case "mismatch": box.style.backgroundColor = "hotpink"; break;
+                    case "anomaly": box.style.backgroundColor = "red"; break;
                 }
             
                 const percentText = document.createElement("span");
@@ -361,10 +361,10 @@ class ScatterplotMatrixView{
             segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
             switch (type) {
-                case "missing": segment.style.backgroundColor = "gray"; break;
-                case "incomplete": segment.style.backgroundColor = "pink"; break;
-                case "mismatch": segment.style.backgroundColor = "burlywood"; break;
-                case "anomaly": segment.style.backgroundColor = "firebrick"; break;
+                case "missing": segment.style.backgroundColor = "saddlebrown"; break;
+                case "incomplete": segment.style.backgroundColor = "gray"; break;
+                case "mismatch": segment.style.backgroundColor = "hotpink"; break;
+                case "anomaly": segment.style.backgroundColor = "red"; break;
             }
 
             barContainer.appendChild(segment);
@@ -468,7 +468,7 @@ class ScatterplotMatrixView{
         const height = 500; 
         const margin = { top: 30, right: 120, bottom: 50, left: 100 };
 
-        const salaryExtent = d3.extent(groupStats.flatMap(d => [d.min, d.max]));
+        const salaryExtent = d3.extent(groupStats.flatMap(d => [d.min, d.max]).filter(v => !isNaN(v)));
     
         salaryExtent[0] = Math.min(salaryExtent[0], overallMedian);
         salaryExtent[1] = Math.max(salaryExtent[1], overallMedian);
@@ -4561,7 +4561,7 @@ class ScatterplotMatrixView{
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
-    drawPreviewPlot(givenData, containerId, isHistogram, groupByAttribute, xCol, yCol){
+    drawPreviewPlot(givenData, originalData, containerId, isHistogram, groupByAttribute, xCol, yCol){
         const container = document.getElementById(containerId);
         container.innerHTML = ""; 
 
@@ -4591,7 +4591,8 @@ class ScatterplotMatrixView{
             .attr("font-weight", "bold")
             .text(containerId === "preview-remove" ? "Preview of Removing Selected Data" :
                   containerId === "preview-impute-average-x" ? `Preview of Imputing by Avg ${xCol}` :
-                  `Preview of Imputing by Avg ${yCol}`);
+                  containerId === "preview-impute-average-y" ? `Preview of Imputing by Avg ${yCol}` :
+                  "Preview of User Specified Repair");
 
         if(isHistogram)
         {
@@ -4600,15 +4601,21 @@ class ScatterplotMatrixView{
                 return;
             }
             let data = [];
+            let originalDataArr = [];
 
             if (groupByAttribute){
                 data = givenData.select(["ID", xCol, groupByAttribute]).objects();
+                originalDataArr = originalData.select(["ID", xCol, groupByAttribute]).objects();
             }
             else{
                 data = givenData.select(["ID", xCol]).objects();
+                originalDataArr = originalData.select(["ID", xCol]).objects();
             }
 
             const numericData = data.filter(d => 
+                typeof d[xCol] === "number" && !isNaN(d[xCol])
+            );
+            const originalNumericData = originalDataArr.filter(d => 
                 typeof d[xCol] === "number" && !isNaN(d[xCol])
             );
             
@@ -4618,28 +4625,48 @@ class ScatterplotMatrixView{
                 ...d,
                 [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
             }));
+            const originalNonNumericData = originalDataArr.filter(d => 
+                typeof d[xCol] !== "number" || isNaN(d[xCol])
+            ).map(d => ({
+                ...d,
+                [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
+            }));
 
             const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
+            const originalGroupedCategories = d3.group(originalNonNumericData, d => String(d[xCol]));
 
             let uniqueCategories;
+            let originalUniqueCategories;
             
             if (numericData.length === data.length)
             {
                 uniqueCategories = [];
             }else{
-                uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
+                uniqueCategories = ["NaN", ...[...originalGroupedCategories.keys()].filter(d => d !== "NaN").sort()]
+            }
+
+            if (originalNumericData.length === data.length)
+            {
+                originalUniqueCategories = [];
+            }else{
+                originalUniqueCategories = ["NaN", ...[...originalGroupedCategories.keys()].filter(d => d !== "NaN").sort()]
             }
 
             const categorySpace = uniqueCategories.length * 20; 
+            const originalCategorySpace = originalUniqueCategories *20
             const numericSpace = width - categorySpace; 
+            const originalNumericSpace = width - originalCategorySpace; 
             let categoricalScale = null;
+            let originalCategoricalScale = null;
             
             if (numericData.length > 0)
             {
                 uniqueCategories = sortCategories(uniqueCategories);
+                originalUniqueCategories = sortCategories(originalUniqueCategories);
+
                 const xScale = d3.scaleLinear()
-                    .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
-                    .range([0, numericSpace]);
+                    .domain([d3.min(originalNumericData, (d) => d[xCol]), d3.max(originalNumericData, (d) => d[xCol]) + 1])
+                    .range([0, originalNumericSpace]);
 
                 let yScale = null;
                 
@@ -4679,8 +4706,8 @@ class ScatterplotMatrixView{
                     const categoricalStart = xScale.range()[1] + 10;
 
                     categoricalScale = d3.scaleOrdinal()
-                        .domain(uniqueCategories)
-                        .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
+                        .domain(originalUniqueCategories)
+                        .range([...Array(originalUniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
 
                     uniqueCategories.forEach(category => {
                         const catData = nonNumericData.filter(d => String(d[xCol]) === category);
@@ -4759,8 +4786,8 @@ class ScatterplotMatrixView{
                     const categoricalStart = xScale.range()[1] + 10;
 
                     categoricalScale = d3.scaleOrdinal()
-                        .domain(uniqueCategories)
-                        .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
+                        .domain(originalUniqueCategories)
+                        .range([...Array(originalUniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
 
                     uniqueCategories.forEach(category => {
                         histData.push({
@@ -4833,8 +4860,11 @@ class ScatterplotMatrixView{
                 uniqueCategories = uniqueCategories.slice(1);
                 uniqueCategories = sortCategories(uniqueCategories);
 
+                originalUniqueCategories = originalUniqueCategories.slice(1);
+                originalUniqueCategories = sortCategories(originalUniqueCategories);
+
                 const xScale = d3.scaleBand()
-                    .domain(uniqueCategories)
+                    .domain(originalUniqueCategories)
                     .range([0, width]);
 
                 let yScale = null;
@@ -5973,12 +6003,10 @@ function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, select
 
     if (d.category) {
         // Check for missing values
-        if (d.category === null || d.category === "none" || d.category === "") return "gray";
-        // Check for '0 years of age'
-        if (d.category === "0 years of age") return "pink";
+        if (d.category === null || d.category === "none" || d.category === "") return "saddlebrown";
         // Check for specific categorical values
-        if (["billions", "seventy", "0", "21.5"].includes(d.category)) return "burlywood";
-    } else {
+        if (["'00'", "'4'",  "0", "21.5"].includes(d.category)) return "hotpink";
+    } else {       
         // Check for numeric outliers
         const avgValue = d3.mean(d.ids.map(id => {
             const found = numericData.find(n => n.ID === id);
@@ -5986,8 +6014,10 @@ function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, select
         }).filter(v => !isNaN(v)));
 
         if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-            return "firebrick";
+            return "red";
         }
+        if (d.ids.length < 3) return "gray";
+
     }
 
     return "steelblue"; // Default color
@@ -6001,12 +6031,12 @@ function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints)
 
     if (category) {
         // Check for missing values
-        if (category === "null" || category === "none" || category === "") return "gray";
-        // Check for '0 years of age'
-        if (category === "0 years old") return "pink";
+        if (category === "null" || category === "none" || category === "") return "saddlebrown";
+
         // Check for specific categorical values
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(category)) return "burlywood";
+        if (["'00'", "'4'", "'0'", "'21.5'"].includes(category)) return "hotpink";
     } else {
+
         // Check for numeric outliers
         const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
             const found = numericData.find(n => n.ID === id);
@@ -6014,8 +6044,10 @@ function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints)
         }).filter(v => !isNaN(v)));
 
         if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-            return "firebrick";
+            return "red";
         }
+        if (d.data.groupIDs[d.group].length < 3) return "gray";
+
     }
 
     return "steelblue"; 
@@ -6027,10 +6059,11 @@ function getFillColorNoGroupbyCategorical(d, selectedPoints) {
 
     const category = String(d.category); 
 
-    if (category === "none" || category === "" || category === "null") return "gray";
+    if (category === "none" || category === "" || category === "null") return "saddlebrown";
 
-    if (category === "0 years old") return "pink";
-    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "burlywood";
+    if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
+    if (d.ids.length < 3) return "gray";
+
 
     return "steelblue"; 
 }
@@ -6041,10 +6074,11 @@ function getFillColorCategorical(d, selectedPoints) {
 
     const category = d.data.category;
 
-    if (category === "none" || category === "" || category === "null") return "gray";
+    if (category === "none" || category === "" || category === "null") return "saddlebrown";
 
-    if (category === "0 years old") return "pink";
-    if (["billion", "seventy", "'0'", "'21.5'"].includes(category)) return "burlywood";
+    if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
+    if (d.ids.length < 3) return "gray";
+
 
     return "steelblue"; 
 }
@@ -6057,15 +6091,17 @@ function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX
     const categoryY = typeof d.y === "string" ? String(d.y) : null;
 
     if (categoryX || categoryY) {
-        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
-        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "burlywood";
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "saddlebrown";
+        if (["'00'", "'4'",  "'0'", "'21.5'"].includes(categoryX) || ["'00'", "'4'",  "'0'", "'21.5'"].includes(categoryY)) return "hotpink";
     }
+
 
     const valueX = parseFloat(d.x);
     const valueY = parseFloat(d.y);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "firebrick";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "firebrick";
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+    if (d.ids.length < 3) return "gray";
+
 
     return colorScale(d.value);
 }
@@ -6078,15 +6114,17 @@ function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, 
     const categoryY = typeof d.y === "string" ? String(d.y) : null;
 
     if (categoryX || categoryY) {
-        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
-        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "burlywood";
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "saddlebrown";
+        if (["'00'", "'4'", "'0'", "'21.5'"].includes(categoryX) || ["'00'", "'4'", "'0'", "'21.5'"].includes(categoryY)) return "hotpink";
     }
+
 
     const valueX = parseFloat(d.x);
     const valueY = parseFloat(d.y);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "firebrick";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "firebrick";
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+    if (d.ids[group].length < 3) return "gray";
+
 
     return "steelblue"; 
 
@@ -6098,15 +6136,16 @@ function getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, 
     const categoryY = typeof d[yCol] === "string" ? String(d[yCol]) : null;
 
     if (categoryX || categoryY) {
-        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "gray";
-        if (categoryX === "0 years old" || categoryY === "0 years old") return "pink";
-        if (["billions", "seventy", "'0'", "'21.5'"].includes(categoryX) || ["billions", "seventy", "'0'", "'21.5'"].includes(categoryY)) return "burlywood";
+        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "saddlebrown";
+        if (["'00'", "'4'", "'0'", "'21.5'"].includes(categoryX) || ["'00'", "'4'", "'0'", "'21.5'"].includes(categoryY)) return "hotpink";
     }
+
+    if (categoryX === "0 years old" || categoryY === "0 years old") return "gray";
 
     const valueX = parseFloat(d[xCol]);
     const valueY = parseFloat(d[yCol]);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "firebrick";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "firebrick";
+    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
+    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
 
     return "steelblue"; 
 }

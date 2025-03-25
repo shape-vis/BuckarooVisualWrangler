@@ -356,6 +356,7 @@ class ScatterplotController {
             document.getElementById("preview-remove").style.display = "none";
             document.getElementById("preview-impute-average-x").style.display = "none";
             document.getElementById("preview-impute-average-y").style.display = "none";
+            document.getElementById("preview-user-function").style.display = "none";
             return;
         }
     
@@ -363,20 +364,47 @@ class ScatterplotController {
         if(!yCol)   isHistogram = true;
         const removedData = this.model.getPreviewData((row) => !selectedPoints.some((point) => point.ID === row.ID));
         console.log("removedData", removedData);
-        this.view.drawPreviewPlot(removedData, "preview-remove", isHistogram, groupByAttribute, xCol, yCol);
+        this.view.drawPreviewPlot(removedData, currData, "preview-remove", isHistogram, groupByAttribute, xCol, yCol);
     
         const imputedXData = this.model.previewAverage(xCol);
         console.log("imputedXData", imputedXData);
-        this.view.drawPreviewPlot(imputedXData, "preview-impute-average-x", isHistogram, groupByAttribute, xCol, yCol);
+        this.view.drawPreviewPlot(imputedXData, currData, "preview-impute-average-x", isHistogram, groupByAttribute, xCol, yCol);
     
         if(yCol){
             const imputedYData = this.model.previewAverage(yCol);
             console.log("imputedYData", imputedYData);
-            this.view.drawPreviewPlot(imputedYData, "preview-impute-average-y", isHistogram, groupByAttribute, xCol, yCol);
+            this.view.drawPreviewPlot(imputedYData, currData, "preview-impute-average-y", isHistogram, groupByAttribute, xCol, yCol);
         }
         else{
             document.getElementById("preview-impute-average-y").style.display = "none";
         }
+
+        /// Hard coded user repair function (remove all points with the average of xCol)
+
+        const isNumeric = currData.array(xCol).some(v => typeof v === "number" && !isNaN(v));
+        let xAvg = 0;
+
+        /// Calculate numeric average ///
+        if(isNumeric){
+            const columnValues = currData.array(xCol).filter((v) => !isNaN(v) && v > 0);
+            xAvg = columnValues.length > 0 
+                ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
+                : 0;           
+        }
+        /// Calculate categorical mode ///
+        else{
+            const frequencyMap = currData.array(xCol).reduce((acc, val) => {
+                acc[val] = (acc[val] || 0) + 1;
+                return acc;
+            }, {});
+    
+            xAvg = Object.keys(frequencyMap).reduce((a, b) =>
+                frequencyMap[a] > frequencyMap[b] ? a : b
+            );   
+        }
+
+        const removedXAvg = currData.filter(aq.escape(d => d[xCol] !== xAvg));
+        this.view.drawPreviewPlot(removedXAvg, currData, "preview-user-function", isHistogram, groupByAttribute, xCol, yCol);
     }
 
     updateLegend(groupByAttribute) {
@@ -391,7 +419,7 @@ class ScatterplotController {
             const errorTypes = ["Missing Values", "Data Type Mismatch", "Average Anomalies (Outliers)", "Incomplete Data (< 3 points)", "Clean"];
             const errorColors = d3.scaleOrdinal()
                 .domain(errorTypes)
-                .range(["gray", "burlywood", "firebrick", "pink", "steelblue"]);
+                .range(["saddlebrown", "hotpink", "red", "gray", "steelblue"]);
 
             errorTypes.forEach(error => {
                 const legendItem = legendContainer.append("div")
@@ -475,6 +503,7 @@ function attachButtonEventListeners(){
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
+        document.getElementById("preview-user-function").style.display = "none";
 
         const controller = getActiveController();
         controller.view.setSelectedPoints([]);
@@ -488,6 +517,8 @@ function attachButtonEventListeners(){
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
+        document.getElementById("preview-user-function").style.display = "none";
+
         const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
@@ -502,6 +533,8 @@ function attachButtonEventListeners(){
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
+        document.getElementById("preview-user-function").style.display = "none";
+
         const controller = getActiveController();
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
@@ -515,6 +548,8 @@ function attachButtonEventListeners(){
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
+        document.getElementById("preview-user-function").style.display = "none";
+
         const controller = getActiveController();
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
