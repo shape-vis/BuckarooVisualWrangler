@@ -218,8 +218,8 @@ class DataModel {
   }
 
   getColumnErrors() {
-    const data = this.filteredData.objects();
-    const columns = this.filteredData.columnNames().slice(1); 
+    const data = this.fullFilteredData.objects();
+    const columns = this.fullFilteredData.columnNames().slice(1); 
     const errorsPerColumn = {};
   
     columns.forEach(col => {
@@ -227,6 +227,8 @@ class DataModel {
       const errors = {};
 
       const total = values.length;
+      const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
+
   
       // if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
       //   errors.add("missing");
@@ -247,8 +249,23 @@ class DataModel {
       // const majorityType = types.sort((a,b) =>
       //   types.filter(t => t === a).length - types.filter(t => t === b).length
       // ).pop();
-      const incompleteCount = values.filter(v => String(v) === "0 years old").length;
-      if (incompleteCount > 0) errors.incomplete = incompleteCount / total;
+      if (numericValues.length == 0) {
+        const categoryCounts = {};
+        values.forEach(v => {
+          const key = String(v);
+          categoryCounts[key] = (categoryCounts[key] || 0) + 1;
+        });
+
+        let infrequentCount = 0;
+        for (const [key, count] of Object.entries(categoryCounts)) {
+          if (count > 0 && count < 3) {
+            infrequentCount += count;
+          }
+        }
+
+        const totalIncomplete = infrequentCount;
+        if (totalIncomplete > 0) errors.incomplete = totalIncomplete / total;
+      }
   
       // const firstType = typeof values.find(v => v !== null && v !== undefined);
       // if (values.some(v => typeof v !== firstType)) {
@@ -257,7 +274,7 @@ class DataModel {
       // if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
       //   errors.add("mismatch");
       // }
-      const mismatchCount = values.filter(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v)).length;
+      const mismatchCount = values.filter(v => ["'00'", "'4'", "'0'", "'21.5'"].includes(v)).length;
       if (mismatchCount > 0) errors.mismatch = mismatchCount / total;
   
     //   const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
@@ -271,7 +288,6 @@ class DataModel {
   
     //   errorsPerColumn[col] = Array.from(errors);
     // });
-    const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
     if (numericValues.length > 0) {
       const mean = d3.mean(numericValues);
       const std = d3.deviation(numericValues);
@@ -281,6 +297,8 @@ class DataModel {
 
     errorsPerColumn[col] = errors;
   });
+
+    console.log("errospercolumn", errorsPerColumn);
   
     return errorsPerColumn;
   }

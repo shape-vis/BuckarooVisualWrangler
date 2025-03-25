@@ -16,7 +16,7 @@ class ScatterplotController {
     updateSelectedAttributes(attributes) {
         this.selectedAttributes = ["ID", ...attributes];
         this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes)); 
-        this.render(false, true);
+        this.render(true, true);
     }
 
     // Update the 1 group by attribute the user selects

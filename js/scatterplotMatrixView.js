@@ -6077,7 +6077,7 @@ function getFillColorCategorical(d, selectedPoints) {
     if (category === "none" || category === "" || category === "null") return "saddlebrown";
 
     if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
-    if (d.ids.length < 3) return "gray";
+    if (d.data.groupIDs[d.group].length < 3) return "gray";
 
 
     return "steelblue"; 

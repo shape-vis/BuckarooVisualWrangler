@@ -3,46 +3,48 @@ let practiceController, stackoverflowController;
 
 let data2 = null;
 // May need to change 'id' to 'ID'
-d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
-  data2 = aq.from(inputData).slice(0, 200);
+// d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
+//   data2 = aq.from(inputData).slice(0, 200);
 
-  stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
+//   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
 
-  stackoverflowController.updateSelectedAttributes(data2.columnNames().slice(1).sort().slice(0,3));
-  // stackoverflowController.render();
-  stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
+//   stackoverflowController.updateSelectedAttributes(data2.columnNames().slice(1).sort().slice(0,3));
+//   // stackoverflowController.render();
+//   stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
 
-  attachButtonEventListeners();
-});
-
-// document.getElementById('fileInput').addEventListener('change', function (event) {
-//   const file = event.target.files[0];
-//   console.log("file", file);
-//   if (!file) return;
-
-//   const reader = new FileReader();
-
-//   reader.onload = function (e) {
-//     const contents = e.target.result;
-
-//     // Parse CSV using d3.csvParse
-//     const parsedData = d3.csvParse(contents);
-//     const table = aq.from(parsedData).slice(0,200);
-
-//     // Clear the existing visualization container
-//     d3.select("#matrix-vis-stackoverflow").html("");
-
-//     // Reinitialize controller with new data
-//     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
-//     stackoverflowController.updateSelectedAttributes(table.columnNames().slice(1).sort().slice(0, 3));
-//     stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
-
-//     attachButtonEventListeners();
-
-//   };
-
-//   reader.readAsText(file);
+//   attachButtonEventListeners();
 // });
+
+document.getElementById('fileInput').addEventListener('change', function (event) {
+  const file = event.target.files[0];
+  console.log("file", file);
+  if (!file) return;
+
+  document.getElementById('placeholder-message').style.display = "none";
+
+  const reader = new FileReader();
+
+  reader.onload = function (e) {
+    const contents = e.target.result;
+
+    // Parse CSV using d3.csvParse
+    const parsedData = d3.csvParse(contents);
+    const table = aq.from(parsedData).slice(0,200);
+
+    // Clear the existing visualization container
+    d3.select("#matrix-vis-stackoverflow").html("");
+
+    // Reinitialize controller with new data
+    stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
+    stackoverflowController.updateSelectedAttributes(table.columnNames().slice(1).sort().slice(0, 3));
+    stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
+
+    attachButtonEventListeners();
+
+  };
+
+  reader.readAsText(file);
+});
 
 document.getElementById("export-script").addEventListener("click", function () {
   const scriptContent = `
