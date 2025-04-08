@@ -4,8 +4,9 @@ let barX0 = 0;
 let barX1 = 0;
 
 class ScatterplotMatrixView{
-    constructor(container) {
+    constructor(container, model) {
         this.container = container;
+        this.model = model;
 
         this.size = 180; // Size of each cell in matrix
         this.xPadding = 175;
@@ -602,6 +603,14 @@ class ScatterplotMatrixView{
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {  
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
+        const columnErrors = this.model.getColumnErrors();
+
+        const errorColors = {
+        "mismatch": "red",
+        "missing": "orange",
+        "anomaly": "purple"
+        };
+
         let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
         let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
@@ -656,6 +665,8 @@ class ScatterplotMatrixView{
                     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
                 }));
 
+                const isNumericMajority = numericData.length >= nonNumericData.length;
+
                 const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
 
                 let uniqueCategories;
@@ -663,9 +674,14 @@ class ScatterplotMatrixView{
                 if (numericData.length === data.length)
                 {
                     uniqueCategories = [];
-                }else{
+                }else if (isNumericMajority){
                     // uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
+
                     uniqueCategories = [...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
+                }
+                else{
+                    const mismatchNums = numericData.map(d => String(d[xCol]));
+                    uniqueCategories = [...[...mismatchNums, ...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
                 }
 
                 const categorySpace = uniqueCategories.length * 20; 
@@ -675,7 +691,8 @@ class ScatterplotMatrixView{
                 let bars = null;
                 let yScale = null;
                 
-                if (numericData.length > 0)
+                // Numeric Data
+                if (isNumericMajority)
                 {
                     uniqueCategories = sortCategories(uniqueCategories);
                     const xScale = d3.scaleLinear()
@@ -692,6 +709,7 @@ class ScatterplotMatrixView{
                     const mean = d3.mean(values);
                     const stdDev = d3.deviation(values);
 
+                    // Data is grouped
                     if (groupByAttribute) {
                         const groups = Array.from(new Set(numericData.map(d => d[groupByAttribute])));
                         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
@@ -784,8 +802,8 @@ class ScatterplotMatrixView{
                             .attr("x", d => d.data.category ? categoricalScale(d.data.category) : xScale(d.data.x0))
                             .attr("width", binWidth);
                     }
+                    // No group by
                     else{
-                        // No group by
                         const histData = histogramGenerator(numericData.map(d => d[xCol])).map(bin => {
                             return {
                                 x0: bin.x0,
@@ -888,7 +906,9 @@ class ScatterplotMatrixView{
                         .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                         .text("count");
                 }
-                else{   // Data is all categorical
+                // Data is all categorical
+                else{   
+
                     // uniqueCategories = uniqueCategories.slice(1);
                     uniqueCategories = sortCategories(uniqueCategories);
 
@@ -896,6 +916,7 @@ class ScatterplotMatrixView{
                         .domain(uniqueCategories)
                         .range([0, this.size]);
 
+                    // Data is grouped
                     if (groupByAttribute) {
                         const groups = Array.from(new Set(nonNumericData.map(d => d[groupByAttribute])));
                         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
@@ -965,6 +986,7 @@ class ScatterplotMatrixView{
                             .attr("x", d => xScale(d.data.category))
                             .attr("width", xScale.bandwidth());                          
                     }
+                    // No group by
                     else{
                         const histData = [];
 
@@ -987,6 +1009,18 @@ class ScatterplotMatrixView{
                             .join("rect")
                             .attr("x", d => xScale(d.category))
                             .attr("width", xScale.bandwidth())
+                            // .attr("fill", d => {
+                            //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
+                            //     if (isSelected) return "gold";
+                            //     const errorTypes = d.ids
+                            //         .flatMap(ID => columnErrors[xCol]?.[ID] || [])
+                            //         .filter(Boolean); // Remove undefined/null                               
+                            //     console.log("errorTypes", errorTypes);
+                            //     if (errorTypes && errorTypes.length > 0) {
+                            //         return errorColors[errorTypes[0]];
+                            //     }
+                            //     return "steelblue";
+                            // })
                             .attr("fill", d => getFillColorNoGroupbyCategorical(d, this.selectedPoints))
                             // .attr("fill", (d) => {
                             //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
@@ -1114,6 +1148,7 @@ class ScatterplotMatrixView{
                     });
                 }                
             } 
+            // Plot off diagonal cells
             else {
                 const heatMapViewButton = cellGroup.append("image")
                 .attr("class", "heatmap-button active")
@@ -2130,7 +2165,7 @@ class ScatterplotMatrixView{
             data = givenData.select(["ID", xCol, yCol]).objects();
         }
 
-        let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
+        let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority} = splitData(data, xCol, yCol);
 
         const numericXValues = nonNumericYData.map(d => d[xCol]).filter(v => !isNaN(v));
         const numericYValues = nonNumericXData.map(d => d[yCol]).filter(v => !isNaN(v));
@@ -2172,7 +2207,7 @@ class ScatterplotMatrixView{
         let rect = null;
 
         /// All numeric plot ///
-        if(xIsNumeric && yIsNumeric)
+        if(xIsNumericMajority && yIsNumericMajority)
         {
             binXGenerator = d3.bin()
                 .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol])])  
@@ -2399,7 +2434,7 @@ class ScatterplotMatrixView{
             }
         }
         /// Non numeric X plot ///
-        else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
+        else if(!xIsNumericMajority && yIsNumericMajority) // xCol is cat. yCol is num.
         {
             data = data.map(d => ({
                 ...d,
@@ -2627,7 +2662,7 @@ class ScatterplotMatrixView{
         }
 
         /// Non numeric Y plot ///
-        else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
+        else if(xIsNumericMajority && !yIsNumericMajority) // xCol is num. yCol is cat.
         {
             data = data.map(d => ({
                     ...d,
@@ -3156,7 +3191,7 @@ class ScatterplotMatrixView{
             data = givenData.select([xCol, yCol]).objects();
         }
 
-        let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
+        let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority} = splitData(data, xCol, yCol);
 
         const numericXValues = nonNumericYData.map(d => d[xCol]).filter(v => !isNaN(v));
         const numericYValues = nonNumericXData.map(d => d[yCol]).filter(v => !isNaN(v));
@@ -3166,7 +3201,7 @@ class ScatterplotMatrixView{
         const stdDevY = d3.deviation(numericYValues);
 
         /// All numeric plot ///
-        if(xIsNumeric && yIsNumeric)
+        if(xIsNumericMajority && yIsNumericMajority)
         {
             const xScale = d3.scaleLinear()
                 .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
@@ -3330,7 +3365,7 @@ class ScatterplotMatrixView{
         }
 
         /// Non numeric X plot ///
-        else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
+        else if(!xIsNumericMajority && yIsNumericMajority) // xCol is cat. yCol is num.
         {
             uniqueXCategories = uniqueXCategories.slice(1);
             uniqueYCategories = uniqueYCategories.slice(1);
@@ -3499,7 +3534,7 @@ class ScatterplotMatrixView{
         }
 
         /// Non numeric Y plot ///
-        else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
+        else if(xIsNumericMajority && !yIsNumericMajority) // xCol is num. yCol is cat.
         {
             uniqueYCategories = uniqueYCategories.slice(1);
             uniqueXCategories = uniqueXCategories.slice(1);
@@ -3831,10 +3866,10 @@ class ScatterplotMatrixView{
             data = givenData.select([xCol, yCol]).objects();
         }
 
-        let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
+        let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority} = splitData(data, xCol, yCol);
 
         /// All numeric plot ///
-        if(xIsNumeric && yIsNumeric)
+        if(xIsNumericMajority && yIsNumericMajority)
         {
             const xScale = d3.scaleLinear()
                 .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
@@ -4013,7 +4048,7 @@ class ScatterplotMatrixView{
         }
 
         /// Non numeric X plot ///
-        else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
+        else if(!xIsNumericMajority && yIsNumericMajority) // xCol is cat. yCol is num.
         {
             uniqueXCategories = uniqueXCategories.slice(1);
             uniqueYCategories = uniqueYCategories.slice(1);
@@ -4166,7 +4201,7 @@ class ScatterplotMatrixView{
         }
 
         /// Non numeric Y plot ///
-        else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
+        else if(xIsNumericMajority && !yIsNumericMajority) // xCol is num. yCol is cat.
         {
             uniqueYCategories = uniqueYCategories.slice(1);
             uniqueXCategories = uniqueXCategories.slice(1);
@@ -5962,6 +5997,9 @@ function splitData (data, xCol, yCol){
         ...nonNumericData.map(d => ({ ...d, type: "nan-xy" }))
     ];
 
+    const numericXData = data.filter(d => typeof d[xCol] === "number" && !isNaN(d[xCol]));
+    const numericYData = data.filter(d => typeof d[yCol] === "number" && !isNaN(d[yCol]));
+
     const allNonNumericX = [...nonNumericXData, ...nonNumericData].filter(d =>
         typeof d[xCol] !== "number" || isNaN(d[xCol])
     ).map(d => ({
@@ -5976,6 +6014,8 @@ function splitData (data, xCol, yCol){
         [yCol]: (typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol])
     }));
 
+    const xIsNumericMajority = numericXData.length >= allNonNumericX.length;
+    const yIsNumericMajority = numericYData.length >= allNonNumericY.length;
 
     const groupedXCategories = d3.group(allNonNumericX, d => String(d[xCol]));
     const groupedYCategories = d3.group(allNonNumericY, d => String(d[yCol]));
@@ -5986,15 +6026,37 @@ function splitData (data, xCol, yCol){
     {
         uniqueXCategories = [];
         uniqueYCategories = [];
-    }else{
+    }else if(xIsNumericMajority && yIsNumericMajority){
         uniqueXCategories = ["NaN",...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
         uniqueYCategories = ["NaN",...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+    }else if(!xIsNumericMajority && yIsNumericMajority){
+        const mismatchXNums = numericXData
+            .filter(d => typeof d[xCol] === "number" && !isNaN(d[xCol]))
+            .map(d => String(d[xCol]));
+        uniqueXCategories = ["NaN",...[...mismatchXNums, ...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+        uniqueYCategories = ["NaN",...[...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+    }else if(xIsNumericMajority && !yIsNumericMajority){
+        const mismatchYNums = numericYData
+            .filter(d => typeof d[yCol] === "number" && !isNaN(d[yCol]))
+            .map(d => String(d[yCol]));
+        uniqueXCategories = ["NaN",...[...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+        uniqueYCategories = ["NaN",...[...mismatchYNums, ...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
+    }else{
+        const mismatchXNums = numericXData
+            .filter(d => typeof d[xCol] === "number" && !isNaN(d[xCol]))
+            .map(d => String(d[xCol]));
+
+        const mismatchYNums = numericYData
+            .filter(d => typeof d[yCol] === "number" && !isNaN(d[yCol]))
+            .map(d => String(d[yCol]));
+        uniqueXCategories = ["NaN",...[...mismatchXNums, ...groupedXCategories.keys()].filter(d => d !== "NaN").sort()];
+        uniqueYCategories = ["NaN",...[...mismatchYNums, ...groupedYCategories.keys()].filter(d => d !== "NaN").sort()];
     }
 
     const categorySpace = 20 * Math.max(uniqueXCategories.length, uniqueYCategories.length);
     const numericSpace = this.size - categorySpace;
 
-    return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace};
+    return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority};
 }
 
 function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, selectedPoints) {

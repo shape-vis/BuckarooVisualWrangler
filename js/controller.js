@@ -1,7 +1,7 @@
 class ScatterplotController {
     constructor(data, container) {
       this.model = new DataModel(data);
-      this.view = new ScatterplotMatrixView(container);
+      this.view = new ScatterplotMatrixView(container, this.model);
       this.selectedAttributes = data.columnNames().slice(1).sort().slice(0,3); // Store selected columns
       this.xCol = null;
       this.yCol = null;
