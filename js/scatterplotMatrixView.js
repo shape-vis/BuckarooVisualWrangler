@@ -2295,7 +2295,7 @@ class ScatterplotMatrixView{
                                 // .attr("fill", groupColorScale(group))
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
-                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
                                     }
                                     return groupColorScale(group);
                                 })
@@ -2410,7 +2410,7 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                     // .attr("fill", d => {
                     //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -2499,7 +2499,7 @@ class ScatterplotMatrixView{
                                 // .attr("fill", groupColorScale(group))
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
-                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
                                     }
                                     return groupColorScale(group);
                                 })
@@ -2606,7 +2606,7 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr('opactiy', 0.8)
-                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                     // .attr("fill", d => {
                     //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -2729,7 +2729,7 @@ class ScatterplotMatrixView{
                                 .attr("y", yOffset) 
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
-                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
                                     }
                                     return groupColorScale(group);
                                 })
@@ -2837,7 +2837,7 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                     // .attr("fill", d => {
                     //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -2945,7 +2945,7 @@ class ScatterplotMatrixView{
                                 // .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
-                                        return getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, self.selectedPoints, groupColorScale); 
+                                        return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
                                     }
                                     return groupColorScale(group);
                                 })
@@ -6151,7 +6151,6 @@ function getFillColorCategorical(d, selectedPoints) {
 }
 
 function getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, errorColors, colorScale, selectedPoints) {
-    console.log(selectedPoints);
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
@@ -6192,29 +6191,43 @@ function getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, errorColors, 
     return colorScale(d.value);
 }
 
-function getFillColorHeatmap(d, group, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+function getFillColorHeatmap(d, group, xCol, yCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.ids[group].some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    const categoryX = typeof d.x === "string" ? String(d.x) : null;
-    const categoryY = typeof d.y === "string" ? String(d.y) : null;
+    const allErrors = [];
 
-    if (categoryX || categoryY) {
-        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "saddlebrown";
-        if (["'00'", "'4'", "'0'", "'21.5'"].includes(categoryX) || ["'00'", "'4'", "'0'", "'21.5'"].includes(categoryY)) return "hotpink";
+    for (const id of d.ids[group]) {
+        const xErrors = columnErrors[xCol]?.[id] || [];
+        const yErrors = columnErrors[yCol]?.[id] || [];
+        allErrors.push(...xErrors, ...yErrors);
     }
 
+    if (allErrors.length === 0) {
+        return "steelblue"; 
+    }
 
-    const valueX = parseFloat(d.x);
-    const valueY = parseFloat(d.y);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
-    if (d.ids[group].length < 3) return "gray";
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; 
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
 
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
+        }
+    }
+
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
+    }
 
     return "steelblue"; 
-
-    // return colorScale(d.value);
 }
 
 function getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {

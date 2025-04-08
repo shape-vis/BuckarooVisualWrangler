@@ -13,6 +13,9 @@ class ScatterplotController {
 
     async init(detectors) {
         await this.model.runDetectors(detectors); 
+
+        this.updateSelectedAttributes(this.model.getFullData().columnNames().slice(1).sort().slice(0,3));
+
         this.updateLegend(this.model.getGroupByAttribute());
       }
 

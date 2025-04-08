@@ -274,7 +274,7 @@ class DataModel {
 
   getColumnErrors() {
     return this.columnErrorMap;
-    const data = this.fullFilteredData.objects();
+    //   const data = this.fullFilteredData.objects();
     //   const columns = this.fullFilteredData.columnNames().slice(1); 
     //   const errorsPerColumn = {};
     
