@@ -68,27 +68,56 @@ class DataModel {
   }
 
   preprocessData(table) {
+    function isNumeric(val) {
+      return typeof val === "number" || (typeof val === "string" && /^\d+(\.\d+)?$/.test(val.trim()));
+    }
+
     function parseValue(value) {
       if (typeof value === "number") return value; 
-
       if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim())) {
           return +value; 
       }
-
       return value; 
     }
 
-    let tempArr = table.objects().map(row => {
-      let newRow = { ...row }; 
+    const rawData = table.objects();
+    const columns = Object.keys(rawData[0] || {});
 
-      Object.keys(row).forEach(column => {
-          newRow[column] = parseValue(row[column]); 
-      });
-
+    // Step 1: Initial parsing
+    let tempArr = rawData.map(row => {
+      let newRow = {};
+      for (let key of columns) {
+        newRow[key] = parseValue(row[key]);
+      }
       return newRow;
     });
 
-    return aq.from(tempArr);
+    // Step 2: Determine majority type for each column
+    let columnMajorTypes = {};
+    for (let col of columns) {
+      let numericCount = 0;
+      let totalCount = 0;
+      for (let row of tempArr) {
+        if (row[col] !== null && row[col] !== undefined) {
+          totalCount++;
+          if (typeof row[col] === "number") numericCount++;
+        }
+      }
+      columnMajorTypes[col] = numericCount > totalCount / 2 ? "numeric" : "non-numeric";
+    }
+
+    // Step 3: Convert numeric values to strings in non-numeric columns
+    let finalArr = tempArr.map(row => {
+      let newRow = { ...row };
+      for (let col of columns) {
+        if (columnMajorTypes[col] === "non-numeric" && typeof newRow[col] === "number") {
+          newRow[col] = newRow[col].toString();
+        }
+      }
+      return newRow;
+    });
+
+    return aq.from(finalArr);
   }
   
   filterData(condition) {
@@ -212,6 +241,7 @@ class DataModel {
 
   setSelectedPoints(points) {
     this.selectedPoints = points;
+    console.log("setting selected POints");
   }
 
   getSelectedPoints() {
@@ -222,7 +252,9 @@ class DataModel {
     this.columnErrorMap = {}; // Reset
   
     for (const detector of detectors) {
-      const module = await import(`./${detector.code}`);
+      const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
+      console.log("Importing detector from:", path);
+      const module = await import(path);
       const result = module.default(this.fullFilteredData);
   
       for (const [column, idErrorMap] of Object.entries(result)) {
@@ -242,89 +274,88 @@ class DataModel {
 
   getColumnErrors() {
     return this.columnErrorMap;
+    const data = this.fullFilteredData.objects();
+    //   const columns = this.fullFilteredData.columnNames().slice(1); 
+    //   const errorsPerColumn = {};
+    
+    //   columns.forEach(col => {
+    //     const values = data.map(row => row[col]);
+    //     const errors = {};
   
-  //   const data = this.fullFilteredData.objects();
-  //   const columns = this.fullFilteredData.columnNames().slice(1); 
-  //   const errorsPerColumn = {};
+    //     const total = values.length;
+    //     const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
   
-  //   columns.forEach(col => {
-  //     const values = data.map(row => row[col]);
-  //     const errors = {};
-
-  //     const total = values.length;
-  //     const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
-
+    
+    //     // if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
+    //     //   errors.add("missing");
+    //     // }
   
-  //     // if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
-  //     //   errors.add("missing");
-  //     // }
-
-  //     const missingCount = values.filter(v => String(v) === "null" || String(v) === "none" || String(v) === "").length;
-  //     if (missingCount > 0) errors.missing = missingCount / total;
+    //     const missingCount = values.filter(v => String(v) === "null" || String(v) === "none" || String(v) === "").length;
+    //     if (missingCount > 0) errors.missing = missingCount / total;
+    
+    //     // const types = values.map(v => typeof v);
+    //     // if (new Set(types).size > 1) {
+    //     //   errors.add("incomplete");
+    //     // }
+    //     // if (values.some(v => String(v) === "0 years old")) {
+    //     //   errors.add("incomplete");
+    //     // }
   
-  //     // const types = values.map(v => typeof v);
-  //     // if (new Set(types).size > 1) {
-  //     //   errors.add("incomplete");
-  //     // }
-  //     // if (values.some(v => String(v) === "0 years old")) {
-  //     //   errors.add("incomplete");
-  //     // }
-
-  //     // const types = values.map(v => typeof v);
-  //     // const majorityType = types.sort((a,b) =>
-  //     //   types.filter(t => t === a).length - types.filter(t => t === b).length
-  //     // ).pop();
-  //     if (numericValues.length == 0) {
-  //       const categoryCounts = {};
-  //       values.forEach(v => {
-  //         const key = String(v);
-  //         categoryCounts[key] = (categoryCounts[key] || 0) + 1;
-  //       });
-
-  //       let infrequentCount = 0;
-  //       for (const [key, count] of Object.entries(categoryCounts)) {
-  //         if (count > 0 && count < 3) {
-  //           infrequentCount += count;
-  //         }
-  //       }
-
-  //       const totalIncomplete = infrequentCount;
-  //       if (totalIncomplete > 0) errors.incomplete = totalIncomplete / total;
-  //     }
+    //     // const types = values.map(v => typeof v);
+    //     // const majorityType = types.sort((a,b) =>
+    //     //   types.filter(t => t === a).length - types.filter(t => t === b).length
+    //     // ).pop();
+    //     if (numericValues.length == 0) {
+    //       const categoryCounts = {};
+    //       values.forEach(v => {
+    //         const key = String(v);
+    //         categoryCounts[key] = (categoryCounts[key] || 0) + 1;
+    //       });
   
-  //     // const firstType = typeof values.find(v => v !== null && v !== undefined);
-  //     // if (values.some(v => typeof v !== firstType)) {
-  //     //   errors.add("mismatch");
-  //     // }
-  //     // if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
-  //     //   errors.add("mismatch");
-  //     // }
-  //     const mismatchCount = values.filter(v => ["'00'", "'4'", "'0'", "'21.5'"].includes(v)).length;
-  //     if (mismatchCount > 0) errors.mismatch = mismatchCount / total;
+    //       let infrequentCount = 0;
+    //       for (const [key, count] of Object.entries(categoryCounts)) {
+    //         if (count > 0 && count < 3) {
+    //           infrequentCount += count;
+    //         }
+    //       }
   
-  //   //   const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
-  //   //   if (numericValues.length > 0) {
-  //   //     const mean = d3.mean(numericValues);
-  //   //     const std = d3.deviation(numericValues);
-  //   //     if (numericValues.some(v => Math.abs(v - mean) > 2 * std)) {
-  //   //       errors.add("anomaly");
-  //   //     }
-  //   //   }
+    //       const totalIncomplete = infrequentCount;
+    //       if (totalIncomplete > 0) errors.incomplete = totalIncomplete / total;
+    //     }
+    
+    //     // const firstType = typeof values.find(v => v !== null && v !== undefined);
+    //     // if (values.some(v => typeof v !== firstType)) {
+    //     //   errors.add("mismatch");
+    //     // }
+    //     // if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
+    //     //   errors.add("mismatch");
+    //     // }
+    //     const mismatchCount = values.filter(v => ["'00'", "'4'", "'0'", "'21.5'"].includes(v)).length;
+    //     if (mismatchCount > 0) errors.mismatch = mismatchCount / total;
+    
+    //   //   const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
+    //   //   if (numericValues.length > 0) {
+    //   //     const mean = d3.mean(numericValues);
+    //   //     const std = d3.deviation(numericValues);
+    //   //     if (numericValues.some(v => Math.abs(v - mean) > 2 * std)) {
+    //   //       errors.add("anomaly");
+    //   //     }
+    //   //   }
+    
+    //   //   errorsPerColumn[col] = Array.from(errors);
+    //   // });
+    //   if (numericValues.length > 0) {
+    //     const mean = d3.mean(numericValues);
+    //     const std = d3.deviation(numericValues);
+    //     const anomalyCount = numericValues.filter(v => Math.abs(v - mean) > 2 * std).length;
+    //     if (anomalyCount > 0) errors.anomaly = anomalyCount / total;
+    //   }
   
-  //   //   errorsPerColumn[col] = Array.from(errors);
-  //   // });
-  //   if (numericValues.length > 0) {
-  //     const mean = d3.mean(numericValues);
-  //     const std = d3.deviation(numericValues);
-  //     const anomalyCount = numericValues.filter(v => Math.abs(v - mean) > 2 * std).length;
-  //     if (anomalyCount > 0) errors.anomaly = anomalyCount / total;
-  //   }
-
-  //   errorsPerColumn[col] = errors;
-  // });
-
-  //   console.log("errospercolumn", errorsPerColumn);
+    //   errorsPerColumn[col] = errors;
+    // });
   
-  //   return errorsPerColumn;
+    //   console.log("errospercolumn", errorsPerColumn);
+    
+    //   return errorsPerColumn;
   }
 }

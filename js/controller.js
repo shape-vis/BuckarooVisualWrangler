@@ -9,8 +9,12 @@ class ScatterplotController {
 
     //   this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
-      this.updateLegend(this.model.getGroupByAttribute()); 
     }
+
+    async init(detectors) {
+        await this.model.runDetectors(detectors); 
+        this.updateLegend(this.model.getGroupByAttribute());
+      }
 
     // Update the 1-3 columns the user selects
     updateSelectedAttributes(attributes) {

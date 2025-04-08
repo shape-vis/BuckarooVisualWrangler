@@ -2,6 +2,6 @@
     {
         "ID": 1,
         "name": "Mismatch",
-        "code": "detectors/datatypeMismatch.js"
+        "code": "/detectors/datatypeMismatch.js"
     }
 ]

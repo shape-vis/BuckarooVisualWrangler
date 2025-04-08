@@ -28,10 +28,19 @@ class ScatterplotMatrixView{
         this.selectedPoints = [];
         this.predicatePoints = [];
         this.viewGroupsButton = false;
+
+        this.errorColors = {
+            "mismatch": "hotpink",
+            "missing": "saddlebrown",
+            "anomaly": "red",
+            "incomplete": "gray"
+        };
+
     }
 
     setSelectedPoints(points) {
         this.selectedPoints = points;
+        console.log("view is setting selected points");
       }
 
     setPredicatePoints(points) {
@@ -604,12 +613,6 @@ class ScatterplotMatrixView{
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
         const columnErrors = this.model.getColumnErrors();
-
-        const errorColors = {
-        "mismatch": "red",
-        "missing": "orange",
-        "anomaly": "purple"
-        };
 
         let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
         let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
@@ -2142,6 +2145,8 @@ class ScatterplotMatrixView{
     drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
+        const columnErrors = this.model.getColumnErrors();
+
         const groupColorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
 
         const gradientID = `legend-gradient-${i}-${j}`;
@@ -3049,7 +3054,7 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                     // .attr("fill", (d) => {
                     //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                     //     return isSelected ? "gold" : colorScale(d.value);
@@ -6145,25 +6150,44 @@ function getFillColorCategorical(d, selectedPoints) {
     return "steelblue"; 
 }
 
-function getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
+function getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, errorColors, colorScale, selectedPoints) {
+    console.log(selectedPoints);
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    const categoryX = typeof d.x === "string" ? String(d.x) : null;
-    const categoryY = typeof d.y === "string" ? String(d.y) : null;
+    const allErrors = [];
 
-    if (categoryX || categoryY) {
-        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "saddlebrown";
-        if (["'00'", "'4'",  "'0'", "'21.5'"].includes(categoryX) || ["'00'", "'4'",  "'0'", "'21.5'"].includes(categoryY)) return "hotpink";
+    for (const id of d.ids) {
+        const xErrors = columnErrors[xCol]?.[id] || [];
+        const yErrors = columnErrors[yCol]?.[id] || [];
+        allErrors.push(...xErrors, ...yErrors);
     }
 
+    if (allErrors.length === 0) {
+        return colorScale(d.value); // no errors → normal heatmap color
+    }
 
-    const valueX = parseFloat(d.x);
-    const valueY = parseFloat(d.y);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
-    if (d.ids.length < 3) return "gray";
+    // Count frequency of each error type
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; // skip unknown error types
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
 
+    // Find the most frequent known error type
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
+        }
+    }
+
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
+    }
 
     return colorScale(d.value);
 }
