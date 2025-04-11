@@ -28,11 +28,10 @@ export default function detectIncompleteData(table) {
     
         // Flag categories that appear fewer times than threshold
         for (const [category, count] of Object.entries(valueCounts)) {
-          if (count < threshold) {
+          if (count < 3) {
             for (const id of valueToIds[category]) {
               if (!result[column]) result[column] = {};
               result[column][id] = "incomplete";
-              console.log(`Category "${category}" in column "${column}" is underrepresented (count: ${count}), row ID: ${id}`);
             }
           }
         }

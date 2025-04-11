@@ -254,7 +254,7 @@ class DataModel {
       const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
       console.log("Importing detector from:", path);
       const module = await import(path);
-      const result = module.default(this.fullFilteredData);
+      const result = module.default(this.filteredData);
   
       for (const [column, idErrorMap] of Object.entries(result)) {
         if (!this.columnErrorMap[column]) {
@@ -269,92 +269,35 @@ class DataModel {
         }
       }
     }
+    console.log("this.columnErrorMap", this.columnErrorMap);
   }
 
   getColumnErrors() {
     return this.columnErrorMap;
-    //   const data = this.fullFilteredData.objects();
-    //   const columns = this.fullFilteredData.columnNames().slice(1); 
-    //   const errorsPerColumn = {};
-    
-    //   columns.forEach(col => {
-    //     const values = data.map(row => row[col]);
-    //     const errors = {};
+  }
+
+  getColumnErrorSummary() {
+    const result = {}; // { column: { errorType: percent } }
+    const totalRows = this.fullFilteredData.numRows();
+    const errorMap = this.getColumnErrors();
   
-    //     const total = values.length;
-    //     const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
+    for (const [col, idErrors] of Object.entries(errorMap)) {
+      const errorTypeCounts = {};
   
-    
-    //     // if (values.some(v => String(v) === "null" || String(v) === "none" || String(v) === "")) {
-    //     //   errors.add("missing");
-    //     // }
+      for (const errorList of Object.values(idErrors)) {
+        for (const errorType of errorList) {
+          errorTypeCounts[errorType] = (errorTypeCounts[errorType] || 0) + 1;
+        }
+      }
   
-    //     const missingCount = values.filter(v => String(v) === "null" || String(v) === "none" || String(v) === "").length;
-    //     if (missingCount > 0) errors.missing = missingCount / total;
-    
-    //     // const types = values.map(v => typeof v);
-    //     // if (new Set(types).size > 1) {
-    //     //   errors.add("incomplete");
-    //     // }
-    //     // if (values.some(v => String(v) === "0 years old")) {
-    //     //   errors.add("incomplete");
-    //     // }
+      result[col] = {};
+      for (const [type, count] of Object.entries(errorTypeCounts)) {
+        result[col][type] = count / totalRows;
+      }
+    }
+    console.log("Final summary:", result);
+
   
-    //     // const types = values.map(v => typeof v);
-    //     // const majorityType = types.sort((a,b) =>
-    //     //   types.filter(t => t === a).length - types.filter(t => t === b).length
-    //     // ).pop();
-    //     if (numericValues.length == 0) {
-    //       const categoryCounts = {};
-    //       values.forEach(v => {
-    //         const key = String(v);
-    //         categoryCounts[key] = (categoryCounts[key] || 0) + 1;
-    //       });
-  
-    //       let infrequentCount = 0;
-    //       for (const [key, count] of Object.entries(categoryCounts)) {
-    //         if (count > 0 && count < 3) {
-    //           infrequentCount += count;
-    //         }
-    //       }
-  
-    //       const totalIncomplete = infrequentCount;
-    //       if (totalIncomplete > 0) errors.incomplete = totalIncomplete / total;
-    //     }
-    
-    //     // const firstType = typeof values.find(v => v !== null && v !== undefined);
-    //     // if (values.some(v => typeof v !== firstType)) {
-    //     //   errors.add("mismatch");
-    //     // }
-    //     // if (values.some(v => ["billions", "seventy", "'0'", "'21.5'"].includes(v))) {
-    //     //   errors.add("mismatch");
-    //     // }
-    //     const mismatchCount = values.filter(v => ["'00'", "'4'", "'0'", "'21.5'"].includes(v)).length;
-    //     if (mismatchCount > 0) errors.mismatch = mismatchCount / total;
-    
-    //   //   const numericValues = values.filter(v => typeof v === "number" && !isNaN(v));
-    //   //   if (numericValues.length > 0) {
-    //   //     const mean = d3.mean(numericValues);
-    //   //     const std = d3.deviation(numericValues);
-    //   //     if (numericValues.some(v => Math.abs(v - mean) > 2 * std)) {
-    //   //       errors.add("anomaly");
-    //   //     }
-    //   //   }
-    
-    //   //   errorsPerColumn[col] = Array.from(errors);
-    //   // });
-    //   if (numericValues.length > 0) {
-    //     const mean = d3.mean(numericValues);
-    //     const std = d3.deviation(numericValues);
-    //     const anomalyCount = numericValues.filter(v => Math.abs(v - mean) > 2 * std).length;
-    //     if (anomalyCount > 0) errors.anomaly = anomalyCount / total;
-    //   }
-  
-    //   errorsPerColumn[col] = errors;
-    // });
-  
-    //   console.log("errospercolumn", errorsPerColumn);
-    
-    //   return errorsPerColumn;
+    return result;
   }
 }

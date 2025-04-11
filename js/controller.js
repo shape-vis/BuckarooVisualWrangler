@@ -6,13 +6,17 @@ class ScatterplotController {
       this.xCol = null;
       this.yCol = null;
       this.viewGroupsButton = false;
+      this.detectors = null;
 
     //   this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
     }
 
     async init(detectors) {
+        this.detectors = detectors;
         await this.model.runDetectors(detectors); 
+
+        this.view.populateDropdownFromTable(this.model.getFullData(), this);
 
         this.updateSelectedAttributes(this.model.getFullData().columnNames().slice(1).sort().slice(0,3));
 
@@ -468,7 +472,7 @@ class ScatterplotController {
 
 }
 
-function attachButtonEventListeners(controller){
+async function attachButtonEventListeners(controller){
     d3.select("#undo").on("click", null);
     d3.select("#redo").on("click", null);
     d3.select("#clear-selection").on("click", null);
@@ -476,18 +480,20 @@ function attachButtonEventListeners(controller){
     d3.select("#impute-average-x").on("click", null);
     d3.select("#impute-average-y").on("click", null);
 
-    d3.select("#undo").on("click", () => {
+    d3.select("#undo").on("click", async () => {
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        await controller.model.runDetectors(controller.detectors);
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
-    d3.select("#redo").on("click", () => {
+    d3.select("#redo").on("click", async () => {
         controller.model.redoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        await controller.model.runDetectors(controller.detectors);
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
@@ -508,7 +514,7 @@ function attachButtonEventListeners(controller){
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, animate, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
-    d3.select("#remove-selected-data").on("click", () => {
+    d3.select("#remove-selected-data").on("click", async () => {
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
@@ -518,12 +524,13 @@ function attachButtonEventListeners(controller){
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        await controller.model.runDetectors(controller.detectors);
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
-    d3.select("#impute-average-x").on("click", () => {
+    d3.select("#impute-average-x").on("click", async () => {
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
@@ -532,12 +539,13 @@ function attachButtonEventListeners(controller){
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        await controller.model.runDetectors(controller.detectors);
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
 
-    d3.select("#impute-average-y").on("click", () => {
+    d3.select("#impute-average-y").on("click", async () => {
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";
@@ -546,6 +554,7 @@ function attachButtonEventListeners(controller){
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
+        await controller.model.runDetectors(controller.detectors);
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));

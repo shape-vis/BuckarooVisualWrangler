@@ -38,10 +38,4 @@ export default function detectAnomaly(table) {
     
           if (Math.abs(val - mean) > 2 * stdDev) {
             if (!result[column]) result[column] = {};
-            result[column][id] = "anomaly";
-          }
-        }
-      });
-    
-      return result;
-  }
+            result

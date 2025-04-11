@@ -38,5 +38,6 @@ export default function detectDataTypeMismatch(table) {
 
       }
     });
+
     return result;
-  }
+}

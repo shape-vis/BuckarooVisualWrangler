@@ -11,7 +11,6 @@ d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
   stackoverflowController = new ScatterplotController(data2, "#matrix-vis-stackoverflow");
 
   // stackoverflowController.render();
-  stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
 
   attachButtonEventListeners(stackoverflowController);
 

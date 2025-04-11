@@ -90,8 +90,9 @@ class ScatterplotMatrixView{
             columnListContainer.innerHTML = "<h3>Attribute Summaries</h3>";
             const ul = document.createElement("ul");
         
-            const columnErrors = controller.model.getColumnErrors(); 
+            const columnErrors = this.model.getColumnErrorSummary(); 
         
+            console.log("columnErrors", columnErrors);
             attributes.forEach(attr => {
                 const li = document.createElement("li");
                 li.style.display = "flex";
@@ -112,18 +113,21 @@ class ScatterplotMatrixView{
                 topRow.appendChild(label);
         
                 const errorTypes = columnErrors[attr] || {};
-        
+                console.log("errorTypes", errorTypes);
+
                 Object.entries(errorTypes).forEach(([type, pct]) => {
+                    console.log("type", type);
+                    console.log("pct", pct);
                     const box = document.createElement("span");
                     box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
                     box.classList.add("error-scent");
         
-                    switch (type) {
-                        case "missing": box.style.backgroundColor = "saddlebrown"; break;
-                        case "incomplete": box.style.backgroundColor = "gray"; break;
-                        case "mismatch": box.style.backgroundColor = "hotpink"; break;
-                        case "anomaly": box.style.backgroundColor = "red"; break;
-                    }
+                    box.style.backgroundColor = {
+                        "missing": "saddlebrown",
+                        "incomplete": "gray",
+                        "mismatch": "hotpink",
+                        "anomaly": "red"
+                    }[type] || "black";
                 
                     const percentText = document.createElement("span");
                     percentText.textContent = `${Math.round(pct * 100)}%`;
@@ -175,19 +179,19 @@ class ScatterplotMatrixView{
                 barContainer.classList.add("error-bar-container");
 
                 errorEntries.forEach(([type, pct]) => {
-                const segment = document.createElement("div");
-                segment.classList.add("bar-segment");
-                segment.style.width = `${pct * 100}%`;
-                segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
+                    const segment = document.createElement("div");
+                    segment.classList.add("bar-segment");
+                    segment.style.width = `${pct * 100}%`;
+                    segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
-                switch (type) {
-                    case "missing": segment.style.backgroundColor = "saddlebrown"; break;
-                    case "incomplete": segment.style.backgroundColor = "gray"; break;
-                    case "mismatch": segment.style.backgroundColor = "hotpink"; break;
-                    case "anomaly": segment.style.backgroundColor = "red"; break;
-                }
+                    segment.style.backgroundColor = {
+                        "missing": "saddlebrown",
+                        "incomplete": "gray",
+                        "mismatch": "hotpink",
+                        "anomaly": "red"
+                    }[type] || "black";
 
-                barContainer.appendChild(segment);
+                    barContainer.appendChild(segment);
                 });
 
                 if (cleanPct > 0) {
@@ -273,7 +277,7 @@ class ScatterplotMatrixView{
     }
 
     updateColumnErrorIndicators(table, controller) {
-        const columnErrors = controller.model.getColumnErrors(); 
+        const columnErrors = controller.model.getColumnErrorSummary(); 
         const attributes = table.columnNames().slice(1).sort(); 
       
         const container = document.getElementById("attribute-list");
@@ -307,12 +311,12 @@ class ScatterplotMatrixView{
                 box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
                 box.classList.add("error-scent");
     
-                switch (type) {
-                    case "missing": box.style.backgroundColor = "saddlebrown"; break;
-                    case "incomplete": box.style.backgroundColor = "gray"; break;
-                    case "mismatch": box.style.backgroundColor = "hotpink"; break;
-                    case "anomaly": box.style.backgroundColor = "red"; break;
-                }
+                box.style.backgroundColor = {
+                    "missing": "saddlebrown",
+                    "incomplete": "gray",
+                    "mismatch": "hotpink",
+                    "anomaly": "red"
+                }[type] || "black";
             
                 const percentText = document.createElement("span");
                 percentText.textContent = `${Math.round(pct * 100)}%`;
@@ -369,12 +373,12 @@ class ScatterplotMatrixView{
             segment.style.width = `${pct * 100}%`;
             segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
-            switch (type) {
-                case "missing": segment.style.backgroundColor = "saddlebrown"; break;
-                case "incomplete": segment.style.backgroundColor = "gray"; break;
-                case "mismatch": segment.style.backgroundColor = "hotpink"; break;
-                case "anomaly": segment.style.backgroundColor = "red"; break;
-            }
+            segment.style.backgroundColor = {
+                "missing": "saddlebrown",
+                "incomplete": "gray",
+                "mismatch": "hotpink",
+                "anomaly": "red"
+            }[type] || "black";
 
             barContainer.appendChild(segment);
             });
