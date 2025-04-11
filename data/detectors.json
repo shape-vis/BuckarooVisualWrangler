@@ -9,5 +9,11 @@
         "ID": 2,
         "name": "Missing",
         "code": "/detectors/missingValue.js"
+    },
+
+    {
+        "ID": 3,
+        "name": "Anomaly",
+        "code": "/detectors/anomaly.js"
     }
 ]

@@ -1,6 +1,5 @@
 export default function detectDataTypeMismatch(table) {
     console.log("here in mismatch detector");
-    console.log("hereeeeee");
     const result = {}; // { column: { id: errorType } }
   
     const numRows = table.numRows();
@@ -39,5 +38,4 @@ export default function detectDataTypeMismatch(table) {
 
       }
     });
-    return result;
-  }
+    return re

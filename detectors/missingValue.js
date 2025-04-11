@@ -1,4 +1,4 @@
-export default function detectDataTypeMismatch(table) {
+export default function detectMissingValue(table) {
     console.log("here in missing value detector");
     const result = {}; // { column: { id: errorType } }
   
@@ -19,7 +19,6 @@ export default function detectDataTypeMismatch(table) {
           if (isMissing) {
             if (!result[column]) result[column] = {};
             result[column][rowId] = "missing";
-            console.log(`Missing value found in column "${column}" for row ID ${rowId}:`, value);
           }
         }
       });
