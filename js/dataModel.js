@@ -241,7 +241,6 @@ class DataModel {
 
   setSelectedPoints(points) {
     this.selectedPoints = points;
-    console.log("setting selected POints");
   }
 
   getSelectedPoints() {

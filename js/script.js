@@ -13,7 +13,7 @@ d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
   // stackoverflowController.render();
   stackoverflowController.view.populateDropdownFromTable(stackoverflowController.model.getFullData(), stackoverflowController);
 
-  attachButtonEventListeners();
+  attachButtonEventListeners(stackoverflowController);
 
   (async () => {
     try {

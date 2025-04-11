@@ -40,7 +40,6 @@ class ScatterplotMatrixView{
 
     setSelectedPoints(points) {
         this.selectedPoints = points;
-        console.log("view is setting selected points");
       }
 
     setPredicatePoints(points) {
@@ -785,7 +784,7 @@ class ScatterplotMatrixView{
                             // .attr("fill", d => d.category ? "gray" : colorScale(d.group))
                             .attr("fill", d => {
                                 if (!this.viewGroupsButton){
-                                    return getFillColorNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints); 
+                                    return getFillColorNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints); 
                                 }
                                 return d.data.category ? "gray" : colorScale(d.group);
                             })
@@ -848,7 +847,7 @@ class ScatterplotMatrixView{
                             //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                             //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
                             // })
-                            .attr("fill", d => getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints))
+                            .attr("fill", d => getFillColorNoGroupbyNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
                             // .attr("stroke", d => d.category ? "red" : "none")
                             .attr("stroke", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
@@ -969,7 +968,7 @@ class ScatterplotMatrixView{
                             // .attr("fill", d => colorScale(d.group))
                             .attr("fill", d => {
                                 if (!this.viewGroupsButton){
-                                    return getFillColorCategorical(d, this.selectedPoints); 
+                                    return getFillColorCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints); 
                                 }
                                 return colorScale(d.group);
                             })
@@ -1024,7 +1023,7 @@ class ScatterplotMatrixView{
                             //     }
                             //     return "steelblue";
                             // })
-                            .attr("fill", d => getFillColorNoGroupbyCategorical(d, this.selectedPoints))
+                            .attr("fill", d => getFillColorNoGroupbyCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
                             // .attr("fill", (d) => {
                             //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                             //     return isSelected ? "gold" : "steelblue";
@@ -3048,6 +3047,7 @@ class ScatterplotMatrixView{
                 colorScale = d3.scaleSequential(d3.interpolateBlues)
                     .domain([0, d3.max(heatmapData, d => d.value)]);
         
+                console.log("this.selectedPoints param", this.selectedPoints);
                 rect = cellGroup.selectAll("rect")
                     .data(heatmapData)
                     .join("rect")
@@ -3184,16 +3184,18 @@ class ScatterplotMatrixView{
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
+        const columnErrors = this.model.getColumnErrors();
+
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
 
         let data = [];
 
         if(groupByAttribute)
         {
-            data = givenData.select([xCol, yCol, groupByAttribute]).objects(); 
+            data = givenData.select(["ID", xCol, yCol, groupByAttribute]).objects(); 
         }
         else{
-            data = givenData.select([xCol, yCol]).objects();
+            data = givenData.select(["ID", xCol, yCol]).objects();
         }
 
         let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority} = splitData(data, xCol, yCol);
@@ -3259,7 +3261,7 @@ class ScatterplotMatrixView{
                     if (groupByAttribute) {
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return d.type === "numeric" ? "steelblue" : "gray"; 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                     }
                 })
                 // .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
@@ -3279,7 +3281,6 @@ class ScatterplotMatrixView{
                         .attr("opacity", 0.6);
                 }  
                 circles.on("mouseover", function(event, d) {
-                        d3.select(this).attr("fill", "gold");
                         let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                         if (groupByAttribute) {
                             tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3294,13 +3295,6 @@ class ScatterplotMatrixView{
                             .style("top", `${event.pageY + 10}px`);
                     })
                     .on("mouseout", function() {
-                        d3.select(this).attr("fill", d => {
-                            if (groupByAttribute) {
-                                return colorScale(d[groupByAttribute]);
-                            } else {
-                                return d.type === "numeric" ? "steelblue" : "gray"; 
-                            }
-                        });
                         tooltip.style("display", "none");
                     });
 
@@ -3421,11 +3415,11 @@ class ScatterplotMatrixView{
                 .attr("fill", d => {
                     if (groupByAttribute) {
                         if (!this.viewGroupsButton){
-                            return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                            return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                         }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                     }
                 })
                 // .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
@@ -3445,7 +3439,6 @@ class ScatterplotMatrixView{
                     .attr("opacity", 0.6);
             }  
             circles.on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "gold");
                     let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                     if (groupByAttribute) {
                         tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3460,13 +3453,6 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
-                        if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return d.type === "nan-y" ? "gray" : "steelblue"; 
-                        }
-                    });
                     tooltip.style("display", "none");
                 });
 
@@ -3591,11 +3577,11 @@ class ScatterplotMatrixView{
                 .attr("fill", d => {
                     if (groupByAttribute) {
                         if (!this.viewGroupsButton){
-                            return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                            return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                         }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                     }
                 })
                 // .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
@@ -3615,7 +3601,6 @@ class ScatterplotMatrixView{
                     .attr("opacity", 0.6);
             }  
             circles.on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "gold");
                     let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                     if (groupByAttribute) {
                         tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3630,13 +3615,6 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
-                        if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return d.type === "nan-x" ? "gray" : "steelblue"; 
-                        }
-                    });
                     tooltip.style("display", "none");
                 });
             
@@ -3740,11 +3718,11 @@ class ScatterplotMatrixView{
                 .attr("fill", d => {
                     if (groupByAttribute) {
                         if (!this.viewGroupsButton){
-                            return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                            return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                         }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                     }
                 })
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
@@ -3762,7 +3740,6 @@ class ScatterplotMatrixView{
                     .attr("opacity", 0.6);
             }                
             circles.on("mouseover", function(event, d) {
-                    d3.select(this).attr("fill", "gold");
                     let tooltipContent = `<strong>${xCol}:</strong> ${d[xCol]}<br><strong>${yCol}:</strong> ${d[yCol]}`;
                     if (groupByAttribute) {
                         tooltipContent += `<br><strong>${groupByAttribute}:</strong> ${d[groupByAttribute]}`;
@@ -3777,13 +3754,6 @@ class ScatterplotMatrixView{
                         .style("top", `${event.pageY + 10}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).attr("fill", d => {
-                        if (groupByAttribute) {
-                            return colorScale(d[groupByAttribute]);
-                        } else {
-                            return "steelblue"; 
-                        }
-                    });
                     tooltip.style("display", "none");
                 });
 
@@ -4634,6 +4604,8 @@ class ScatterplotMatrixView{
                   containerId === "preview-impute-average-y" ? `Preview of Imputing by Avg ${yCol}` :
                   "Preview of User Specified Repair");
 
+        const columnErrors = this.model.getColumnErrors();
+
         if(isHistogram)
         {
             if(containerId === "preview-impute-average-y")
@@ -4790,7 +4762,7 @@ class ScatterplotMatrixView{
                         .join("rect")
                         .attr("fill", d => {
                             if (!this.viewGroupsButton){
-                                return getFillColorNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints); 
+                                return getFillColorNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints); 
                             }
                             return d.data.category ? "gray" : colorScale(d.group);
                         })
@@ -4850,7 +4822,7 @@ class ScatterplotMatrixView{
                         .attr("width", binWidth)
                         .attr("y", d => yScale(d.length))
                         .attr("height", d => height - yScale(d.length))
-                        .attr("fill", d => getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, this.selectedPoints))
+                        .attr("fill", d => getFillColorNoGroupbyNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
                         // .attr("fill", (d) => {
                         //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                         //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
@@ -4956,7 +4928,7 @@ class ScatterplotMatrixView{
                         .join("rect")
                         .attr("fill", d => {
                             if (!this.viewGroupsButton){
-                                return getFillColorCategorical(d, this.selectedPoints); 
+                                return getFillColorCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints); 
                             }
                             return colorScale(d.group);
                         })
@@ -5001,7 +4973,7 @@ class ScatterplotMatrixView{
                         .attr("width", xScale.bandwidth())
                         .attr("y", d => yScale(d.length))
                         .attr("height", d => Math.max(0, height - yScale(d.length)))
-                        .attr("fill", d => getFillColorNoGroupbyCategorical(d, this.selectedPoints))
+                        .attr("fill", d => getFillColorNoGroupbyCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
                         // .attr("fill", (d) => {
                         //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                         //     return isSelected ? "gold" : "steelblue";
@@ -5234,7 +5206,7 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                         // .attr("fill", d => {
                         //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -5415,7 +5387,7 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                         // .attr("fill", d => {
                         //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -5625,7 +5597,7 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                         // .attr("fill", d => {
                         //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
 
@@ -5823,7 +5795,7 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, this.selectedPoints, colorScale))
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
                         // .attr("fill", (d) => {
                         //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
                         //     return isSelected ? "gold" : colorScale(d.value);
@@ -6064,88 +6036,184 @@ function splitData (data, xCol, yCol){
     return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority};
 }
 
-function getFillColorNoGroupbyNumeric(d, numericData, xCol, mean, stdDev, selectedPoints) {
+function getFillColorNoGroupbyNumeric(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    if (d.category) {
-        // Check for missing values
-        if (d.category === null || d.category === "none" || d.category === "") return "saddlebrown";
-        // Check for specific categorical values
-        if (["'00'", "'4'",  "0", "21.5"].includes(d.category)) return "hotpink";
-    } else {       
-        // Check for numeric outliers
-        const avgValue = d3.mean(d.ids.map(id => {
-            const found = numericData.find(n => n.ID === id);
-            return found ? found[xCol] : undefined;
-        }).filter(v => !isNaN(v)));
+    const allErrors = [];
 
-        if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-            return "red";
-        }
-        if (d.ids.length < 3) return "gray";
-
+    for (const id of d.ids) {
+        const xErrors = columnErrors[xCol]?.[id] || [];
+        allErrors.push(...xErrors);
     }
 
-    return "steelblue"; // Default color
+    if (allErrors.length === 0) {
+        return "steelblue";
+    }
+
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; 
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
+
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
+        }
+    }
+
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
+    }
+
+    return "steelblue"; 
 }
 
-function getFillColorNumeric(d, numericData, xCol, mean, stdDev, selectedPoints) {
+function getFillColorNumeric(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));                            
     if (isSelected) return "gold";
 
-    const category = d.data.category;
+    // const category = d.data.category;
 
-    if (category) {
-        // Check for missing values
-        if (category === "null" || category === "none" || category === "") return "saddlebrown";
+    // if (category) {
+    //     // Check for missing values
+    //     if (category === "null" || category === "none" || category === "") return "saddlebrown";
 
-        // Check for specific categorical values
-        if (["'00'", "'4'", "'0'", "'21.5'"].includes(category)) return "hotpink";
-    } else {
+    //     // Check for specific categorical values
+    //     if (["'00'", "'4'", "'0'", "'21.5'"].includes(category)) return "hotpink";
+    // } else {
 
-        // Check for numeric outliers
-        const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
-            const found = numericData.find(n => n.ID === id);
-            return found ? found[xCol] : undefined;
-        }).filter(v => !isNaN(v)));
+    //     // Check for numeric outliers
+    //     const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
+    //         const found = numericData.find(n => n.ID === id);
+    //         return found ? found[xCol] : undefined;
+    //     }).filter(v => !isNaN(v)));
 
-        if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-            return "red";
+    //     if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
+    //         return "red";
+    //     }
+    //     if (d.data.groupIDs[d.group].length < 3) return "gray";
+
+    // }
+
+    // return "steelblue"; 
+    const allErrors = [];
+
+    for (const id of d.data.groupIDs[d.group]) {
+        const xErrors = columnErrors[xCol]?.[id] || [];
+        allErrors.push(...xErrors);
+    }
+
+    if (allErrors.length === 0) {
+        return "steelblue"; 
+    }
+
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; 
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
+
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
         }
-        if (d.data.groupIDs[d.group].length < 3) return "gray";
+    }
 
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
     }
 
     return "steelblue"; 
 }
 
-function getFillColorNoGroupbyCategorical(d, selectedPoints) {
+function getFillColorNoGroupbyCategorical(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    const category = String(d.category); 
+    const allErrors = [];
 
-    if (category === "none" || category === "" || category === "null") return "saddlebrown";
+    for (const id of d.ids) {
+        const xErrors = columnErrors[xCol]?.[id] || [];
+        allErrors.push(...xErrors);
+    }
 
-    if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
-    if (d.ids.length < 3) return "gray";
+    if (allErrors.length === 0) {
+        return "steelblue";
+    }
 
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; 
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
+
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
+        }
+    }
+
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
+    }
 
     return "steelblue"; 
 }
 
-function getFillColorCategorical(d, selectedPoints) {
+function getFillColorCategorical(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    const category = d.data.category;
+    // const category = d.data.category;
 
-    if (category === "none" || category === "" || category === "null") return "saddlebrown";
+    // if (category === "none" || category === "" || category === "null") return "saddlebrown";
 
-    if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
-    if (d.data.groupIDs[d.group].length < 3) return "gray";
+    // if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
+    // if (d.data.groupIDs[d.group].length < 3) return "gray";
+    const allErrors = [];
 
+    for (const id of d.data.groupIDs[d.group]) {
+        const xErrors = columnErrors[xCol]?.[id] || [];
+        allErrors.push(...xErrors);
+    }
+
+    if (allErrors.length === 0) {
+        return "steelblue"; 
+    }
+
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; 
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
+
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
+        }
+    }
+
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
+    }
 
     return "steelblue"; 
 }
@@ -6230,21 +6298,36 @@ function getFillColorHeatmap(d, group, xCol, yCol, columnErrors, errorColors, se
     return "steelblue"; 
 }
 
-function getFillColorScatter(d, numericData, xCol, yCol, meanX, stdDevX, meanY, stdDevY, selectedPoints, colorScale) {
-    const categoryX = typeof d[xCol] === "string" ? String(d[xCol]) : null;
-    const categoryY = typeof d[yCol] === "string" ? String(d[yCol]) : null;
+function getFillColorScatter(d, xCol, yCol, columnErrors, errorColors, selectedPoints, colorScale) {
+    const allErrors = [];
+    
+    const xErrors = columnErrors[xCol]?.[d.ID] || [];
+    const yErrors = columnErrors[yCol]?.[d.ID] || [];
+    allErrors.push(...xErrors, ...yErrors);
 
-    if (categoryX || categoryY) {
-        if (categoryX === "none" || categoryX === "" || categoryX === "null" || categoryY === "none" || categoryY === "" || categoryY === "null") return "saddlebrown";
-        if (["'00'", "'4'", "'0'", "'21.5'"].includes(categoryX) || ["'00'", "'4'", "'0'", "'21.5'"].includes(categoryY)) return "hotpink";
+    if (allErrors.length === 0) {
+        return "steelblue";
     }
 
-    if (categoryX === "0 years old" || categoryY === "0 years old") return "gray";
+    const errorCounts = {};
+    for (const error of allErrors) {
+        if (!errorColors[error]) continue; 
+        errorCounts[error] = (errorCounts[error] || 0) + 1;
+    }
 
-    const valueX = parseFloat(d[xCol]);
-    const valueY = parseFloat(d[yCol]);
-    if (!isNaN(valueX) && Math.abs(valueX - meanX) > 2 * stdDevX) return "red";
-    if (!isNaN(valueY) && Math.abs(valueY - meanY) > 2 * stdDevY) return "red";
+    let mostFrequentError = null;
+    let maxCount = -1;
+
+    for (const [error, count] of Object.entries(errorCounts)) {
+        if (count > maxCount) {
+        mostFrequentError = error;
+        maxCount = count;
+        }
+    }
+
+    if (mostFrequentError) {
+        return errorColors[mostFrequentError];
+    }
 
     return "steelblue"; 
 }

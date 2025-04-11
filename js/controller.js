@@ -128,7 +128,7 @@ class ScatterplotController {
         };
       }
   
-    render(selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {
+    render(selectionEnabled, animate) {
         if(selectionEnabled)
         {
             this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, animate, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
@@ -319,10 +319,6 @@ class ScatterplotController {
             this.updateLegendContent(selectedValue, this.model.getGroupByAttribute());
         });
 
-        const getActiveController = () => {
-            return activeDataset === "practice" ? practiceController : stackoverflowController;
-        };
-
         document.querySelectorAll(".tab-button").forEach(button => {
             button.addEventListener("click", function() {
                 document.querySelectorAll(".tab-button").forEach(btn => btn.classList.remove("active"));
@@ -341,12 +337,11 @@ class ScatterplotController {
                 document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
                 document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
 
-                const activeController = getActiveController();
-                activeController.updateSelectedAttributes(controller.selectedAttributes); // renders
+                this.updateSelectedAttributes(this.selectedAttributes); // renders
 
-                activeController.view.populateDropdownFromTable(activeController.model.getFullData(), activeController);
+                this.view.populateDropdownFromTable(this.model.getFullData(), this);
 
-                attachButtonEventListeners();
+                attachButtonEventListeners(this);
             });
         });
 
@@ -473,7 +468,7 @@ class ScatterplotController {
 
 }
 
-function attachButtonEventListeners(){
+function attachButtonEventListeners(controller){
     d3.select("#undo").on("click", null);
     d3.select("#redo").on("click", null);
     d3.select("#clear-selection").on("click", null);
@@ -481,12 +476,7 @@ function attachButtonEventListeners(){
     d3.select("#impute-average-x").on("click", null);
     d3.select("#impute-average-y").on("click", null);
 
-     const getActiveController = () => {
-        return activeDataset === "practice" ? practiceController : stackoverflowController;
-    };
-
     d3.select("#undo").on("click", () => {
-        const controller = getActiveController();
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
@@ -496,7 +486,6 @@ function attachButtonEventListeners(){
     });
 
     d3.select("#redo").on("click", () => {
-        const controller = getActiveController();
         controller.model.redoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
@@ -512,7 +501,6 @@ function attachButtonEventListeners(){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
-        const controller = getActiveController();
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         const selectionEnabled = true;
@@ -526,7 +514,6 @@ function attachButtonEventListeners(){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
-        const controller = getActiveController();
         const selectedPoints = controller.model.getSelectedPoints();
         controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
@@ -542,7 +529,6 @@ function attachButtonEventListeners(){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
-        const controller = getActiveController();
         controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
@@ -557,7 +543,6 @@ function attachButtonEventListeners(){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
-        const controller = getActiveController();
         controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
@@ -570,7 +555,6 @@ function attachButtonEventListeners(){
 
     radioButtons.forEach((radio) => {
         radio.addEventListener("change", (event) => {
-            const controller = getActiveController();
             if (event.target.value === "selectData" && event.target.checked) {
                 const selectionEnabled = true;
                 controller.render(selectionEnabled, false);
@@ -582,7 +566,4 @@ function attachButtonEventListeners(){
             }
         });
     });
-}
-
-    
-       
+}     
