@@ -3,5 +3,11 @@
         "ID": 1,
         "name": "Mismatch",
         "code": "/detectors/datatypeMismatch.js"
+    },
+
+    {
+        "ID": 2,
+        "name": "Missing",
+        "code": "/detectors/missingValue.js"
     }
 ]

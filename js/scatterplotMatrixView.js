@@ -3047,7 +3047,6 @@ class ScatterplotMatrixView{
                 colorScale = d3.scaleSequential(d3.interpolateBlues)
                     .domain([0, d3.max(heatmapData, d => d.value)]);
         
-                console.log("this.selectedPoints param", this.selectedPoints);
                 rect = cellGroup.selectAll("rect")
                     .data(heatmapData)
                     .join("rect")
