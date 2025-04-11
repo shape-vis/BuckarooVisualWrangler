@@ -95,7 +95,31 @@
           <div id="legend-content"></div>
         </div>
 
-        <div id="attribute-list"></div>
+        <label for="sort-errors">Sort by:</label>
+        <select id="sort-errors">
+          <option value="total">Total Error % (default)</option>
+          <option value="missing">Missing</option>
+          <option value="incomplete">Incomplete</option>
+          <option value="mismatch">Mismatch</option>
+          <option value="outlier">Outlier</option>
+        </select>
+
+        <div id="attribute-list">
+          <div id="attribute-list-header">
+            <h3>Attribute Summaries</h3>
+            <label>
+              Sort by:
+              <select id="sort-errors">
+                <option value="total">Total Error %</option>
+                <option value="missing">Missing</option>
+                <option value="incomplete">Incomplete</option>
+                <option value="mismatch">Mismatch</option>
+                <option value="outlier">Outlier</option>
+              </select>
+            </label>
+          </div>
+          <ul id="attribute-summary-list"></ul>
+        </div>
       </div>
 
       <div class="matrix-and-toolbox">

@@ -87,13 +87,18 @@ class ScatterplotMatrixView{
         // Populate list of columns legend (attribute-list)
         const columnListContainer = document.getElementById("attribute-list");
         if (columnListContainer) {
-            columnListContainer.innerHTML = "<h3>Attribute Summaries</h3>";
-            const ul = document.createElement("ul");
-        
+            const ul = document.getElementById("attribute-summary-list");
+            ul.innerHTML = "";
+
             const columnErrors = this.model.getColumnErrorSummary(); 
-        
-            console.log("columnErrors", columnErrors);
-            attributes.forEach(attr => {
+            
+            const sortedAttributes = attributes.sort((a, b) => {
+                const errorsA = Object.values(columnErrors[a] || {}).reduce((sum, pct) => sum + pct, 0);
+                const errorsB = Object.values(columnErrors[b] || {}).reduce((sum, pct) => sum + pct, 0);
+                return errorsB - errorsA; // descending order
+              });       
+
+            sortedAttributes.forEach(attr => {
                 const li = document.createElement("li");
                 li.style.display = "flex";
                 li.style.flexDirection = "column";
@@ -273,19 +278,40 @@ class ScatterplotMatrixView{
             this.handlePredicateChange(table, controller);
         });
     
+        document.getElementById("attribute-list").innerHTML =
+          
         updateDropdownButton();
     }
 
     updateColumnErrorIndicators(table, controller) {
         const columnErrors = controller.model.getColumnErrorSummary(); 
-        const attributes = table.columnNames().slice(1).sort(); 
-      
+        const attributes = table.columnNames().slice(1);
+
+        console.log("sort errors", document.getElementById("sort-errors"));
+
+        const sortBy = document.getElementById("sort-errors")?.value || "total";
+
         const container = document.getElementById("attribute-list");
         if (!container) return;
-        container.innerHTML = "<h3>Attribute Summaries</h3>";
-        const ul = document.createElement("ul");
+
+        console.log("sortBy", sortBy);
+        const sortedAttributes = attributes.sort((a, b) => {
+          const errorsA = columnErrors[a] || {};
+          const errorsB = columnErrors[b] || {};
       
-        attributes.forEach(attr => {
+          if (sortBy === "total") {
+            const totalA = Object.values(errorsA).reduce((sum, pct) => sum + pct, 0);
+            const totalB = Object.values(errorsB).reduce((sum, pct) => sum + pct, 0);
+            return totalB - totalA;
+          } else {
+            return (errorsB[sortBy] || 0) - (errorsA[sortBy] || 0);
+          }
+        });
+      
+        const ul = document.getElementById("attribute-summary-list");
+        ul.innerHTML = "";
+            
+        sortedAttributes.forEach(attr => {
             const li = document.createElement("li");
             li.style.display = "flex";
             li.style.flexDirection = "column";
