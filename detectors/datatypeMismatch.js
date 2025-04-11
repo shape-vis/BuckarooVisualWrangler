@@ -38,4 +38,5 @@ export default function detectDataTypeMismatch(table) {
 
       }
     });
-    return re
+    return result;
+  }
