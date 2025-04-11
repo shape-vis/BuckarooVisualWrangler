@@ -15,5 +15,11 @@
         "ID": 3,
         "name": "Anomaly",
         "code": "/detectors/anomaly.js"
+    },
+
+    {
+        "ID": 4,
+        "name": "Incomplete",
+        "code": "/detectors/incomplete.js"
     }
 ]

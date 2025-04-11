@@ -9,33 +9,36 @@ export default function detectAnomaly(table) {
         const values = [];
         const ids = [];
     
-        // Collect numeric values and their IDs
+        let numericCount = 0;
+    
         for (let i = 0; i < numRows; i++) {
           const value = table.array(column).at(i);
           const id = table.array("ID").at(i);
-          const parsed = parseFloat(value);
     
-          if (!isNaN(parsed)) {
-            values.push(parsed);
+          // Only accept actual numbers
+          const isNumber = typeof value === "number";
+          if (isNumber && !isNaN(value)) {
+            values.push(value);
             ids.push(id);
+            numericCount++;
           }
         }
     
-        // Calculate mean and standard deviation
+        // Only treat as numeric if there are enough valid numbers
+        if (numericCount < 10) return;
+    
         const mean = d3.mean(values);
         const stdDev = d3.deviation(values);
     
-        if (stdDev === 0 || stdDev === undefined) return; // avoid divide-by-zero
+        if (stdDev === 0 || stdDev === undefined) return; // Avoid divide by 0
     
-        // Check for outliers
         for (let i = 0; i < values.length; i++) {
           const val = values[i];
           const id = ids[i];
     
           if (Math.abs(val - mean) > 2 * stdDev) {
             if (!result[column]) result[column] = {};
-            result[column][id] = "outlier";
-            console.log(`Outlier found in column "${column}" for row ID ${id}:`, val);
+            result[column][id] = "anomaly";
           }
         }
       });
