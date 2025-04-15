@@ -1,5 +1,4 @@
 export default function detectDataTypeMismatch(table) {
-    console.log("here in mismatch detector");
     const result = {}; // { column: { id: errorType } }
   
     const numRows = table.numRows();
@@ -33,7 +32,7 @@ export default function detectDataTypeMismatch(table) {
         if (valueType !== majorityType || (majorityType !== "number" && isNumeric)) {
           if (!result[column]) result[column] = {};
           result[column][rowId] = "mismatch";
-          console.log("mismatch found", value);
+          // console.log("mismatch found", value);
         }
 
       }

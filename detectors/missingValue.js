@@ -1,5 +1,4 @@
 export default function detectMissingValue(table) {
-    console.log("here in missing value detector");
     const result = {}; // { column: { id: errorType } }
   
     const numRows = table.numRows();

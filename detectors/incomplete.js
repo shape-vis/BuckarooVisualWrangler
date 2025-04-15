@@ -1,5 +1,4 @@
 export default function detectIncompleteData(table) {
-    console.log("here in incomplete data detector");
     const result = {}; // { column: { id: errorType } }
   
     const numRows = table.numRows();

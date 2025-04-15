@@ -7,13 +7,16 @@ class ScatterplotController {
       this.yCol = null;
       this.viewGroupsButton = false;
       this.detectors = null;
+      this.wranglers = null;
 
     //   this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
     }
 
-    async init(detectors) {
+    async init(detectors, wranglers) {
         this.detectors = detectors;
+        this.wranglers = wranglers;
+
         await this.model.runDetectors(detectors); 
 
         this.view.populateDropdownFromTable(this.model.getFullData(), this);
@@ -521,7 +524,14 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
+        const module = await import("/wranglers/removeData.js");
+        const condition = module.default(selectedPoints); // This returns a filter function
+
+        controller.model.filterData(condition, {
+            column: controller.xCol,
+            ids: selectedPoints.map(p => p.ID)
+          });
+        // controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
@@ -536,7 +546,17 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
-        controller.model.imputeAverage(controller.xCol);
+        const selectedPoints = controller.model.getSelectedPoints();
+        const module = await import("/wranglers/imputeAverage.js");
+        const imputedValue = computeAverage(controller.xCol, controller.model.getData())
+        const transformation = module.default(controller.xCol, controller.model.getData(), selectedPoints);
+
+        controller.model.transformData(controller.xCol, transformation, {
+            value: imputedValue,
+            ids: selectedPoints.map(p => p.ID),
+            column: controller.xCol
+          });
+        // controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
@@ -551,7 +571,17 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
-        controller.model.imputeAverage(controller.yCol);
+        const selectedPoints = controller.model.getSelectedPoints();
+        const module = await import("/wranglers/imputeAverage.js");
+        const imputedValue = computeAverage(controller.yCol, controller.model.getData())
+        const transformation = module.default(controller.yCol, controller.model.getData(), selectedPoints);
+
+        controller.model.transformData(controller.yCol, transformation, {
+            value: imputedValue,
+            ids: selectedPoints.map(p => p.ID),
+            column: controller.yCol
+          });
+        // controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
@@ -576,3 +606,30 @@ async function attachButtonEventListeners(controller){
         });
     });
 }     
+
+function computeAverage(column, table){
+    const isNumeric = table.array(column).some(v => typeof v === "number" && !isNaN(v));
+  
+    let imputedValue;
+  
+    /// Calculate numeric average ///
+    if (isNumeric) {
+      const columnValues = table.array(column).filter((v) => !isNaN(v) && v > 0);
+      imputedValue = columnValues.length > 0
+        ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
+        : 0;
+  
+    }
+    /// Calculate categorical mode ///
+    else {
+      const frequencyMap = table.array(column).reduce((acc, val) => {
+        acc[val] = (acc[val] || 0) + 1;
+        return acc;
+      }, {});
+  
+      imputedValue = Object.keys(frequencyMap).reduce((a, b) =>
+        frequencyMap[a] > frequencyMap[b] ? a : b
+      );
+    }
+    return imputedValue;
+}

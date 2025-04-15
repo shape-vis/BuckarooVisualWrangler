@@ -1,5 +1,4 @@
 export default function detectAnomaly(table) {
-    console.log("here in anomaly detector");
     const result = {}; // { column: { id: errorType } }
   
     const numRows = table.numRows();

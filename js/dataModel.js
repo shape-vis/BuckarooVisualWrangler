@@ -120,15 +120,39 @@ class DataModel {
     return aq.from(finalArr);
   }
   
-  filterData(condition) {
+  filterData(condition, filterInfo=null) {
+    console.log("condition", condition);
     this.dataStates.push(this.filteredData);
     this.redoStack = [];
-    this.dataTransformations.push(condition);
     this.transformationPoints.push(this.selectedPoints);
+    if (filterInfo) {
+      this.dataTransformations.push({
+        type: "remove",
+        ...filterInfo,
+      });
+    }
+    console.log("Data Transformations", this.dataTransformations);
+
     this.filteredData = this.filteredData.filter(aq.escape(condition));
 
     // Filter the data but keep all the columns in this dataset
     this.fullFilteredData = this.fullFilteredData.filter(aq.escape(condition));
+  }
+
+  // Transforms the data such as imputing average, etc.
+  transformData(column, condition, transformInfo=null){
+    this.dataStates.push(this.filteredData);
+    this.redoStack = [];
+    this.transformationPoints.push(this.selectedPoints);
+    if (transformInfo) {
+      this.dataTransformations.push({
+        type: "transform",
+        ...transformInfo,
+      });
+    }
+    console.log("Data Transformations", this.dataTransformations);
+
+    this.filteredData = this.filteredData.derive({ [column]: aq.escape(condition) });
   }
 
   getPreviewData(condition) {
@@ -154,51 +178,6 @@ class DataModel {
     } else {
         console.log("Nothing to redo.");
     }
-  }
-  
-  imputeAverage(column) {
-    this.dataStates.push(this.filteredData);
-    this.redoStack = [];
-
-    console.log("Column: ", column);
-
-    const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
-
-    const isNumeric = this.filteredData.array(column).some(v => typeof v === "number" && !isNaN(v));
-
-    let imputedValue;
-
-    /// Calculate numeric average ///
-    if(isNumeric){
-      const columnValues = this.filteredData.array(column).filter((v) => !isNaN(v) && v > 0);
-      console.log("Column values: ", columnValues);
-      imputedValue = columnValues.length > 0 
-          ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
-          : 0;
-        
-      console.log("Avg: ", imputedValue);
-    }
-    /// Calculate categorical mode ///
-    else{
-        const frequencyMap = this.filteredData.array(column).reduce((acc, val) => {
-            acc[val] = (acc[val] || 0) + 1;
-            return acc;
-        }, {});
-
-        imputedValue = Object.keys(frequencyMap).reduce((a, b) =>
-            frequencyMap[a] > frequencyMap[b] ? a : b
-        );
-
-        console.log("Computed Categorical Mode: ", imputedValue);
-    }
-
-    let condition = (d) => selectedIds.has(d.ID) ? imputedValue : d[column];
-    this.dataTransformations.push(condition);
-    this.transformationPoints.push(this.selectedPoints);
-
-    this.filteredData = this.filteredData.derive({ 
-      [column]: aq.escape(condition)
-    });
   }
 
   previewAverage(column) {
@@ -252,7 +231,7 @@ class DataModel {
   
     for (const detector of detectors) {
       const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
-      console.log("Importing detector from:", path);
+      // console.log("Importing detector from:", path);
       const module = await import(path);
       const result = module.default(this.filteredData);
   
@@ -269,7 +248,7 @@ class DataModel {
         }
       }
     }
-    console.log("this.columnErrorMap", this.columnErrorMap);
+    // console.log("this.columnErrorMap", this.columnErrorMap);
   }
 
   getColumnErrors() {
@@ -295,9 +274,32 @@ class DataModel {
         result[col][type] = count / totalRows;
       }
     }
-    console.log("Final summary:", result);
-
   
     return result;
+  }
+
+  exportPythonScript() {
+    const lines = [
+      "import pandas as pd",
+      "",
+      "# Load your dataset",
+      "df = pd.read_csv('stackoverflow_db_uncleaned.csv')",
+      "",
+      "# Apply cleaning transformations"
+    ];
+  
+    for (const step of this.dataTransformations) {
+      if (step.type === "remove") {
+        lines.push(`df = df[~df["ID"].isin(${JSON.stringify(step.ids)})]`);
+      } else if (step.type === "transform") {
+        lines.push(`df.loc[df["ID"].isin(${JSON.stringify(step.ids)}), "${step.column}"] = ${JSON.stringify(step.value)}`);
+      }
+      lines.push("");
+    }
+  
+    lines.push("# Save cleaned dataset");
+    lines.push("df.to_csv('stackoverflow_db_cleaned.csv', index=False)");
+  
+    return lines.join("\n");
   }
 }

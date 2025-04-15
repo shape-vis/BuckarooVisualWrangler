@@ -16,10 +16,13 @@ d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
 
   (async () => {
     try {
-      const response = await fetch('/data/detectors.json');
-      const detectors = await response.json();
+      const detectorResponse = await fetch('/data/detectors.json');
+      const detectors = await detectorResponse.json();
+
+      const wranglerResponse = await fetch('/data/wranglers.json');
+      const wranglers = await wranglerResponse.json();
   
-      await stackoverflowController.init(detectors);
+      await stackoverflowController.init(detectors, wranglers);
     } catch (err) {
       console.error("Failed to load or run detectors:", err);
     }
@@ -81,69 +84,7 @@ d3.csv("data/stackoverflow_db_uncleaned.csv").then(inputData => {
 document.addEventListener("DOMContentLoaded", function () {
 
   document.getElementById("export-script").addEventListener("click", function () {
-    const scriptContent = `
-  import pandas as pd
-
-  # Load your dataset
-  df = pd.read_csv('stackoverflow_db_uncleaned.csv')
-
-  # Example cleaning steps:
-  # Drop rows with missing values
-  df_cleaned = df.dropna()
-
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-  # Convert 'ConvertedSalary' to numeric, coercing errors
-  df_cleaned['ConvertedSalary'] = pd.to_numeric(df_cleaned['ConvertedSalary'], errors='coerce')
-  # Fill missing values with column means
-  df_cleaned = df_cleaned.fillna(df_cleaned.mean(numeric_only=True))
-
-
-  # Save cleaned dataset
-  df_cleaned.to_csv('stackoverflow_db_cleaned.csv', index=False)
-  `;
+    const scriptContent = stackoverflowController.model.exportPythonScript();
 
     const blob = new Blob([scriptContent], { type: "text/x-python" });
     const url = URL.createObjectURL(blob);

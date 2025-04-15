@@ -118,21 +118,18 @@ class ScatterplotMatrixView{
                 topRow.appendChild(label);
         
                 const errorTypes = columnErrors[attr] || {};
-                console.log("errorTypes", errorTypes);
 
                 Object.entries(errorTypes).forEach(([type, pct]) => {
-                    console.log("type", type);
-                    console.log("pct", pct);
                     const box = document.createElement("span");
                     box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
                     box.classList.add("error-scent");
         
                     box.style.backgroundColor = {
-                        "missing": "saddlebrown",
-                        "incomplete": "gray",
-                        "mismatch": "hotpink",
-                        "anomaly": "red"
-                    }[type] || "black";
+                        "mismatch": "rgba(255, 105, 180, 0.7)",  // hotpink
+                        "missing": "rgba(139, 69, 19, 0.7)",     // saddlebrown
+                        "anomaly": "rgba(255, 0, 0, 0.7)",       // red
+                        "incomplete": "rgba(128, 128, 128, 0.7)" // gray
+                      }[type];
                 
                     const percentText = document.createElement("span");
                     percentText.textContent = `${Math.round(pct * 100)}%`;
@@ -189,13 +186,7 @@ class ScatterplotMatrixView{
                     segment.style.width = `${pct * 100}%`;
                     segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
-                    segment.style.backgroundColor = {
-                        "missing": "saddlebrown",
-                        "incomplete": "gray",
-                        "mismatch": "hotpink",
-                        "anomaly": "red"
-                    }[type] || "black";
-
+                    segment.style.backgroundColor = this.errorColors[type];
                     barContainer.appendChild(segment);
                 });
 
@@ -277,9 +268,11 @@ class ScatterplotMatrixView{
         predicateDropdown.addEventListener("change", () => {
             this.handlePredicateChange(table, controller);
         });
-    
-        document.getElementById("attribute-list").innerHTML =
-          
+              
+        document.getElementById("sort-errors").addEventListener("change", () => {
+            this.updateColumnErrorIndicators(table, controller);
+          });
+
         updateDropdownButton();
     }
 
@@ -287,24 +280,34 @@ class ScatterplotMatrixView{
         const columnErrors = controller.model.getColumnErrorSummary(); 
         const attributes = table.columnNames().slice(1);
 
-        console.log("sort errors", document.getElementById("sort-errors"));
-
-        const sortBy = document.getElementById("sort-errors")?.value || "total";
+        const sortBy = document.getElementById("sort-errors").value || "total";
+        console.log("sortBy", sortBy);
 
         const container = document.getElementById("attribute-list");
         if (!container) return;
 
-        console.log("sortBy", sortBy);
         const sortedAttributes = attributes.sort((a, b) => {
           const errorsA = columnErrors[a] || {};
           const errorsB = columnErrors[b] || {};
-      
+
+          // Primary: specific error type (or 0 if not present)
+          const primaryA = sortBy === "total" ? 0 : (errorsA[sortBy] || 0);
+          const primaryB = sortBy === "total" ? 0 : (errorsB[sortBy] || 0);
+
+          // Secondary: total error percentage
+          const totalA = Object.values(errorsA).reduce((sum, pct) => sum + pct, 0);
+          const totalB = Object.values(errorsB).reduce((sum, pct) => sum + pct, 0);
+
           if (sortBy === "total") {
-            const totalA = Object.values(errorsA).reduce((sum, pct) => sum + pct, 0);
-            const totalB = Object.values(errorsB).reduce((sum, pct) => sum + pct, 0);
-            return totalB - totalA;
+              // Sort by total error only
+              return totalB - totalA;
           } else {
-            return (errorsB[sortBy] || 0) - (errorsA[sortBy] || 0);
+              // First by specific error type
+              if (primaryB !== primaryA) {
+              return primaryB - primaryA;
+              }
+              // Then by total error percentage
+              return totalB - totalA;
           }
         });
       
@@ -338,12 +341,12 @@ class ScatterplotMatrixView{
                 box.classList.add("error-scent");
     
                 box.style.backgroundColor = {
-                    "missing": "saddlebrown",
-                    "incomplete": "gray",
-                    "mismatch": "hotpink",
-                    "anomaly": "red"
-                }[type] || "black";
-            
+                    "mismatch": "rgba(255, 105, 180, 0.7)",  // hotpink
+                    "missing": "rgba(139, 69, 19, 0.7)",     // saddlebrown
+                    "anomaly": "rgba(255, 0, 0, 0.7)",       // red
+                    "incomplete": "rgba(128, 128, 128, 0.7)" // gray
+                  }[type];
+                  
                 const percentText = document.createElement("span");
                 percentText.textContent = `${Math.round(pct * 100)}%`;
                 percentText.style.fontSize = "10px";
@@ -399,12 +402,7 @@ class ScatterplotMatrixView{
             segment.style.width = `${pct * 100}%`;
             segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
-            segment.style.backgroundColor = {
-                "missing": "saddlebrown",
-                "incomplete": "gray",
-                "mismatch": "hotpink",
-                "anomaly": "red"
-            }[type] || "black";
+            segment.style.backgroundColor = this.errorColors[type];
 
             barContainer.appendChild(segment);
             });
