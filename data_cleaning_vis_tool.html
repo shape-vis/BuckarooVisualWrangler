@@ -95,15 +95,6 @@
           <div id="legend-content"></div>
         </div>
 
-        <!-- <label for="sort-errors">Sort by:</label>
-        <select id="sort-errors">
-          <option value="total">Total Error % (default)</option>
-          <option value="missing">Missing</option>
-          <option value="incomplete">Incomplete</option>
-          <option value="mismatch">Mismatch</option>
-          <option value="outlier">Outlier</option>
-        </select> -->
-
         <div id="attribute-list">
           <div id="attribute-list-header">
             <h3>Attribute Summaries</h3>
@@ -128,10 +119,10 @@
         </div>
         <div id="tab2" class="tab-content active">
           <div id="matrix-vis-stackoverflow"></div>
-          <div id="placeholder-message" style="text-align: center; margin-top: 200px; font-size: 40px; color: darkslategrey;">
+          <!-- <div id="placeholder-message" style="text-align: center; margin-top: 200px; font-size: 40px; color: darkslategrey;">
             <div>Welcome to Buckaroo!</div>
             <div style="font-size: 25px; margin-top: 10px; color: gray;">Get started by uploading a file</div>
-          </div>
+          </div> -->
         </div>
 
         <div class="toolbox-wrapper">
@@ -173,6 +164,10 @@
       </div>
 
       <div id="tooltip" class="tooltip"></div>
+    </div>
+    <div id="dirty-rows-container">
+      <h3>Top 10 Rows with Most Errors</h3>
+      <div id="dirty-rows-table-wrapper"></div>
     </div>
   </body>
   <script src="js/dataModel.js"></script>

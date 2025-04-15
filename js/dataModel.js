@@ -14,6 +14,7 @@ class DataModel {
     this.previewData = this.data;
     this.fullFilteredData = this.data;
     this.columnErrorMap = {};
+    this.originalFilename = null;
   }
 
   // New method to update the selected groups:
@@ -279,11 +280,14 @@ class DataModel {
   }
 
   exportPythonScript() {
+    const baseFilename = this.originalFilename.replace(/\.csv$/, '');
+    const cleanedFilename = `${baseFilename}_cleaned.csv`;
+
     const lines = [
       "import pandas as pd",
       "",
-      "# Load your dataset",
-      "df = pd.read_csv('stackoverflow_db_uncleaned.csv')",
+      `# Load your dataset`,
+      `df = pd.read_csv('${this.originalFilename}')`,
       "",
       "# Apply cleaning transformations"
     ];
@@ -298,8 +302,11 @@ class DataModel {
     }
   
     lines.push("# Save cleaned dataset");
-    lines.push("df.to_csv('stackoverflow_db_cleaned.csv', index=False)");
+    lines.push(`df.to_csv('${cleanedFilename}', index=False)`);
   
-    return lines.join("\n");
+    return {
+      scriptContent: lines.join("\n"),
+      filename: `${baseFilename}_cleaned.py`
+    };
   }
 }

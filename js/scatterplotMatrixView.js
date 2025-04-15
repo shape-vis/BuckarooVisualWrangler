@@ -36,6 +36,7 @@ class ScatterplotMatrixView{
             "incomplete": "gray"
         };
 
+        this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];
     }
 
     setSelectedPoints(points) {
@@ -422,6 +423,85 @@ class ScatterplotMatrixView{
         });
     
         container.appendChild(ul);
+      }
+
+    updateDirtyRowsTable(data) {
+        const columnErrors = this.model.getColumnErrors();
+
+        // Count errors per row ID
+        const rowErrorCounts = {};
+      
+        for (const col in columnErrors) {
+          for (const id in columnErrors[col]) {
+            if (!rowErrorCounts[id]) {
+              rowErrorCounts[id] = { count: 0 };
+            }
+            rowErrorCounts[id].count += columnErrors[col][id].length;
+          }
+        }
+      
+        // Convert to array and sort by error count descending
+        const topDirtyRowIDs = Object.entries(rowErrorCounts)
+          .sort((a, b) => b[1].count - a[1].count)
+          .slice(0, 10)
+          .map(([id]) => id);
+      
+        // Filter full rows from data
+        const topRows = data.objects().filter(d => topDirtyRowIDs.includes(String(d.ID)));
+      
+        // Dynamically build the table
+        const wrapper = document.getElementById("dirty-rows-table-wrapper");
+        wrapper.innerHTML = ""; 
+      
+        if (topRows.length === 0) {
+          wrapper.innerHTML = "<p>No rows with errors found.</p>";
+          return;
+        }
+      
+        const table = document.createElement("table");
+        table.id = "dirty-rows-table";
+        table.style.borderCollapse = "collapse";
+        table.style.width = "100%";
+      
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+      
+        const columns = Object.keys(topRows[0]);
+        columns.forEach(col => {
+          const th = document.createElement("th");
+          th.textContent = col;
+          th.style.border = "1px solid #ddd";
+          th.style.padding = "6px";
+          th.style.backgroundColor = "#f0f0f0";
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+      
+        const tbody = document.createElement("tbody");
+        topRows.forEach(row => {
+          const tr = document.createElement("tr");
+          columns.forEach(col => {
+            const td = document.createElement("td");
+            td.textContent = row[col];
+            // Check if there's an error for this cell
+            const errorList = columnErrors[col]?.[row.ID];
+            if (errorList && errorList.length > 0) {
+                // Pick the highest priority error
+                const topErrorType = this.errorPriority.find(type => errorList.includes(type));
+
+                td.style.backgroundColor = this.errorColors[topErrorType];
+                td.style.color = "white";
+            }
+            td.style.border = "1px solid #ddd";
+            td.style.padding = "6px";
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        wrapper.appendChild(table);
       }
 
     handlePredicateChange(table, controller) {

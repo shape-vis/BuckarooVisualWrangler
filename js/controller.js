@@ -18,6 +18,7 @@ class ScatterplotController {
         this.wranglers = wranglers;
 
         await this.model.runDetectors(detectors); 
+        this.view.updateDirtyRowsTable(this.model.getFullFilteredData());
 
         this.view.populateDropdownFromTable(this.model.getFullData(), this);
 
@@ -488,6 +489,7 @@ async function attachButtonEventListeners(controller){
         controller.model.undoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
+        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
@@ -497,6 +499,7 @@ async function attachButtonEventListeners(controller){
         controller.model.redoLastTransformation();
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
+        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
@@ -535,6 +538,7 @@ async function attachButtonEventListeners(controller){
 
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
+        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
@@ -560,6 +564,7 @@ async function attachButtonEventListeners(controller){
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
+        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
@@ -585,6 +590,7 @@ async function attachButtonEventListeners(controller){
         controller.view.setSelectedPoints([]);
         // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
+        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
