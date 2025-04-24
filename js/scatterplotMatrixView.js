@@ -167,8 +167,8 @@ class ScatterplotMatrixView{
                     const min = sortedVals[0];
                     const max = sortedVals[sortedVals.length - 1];
 
-                    stats.innerHTML = `<div>Mode: ${mode}</div>
-                                        <div>Range: ${min} - ${max}</div>`;
+                    stats.innerHTML = `<div>Mode: ${truncateText(mode, 50)}</div>
+                                        <div>Range: ${truncateText(min, 50)} - ${truncateText(max, 50)}</div>`;
                 }
 
                 li.appendChild(stats);
@@ -383,8 +383,8 @@ class ScatterplotMatrixView{
                 const min = sortedVals[0];
                 const max = sortedVals[sortedVals.length - 1];
 
-                stats.innerHTML = `<div>Mode: ${mode}</div>
-                                    <div>Range: ${min} - ${max}</div>`;
+                stats.innerHTML = `<div>Mode: ${truncateText(mode, 50)}</div>
+                                    <div>Range: ${truncateText(min, 50)} - ${truncateText(max, 50)}</div>`;
             }
 
             li.appendChild(stats);
@@ -425,33 +425,36 @@ class ScatterplotMatrixView{
         container.appendChild(ul);
       }
 
-    updateDirtyRowsTable(data) {
+      updateDirtyRowsTable(data) {
         const columnErrors = this.model.getColumnErrors();
-
+      
         // Count errors per row ID
         const rowErrorCounts = {};
-      
         for (const col in columnErrors) {
           for (const id in columnErrors[col]) {
             if (!rowErrorCounts[id]) {
               rowErrorCounts[id] = { count: 0 };
             }
-            rowErrorCounts[id].count += columnErrors[col][id].length;
-          }
+            rowErrorCounts[id].count += 1;          }
         }
       
-        // Convert to array and sort by error count descending
-        const topDirtyRowIDs = Object.entries(rowErrorCounts)
-          .sort((a, b) => b[1].count - a[1].count)
-          .slice(0, 10)
-          .map(([id]) => id);
+        // Build full row objects with their error counts
+        const fullData = data.objects().map(row => {
+          const id = String(row.ID);
+          return {
+            ...row,
+            __errorCount__: rowErrorCounts[id] ? rowErrorCounts[id].count : 0,
+          };
+        });
       
-        // Filter full rows from data
-        const topRows = data.objects().filter(d => topDirtyRowIDs.includes(String(d.ID)));
+        // Sort by error count descending and take top 10
+        const topRows = fullData
+          .sort((a, b) => b.__errorCount__ - a.__errorCount__)
+          .slice(0, 10);
       
-        // Dynamically build the table
+        // Build table
         const wrapper = document.getElementById("dirty-rows-table-wrapper");
-        wrapper.innerHTML = ""; 
+        wrapper.innerHTML = "";
       
         if (topRows.length === 0) {
           wrapper.innerHTML = "<p>No rows with errors found.</p>";
@@ -466,7 +469,8 @@ class ScatterplotMatrixView{
         const thead = document.createElement("thead");
         const headerRow = document.createElement("tr");
       
-        const columns = Object.keys(topRows[0]);
+        const columns = ['Error Count', ...Object.keys(topRows[0]).filter(c => c !== '__errorCount__')];
+      
         columns.forEach(col => {
           const th = document.createElement("th");
           th.textContent = col;
@@ -480,29 +484,43 @@ class ScatterplotMatrixView{
         const tbody = document.createElement("tbody");
         topRows.forEach(row => {
           const tr = document.createElement("tr");
+      
           columns.forEach(col => {
             const td = document.createElement("td");
-            td.textContent = row[col];
-            // Check if there's an error for this cell
-            const errorList = columnErrors[col]?.[row.ID];
-            if (errorList && errorList.length > 0) {
-                // Pick the highest priority error
+      
+            // Handle 'Error Count' column separately
+            if (col === 'Error Count') {
+              td.textContent = row.__errorCount__;
+            } else {
+              const cellValue = row[col];
+              if (typeof cellValue === "string" && cellValue.length > 50) {
+                  td.textContent = truncateText(cellValue, 50);
+                  td.title = cellValue; // Show full value as tooltip
+              } else {
+                  td.textContent = cellValue;
+              }
+      
+              // Style cell if it has errors
+              const errorList = columnErrors[col]?.[row.ID];
+              if (errorList && errorList.length > 0) {
                 const topErrorType = this.errorPriority.find(type => errorList.includes(type));
-
                 td.style.backgroundColor = this.errorColors[topErrorType];
                 td.style.color = "white";
+              }
             }
+      
             td.style.border = "1px solid #ddd";
             td.style.padding = "6px";
             tr.appendChild(td);
           });
+      
           tbody.appendChild(tr);
         });
       
         table.appendChild(thead);
         table.appendChild(tbody);
         wrapper.appendChild(table);
-      }
+      }      
 
     handlePredicateChange(table, controller) {
         const predicateDropdown = document.getElementById("predicate-dropdown");
@@ -998,12 +1016,13 @@ class ScatterplotMatrixView{
 
                     cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
 
-                    svg
+                    const xText = svg
                         .append("text")
                         .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
                         .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) 
                         .style("text-anchor", "middle")
-                        .text(xCol);
+                        .text(truncateText(xCol, 30));
+                    xText.append("title").text(xCol);  // Full column name on hover
         
                     const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
                     const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
@@ -1164,18 +1183,17 @@ class ScatterplotMatrixView{
 
                     cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
                         
-                    svg
-                        .append("text")
+                    const xText = svg.append("text")
                         .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
                         .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) 
                         .style("text-anchor", "middle")
-                        .text(xCol);
+                        .text(truncateText(xCol, 30));
+                    xText.append("title").text(xCol);  // Full column name on hover
         
                     const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
                     const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
                     
-                    svg
-                        .append("text")
+                    svg.append("text")
                         .attr("x", xPosition) 
                         .attr("y", yPosition - 20) 
                         .style("text-anchor", "middle")
@@ -3274,18 +3292,20 @@ class ScatterplotMatrixView{
                 .style("font-size", "8px");
         }
 
-        svg.append("text")
+        const xText = svg.append("text")
             .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
             .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25)
             .style("text-anchor", "middle")
-            .text(xCol);
+            .text(truncateText(xCol, 30));
+        xText.append("title").text(xCol);  // Full column name on hover
 
-        svg.append("text")
+        const yText = svg.append("text")
             .attr("x", xPosition)
             .attr("y", yPosition - 20)
             .style("text-anchor", "middle")
             .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`)
-            .text(yCol);
+            .text(truncateText(yCol));
+        yText.append("title").text(yCol);  // Full column name on hover
     }
 
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
@@ -3905,23 +3925,23 @@ class ScatterplotMatrixView{
             //     .style("font-size", "10px"); 
             // }
             
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover
         }
         
     }
@@ -4547,23 +4567,23 @@ class ScatterplotMatrixView{
                 .append("title")  
                 .text(d => d);
             
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover
         }
 
         d3.select(this.parentNode).selectAll(".heatmap-button, .scatterplot-button").classed("active", false);
@@ -4707,8 +4727,8 @@ class ScatterplotMatrixView{
             .attr("font-size", "12px")
             .attr("font-weight", "bold")
             .text(containerId === "preview-remove" ? "Preview of Removing Selected Data" :
-                  containerId === "preview-impute-average-x" ? `Preview of Imputing by Avg ${xCol}` :
-                  containerId === "preview-impute-average-y" ? `Preview of Imputing by Avg ${yCol}` :
+                  containerId === "preview-impute-average-x" ? `Preview of Imputing by Avg ${truncateText(xCol, 12)}` :
+                  containerId === "preview-impute-average-y" ? `Preview of Imputing by Avg ${truncateText(yCol, 12)}` :
                   "Preview of User Specified Repair");
 
         const columnErrors = this.model.getColumnErrors();
@@ -6438,4 +6458,9 @@ function getFillColorScatter(d, xCol, yCol, columnErrors, errorColors, selectedP
 
     return "steelblue"; 
 }
+
+function truncateText(text, maxLength = 17) {
+    if (typeof text !== "string") return text;
+    return text.length > maxLength ? text.slice(0, maxLength - 3) + "..." : text;
+  }
 

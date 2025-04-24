@@ -11,6 +11,24 @@
     display: flex;
 }
 
+.dataset-button {
+    background-color: #0074d9; 
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 15px 25px;
+    margin: 10px auto;
+    border: none;
+    border-radius: 10px;
+    text-align: center;
+    cursor: pointer;
+    width: 300px;
+  }
+  
+  .dataset-button:hover {
+    background-color: #005bab; 
+  }
+
 h3 {
     text-align: center;
     margin-top: -5px;
@@ -30,7 +48,7 @@ body, html, h1 {
     margin: 15px;
     padding: 10px;
     align-items: center;
-    width: 1860px;
+    width: 1400px;
     background-color: #f5f5f5;
     border: 2px solid #ccc;
     border-radius: 5px;
