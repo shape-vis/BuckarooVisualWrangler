@@ -529,8 +529,32 @@ async function attachButtonEventListeners(controller){
         const selectedPoints = controller.model.getSelectedPoints();
         const module = await import("/wranglers/removeData.js");
         const condition = module.default(selectedPoints); // This returns a filter function
+        const errorMap = controller.model.getColumnErrors();
 
+        const selectedPointsErrors = {};
+        const selectedIDs = selectedPoints.map(d => d.ID);
+
+        selectedIDs.forEach(id => {
+            const errors = [];
+
+            // Check xCol
+            if (errorMap[controller.xCol] && errorMap[controller.xCol][id]) {
+            errors.push(...errorMap[controller.xCol][id]);
+            }
+
+            // Check yCol
+            if (errorMap[controller.yCol] && errorMap[controller.yCol][id]) {
+            errors.push(...errorMap[controller.yCol][id]);
+            }
+
+            if (errors.length > 0) {
+                selectedPointsErrors[id] = errors;
+            }
+        });
+
+        console.log("errorMap", errorMap);
         console.log("sp",selectedPoints);
+        console.log("spErrors", selectedPointsErrors);
 
         controller.model.filterData(condition, {
             ids: selectedPoints.map(p => p.ID),
@@ -539,7 +563,8 @@ async function attachButtonEventListeners(controller){
             yCol: controller.yCol,
             yVals: selectedPoints.map(p => p[controller.yCol]),
             imputedColumn: false,
-            value: false
+            value: false,
+            idErrors: selectedPointsErrors
           });
         // controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
@@ -561,6 +586,28 @@ async function attachButtonEventListeners(controller){
         const module = await import("/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.xCol, controller.model.getData())
         const transformation = module.default(controller.xCol, controller.model.getData(), selectedPoints);
+        const errorMap = controller.model.getColumnErrors();
+
+        const selectedPointsErrors = {};
+        const selectedIDs = selectedPoints.map(d => d.ID);
+
+        selectedIDs.forEach(id => {
+            const errors = [];
+
+            // Check xCol
+            if (errorMap[controller.xCol] && errorMap[controller.xCol][id]) {
+            errors.push(...errorMap[controller.xCol][id]);
+            }
+
+            // Check yCol
+            if (errorMap[controller.yCol] && errorMap[controller.yCol][id]) {
+            errors.push(...errorMap[controller.yCol][id]);
+            }
+
+            if (errors.length > 0) {
+                selectedPointsErrors[id] = errors;
+            }
+        });
 
         controller.model.transformData(controller.xCol, transformation, {
             ids: selectedPoints.map(p => p.ID),
@@ -569,7 +616,8 @@ async function attachButtonEventListeners(controller){
             yCol: controller.yCol,
             yVals: selectedPoints.map(p => p[controller.yCol]),
             imputedColumn: controller.xCol,
-            value: imputedValue
+            value: imputedValue,
+            idErrors: selectedPointsErrors
           });
         // controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
@@ -591,6 +639,28 @@ async function attachButtonEventListeners(controller){
         const module = await import("/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.yCol, controller.model.getData())
         const transformation = module.default(controller.yCol, controller.model.getData(), selectedPoints);
+        const errorMap = controller.model.getColumnErrors();
+
+        const selectedPointsErrors = {};
+        const selectedIDs = selectedPoints.map(d => d.ID);
+
+        selectedIDs.forEach(id => {
+            const errors = [];
+
+            // Check xCol
+            if (errorMap[controller.xCol] && errorMap[controller.xCol][id]) {
+            errors.push(...errorMap[controller.xCol][id]);
+            }
+
+            // Check yCol
+            if (errorMap[controller.yCol] && errorMap[controller.yCol][id]) {
+            errors.push(...errorMap[controller.yCol][id]);
+            }
+
+            if (errors.length > 0) {
+                selectedPointsErrors[id] = errors;
+            }
+        });
 
         controller.model.transformData(controller.yCol, transformation, {
             ids: selectedPoints.map(p => p.ID),
@@ -599,7 +669,8 @@ async function attachButtonEventListeners(controller){
             yCol: controller.yCol,
             yVals: selectedPoints.map(p => p[controller.yCol]),
             imputedColumn: controller.yCol,
-            value: imputedValue
+            value: imputedValue,
+            idErrors: selectedPointsErrors
           });
         // controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);

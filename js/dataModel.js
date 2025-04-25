@@ -17,7 +17,11 @@ class DataModel {
     this.originalFilename = null;
   }
 
-  // New method to update the selected groups:
+  /**
+   * Update the selected groups from the box and whisker plot.
+   * @param {*} groups The selected groups to view.
+   * @param {*} selectedAttributes The columns currently plotted.
+   */
   setSelectedGroups(groups, selectedAttributes) {
     this.selectedGroups = groups;  
     const selectedColumns = new Set([...selectedAttributes]); 
@@ -37,37 +41,69 @@ class DataModel {
     }
 
     console.log("set filtered data", this.filteredData.objects());
-
   }
+
+  /**
+   * 
+   * @returns The selected groups.
+   */
   getSelectedGroups() {
     return this.selectedGroups;
   }
 
+  /**
+   * 
+   * @returns The current dataset used for plotting.
+   */
   getData() {
     return this.filteredData;
   }
 
+  /**
+   * 
+   * @returns The full original dataset.
+   */
   getFullData() {
     return this.data;
   }
-
+  /**
+   * 
+   * @returns The filtered dataset but with all columns, not just the selected columns.
+   */
   getFullFilteredData(){
     return this.fullFilteredData;
   }
 
+  /**
+   * Update the current dataset being plotted.
+   * @param {*} filteredData 
+   */
   setFilteredData(filteredData) {
     this.filteredData = filteredData;  
   } 
   
+  /**
+   * Set the user selected attribute to group data by.
+   * @param {*} attribute 
+   */
   setGroupByAttribute(attribute) {
     console.log("Grouping by:", attribute);
     this.groupByAttribute = attribute && attribute !== "None" ? attribute : null;
   }
 
+  /**
+   * 
+   * @returns The user selected group by attribute.
+   */
   getGroupByAttribute() {
     return this.groupByAttribute;
   }
 
+  /**
+   * Preprocess the data by finding the majority type of each column and converting numeric vals to strings in non-numeric columns
+   * @param {*} table 
+   * @returns The preprocessed Arquero table.
+   */
   preprocessData(table) {
     function isNumeric(val) {
       return typeof val === "number" || (typeof val === "string" && /^\d+(\.\d+)?$/.test(val.trim()));
@@ -84,7 +120,7 @@ class DataModel {
     const rawData = table.objects();
     const columns = Object.keys(rawData[0] || {});
 
-    // Step 1: Initial parsing
+    // Initial parsing
     let tempArr = rawData.map(row => {
       let newRow = {};
       for (let key of columns) {
@@ -93,7 +129,7 @@ class DataModel {
       return newRow;
     });
 
-    // Step 2: Determine majority type for each column
+    // Determine majority type for each column
     let columnMajorTypes = {};
     for (let col of columns) {
       let numericCount = 0;
@@ -107,7 +143,7 @@ class DataModel {
       columnMajorTypes[col] = numericCount > totalCount / 2 ? "numeric" : "non-numeric";
     }
 
-    // Step 3: Convert numeric values to strings in non-numeric columns
+    // Convert numeric values to strings in non-numeric columns
     let finalArr = tempArr.map(row => {
       let newRow = { ...row };
       for (let col of columns) {
@@ -121,6 +157,11 @@ class DataModel {
     return aq.from(finalArr);
   }
   
+  /**
+   * Removes data from this.filteredData according to user selection and removal of data.
+   * @param {*} condition The Arquero filtering condition.
+   * @param {*} filterInfo Info to be passed to the export script function.
+   */
   filterData(condition, filterInfo=null) {
     console.log("condition", condition);
     this.dataStates.push(this.filteredData);
@@ -133,7 +174,6 @@ class DataModel {
         ...filterInfo,
       });
     }
-    console.log("Data Transformations", this.dataTransformations);
 
     this.filteredData = this.filteredData.filter(aq.escape(condition));
 
@@ -141,7 +181,12 @@ class DataModel {
     this.fullFilteredData = this.fullFilteredData.filter(aq.escape(condition));
   }
 
-  // Transforms the data such as imputing average, etc.
+  /**
+   * Transforms the data such as imputing average, etc.
+   * @param {*} column The column where the values are being imputed.
+   * @param {*} condition The Arquero condition.
+   * @param {*} transformInfo Info to be passed to the export script function.
+   */
   transformData(column, condition, transformInfo=null){
     this.dataStates.push(this.filteredData);
     this.redoStack = [];
@@ -152,15 +197,22 @@ class DataModel {
         ...transformInfo,
       });
     }
-    console.log("Data Transformations", this.dataTransformations);
 
     this.filteredData = this.filteredData.derive({ [column]: aq.escape(condition) });
   }
 
+  /**
+   * Returns a preview of the dataset if a user takes a specific wrangling action.
+   * @param {*} condition 
+   * @returns Preview dataset
+   */
   getPreviewData(condition) {
     return this.filteredData.filter(aq.escape(condition));
   }
 
+  /**
+   * Method behind the undo button. Restores the previous state of the dataset.
+   */
   undoLastTransformation() {
     if (this.dataStates.length > 0) {
         this.redoStack.push(this.filteredData); 
@@ -171,6 +223,9 @@ class DataModel {
     }
   } 
 
+  /**
+   * Method behind the redo button. Restores the previous state of the data.
+   */
   redoLastTransformation() {
     if (this.redoStack.length > 0) {
         this.dataStates.push(this.filteredData);
@@ -182,6 +237,11 @@ class DataModel {
     }
   }
 
+  /**
+   * Calculates averages for the preview plots.
+   * @param {*} column 
+   * @returns The preview dataset with the imputations.
+   */
   previewAverage(column) {
     const selectedIds = new Set(this.selectedPoints.map(p => p.ID));
 
@@ -220,20 +280,31 @@ class DataModel {
     });
   }
 
+  /**
+   * Sets selected points as a result of the user's selection.
+   * @param {*} points 
+   */
   setSelectedPoints(points) {
     this.selectedPoints = points;
   }
 
+  /**
+   * 
+   * @returns The user selected points.
+   */
   getSelectedPoints() {
     return this.selectedPoints;
   }
 
+  /**
+   * Loads and runs the detectors to build a column error map that contains all the error types and their associated IDs.
+   * @param {*} detectors 
+   */
   async runDetectors(detectors) {
-    this.columnErrorMap = {}; // Reset
+    this.columnErrorMap = {};
   
     for (const detector of detectors) {
       const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
-      // console.log("Importing detector from:", path);
       const module = await import(path);
       const result = module.default(this.filteredData);
   
@@ -250,13 +321,20 @@ class DataModel {
         }
       }
     }
-    // console.log("this.columnErrorMap", this.columnErrorMap);
   }
 
+  /**
+   * 
+   * @returns The error mapping.
+   */
   getColumnErrors() {
     return this.columnErrorMap;
   }
 
+  /**
+   * Creates a column error summary to be used for the attribute summaries.
+   * @returns 
+   */
   getColumnErrorSummary() {
     const result = {}; // { column: { errorType: percent } }
     const totalRows = this.fullFilteredData.numRows();
@@ -280,6 +358,10 @@ class DataModel {
     return result;
   }
 
+  /**
+   * Convert data transformations from Arquero to Python and writes a Python script to export.
+   * @returns The written script and its filename.
+   */
   exportPythonScript() {
     const baseFilename = this.originalFilename.replace(/\.csv$/, '');
     const cleanedFilename = `${baseFilename}_cleaned.csv`;
@@ -295,11 +377,13 @@ class DataModel {
   
     for (const step of this.dataTransformations) {
       console.log("step", step);
-      const { type, ids, xCol, xVals, yCol, yVals, imputedColumn, value } = step;
+      const { type, ids, xCol, xVals, yCol, yVals, imputedColumn, value, idErrors } = step;
+
+      const error = Object.values(idErrors).flat()[0]; // The first item should be the error type
 
       if(yCol)
       {
-        // All (x, y) combinations for all selected points
+        // All (x, y) combinations for all selected points on a HEATMAP
         const uniqueXVals = [...new Set(xVals)];
         const uniqueYVals = [...new Set(yVals)];
         const conditions = [];
@@ -314,15 +398,16 @@ class DataModel {
         const compoundCondition = conditions.join(" | "); // OR all the conditions
 
         if (type === "remove") {
-          lines.push(`# Remove rows where any of ${xCol} × ${yCol} combinations match`);
-          lines.push(`df = df[~(${compoundCondition})]`);
+          lines.push(`# Remove rows where any of ${xCol} x ${yCol} combinations match ${xVals[0]} x ${yVals[0]}`);
+          lines.push(`df = df[~(${compoundCondition})]    # Error Type: ${error}`);
         } else if (type === "transform") {
-          lines.push(`# Transform ${imputedColumn} where any of ${xCol} × ${yCol} combinations match`);
-          lines.push(`df.loc[(${compoundCondition}), ${JSON.stringify(imputedColumn)}] = ${JSON.stringify(value)}`);
+          lines.push(`# Transform ${imputedColumn} with ${value} where ${xCol} = ${xVals[0]} and ${yCol} = ${yVals[0]}`);
+          lines.push(`df.loc[(${compoundCondition}), ${JSON.stringify(imputedColumn)}] = ${JSON.stringify(value)}   # Error Type: ${error}`);
         }
         lines.push("");
       }
       else{
+        // Selected points were on a HISTOGRAM (no yCol or yVals)
         const uniqueXVals = [...new Set(xVals)];
         const conditions = [];
         for (const xVal of uniqueXVals) {
@@ -332,11 +417,11 @@ class DataModel {
         const compoundCondition = conditions.join(" | "); 
 
         if (type === "remove") {
-          lines.push(`# Remove rows where any of ${xCol} matches`);
-          lines.push(`df = df[~(${compoundCondition})]`);
+          lines.push(`# Remove rows where any of ${xCol} = ${xVals[0]}`);
+          lines.push(`df = df[~(${compoundCondition})]   # Error Type: ${error}`);
         } else if (type === "transform") {
-          lines.push(`# Transform ${imputedColumn} where any of ${xCol} matches`);
-          lines.push(`df.loc[(${compoundCondition}), ${JSON.stringify(imputedColumn)}] = ${JSON.stringify(value)}`);
+          lines.push(`# Transform ${imputedColumn} with ${value} where ${xCol} = ${xVals[0]}`);
+          lines.push(`df.loc[(${compoundCondition}), ${JSON.stringify(imputedColumn)}] = ${JSON.stringify(value)}   # Error Type: ${error}`);
         }
         lines.push("");
       }
