@@ -126,6 +126,7 @@ class DataModel {
     this.dataStates.push(this.filteredData);
     this.redoStack = [];
     this.transformationPoints.push(this.selectedPoints);
+    console.log("filterInfo", filterInfo);
     if (filterInfo) {
       this.dataTransformations.push({
         type: "remove",
@@ -293,14 +294,54 @@ class DataModel {
     ];
   
     for (const step of this.dataTransformations) {
-      if (step.type === "remove") {
-        lines.push(`df = df[~df["ID"].isin(${JSON.stringify(step.ids)})]`);
-      } else if (step.type === "transform") {
-        lines.push(`df.loc[df["ID"].isin(${JSON.stringify(step.ids)}), "${step.column}"] = ${JSON.stringify(step.value)}`);
+      console.log("step", step);
+      const { type, ids, xCol, xVals, yCol, yVals, imputedColumn, value } = step;
+
+      if(yCol)
+      {
+        // All (x, y) combinations for all selected points
+        const uniqueXVals = [...new Set(xVals)];
+        const uniqueYVals = [...new Set(yVals)];
+        const conditions = [];
+        for (const xVal of uniqueXVals) {
+          for (const yVal of uniqueYVals) {
+            const xCond = `df[${JSON.stringify(xCol)}] == ${JSON.stringify(xVal)}`;
+            const yCond = `df[${JSON.stringify(yCol)}] == ${JSON.stringify(yVal)}`;
+            conditions.push(`(${xCond} & ${yCond})`);
+          }
+        }
+
+        const compoundCondition = conditions.join(" | "); // OR all the conditions
+
+        if (type === "remove") {
+          lines.push(`# Remove rows where any of ${xCol} × ${yCol} combinations match`);
+          lines.push(`df = df[~(${compoundCondition})]`);
+        } else if (type === "transform") {
+          lines.push(`# Transform ${imputedColumn} where any of ${xCol} × ${yCol} combinations match`);
+          lines.push(`df.loc[(${compoundCondition}), ${JSON.stringify(imputedColumn)}] = ${JSON.stringify(value)}`);
+        }
+        lines.push("");
       }
-      lines.push("");
+      else{
+        const uniqueXVals = [...new Set(xVals)];
+        const conditions = [];
+        for (const xVal of uniqueXVals) {
+          const xCond = `df[${JSON.stringify(xCol)}] == ${JSON.stringify(xVal)}`;
+          conditions.push(`(${xCond})`);
+        }
+        const compoundCondition = conditions.join(" | "); 
+
+        if (type === "remove") {
+          lines.push(`# Remove rows where any of ${xCol} matches`);
+          lines.push(`df = df[~(${compoundCondition})]`);
+        } else if (type === "transform") {
+          lines.push(`# Transform ${imputedColumn} where any of ${xCol} matches`);
+          lines.push(`df.loc[(${compoundCondition}), ${JSON.stringify(imputedColumn)}] = ${JSON.stringify(value)}`);
+        }
+        lines.push("");
+      }
     }
-  
+
     lines.push("# Save cleaned dataset");
     lines.push(`df.to_csv('${cleanedFilename}', index=False)`);
   

@@ -1254,26 +1254,51 @@ class ScatterplotMatrixView{
                         bars.attr("y", d => yScale(d.length)) 
                             .attr("height", d => Math.max(0, this.size - yScale(d.length)));
                     }
-                    bars.on("mouseover", function(event, d) {
-                        d3.select(this).attr("opacity", 0.5);
-                        tooltip.style("display", "block")
-                            .html(`<strong>${d.category}</strong><br><strong>Count: </strong>${d.length}`)
-                            .style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mousemove", function(event) {
-                        tooltip.style("left", `${event.pageX + 10}px`)
-                            .style("top", `${event.pageY + 10}px`);
-                    })
-                    .on("mouseout", function() {
-                        d3.select(this).attr("opacity", 0.8);
-                        tooltip.style("display", "none");
-                    })
-                    .attr("data-ids", d => d.ids.join(","))
-                    .on("click", function (event, d) {
-                        if (!selectionEnabled) return;
-                        handleBarClick(event, d, xCol, groupByAttribute)
-                    });
+                    if(!isNumericMajority){
+                        bars.on("mouseover", function(event, d) {
+                            d3.select(this).attr("opacity", 0.5);
+                            tooltip.style("display", "block")
+                                .html(`<strong>${d.category}</strong><br><strong>Count: </strong>${d.length}`)
+                                .style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mousemove", function(event) {
+                            tooltip.style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mouseout", function() {
+                            d3.select(this).attr("opacity", 0.8);
+                            tooltip.style("display", "none");
+                        })
+                        .attr("data-ids", d => d.ids.join(","))
+                        .on("click", function (event, d) {
+                            if (!selectionEnabled) return;
+                            handleBarClick(event, d, xCol, groupByAttribute)
+                        });
+                    }
+                    else{
+                        bars.on("mouseover", function(event, d) {
+                            d3.select(this).attr("opacity", 0.5);
+                            tooltip.style("display", "block")
+                                .html(`<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count: </strong>${d.length}`)
+                                .style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mousemove", function(event) {
+                            tooltip.style("left", `${event.pageX + 10}px`)
+                                .style("top", `${event.pageY + 10}px`);
+                        })
+                        .on("mouseout", function() {
+                            d3.select(this).attr("opacity", 0.8);
+                            tooltip.style("display", "none");
+                        })
+                        .attr("data-ids", d => d.ids.join(","))
+                        .on("click", function (event, d) {
+                            if (!selectionEnabled) return;
+                            handleBarClick(event, d, xCol, groupByAttribute)
+                        });
+                    }
+                    
                 }                
             } 
             // Plot off diagonal cells
@@ -4803,7 +4828,7 @@ class ScatterplotMatrixView{
                 uniqueCategories = sortCategories(uniqueCategories);
                 originalUniqueCategories = sortCategories(originalUniqueCategories);
 
-                const xScale = d3.scaleLinear()
+                let xScale = d3.scaleLinear()
                     .domain([d3.min(originalNumericData, (d) => d[xCol]), d3.max(originalNumericData, (d) => d[xCol]) + 1])
                     .range([0, originalNumericSpace]);
 
@@ -4921,6 +4946,10 @@ class ScatterplotMatrixView{
                         };
                     });
 
+                    xScale = d3.scaleLinear()
+                        .domain([d3.min(histData, d => d.x0), d3.max(histData, d => d.x1)])
+                        .range([0, this.size]);
+
                     const binWidth = xScale(histData[0].x1) - xScale(histData[0].x0);
                     const categoricalStart = xScale.range()[1] + 10;
 
@@ -4940,7 +4969,7 @@ class ScatterplotMatrixView{
 
                     yScale = d3.scaleLinear()
                         .domain([0, d3.max(histData, (d) => d.length)])
-                        .range([height, 0]);
+                        .range([this.size, 0]);
                     
                     svg.selectAll("rect")
                         .data(histData)
@@ -4969,7 +4998,7 @@ class ScatterplotMatrixView{
                 
                 svg
                     .append("g")
-                    .attr("transform", `translate(0, ${height})`)
+                    .attr("transform", `translate(0, ${this.size})`)
                     .call(d3.axisBottom(xScale).tickFormat(d3.format(".2s")))
                     .selectAll("text") 
                     .style("text-anchor", "end") 
@@ -4982,7 +5011,7 @@ class ScatterplotMatrixView{
 
                 if (uniqueCategories.length > 0) {
                     svg.append("g")
-                        .attr("transform", `translate(10, ${height})`)
+                        .attr("transform", `translate(10, ${this.size})`)
                         .call(d3.axisBottom(categoricalScale))
                         .selectAll("text")
                         .style("text-anchor", "end") 

@@ -530,9 +530,16 @@ async function attachButtonEventListeners(controller){
         const module = await import("/wranglers/removeData.js");
         const condition = module.default(selectedPoints); // This returns a filter function
 
+        console.log("sp",selectedPoints);
+
         controller.model.filterData(condition, {
-            column: controller.xCol,
-            ids: selectedPoints.map(p => p.ID)
+            ids: selectedPoints.map(p => p.ID),
+            xCol: controller.xCol,
+            xVals: selectedPoints.map(p => p[controller.xCol]),
+            yCol: controller.yCol,
+            yVals: selectedPoints.map(p => p[controller.yCol]),
+            imputedColumn: false,
+            value: false
           });
         // controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
@@ -556,9 +563,13 @@ async function attachButtonEventListeners(controller){
         const transformation = module.default(controller.xCol, controller.model.getData(), selectedPoints);
 
         controller.model.transformData(controller.xCol, transformation, {
-            value: imputedValue,
             ids: selectedPoints.map(p => p.ID),
-            column: controller.xCol
+            xCol: controller.xCol,
+            xVals: selectedPoints.map(p => p[controller.xCol]),
+            yCol: controller.yCol,
+            yVals: selectedPoints.map(p => p[controller.yCol]),
+            imputedColumn: controller.xCol,
+            value: imputedValue
           });
         // controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
@@ -582,9 +593,13 @@ async function attachButtonEventListeners(controller){
         const transformation = module.default(controller.yCol, controller.model.getData(), selectedPoints);
 
         controller.model.transformData(controller.yCol, transformation, {
-            value: imputedValue,
             ids: selectedPoints.map(p => p.ID),
-            column: controller.yCol
+            xCol: controller.xCol,
+            xVals: selectedPoints.map(p => p[controller.xCol]),
+            yCol: controller.yCol,
+            yVals: selectedPoints.map(p => p[controller.yCol]),
+            imputedColumn: controller.yCol,
+            value: imputedValue
           });
         // controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
