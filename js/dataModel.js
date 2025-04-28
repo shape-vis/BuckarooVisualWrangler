@@ -3,7 +3,6 @@ class DataModel {
     this.originalData = initialData;
     this.data = this.preprocessData(initialData);
     this.filteredData = this.data;
-    // this.data = initialData;
     this.selectedPoints = [];
     this.dataStates = [];
     this.redoStack = [];
@@ -371,6 +370,8 @@ class DataModel {
       "",
       `# Load your dataset`,
       `df = pd.read_csv('${this.originalFilename}')`,
+      `df = df.head(200)  # Select only the first 200 rows`,    // This can be adjusted as needed. Currenly, the script only takes the first 200 rows to visualize, 
+                                                                // so if that changes in the script, it should also be changed here for consistency.
       "",
       "# Apply cleaning transformations"
     ];
@@ -391,11 +392,11 @@ class DataModel {
           for (const yVal of uniqueYVals) {
             const xCond = `df[${JSON.stringify(xCol)}] == ${JSON.stringify(xVal)}`;
             const yCond = `df[${JSON.stringify(yCol)}] == ${JSON.stringify(yVal)}`;
-            conditions.push(`(${xCond} & ${yCond})`);
+            conditions.push(`((${xCond}) & (${yCond}))`);
           }
         }
 
-        const compoundCondition = conditions.join(" | "); // OR all the conditions
+        const compoundCondition = `(\n  ${conditions.join(" |\n  ")}\n)`;   // OR conditions
 
         if (type === "remove") {
           lines.push(`# Remove rows where any of ${xCol} x ${yCol} combinations match ${xVals[0]} x ${yVals[0]}`);
@@ -414,7 +415,7 @@ class DataModel {
           const xCond = `df[${JSON.stringify(xCol)}] == ${JSON.stringify(xVal)}`;
           conditions.push(`(${xCond})`);
         }
-        const compoundCondition = conditions.join(" | "); 
+        const compoundCondition = `(\n  ${conditions.join(" |\n  ")}\n)`;
 
         if (type === "remove") {
           lines.push(`# Remove rows where any of ${xCol} = ${xVals[0]}`);

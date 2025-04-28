@@ -9,10 +9,14 @@ class ScatterplotController {
       this.detectors = null;
       this.wranglers = null;
 
-    //   this.updateSelectedAttributes(this.selectedAttributes);
       this.setupEventListeners();
     }
 
+    /**
+     * Initialization of the controller runs error detectors and renders everything in the UI.
+     * @param {*} detectors 
+     * @param {*} wranglers 
+     */
     async init(detectors, wranglers) {
         this.detectors = detectors;
         this.wranglers = wranglers;
@@ -27,14 +31,20 @@ class ScatterplotController {
         this.updateLegend(this.model.getGroupByAttribute());
       }
 
-    // Update the 1-3 columns the user selects
+    /**
+     * Update the 1-3 attributes the user selects to view.
+     * @param {*} attributes 
+     */
     updateSelectedAttributes(attributes) {
         this.selectedAttributes = ["ID", ...attributes];
         this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes)); 
         this.render(true, true);
     }
 
-    // Update the 1 group by attribute the user selects
+    /**
+     * Update the user-selected attribute to group by.
+     * @param {*} attribute 
+     */
     updateGrouping(attribute) {
         console.log("User selected group by:", attribute);
         
@@ -49,7 +59,10 @@ class ScatterplotController {
         this.render(false, true);
     }
 
-    // Pop up window for avg aggregations
+    /**
+     * Pop up window for box plots and group selection.
+     * @returns 
+     */
     openGroupSelectionPopup() {
         const groupBy = this.model.getGroupByAttribute();
         if (!groupBy) return;
@@ -63,7 +76,6 @@ class ScatterplotController {
         }).objects()[0];
 
         const overallAvg = overallStats.overallAvg;
-        // const overallStdDev = overallStats.stdDev;
         const overallMedian = overallStats.median;
 
         const absDeviationTable = fullTable.derive({
@@ -75,9 +87,6 @@ class ScatterplotController {
         }).objects()[0];
 
         const overallMad = madStats.mad;
-
-        // const upperBound = overallAvg + 2 * overallStdDev;
-        // const lowerBound = overallAvg - 2 * overallStdDev;
 
         const upperBound = overallMedian + 2 * overallMad;
         const lowerBound = overallMedian - 2 * overallMad;
@@ -136,6 +145,11 @@ class ScatterplotController {
         };
       }
   
+    /**
+     * Calls the view to do plotMatrix.
+     * @param {*} selectionEnabled 
+     * @param {*} animate 
+     */
     render(selectionEnabled, animate) {
         if(selectionEnabled)
         {
@@ -146,6 +160,13 @@ class ScatterplotController {
         }
     }
 
+    /**
+     * Set the predicate points according to the user's predicates.
+     * @param {*} column 
+     * @param {*} operator 
+     * @param {*} value 
+     * @param {*} isNumeric 
+     */
     predicateFilter(column, operator, value, isNumeric)
     {
         let predicatePoints = [];
@@ -186,6 +207,17 @@ class ScatterplotController {
         this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
     }
   
+    /**
+     * Not currently used, but handles user selections on the scatterplots using brushing.
+     * @param {*} event 
+     * @param {*} xScale 
+     * @param {*} yScale 
+     * @param {*} categoricalXScale 
+     * @param {*} categoricalYScale 
+     * @param {*} xCol 
+     * @param {*} yCol 
+     * @returns 
+     */
     handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
         document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;
         document.getElementById("impute-average-y").textContent = `Impute average for ${yCol}`;
@@ -256,6 +288,14 @@ class ScatterplotController {
         this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
   
+    /**
+     * Handler for user clicks on histograms.
+     * @param {*} event 
+     * @param {*} barData 
+     * @param {*} column 
+     * @param {*} groupByAttribute 
+     * @param {*} group 
+     */
     handleBarClick(event, barData, column, groupByAttribute, group) {
         console.log("Bar data: ", barData);
         document.getElementById("impute-average-x").textContent = `Impute average for ${column}`;
@@ -286,6 +326,15 @@ class ScatterplotController {
         selectedBar = barData;
     }
 
+    /**
+     * Handler for user clicks on heatmaps.
+     * @param {*} event 
+     * @param {*} data 
+     * @param {*} xCol 
+     * @param {*} yCol 
+     * @param {*} groupByAttribute 
+     * @param {*} group 
+     */
     handleHeatmapClick(event, data, xCol, yCol, groupByAttribute, group) {
         console.log("Heatmap data: ", data);
         document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;
@@ -311,9 +360,11 @@ class ScatterplotController {
 
         const selectionEnabled = true;
         this.render(selectionEnabled, false);        
-        // this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
     }
 
+    /**
+     * Handler for user selection of groups through checkboxes in the boxplot pop up.
+     */
     handleGroupSelection() {
         const selectedGroups = Array.from(document.querySelectorAll("#boxplot-container input[type=checkbox]:checked"))
                                     .map(cb => cb.value);
@@ -321,6 +372,9 @@ class ScatterplotController {
         this.model.setSelectedGroups(selectedGroups, this.selectedAttributes);
     }
   
+    /**
+     * Listens for user clicks switching between "View Errors" and "View Groups" in the Visual Encoding Options.
+     */
     setupEventListeners() {
         d3.selectAll("input[name='legend-toggle']").on("change", () => {
             const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
@@ -359,6 +413,14 @@ class ScatterplotController {
         }
     }
 
+    /**
+     * Updates the preview plots of selected data by calling the view.
+     * @param {*} selectedPoints 
+     * @param {*} groupByAttribute 
+     * @param {*} xCol 
+     * @param {*} yCol 
+     * @returns 
+     */
     updatePreviews(selectedPoints, groupByAttribute, xCol, yCol){
         const currData = this.model.getData();
 
@@ -421,6 +483,11 @@ class ScatterplotController {
         this.updateLegendContent("errors", groupByAttribute);
     }
 
+    /**
+     * Updates the Visual Encoding Options box. If new error detectors are added, they need to be added to the legend here.
+     * @param {*} type 
+     * @param {*} groupByAttribute 
+     */
     updateLegendContent(type, groupByAttribute) {
         const legendContainer = d3.select("#legend-content");
         legendContainer.selectAll(".legend-item").remove();
@@ -476,6 +543,10 @@ class ScatterplotController {
 
 }
 
+/**
+ * Handler for user clicks in the Data Repair Toolkit. Calls logic for running data wranglers and re-plots the new dataset.
+ * @param {*} controller 
+ */
 async function attachButtonEventListeners(controller){
     d3.select("#undo").on("click", null);
     d3.select("#redo").on("click", null);
@@ -487,7 +558,6 @@ async function attachButtonEventListeners(controller){
     d3.select("#undo").on("click", async () => {
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
@@ -497,7 +567,6 @@ async function attachButtonEventListeners(controller){
 
     d3.select("#redo").on("click", async () => {
         controller.model.redoLastTransformation();
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
@@ -514,7 +583,6 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         controller.view.setSelectedPoints([]);
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         const selectionEnabled = true;
         const animate = false;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, animate, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
@@ -528,7 +596,7 @@ async function attachButtonEventListeners(controller){
 
         const selectedPoints = controller.model.getSelectedPoints();
         const module = await import("/wranglers/removeData.js");
-        const condition = module.default(selectedPoints); // This returns a filter function
+        const condition = module.default(selectedPoints); 
         const errorMap = controller.model.getColumnErrors();
 
         const selectedPointsErrors = {};
@@ -552,10 +620,6 @@ async function attachButtonEventListeners(controller){
             }
         });
 
-        console.log("errorMap", errorMap);
-        console.log("sp",selectedPoints);
-        console.log("spErrors", selectedPointsErrors);
-
         controller.model.filterData(condition, {
             ids: selectedPoints.map(p => p.ID),
             xCol: controller.xCol,
@@ -566,9 +630,7 @@ async function attachButtonEventListeners(controller){
             value: false,
             idErrors: selectedPointsErrors
           });
-        // controller.model.filterData((row) => !selectedPoints.some((point) => point.ID === row.ID));
 
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
@@ -619,9 +681,7 @@ async function attachButtonEventListeners(controller){
             value: imputedValue,
             idErrors: selectedPointsErrors
           });
-        // controller.model.imputeAverage(controller.xCol);
         controller.view.setSelectedPoints([]);
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
@@ -672,9 +732,7 @@ async function attachButtonEventListeners(controller){
             value: imputedValue,
             idErrors: selectedPointsErrors
           });
-        // controller.model.imputeAverage(controller.yCol);
         controller.view.setSelectedPoints([]);
-        // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
@@ -689,7 +747,6 @@ async function attachButtonEventListeners(controller){
             if (event.target.value === "selectData" && event.target.checked) {
                 const selectionEnabled = true;
                 controller.render(selectionEnabled, false);
-                // controller.view.enableBrushing(controller.model.getData(), controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.model.getGroupByAttribute());
             } else {
                 const selectionEnabled = false;
                 const animate = true;
@@ -699,6 +756,12 @@ async function attachButtonEventListeners(controller){
     });
 }     
 
+/**
+ * Computes numerical average or categorical mode for a column.
+ * @param {*} column 
+ * @param {*} table 
+ * @returns The average or mode.
+ */
 function computeAverage(column, table){
     const isNumeric = table.array(column).some(v => typeof v === "number" && !isNaN(v));
   

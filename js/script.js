@@ -1,6 +1,11 @@
 let activeDataset = "stackoverflow";
-let practiceController, stackoverflowController;
+let stackoverflowController;
 
+/**
+ * Adds an ID column into the first index of the table to be used throughout in selection, wrangling, etc.
+ * @param {*} table Data
+ * @returns Data with ID column added if needed
+ */
 function setIDColumn(table) {
   const colNames = table.columnNames();
   const hasID = colNames.includes("ID");
@@ -34,7 +39,7 @@ function setIDColumn(table) {
   return table;
 }
 
-const selectedSample = localStorage.getItem("selectedSample");
+const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
 if (selectedSample) {
   d3.csv(selectedSample).then(inputData => {
     localStorage.removeItem("selectedSample");
@@ -73,7 +78,7 @@ if (selectedSample) {
     })();
   });
 }
-else{
+else{       // User elected to upload their own dataset
   document.getElementById('fileInput').addEventListener('change', function (event) {
 
     fetch('data_cleaning_vis_tool.html') 

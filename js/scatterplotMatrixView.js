@@ -1,8 +1,3 @@
-
-let selectedBar = null;
-let barX0 = 0;
-let barX1 = 0;
-
 class ScatterplotMatrixView{
     constructor(container, model) {
         this.container = container;
@@ -29,28 +24,45 @@ class ScatterplotMatrixView{
         this.predicatePoints = [];
         this.viewGroupsButton = false;
 
-        this.errorColors = {
+        this.errorColors = {        // To be updated as new error detectors are added
             "mismatch": "hotpink",
             "missing": "saddlebrown",
             "anomaly": "red",
             "incomplete": "gray"
         };
 
-        this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];
+        this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];      // Preference given to which errors are highlighted if both are present in a row
     }
 
+    /**
+     * Set the user selected points.
+     * @param {*} points 
+     */
     setSelectedPoints(points) {
         this.selectedPoints = points;
       }
 
+    /**
+     * Set which points fit the user-defined predicate. (Outlined in red)
+     * @param {*} points 
+     */
     setPredicatePoints(points) {
         this.predicatePoints = points;
     }
 
+    /**
+     * This radio button should only be clickable if the user has selected a group by attribute.
+     * @param {*} condition 
+     */
     setViewGroupsButton(condition){
         this.viewGroupsButton = condition;
     }
 
+    /**
+     * Populates the list of columns in the "Select Attributes" dropdown menu. Also initially populates the Attribute Summaries box.
+     * @param {*} table Data
+     * @param {*} controller 
+     */
     populateDropdownFromTable(table, controller) {
         const dropdownMenu = document.getElementById("dropdown-menu");
         const dropdownButton = document.getElementById("dropdown-button");
@@ -277,6 +289,12 @@ class ScatterplotMatrixView{
         updateDropdownButton();
     }
 
+    /**
+     * Updates the Attribute Summaries as data is wrangled and if the user changes which error type to sort on.
+     * @param {*} table 
+     * @param {*} controller 
+     * @returns If the container does not exist, else should just update the UI.
+     */
     updateColumnErrorIndicators(table, controller) {
         const columnErrors = controller.model.getColumnErrorSummary(); 
         const attributes = table.columnNames().slice(1);
@@ -423,9 +441,15 @@ class ScatterplotMatrixView{
         });
     
         container.appendChild(ul);
-      }
+    }
 
-      updateDirtyRowsTable(data) {
+    /**
+     * Populates the top 10 dirty rows table. Updates as the data is wrangled. Counts number of errors per row and displays in first column. Orders rows by most errors per row.
+     * Highlights cells with the corresponding error color.
+     * @param {*} data 
+     * @returns 
+     */
+    updateDirtyRowsTable(data) {
         const columnErrors = this.model.getColumnErrors();
       
         // Count errors per row ID
@@ -452,7 +476,6 @@ class ScatterplotMatrixView{
           .sort((a, b) => b.__errorCount__ - a.__errorCount__)
           .slice(0, 10);
       
-        // Build table
         const wrapper = document.getElementById("dirty-rows-table-wrapper");
         wrapper.innerHTML = "";
       
@@ -500,7 +523,7 @@ class ScatterplotMatrixView{
                   td.textContent = cellValue;
               }
       
-              // Style cell if it has errors
+              // Color in cell if it has errors
               const errorList = columnErrors[col]?.[row.ID];
               if (errorList && errorList.length > 0) {
                 const topErrorType = this.errorPriority.find(type => errorList.includes(type));
@@ -520,8 +543,14 @@ class ScatterplotMatrixView{
         table.appendChild(thead);
         table.appendChild(tbody);
         wrapper.appendChild(table);
-      }      
+    }      
 
+    /**
+     * Handles user input for adding predicates to a column. Predicated points are points that do not meet the condition provided by the user and are outlined in red. 
+     * @param {*} table 
+     * @param {*} controller 
+     * @returns 
+     */
     handlePredicateChange(table, controller) {
         const predicateDropdown = document.getElementById("predicate-dropdown");
         const conditionContainer = document.getElementById("condition-container"); 
@@ -539,7 +568,7 @@ class ScatterplotMatrixView{
         clearPredicateButton.textContent = "Clear Predicate";
         clearPredicateButton.classList.add("clear-predicate-button"); 
         clearPredicateButton.addEventListener("click", () => {
-            controller.predicateFilter(false); // Reset predicatePoints to [] and re-plot
+            controller.predicateFilter(false); 
         });
     
         if (isNumeric) {
@@ -594,6 +623,16 @@ class ScatterplotMatrixView{
         }
     }
     
+    /**
+     * Draws the boxplots for each group when grouped by the group by attribute. Highlights groups in red text when the group median is more that 2 median absolute deviations
+     * from the overall dataset median. Median was used to be resistant to outliers, but mean can be implemented as well. User can select groups they want to view, and the 
+     * data will be filtered down to just those groups and visualized.
+     * @param {*} groupStats 
+     * @param {*} onSelectGroups 
+     * @param {*} overallMedian 
+     * @param {*} selectedGroups User selected groups they want to view
+     * @param {*} significantGroups Groups more than 2 Median Absolute Deviations (MAD) from dataset median
+     */
     drawBoxPlots(groupStats, onSelectGroups, overallMedian, selectedGroups, significantGroups) {
         console.log("significant groups", significantGroups);
         const container = d3.select("#boxplot-container");
@@ -734,6 +773,19 @@ class ScatterplotMatrixView{
             .text("Indicates groups > 2 Median Absolute Deviations (MAD) from dataset median");
     }
 
+    /**
+     * Initial plotting code upon browser loading. Plots bar plots on diagonal and calls drawHeatMap to plot off-diagonal plots. Categorizes data for the bar plot as numeric or 
+     * non-numeric and handles those cases separately. Within each case, plotting is handled separately when the group by function is active vs. when the data is not grouped. 
+     * Each bar is colored by its error type, or is steelblue if no errors. Selected data is colored gold.
+     * @param {*} givenData Data to visualize.
+     * @param {*} groupByAttribute User selected group by attribute if active.
+     * @param {*} selectedGroups Selected groups to plot as chosen by the user in the box-and-whisker plots for the groups.
+     * @param {*} selectionEnabled If true, the user can click on the plots to select points.
+     * @param {*} animate If true, the plots will draw with transitions.
+     * @param {*} handleBrush Handles user selected scatterplot points.
+     * @param {*} handleBarClick Handles user selected bars. 
+     * @param {*} handleHeatmapClick Passes to drawHeatMap to handle user selected bins.
+     */
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {  
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
@@ -746,15 +798,7 @@ class ScatterplotMatrixView{
         let svgWidth = matrixWidth + this.labelPadding + this.leftMargin + this.rightMargin;
         let svgHeight = matrixHeight + this.labelPadding + this.topMargin + this.bottomMargin;
 
-        let maxUqNonNum = 0;
-
-        columns.forEach(yCol => {
-            const yValues = givenData.select([yCol]).objects().map(d => d[yCol]);
-            const uniqueNonNumericY = new Set(yValues.filter(val => isNaN(val) || typeof val !== "number"));
-            maxUqNonNum = Math.max(maxUqNonNum, uniqueNonNumericY.size);
-        });
-
-        this.topMargin = 30 + maxUqNonNum * 10; 
+        this.topMargin = 100;
 
         const container = d3.select(this.container);
         container.selectAll("*").remove();
@@ -772,7 +816,7 @@ class ScatterplotMatrixView{
                 .attr("id", cellID)
                 .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);
 
-            if (i === j) {
+            if (i === j) {      // On the diagonal, so this should be a bar plot.
                 let data = [];
 
                 if (groupByAttribute){
@@ -803,7 +847,6 @@ class ScatterplotMatrixView{
                 {
                     uniqueCategories = [];
                 }else if (isNumericMajority){
-                    // uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
 
                     uniqueCategories = [...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
                 }
@@ -819,7 +862,7 @@ class ScatterplotMatrixView{
                 let bars = null;
                 let yScale = null;
                 
-                // Numeric Data
+                // Plot Numeric Data 
                 if (isNumericMajority)
                 {
                     uniqueCategories = sortCategories(uniqueCategories);
@@ -899,7 +942,6 @@ class ScatterplotMatrixView{
                             .data(series)
                             .join("g")
                             .attr("class", "series")
-                            // .attr("fill", d => d.category ? "gray" : colorScale(d.key))
                             .attr("data-group", d => d.key)  
                             .selectAll("rect")
                             .data(d => {
@@ -907,7 +949,6 @@ class ScatterplotMatrixView{
                                 return d;
                             })
                             .join("rect")
-                            // .attr("fill", d => d.category ? "gray" : colorScale(d.group))
                             .attr("fill", d => {
                                 if (!this.viewGroupsButton){
                                     return getFillColorNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints); 
@@ -967,19 +1008,11 @@ class ScatterplotMatrixView{
                             .join("rect")
                             .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.x0))
                             .attr("width", binWidth)
-                            // .attr("y", d => yScale(d.length))
-                            // .attr("height", d => numericSpace - yScale(d.length))
-                            // .attr("fill", (d) => {
-                            //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
-                            // })
                             .attr("fill", d => getFillColorNoGroupbyNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
-                            // .attr("stroke", d => d.category ? "red" : "none")
                             .attr("stroke", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                                 return isPredicated ? "red" : "none";
                             })
-                            // .attr("stroke-width", d => d.category ? 1 : 0)
                             .attr("stroke-width", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                                 return isPredicated ? 1 : 0
@@ -1038,7 +1071,6 @@ class ScatterplotMatrixView{
                 // Data is all categorical
                 else{   
 
-                    // uniqueCategories = uniqueCategories.slice(1);
                     uniqueCategories = sortCategories(uniqueCategories);
 
                     const xScale = d3.scaleBand()
@@ -1084,7 +1116,6 @@ class ScatterplotMatrixView{
                             .data(series)
                             .join("g")
                             .attr("class", "series")
-                            // .attr("fill", d => colorScale(d.key))
                             .attr("data-group", d => d.key)  
                             .selectAll("rect")
                             .data(d => {
@@ -1092,7 +1123,6 @@ class ScatterplotMatrixView{
                                 return d;
                             })
                             .join("rect")
-                            // .attr("fill", d => colorScale(d.group))
                             .attr("fill", d => {
                                 if (!this.viewGroupsButton){
                                     return getFillColorCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints); 
@@ -1138,23 +1168,7 @@ class ScatterplotMatrixView{
                             .join("rect")
                             .attr("x", d => xScale(d.category))
                             .attr("width", xScale.bandwidth())
-                            // .attr("fill", d => {
-                            //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            //     if (isSelected) return "gold";
-                            //     const errorTypes = d.ids
-                            //         .flatMap(ID => columnErrors[xCol]?.[ID] || [])
-                            //         .filter(Boolean); // Remove undefined/null                               
-                            //     console.log("errorTypes", errorTypes);
-                            //     if (errorTypes && errorTypes.length > 0) {
-                            //         return errorColors[errorTypes[0]];
-                            //     }
-                            //     return "steelblue";
-                            // })
                             .attr("fill", d => getFillColorNoGroupbyCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
-                            // .attr("fill", (d) => {
-                            //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                            //     return isSelected ? "gold" : "steelblue";
-                            // })
                             .attr("stroke", (d) => {
                                 const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                                 return isPredicated ? "red" : "none";
@@ -1334,964 +1348,34 @@ class ScatterplotMatrixView{
                     .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
                 this.drawHeatMap(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);
-
-            }
-            });
-        });
-
-        // this.updateLegend(groupByAttribute, givenData);
-
-    }
-
-    enableBrushing (givenData, handleBrush, handleBarClick, groupByAttribute){
-        const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
-
-        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
-
-        let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
-        let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
-        let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
-
-        let svgWidth = matrixWidth + this.labelPadding + this.leftMargin + this.rightMargin;
-        let svgHeight = matrixHeight + this.labelPadding + this.topMargin + this.bottomMargin;
-
-        let maxUqNonNum = 0;
-
-        columns.forEach(yCol => {
-            const yValues = givenData.select([yCol]).objects().map(d => d[yCol]);
-            const uniqueNonNumericY = new Set(yValues.filter(val => isNaN(val) || typeof val !== "number"));
-            maxUqNonNum = Math.max(maxUqNonNum, uniqueNonNumericY.size);
-        });
-
-        this.topMargin = 30 + maxUqNonNum * 10; 
-
-        this.barSelected = false;
-        const container = d3.select(this.container);
-        container.selectAll("*").remove();
-    
-        const svg = container
-            .append("svg")
-            .attr("width", svgWidth) // 575 + 20 + 60 + 60 = 715
-            .attr("height", svgHeight);
-
-        columns.forEach((xCol, i) => {
-            columns.forEach((yCol, j) => {
-            const cellGroup = svg
-                .append("g")
-                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);  
-
-            if (i === j) {
-                
-                let data = [];
-                
-                if(groupByAttribute){
-                    data = givenData.select(["ID", xCol, groupByAttribute]).objects();
-                }
-                else{
-                    data = givenData.select(["ID", xCol]).objects();
-                }
-
-                const numericData = data.filter(d => 
-                    typeof d[xCol] === "number" && !isNaN(d[xCol])
-                );
-                
-                const nonNumericData = data.filter(d => 
-                    typeof d[xCol] !== "number" || isNaN(d[xCol])
-                ).map(d => ({
-                    ...d,
-                    [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
-                }));
-
-                const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
-
-                let uniqueCategories;
-                
-                if (numericData.length === data.length)
-                {
-                    uniqueCategories = [];
-                }else{
-                    uniqueCategories = ["NaN", ...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
-                }
-
-                const categorySpace = uniqueCategories.length * 20; 
-                const numericSpace = this.size - categorySpace; 
-                let categoricalScale = null;
-
-                if (numericData.length > 0)
-                {
-                    uniqueCategories = sortCategories(uniqueCategories);
-                    const xScale = d3.scaleLinear()
-                        .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
-                        .range([0, numericSpace]);
-
-                    let yScale = null;
-                    
-                    const histogramGenerator = d3.histogram()
-                        .domain(xScale.domain())
-                        .thresholds(10);
-
-                    const bins = histogramGenerator(numericData.map(d => d[xCol]));
-
-                    if (groupByAttribute) {
-                        const groups = Array.from(new Set(numericData.map(d => d[groupByAttribute])));
-                        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
-                
-                        const stackedData = bins.map(bin => {
-                            const binData = numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1);
-                            let obj = {
-                                x0: bin.x0,
-                                x1: bin.x1,
-                                total: binData.length,  
-                                ids: binData.map(d => d.ID)
-                            };
-                            groups.forEach(g => {
-                                const groupData = binData.filter(d => d[groupByAttribute] === g);
-                                obj[g] = groupData.length;
-                                obj[`${g}_ids`] = groupData.map(d => d.ID);
-                            });
-                            return obj;
-                        });
-                
-                        const binWidth = xScale(bins[0].x1) - xScale(bins[0].x0);
-
-                        const categoricalStart = xScale.range()[1] + 10;
-    
-                        categoricalScale = d3.scaleOrdinal()
-                            .domain(uniqueCategories)
-                            .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
-    
-                        uniqueCategories.forEach(category => {
-                            const catData = nonNumericData.filter(d => String(d[xCol]) === category);
-                            let obj = {
-                                category: category, 
-                                x0: categoricalScale(category),
-                                x1: categoricalScale(category) + binWidth,
-                                total: catData.length,
-                                ids: catData.map(d => d.ID)
-                            };
-                            groups.forEach(g => {
-                                const groupData = catData.filter(d => d[groupByAttribute] === g);
-                                obj[g] = groupData.length;
-                                obj[`${g}_ids`] = groupData.map(d => d.ID);
-                            });
-                            stackedData.push(obj);
-                        });
-                
-                        const yMax = d3.max(stackedData, d => d.total);
-                        yScale = d3.scaleLinear()
-                            .domain([0, yMax])
-                            .range([numericSpace, 0]);
-                
-                        const stackGen = d3.stack().keys(groups);
-                        const series = stackGen(stackedData);
-
-                        series.forEach(s => {
-                            s.forEach(segment => {
-                              segment.group = s.key;
-                            });
-                          });
-                
-                        const tooltip = d3.select("#tooltip");
-                
-                        cellGroup.selectAll("g.series")
-                            .data(series)
-                            .join("g")
-                            .attr("class", "series")
-                            .attr("fill", d => d.category ? "gray" : colorScale(d.key))
-                            .selectAll("rect")
-                            .data(d => d)
-                            .join("rect")
-                            .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.data.x0))
-                            .attr("y", d => yScale(d[1]))
-                            .attr("width", binWidth)
-                            .attr("height", d => yScale(d[0]) - yScale(d[1]))
-                            .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute, group));
-                    }
-                    else{
-                        // No group by
-                        const histData = histogramGenerator(numericData.map(d => d[xCol])).map(bin => {
-                            return {
-                                x0: bin.x0,
-                                x1: bin.x1,
-                                length: bin.length,
-                                ids: numericData.filter(d => d[xCol] >= bin.x0 && d[xCol] < bin.x1).map(d => d.ID)
-                            };
-                        });
-    
-                        const binWidth = xScale(histData[0].x1) - xScale(histData[0].x0);
-                        const categoricalStart = xScale.range()[1] + 10;
-    
-                        categoricalScale = d3.scaleOrdinal()
-                            .domain(uniqueCategories)
-                            .range([...Array(uniqueCategories.length).keys()].map(i => categoricalStart + (i * binWidth))); 
-    
-                        uniqueCategories.forEach(category => {
-                            histData.push({
-                                x0: categoricalScale(category),
-                                x1: categoricalScale(category) + binWidth,
-                                length: nonNumericData.filter(d => String(d[xCol]) === category).length,
-                                ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
-                                category: category 
-                            });
-                        });
-    
-                        yScale = d3.scaleLinear()
-                            .domain([0, d3.max(histData, (d) => d.length)])
-                            .range([numericSpace, 0]);
-                        
-                        const tooltip = d3.select("#tooltip");
-    
-                        cellGroup.selectAll("rect")
-                            .data(histData)
-                            .join("rect")
-                            .attr("x", d => d.category ? categoricalScale(d.category) : xScale(d.x0))
-                            .attr("width", binWidth)
-                            .attr("y", d => yScale(d.length))
-                            .attr("height", d => numericSpace - yScale(d.length))
-                            .attr("fill", (d) => {
-                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                                return isSelected ? "red" : (d.category ? "gray" : "steelblue");
-                            })
-                            .attr("stroke", d => d.category ? "red" : "none")
-                            .attr("stroke-width", d => d.category ? 1 : 0)
-                            .attr("opacity", 0.8)
-                            .attr("data-ids", d => d.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
-                    }
-
-                    cellGroup
-                        .append("g")
-                        .attr("transform", `translate(0, ${numericSpace})`)
-                        .call(d3.axisBottom(xScale))
-                        .selectAll("text") 
-                        .style("text-anchor", "end") 
-                        .style("font-size", "8px")
-                        .attr("dx", "-0.5em") 
-                        .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                        .append("title") 
-                        .text(d => d);
-
-                    if (uniqueCategories.length > 0) {
-                        cellGroup.append("g")
-                            .attr("transform", `translate(10, ${numericSpace})`)
-                            .call(d3.axisBottom(categoricalScale))
-                            .selectAll("text")
-                            .style("text-anchor", "end") 
-                            .attr("transform", "rotate(-45)") 
-                            .style("font-size", "8px")
-                            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                            .append("title") 
-                            .text(d => d);
-                    }
-                    cellGroup.append("g")
-                        .call(d3.axisLeft(yScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d); 
-
-                    svg
-                        .append("text")
-                        .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
-                        .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace - 25) 
-                        .style("text-anchor", "middle")
-                        .text(xCol);
-        
-                    const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                    const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
-                    
-                    svg
-                        .append("text")
-                        .attr("x", xPosition) 
-                        .attr("y", yPosition - 20) 
-                        .style("text-anchor", "middle")
-                        .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                        .text("count");
-                }
-                else{   // Data is all categorical
-                    uniqueCategories = uniqueCategories.slice(1);
-                    uniqueCategories = sortCategories(uniqueCategories);
-
-                    const xScale = d3.scaleBand()
-                        .domain(uniqueCategories)
-                        .range([0, this.size]);
-
-                    let yScale = null;
-
-                    if (groupByAttribute) {
-                        const groups = Array.from(new Set(nonNumericData.map(d => d[groupByAttribute])));
-                        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
-                        
-                        // d[0].data.ids
-                        const stackedData = uniqueCategories.map(category => {
-                            const rows = nonNumericData.filter(d => String(d[xCol]) === category);
-                            const obj = {
-                              category: category,
-                              x0: xScale(category),
-                              x1: xScale(category) + xScale.bandwidth(),
-                              ids: rows.map(d => d.ID)
-                            };
-                            groups.forEach(g => {
-                              const groupData = rows.filter(d => d[groupByAttribute] === g);
-                              obj[g] = groupData.length;
-                              obj[`${g}_ids`] = groupData.map(d => d.ID);
-                            });
-                            return obj;
-                          });
-                        
-                        const yMax = d3.max(stackedData, d => groups.reduce((sum, g) => sum + d[g], 0));
-                        yScale = d3.scaleLinear().domain([0, yMax]).range([this.size, 0]);
-                        const tooltip = d3.select("#tooltip");
-                        
-                        const stackGen = d3.stack().keys(groups);
-                        const series = stackGen(stackedData);
-
-                        series.forEach(s => {
-                            s.forEach(d => {
-                              d.group = s.key;
-                            });
-                          });
-                        
-                        cellGroup.selectAll("g.series")
-                            .data(series)
-                            .join("g")
-                            .attr("class", "series")
-                            .attr("data-key", d => d.key) 
-                            .attr("fill", d => colorScale(d.key))
-                            // .attr("stroke", function(d) {
-                            //     const isSelected = d.some(segment => {
-                            //       return groups.some(groupKey => {
-                            //         const groupIDs = segment.data[`${groupKey}_ids`];
-                            //         console.log("segment.data", segment.data);
-                            //         console.log("groupIDs", groupIDs);
-                            //         return groupIDs && groupIDs.some(ID => 
-                            //           this.selectedPoints && this.selectedPoints.some(p => p.ID === ID)
-                            //         );
-                            //       });
-                            //     });
-                            //     return isSelected ? "black" : "none";
-                            //   })
-                            .selectAll("rect")
-                            .data(d => d)
-                            .join("rect")
-                            .attr("x", d => xScale(d.data.category))
-                            .attr("y", d => yScale(d[1]))
-                            .attr("width", xScale.bandwidth())
-                            .attr("height", d => yScale(d[0]) - yScale(d[1]))
-                            .attr("opacity", 0.8)
-                            .attr("data-ids", d => d.data.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute, group));
-                    }
-                    // No group by selected
-                    else{
-                        const histData = [];
-
-                        uniqueCategories.forEach(category => {
-                            histData.push({
-                                x0: xScale(category),
-                                x1: xScale(category) + xScale.bandwidth(),
-                                length: nonNumericData.filter(d => String(d[xCol]) === category).length,
-                                ids: nonNumericData.filter(d => String(d[xCol]) === category).map(d => d.ID),
-                                category: category 
-                            });
-                        });
-                        
-                        yScale = d3.scaleLinear()
-                            .domain([0, d3.max(histData, (d) => d.length)])
-                            .range([this.size, 0]);
-                        
-                        const tooltip = d3.select("#tooltip");
-
-                        cellGroup.selectAll("rect")
-                            .data(histData)
-                            .join("rect")
-                            .attr("x", d => xScale(d.category))
-                            .attr("width", xScale.bandwidth())
-                            .attr("y", d => yScale(d.length))
-                            .attr("height", d => Math.max(0, this.size - yScale(d.length)))
-                            .attr("fill", (d) => {
-                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                                return isSelected ? "red" : "steelblue";
-                            })                       
-                            .attr("stroke", (d) => {
-                                const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                                return isSelected ? "black" : "none";
-                            })                            
-                            .attr("opacity", 0.8)
-                            .attr("data-ids", d => d.ids.join(","))
-                            .on("click", (event, d) => handleBarClick(event, d, xCol, groupByAttribute));
-                    }
-                    
-                    cellGroup
-                        .append("g")
-                        .attr("transform", `translate(0, ${this.size})`)
-                        .call(d3.axisBottom(xScale))
-                        .selectAll("text") 
-                        .style("text-anchor", "end")
-                        .style("font-size", "8px")
-                        .attr("dx", "-0.5em") 
-                        .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d);
-
-                    cellGroup.append("g")
-                        .call(d3.axisLeft(yScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d);  
-
-                    svg
-                        .append("text")
-                        .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2) 
-                        .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) 
-                        .style("text-anchor", "middle")
-                        .text(xCol);
-        
-                    const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                    const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-                    
-                    svg
-                        .append("text")
-                        .attr("x", xPosition) 
-                        .attr("y", yPosition - 20) 
-                        .style("text-anchor", "middle")
-                        .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                        .text("count");
-                }
-            } 
-            /// Begin Scatterplot Code ///
-            else {
-                let data = [];
-
-                if(groupByAttribute)
-                {
-                    data = givenData.select([xCol, yCol, groupByAttribute]).objects(); 
-                }
-                else{
-                    data = givenData.select([xCol, yCol]).objects();
-                }
-                
-                let {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace} = splitData(data, xCol, yCol);
-
-                /// All numeric plot ///
-                if(xIsNumeric && yIsNumeric)
-                {
-                    const xScale = d3.scaleLinear()
-                        .domain([Math.min(0, d3.min(numericData, d => d[xCol])), d3.max(numericData, d => d[xCol]) + 1])
-                        .range([0, numericSpace]);
-
-                    const xTickValues = xScale.ticks(); 
-                    const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
-
-                    const categoricalXStart = xScale.range()[1] + 10;
-                    const categoricalXScale = d3.scaleOrdinal()
-                        .domain(uniqueXCategories)
-                        .range(uniqueXCategories.length > 0 
-                            ? [...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * ((xTickSpacing || 5) + 5)))
-                            : [0]); 
-
-                    const yScale = d3.scaleLinear()
-                        .domain([Math.min(0, d3.min(numericData, d => d[yCol])), d3.max(numericData, d => d[yCol]) + 1])
-                        .range([numericSpace, 0]);
-
-                    const categoricalYStart = yScale.range()[1] - 10;
-                    const categoricalYScale = d3.scaleOrdinal()
-                        .domain(uniqueYCategories)
-                        .range(uniqueYCategories.length > 0 
-                            ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
-                            : [0]); 
-                        
-
-                    const tooltip = d3.select("#tooltip"); 
-
-                    const isSelected = (d) => this.selectedPoints.some(p => 
-                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
-                        (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
-                        (p[yCol] === d[yCol] || isNaN(d[yCol]))
-                    );
-    
-                    const brush = d3.brush()
-                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
-                        .on("end", (event) => handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol));  
-
-                    cellGroup.selectAll("circle")
-                        .data(combinedData)
-                        .join("circle")
-                        .attr("cx", d => {
-                            if (d.type === "numeric") return xScale(d[xCol]);
-                            if (d.type === "nan-x" || d.type === "nan-xy") return categoricalXScale(d[xCol]);
-                            return xScale(d[xCol]); 
-                        })
-                        .attr("cy", d => {
-                            if (d.type === "numeric") return yScale(d[yCol]);
-                            if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
-                            return yScale(d[yCol]);
-                        })
-                        .attr("r", d => (d.type.includes("nan") ? 4 : 3))
-                        // .attr("fill", d => isSelected(d) ? "red" : (d.type === "numeric" ? "steelblue" : "gray"))
-                        .attr("fill", d => {
-                            if (groupByAttribute) {
-                                return colorScale(d[groupByAttribute]);
-                            } else {
-                                return d.type === "numeric" ? "steelblue" : "gray"; 
-                            }
-                        })
-                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
-                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
-                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
-
-                    cellGroup.append("g")
-                        .attr("class", "brush")  
-                        .call(brush);
-
-                    cellGroup
-                        .append("g")
-                        .attr("transform", `translate(0, ${numericSpace})`)
-                        .call(d3.axisBottom(xScale))
-                        .selectAll("text") 
-                        .style("text-anchor", "end") 
-                        .style("font-size", "8px")
-                        .attr("dx", "-0.5em") 
-                        .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                        .append("title")  
-                        .text(d => d);
-
-                    if (uniqueXCategories.length > 0) {
-                    cellGroup.append("g")
-                        .attr("transform", `translate(0, ${numericSpace})`)
-                        .call(d3.axisBottom(categoricalXScale))
-                        .selectAll("text")
-                        .style("text-anchor", "end") 
-                        .attr("transform", "rotate(-45)") 
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                        .append("title") 
-                        .text(d => d); 
-                    }
-
-                    cellGroup.append("g")
-                        .call(d3.axisLeft(yScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title") 
-                        .text(d => d); 
-
-                    if (uniqueYCategories.length > 0) {
-                    cellGroup.append("g")
-                        .attr("transform", `translate(0, 0)`)
-                        .call(d3.axisLeft(categoricalYScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d); 
-                    }
-                    
-                    svg
-                        .append("text")
-                        .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                        .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                        .style("text-anchor", "middle")
-                        .text(xCol);
-
-                    const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                    const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
-                    
-                    svg
-                        .append("text")
-                        .attr("x", xPosition) 
-                        .attr("y", yPosition - 20) 
-                        .style("text-anchor", "middle")
-                        .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                        .text(yCol);
-                }
-
-                /// Non numeric X plot ///
-                else if(!xIsNumeric && yIsNumeric) // xCol is cat. yCol is num.
-                {
-                    uniqueXCategories = uniqueXCategories.slice(1);
-                    uniqueYCategories = uniqueYCategories.slice(1);
-                    uniqueXCategories = sortCategories(uniqueXCategories);
-                    uniqueYCategories = sortCategories(uniqueYCategories);
-
-                    const xScale = d3.scalePoint()
-                        .domain(uniqueXCategories)
-                        .range([0, this.size]);
-
-                    const xTickValues = xScale.step(); 
-                    const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
-
-                    // const categoricalXStart = xScale.range()[1] + 10;
-                    // const categoricalXScale = d3.scaleOrdinal()
-                    //     .domain(uniqueXCategories)
-                    //     .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
-                    
-                    const yScale = d3.scaleLinear()
-                        .domain([Math.min(0, d3.min(nonNumericXData, d => d[yCol])), d3.max(nonNumericXData, d => d[yCol]) + 1])
-                        .range([this.size, 0]);
-
-                    const categoricalYStart = yScale.range()[1] - 10;
-                    const categoricalYScale = d3.scaleOrdinal()
-                        .domain(uniqueYCategories)
-                        .range(uniqueYCategories.length > 0 
-                            ? [...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * ((xTickSpacing || 5) + 5)))
-                            : [0]); 
-                        
-                    const tooltip = d3.select("#tooltip"); 
-
-                    const isSelected = (d) => this.selectedPoints.some(p => 
-                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
-                        (p[xCol] === d[xCol]) &&
-                        (p[yCol] === d[yCol] || isNaN(d[yCol]))
-                    );
-    
-                    const brush = d3.brush()
-                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
-                        .on("end", (event) => handleBrush(event, xScale, yScale, null, categoricalYScale, xCol, yCol));  
-
-                    cellGroup.selectAll("circle")
-                        .data(combinedData)
-                        .join("circle")
-                        .attr("cx", d => xScale(d[xCol]))
-                        .attr("cy", d => {
-                            if (d.type === "numeric") return yScale(d[yCol]);
-                            if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
-                            return yScale(d[yCol]);
-                        })
-                        .attr("r", d => (d.type === "nan-y" ? 4 : 3))
-                        .attr("fill", d => {
-                            if (groupByAttribute) {
-                                return colorScale(d[groupByAttribute]);
-                            } else {
-                                return d.type === "nan-y" ? "gray" : "steelblue"; 
-                            }
-                        })
-                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
-                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
-                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
-
-                    cellGroup.append("g")
-                        .attr("class", "brush")  
-                        .call(brush);
-
-                    cellGroup
-                        .append("g")
-                        .attr("transform", `translate(0, ${this.size})`)
-                        .call(d3.axisBottom(xScale))
-                        .selectAll("text") 
-                        .style("text-anchor", "end") 
-                        .style("font-size", "8px")
-                        .attr("dx", "-0.5em") 
-                        .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title") 
-                        .text(d => d);
-
-                    // if (uniqueXCategories.length > 0) {
-                    // cellGroup.append("g")
-                    //     .attr("transform", `translate(0, ${numericSpace})`)
-                    //     .call(d3.axisBottom(categoricalXScale))
-                    //     .selectAll("text")
-                    //     .style("text-anchor", "end") 
-                    //     .attr("transform", "rotate(-45)") 
-                    //     .style("font-size", "10px"); 
-                    // }
-
-                    cellGroup.append("g")
-                        .call(d3.axisLeft(yScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title") 
-                        .text(d => d); 
-
-                    if (uniqueYCategories.length > 0) {
-                    cellGroup.append("g")
-                        .attr("transform", `translate(0, 0)`)
-                        .call(d3.axisLeft(categoricalYScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title") 
-                        .text(d => d); 
-                    }
-                    
-                    svg
-                        .append("text")
-                        .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                        .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                        .style("text-anchor", "middle")
-                        .text(xCol);
-
-                    const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                    const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-                    
-                    svg
-                        .append("text")
-                        .attr("x", xPosition) 
-                        .attr("y", yPosition - 20) 
-                        .style("text-anchor", "middle")
-                        .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                        .text(yCol);
-                }
-
-                /// Non numeric Y plot ///
-                else if(xIsNumeric && !yIsNumeric) // xCol is num. yCol is cat.
-                {
-                    uniqueYCategories = uniqueYCategories.slice(1);
-                    uniqueXCategories = uniqueXCategories.slice(1);
-                    uniqueYCategories = sortCategories(uniqueYCategories);
-                    uniqueXCategories = sortCategories(uniqueXCategories);
-
-                    const xScale = d3.scaleLinear()
-                        .domain([Math.min(0, d3.min(nonNumericYData, d => d[xCol])), d3.max(nonNumericYData, d => d[xCol]) + 1])
-                        .range([0, this.size]);
-
-                    const xTickValues = xScale.ticks(); 
-                    const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
-
-                    const categoricalXStart = xScale.range()[1] + 10;
-                    const categoricalXScale = d3.scaleOrdinal()
-                        .domain(uniqueXCategories)
-                        .range(uniqueXCategories.length > 0 
-                            ? [...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * ((xTickSpacing || 5) + 5)))
-                            : [0]); 
-                    
-                    const yScale = d3.scalePoint()
-                        .domain(uniqueYCategories)
-                        .range([this.size, 0]);
-
-                    // const categoricalYStart = yScale.range()[1] - 10;
-                    // const categoricalYScale = d3.scaleOrdinal()
-                    //     .domain(uniqueYCategories)
-                    //     .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
-                        
-
-                    const tooltip = d3.select("#tooltip"); 
-
-                    const isSelected = (d) => this.selectedPoints.some(p => 
-                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
-                        (p[xCol] === d[xCol] || isNaN(d[xCol])) &&
-                        (p[yCol] === d[yCol])
-                    );
-    
-                    const brush = d3.brush()
-                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
-                        .on("end", (event) => handleBrush(event, xScale, yScale, categoricalXScale, null, xCol, yCol));  
-
-                    cellGroup.selectAll("circle")
-                        .data(combinedData)
-                        .join("circle")
-                        .attr("cx", d => {
-                            if (d.type === "numeric") return xScale(d[xCol]);
-                            if (d.type === "nan-x" || d.type === "nan-xy") return categoricalXScale(d[xCol]);
-                            return xScale(d[xCol]); 
-                        })
-                        .attr("cy", d => yScale(d[yCol]))
-                        .attr("r", d => (d.type === "nan-x" ? 4 : 3))
-                        .attr("fill", d => {
-                            if (groupByAttribute) {
-                                return colorScale(d[groupByAttribute]);
-                            } else {
-                                return d.type === "nan-x" ? "gray" : "steelblue"; 
-                            }
-                        })
-                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
-                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
-                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
-
-                    cellGroup.append("g")
-                        .attr("class", "brush")  
-                        .call(brush);
-
-                    cellGroup
-                        .append("g")
-                        .attr("transform", `translate(0, ${this.size})`)
-                        .call(d3.axisBottom(xScale))
-                        .selectAll("text") 
-                        .style("text-anchor", "end") 
-                        .style("font-size", "8px")
-                        .attr("dx", "-0.5em") 
-                        .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d);
-
-                    if (uniqueXCategories.length > 0) {
-                    cellGroup.append("g")
-                        .attr("transform", `translate(0, ${numericSpace})`)
-                        .call(d3.axisBottom(categoricalXScale))
-                        .selectAll("text")
-                        .style("text-anchor", "end") 
-                        .attr("transform", "rotate(-45)") 
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d); 
-                    }
-
-                    cellGroup.append("g")
-                        .call(d3.axisLeft(yScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d); 
-
-                    // if (uniqueYCategories.length > 0) {
-                    // cellGroup.append("g")
-                    //     .attr("transform", `translate(0, 0)`)
-                    //     .call(d3.axisLeft(categoricalYScale))
-                    //     .selectAll("text")
-                    //     .style("text-anchor", "end") 
-                    //     .style("font-size", "10px"); 
-                    // }
-                    
-                    svg
-                        .append("text")
-                        .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                        .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                        .style("text-anchor", "middle")
-                        .text(xCol);
-
-                    const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                    const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-                    
-                    svg
-                        .append("text")
-                        .attr("x", xPosition) 
-                        .attr("y", yPosition - 20) 
-                        .style("text-anchor", "middle")
-                        .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                        .text(yCol);
-                }
-
-                /// All non numeric plot ///
-                else{   
-                    uniqueXCategories = uniqueXCategories.slice(1);
-                    uniqueYCategories = uniqueYCategories.slice(1);
-                    uniqueXCategories = sortCategories(uniqueXCategories);
-                    uniqueYCategories = sortCategories(uniqueYCategories);
-
-                    const xScale = d3.scalePoint()
-                        .domain(uniqueXCategories)
-                        .range([0, this.size]);
-                    
-                    const yScale = d3.scalePoint()
-                        .domain(uniqueYCategories)
-                        .range([this.size, 0]);
-
-                    const tooltip = d3.select("#tooltip"); 
-
-                    const isSelected = (d) => this.selectedPoints.some(p => 
-                        (isNaN(p[xCol]) === isNaN(d[xCol])) && (isNaN(p[yCol]) === isNaN(d[yCol])) && 
-                        (p[xCol] === d[xCol]) &&
-                        (p[yCol] === d[yCol])
-                    );
-    
-                    const brush = d3.brush()
-                        .extent([[-60, -60], [this.size + 60, this.size + 60]]) 
-                        .on("end", (event) => handleBrush(event, xScale, yScale, null, null, xCol, yCol));  
-
-                    cellGroup.selectAll("circle")
-                        .data(combinedData)
-                        .join("circle")
-                        .attr("cx", d => xScale(d[xCol]))
-                        .attr("cy", d => yScale(d[yCol]))
-                        .attr("r", 3)
-                        // .attr("fill", d => isSelected(d) ? "red" : "steelblue")
-                        .attr("fill", d => {
-                            if (groupByAttribute) {
-                                return colorScale(d[groupByAttribute]);
-                            } else {
-                                return "steelblue"; 
-                            }
-                        })
-                        .attr("stroke", d => isSelected(d) ? "black" : "none") 
-                        .attr("stroke-width", d => isSelected(d) ? 2 : 0)
-                        .attr("opacity", d => isSelected(d) ? 0.8 : 0.6);
-                    
-                    cellGroup.append("g")
-                        .attr("class", "brush")  
-                        .call(brush);
-
-                    cellGroup
-                        .append("g")
-                        .attr("transform", `translate(0, ${this.size})`)
-                        .call(d3.axisBottom(xScale))
-                        .selectAll("text") 
-                        .style("text-anchor", "end") 
-                        .style("font-size", "8px")
-                        .attr("dx", "-0.5em") 
-                        .attr("dy", "0.5em")  
-                        .attr("transform", "rotate(-45)")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
-                        .append("title")  
-                        .text(d => d);
-
-                    // if (uniqueXCategories.length > 0) {
-                    // cellGroup.append("g")
-                    //     .attr("transform", `translate(0, ${numericSpace})`)
-                    //     .call(d3.axisBottom(categoricalXScale))
-                    //     .selectAll("text")
-                    //     .style("text-anchor", "end") 
-                    //     .attr("transform", "rotate(-45)") 
-                    //     .style("font-size", "10px"); 
-                    // }
-
-                    cellGroup.append("g")
-                        .call(d3.axisLeft(yScale))
-                        .selectAll("text")
-                        .style("font-size", "8px")
-                        .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
-                        .append("title")  
-                        .text(d => d); 
-                                            
-                    // if (uniqueYCategories.length > 0) {
-                    // cellGroup.append("g")
-                    //     .attr("transform", `translate(0, 0)`)
-                    //     .call(d3.axisLeft(categoricalYScale))
-                    //     .selectAll("text")
-                    //     .style("text-anchor", "end") 
-                    //     .style("font-size", "10px"); 
-                    // }
-                    
-                    svg
-                        .append("text")
-                        .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
-                        .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
-                        .style("text-anchor", "middle")
-                        .text(xCol);
-
-                    const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
-                    const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
-                    
-                    svg
-                        .append("text")
-                        .attr("x", xPosition) 
-                        .attr("y", yPosition - 20) 
-                        .style("text-anchor", "middle")
-                        .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                        .text(yCol);
-                }
             }
             });
         });
     }
 
+    /**
+     * Plots heatmaps on the off-diagonals. Heatmaps are colored by a gradient colorscale based on frequency. A bin is colored an error color if it contains a data point with
+     * that error. If group by is active, the bins are colored by group. 
+     * Plots can be 4 categories: 
+     *      both x & y are numeric, 
+     *      x is categorical & y is numeric, 
+     *      x is numeric & y is categorical,
+     *      both x & y are categorical.
+     * These cases are all handled separately. Within each case, there are two options: 
+     *      Group by is active or group by is not active. 
+     * These two cases are handled separately.
+     * @param {*} cellGroup The DOM element for the cell.
+     * @param {*} svg The overall matrix svg.
+     * @param {*} i Which row in the matrix we are in.
+     * @param {*} j Which column in the matrix we are in.
+     * @param {*} givenData Data to visualize.
+     * @param {*} xCol The x attribute/column.
+     * @param {*} yCol The y attribute/column.
+     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
+     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
+     * @param {*} animate If true, the plots should have transitions.
+     * @param {*} handleHeatmapClick Handles user clicks on heatmap bins.
+     */
     drawHeatMap (cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
@@ -2324,11 +1408,6 @@ class ScatterplotMatrixView{
 
         const numericXValues = nonNumericYData.map(d => d[xCol]).filter(v => !isNaN(v));
         const numericYValues = nonNumericXData.map(d => d[yCol]).filter(v => !isNaN(v));
-
-        const meanX = d3.mean(numericXValues);
-        const stdDevX = d3.deviation(numericXValues);
-        const meanY = d3.mean(numericYValues);
-        const stdDevY = d3.deviation(numericYValues);
 
         const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10;
         const yPosition = this.topMargin + i * (this.size + this.yPadding) + this.size / 2;
@@ -2391,7 +1470,7 @@ class ScatterplotMatrixView{
                         }) || yBinLabels[yBinLabels.length - 1] 
             }));
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is activated
                 const groupedData = d3.rollups(
                     data,
                     v => {
@@ -2442,7 +1521,6 @@ class ScatterplotMatrixView{
                             rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                // .attr("fill", groupColorScale(group))
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
                                         return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
@@ -2457,14 +1535,6 @@ class ScatterplotMatrixView{
                                     const isSelected = d.d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));                            
                                     return isSelected ? 2 : 0.5;
                                 })
-                                // .attr("stroke", (d) => {
-                                //     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                //     return isSelected ? "black" : "white";
-                                // })
-                                // .attr("stroke-width", (d) => {
-                                //     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
-                                //     return isSelected ? 2 : 0;
-                                // })
                                 .attr("opacity", (d) => {
                                     const isSelected = d.ids[group].some(ID => self.selectedPoints.some(p => p.ID === ID));
                                     if(selectionEnabled) {return isSelected ? 1 : 0.7;}
@@ -2529,7 +1599,7 @@ class ScatterplotMatrixView{
                         });
                     });   
             }
-            else{
+            else{       // No group by
                 const groupedData = d3.rollups(
                     data,
                     v => ({
@@ -2561,23 +1631,6 @@ class ScatterplotMatrixView{
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
                     .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                    // .attr("fill", d => {
-                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-
-                    //     if (isSelected) {
-                    //         return "gold"; 
-                    //     }
-                    //     if (d.y === "NaN") {
-                    //         return "gray";
-                    //     }
-                    //     if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
-                    //         return "gray";
-                    //     }
-    
-                    //     return colorScale(d.value); 
-                    // })
-                    // .attr("stroke", "gray")
-                    // .attr("stroke-width", 0.5)
                     .attr("stroke", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? "red" : "gray";
@@ -2598,7 +1651,7 @@ class ScatterplotMatrixView{
                     : yBinLabels.find((label, i) => d[yCol] >= yBins[i].x0 && d[yCol] < yBins[i].x1) || yBinLabels[yBinLabels.length - 1]
             }));
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 const groupedData = d3.rollups(
                     data,
                     v => {
@@ -2646,7 +1699,6 @@ class ScatterplotMatrixView{
                             rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset)                                  
-                                // .attr("fill", groupColorScale(group))
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
                                         return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
@@ -2725,7 +1777,7 @@ class ScatterplotMatrixView{
                         });
                     });                
             }
-            else{
+            else{       // No group by
                 const groupedData = d3.rollups(
                     data,
                     v => ({
@@ -2757,23 +1809,6 @@ class ScatterplotMatrixView{
                     .attr("y", d => yScale(d.y))
                     .attr('opactiy', 0.8)
                     .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                    // .attr("fill", d => {
-                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-
-                    //     if (isSelected) {
-                    //         return "gold"; 
-                    //     }
-                    //     if (d.y === "NaN") {
-                    //         return "gray";
-                    //     }
-                    //     if (uniqueYStringBins.includes(d.y)) {
-                    //         return "gray";
-                    //     }
-    
-                    //     return colorScale(d.value); 
-                    // })
-                    // .attr("stroke", "gray")
-                    // .attr("stroke-width", 0.5)
                     .attr("stroke", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? "red" : "gray";
@@ -2829,7 +1864,7 @@ class ScatterplotMatrixView{
 
             }));
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 const groupedData = d3.rollups(
                     data,
                     v => {
@@ -2956,7 +1991,7 @@ class ScatterplotMatrixView{
                     });         
 
             }
-            else{
+            else{       // No group by
                 const groupedData = d3.rollups(
                     data,
                     v => ({
@@ -2987,23 +2022,7 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                    // .attr("fill", d => {
-                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-
-                    //     if (isSelected) {
-                    //         return "gold"; 
-                    //     }
-                    //     if (d.y === "NaN") {
-                    //         return "gray";
-                    //     }
-                    //     if (uniqueXStringBins.includes(d.x)) {
-                    //         return "gray";
-                    //     }
-                    //     return colorScale(d.value); 
-                    // })
-                    // .attr("stroke", "gray")
-                    // .attr("stroke-width", 0.5)    
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))   
                     .attr("stroke", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? "red" : "gray";
@@ -3043,7 +2062,7 @@ class ScatterplotMatrixView{
 
         /// All non numeric plot ///
         else{   
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 const groupedData = d3.rollups(
                     data,
                     v => {
@@ -3091,8 +2110,6 @@ class ScatterplotMatrixView{
                             rect = g.append("rect")
                                 .attr("x", 0)
                                 .attr("y", yOffset) 
-                                // .attr("width", xScale.bandwidth())
-                                // .attr("height", (yScale.bandwidth() * count) / total)  
                                 .attr("fill", d => {
                                     if (!self.viewGroupsButton){
                                         return getFillColorHeatmap(d, group, xCol, yCol, columnErrors, self.errorColors, self.selectedPoints); 
@@ -3172,7 +2189,7 @@ class ScatterplotMatrixView{
                     });
 
             }
-            else{
+            else{       // No group by
                 const groupedData = d3.rollups(
                     data,
                     v => ({
@@ -3204,13 +2221,7 @@ class ScatterplotMatrixView{
                     .attr("x", d => xScale(d.x))
                     .attr("y", d => yScale(d.y))
                     .attr("opacity", 0.8)
-                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                    // .attr("fill", (d) => {
-                    //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                    //     return isSelected ? "gold" : colorScale(d.value);
-                    // })
-                    // .attr("stroke", "gray")
-                    // .attr("stroke-width", 0.5)    
+                    .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints)) 
                     .attr("stroke", (d) => {
                         const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                         return isPredicated ? "red" : "gray";
@@ -3333,6 +2344,27 @@ class ScatterplotMatrixView{
         yText.append("title").text(yCol);  // Full column name on hover
     }
 
+    /**
+     * Plots scatterplots on the off-diagonals when the scatterplot icon is selected. A point is colored an error color if it contains a data point with that error. If group by 
+     * is active, the points are colored by group. 
+     * Plots can be 4 categories: 
+     *      both x & y are numeric, 
+     *      x is categorical & y is numeric, 
+     *      x is numeric & y is categorical,
+     *      both x & y are categorical.
+     * Group by is handled within the "fill" for each circle.
+     * @param {*} cellGroup The DOM element for the cell.
+     * @param {*} svg The overall matrix svg.
+     * @param {*} i Which row in the matrix we are in.
+     * @param {*} j Which column in the matrix we are in.
+     * @param {*} givenData Data to visualize.
+     * @param {*} xCol The x attribute/column.
+     * @param {*} yCol The y attribute/column.
+     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
+     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
+     * @param {*} animate If true, the plots should have transitions.
+     * @param {*} handleHeatmapClick Given to pass around. 
+     */
     drawScatterplot(cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
         const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
@@ -3408,16 +2440,13 @@ class ScatterplotMatrixView{
                     if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
                     return yScale(d[yCol]);
                 })
-                // .attr("fill", d => (d.type === "numeric" ? "steelblue" : "gray"))
                 .attr("fill", d => {
                     if (groupByAttribute) {
-                        return colorScale(d[groupByAttribute]);
+                        return colorScale(d[groupByAttribute]);     // Group by is active
                     } else {
-                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale);     // No group by
                     }
                 })
-                // .attr("stroke", d => (d.type.includes("nan") ? "red" : "none")) 
-                // .attr("stroke-width", d => (d.type.includes("nan") ? 1 : 0))
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
                 .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
                 if(animate){
@@ -3496,23 +2525,23 @@ class ScatterplotMatrixView{
                 .text(d => d); 
             }
             
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover
         }
 
         /// Non numeric X plot ///
@@ -3529,11 +2558,6 @@ class ScatterplotMatrixView{
 
             const xTickValues = xScale.step(); 
             const xTickSpacing = xScale(xTickValues[1]) - this.xScale(xTickValues[0]); 
-
-            // const categoricalXStart = xScale.range()[1] + 10;
-            // const categoricalXScale = d3.scaleOrdinal()
-            //     .domain(uniqueXCategories)
-            //     .range([...Array(uniqueXCategories.length).keys()].map(i => categoricalXStart + (i * (xTickSpacing + 5)))); 
             
             const yScale = d3.scaleLinear()
                 .domain([Math.min(0, d3.min(nonNumericXData, d => d[yCol])), d3.max(nonNumericXData, d => d[yCol]) + 1])
@@ -3563,19 +2587,16 @@ class ScatterplotMatrixView{
                     if (d.type === "nan-y" || d.type === "nan-xy") return categoricalYScale(d[yCol]);
                     return yScale(d[yCol]);
                 })
-                // .attr("fill", d => (d.type === "nan-y" ? "gray" : "steelblue"))
                 .attr("fill", d => {
-                    if (groupByAttribute) {
+                    if (groupByAttribute) {     // Group by is active
                         if (!this.viewGroupsButton){
-                            return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
+                            return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale);    
                         }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale);     // No group by
                     }
                 })
-                // .attr("stroke", d => (d.type === "nan-y" ? "red" : "none")) 
-                // .attr("stroke-width", d => (d.type === "nan-y" ? 1 : 0))
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
                 .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
             if(animate){
@@ -3621,16 +2642,6 @@ class ScatterplotMatrixView{
                 .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
                 .append("title") 
                 .text(d => d);
-
-            // if (uniqueXCategories.length > 0) {
-            // cellGroup.append("g")
-            //     .attr("transform", `translate(0, ${numericSpace})`)
-            //     .call(d3.axisBottom(categoricalXScale))
-            //     .selectAll("text")
-            //     .style("text-anchor", "end") 
-            //     .attr("transform", "rotate(-45)") 
-            //     .style("font-size", "10px"); 
-            // }
             
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale).tickFormat(d => {
@@ -3657,23 +2668,23 @@ class ScatterplotMatrixView{
                 .text(d => d); 
             }
             
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover        
         }
 
         /// Non numeric Y plot ///
@@ -3702,12 +2713,6 @@ class ScatterplotMatrixView{
                 .domain(uniqueYCategories)
                 .range([this.size, 0]);
 
-            // const categoricalYStart = yScale.range()[1] - 10;
-            // const categoricalYScale = d3.scaleOrdinal()
-            //     .domain(uniqueYCategories)
-            //     .range([...Array(uniqueYCategories.length).keys()].map(i => categoricalYStart - (i * (xTickSpacing + 5))));
-                
-
             const tooltip = d3.select("#tooltip"); 
 
             const isPredicated = (d) => this.predicatePoints.some(p => 
@@ -3725,19 +2730,16 @@ class ScatterplotMatrixView{
                     return xScale(d[xCol]); 
                 })
                 .attr("cy", d => yScale(d[yCol]))
-                // .attr("fill", d => (d.type === "nan-x" ? "gray" : "steelblue"))
                 .attr("fill", d => {
-                    if (groupByAttribute) {
+                    if (groupByAttribute) {     // Group by is active
                         if (!this.viewGroupsButton){
                             return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                         }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale);     // No group by
                     }
                 })
-                // .attr("stroke", d => (d.type === "nan-x" ? "red" : "none")) 
-                // .attr("stroke-width", d => (d.type === "nan-x" ? 1 : 0))
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
                 .attr("stroke-width", d => isPredicated(d) ? 1 : 0);
             if(animate){
@@ -3810,32 +2812,23 @@ class ScatterplotMatrixView{
                 .append("title") 
                 .text(d => d); 
 
-            // if (uniqueYCategories.length > 0) {
-            // cellGroup.append("g")
-            //     .attr("transform", `translate(0, 0)`)
-            //     .call(d3.axisLeft(categoricalYScale))
-            //     .selectAll("text")
-            //     .style("text-anchor", "end") 
-            //     .style("font-size", "10px"); 
-            // }
-            
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover        
         }
 
         /// All non numeric plot ///
@@ -3866,15 +2859,14 @@ class ScatterplotMatrixView{
                 .join("circle")
                 .attr("cx", d => xScale(d[xCol]))
                 .attr("cy", d => yScale(d[yCol]))
-                // .attr("fill", "steelblue")
                 .attr("fill", d => {
-                    if (groupByAttribute) {
+                    if (groupByAttribute) {     // Group by is active
                         if (!this.viewGroupsButton){
                             return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
                         }
                         return colorScale(d[groupByAttribute]);
                     } else {
-                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale); 
+                        return getFillColorScatter(d, xCol, yCol, columnErrors, this.errorColors, this.selectedPoints, colorScale);     // No group by
                     }
                 })
                 .attr("stroke", d => isPredicated(d) ? "red" : "none")
@@ -3923,16 +2915,6 @@ class ScatterplotMatrixView{
                 .append("title")
                 .text(d => d);
 
-            // if (uniqueXCategories.length > 0) {
-            // cellGroup.append("g")
-            //     .attr("transform", `translate(0, ${numericSpace})`)
-            //     .call(d3.axisBottom(categoricalXScale))
-            //     .selectAll("text")
-            //     .style("text-anchor", "end") 
-            //     .attr("transform", "rotate(-45)") 
-            //     .style("font-size", "10px"); 
-            // }
-
             cellGroup.append("g")
                 .call(d3.axisLeft(yScale))
                 .selectAll("text")
@@ -3941,15 +2923,6 @@ class ScatterplotMatrixView{
                 .append("title")
                 .text(d => d); 
 
-            // if (uniqueYCategories.length > 0) {
-            // cellGroup.append("g")
-            //     .attr("transform", `translate(0, 0)`)
-            //     .call(d3.axisLeft(categoricalYScale))
-            //     .selectAll("text")
-            //     .style("text-anchor", "end") 
-            //     .style("font-size", "10px"); 
-            // }
-            
             const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
@@ -3967,10 +2940,26 @@ class ScatterplotMatrixView{
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
                 .text(truncateText(yCol));
             yText.append("title").text(yCol);  // Full column name on hover
-        }
-        
+        }        
     }
-
+    /**
+     * Plots line charts on the off-diagonals when the line chart icon is selected. A line is colored an error color if it contains a data point with that error. If group by 
+     * is active, the lines are colored by group. 
+     * Plots can be 4 categories: 
+     *      both x & y are numeric, 
+     *      x is categorical & y is numeric, 
+     *      x is numeric & y is categorical,
+     *      both x & y are categorical.
+     * @param {*} givenData Data to visualize.
+     * @param {*} svg The overall matrix svg.
+     * @param {*} xCol The x attribute/column.
+     * @param {*} yCol The y attribute/column.
+     * @param {*} cellID Which cell in the matrix we are in.
+     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
+     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
+     * @param {*} animate If true, the plots should have transitions.
+     * @param {*} handleHeatmapClick Given to pass around. 
+     */
     switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`);  // Hardcoded for stackoverflow tab, need to make dynamic later
         const [, i, j] = cellID.split("-").map(d => parseInt(d));
@@ -4066,7 +3055,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol] || isNaN(d[yCol]))
             );
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
                     const path = cellGroup.append("path")
@@ -4089,12 +3078,10 @@ class ScatterplotMatrixView{
                     }
                   });
             }
-            else{
+            else{       // No group by
                 const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    // .attr("stroke", "steelblue")
-                    // .attr("stroke-width", 2)
                     .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
                     .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
                     .attr("d", line)
@@ -4155,23 +3142,23 @@ class ScatterplotMatrixView{
                 .text(d => d); 
             }
             
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding) - categorySpace  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2) - categorySpace; 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover        
         }
 
         /// Non numeric X plot ///
@@ -4225,7 +3212,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol] || isNaN(d[yCol]))
             );
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
                     const path = cellGroup.append("path")
@@ -4248,7 +3235,7 @@ class ScatterplotMatrixView{
                     }
                   });
             }
-            else{
+            else{       // No group by
                 const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
@@ -4306,25 +3293,25 @@ class ScatterplotMatrixView{
                 .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d) 
                 .append("title")  
                 .text(d => d); 
-            }
+            }  
             
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
-
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
+    
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+                yText.append("title").text(yCol);  // Full column name on hover          
         }
 
         /// Non numeric Y plot ///
@@ -4378,7 +3365,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol])
             );
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
                     const path = cellGroup.append("path")
@@ -4401,12 +3388,10 @@ class ScatterplotMatrixView{
                     }
                   });
             }
-            else{
+            else{       // No group by
                 const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    // .attr("stroke", "steelblue")
-                    // .attr("stroke-width", 2)
                     .attr("stroke", d => isPredicated(d) ? "red" : "steelblue")
                     .attr("stroke-width", d => isPredicated(d) ? 3 : 2)
                     .attr("d", line)
@@ -4463,23 +3448,23 @@ class ScatterplotMatrixView{
                 .append("title")  
                 .text(d => d);
 
-            svg
-                .append("text")
+            const xText = svg.append("text")
                 .attr("x", this.leftMargin + j * (this.size + this.xPadding) + this.size / 2)
                 .attr("y", this.topMargin + (i + 1) * (this.size + this.yPadding)  - 25) // 30 + [1,2,3] * ([120,140] + 60) - 20
                 .style("text-anchor", "middle")
-                .text(xCol);
+                .text(truncateText(xCol, 30));
+            xText.append("title").text(xCol);  // Full column name on hover
 
             const xPosition = this.leftMargin + j * (this.size + this.xPadding) - this.labelPadding - 10; 
             const yPosition = (this.topMargin + i * (this.size + this.yPadding) + this.size / 2); 
             
-            svg
-                .append("text")
+            const yText = svg.append("text")
                 .attr("x", xPosition) 
                 .attr("y", yPosition - 20) 
                 .style("text-anchor", "middle")
                 .attr("transform", `rotate(-90, ${xPosition}, ${yPosition})`) 
-                .text(yCol);
+                .text(truncateText(yCol));
+            yText.append("title").text(yCol);  // Full column name on hover        
         }
 
         /// All non numeric plot ///
@@ -4504,8 +3489,6 @@ class ScatterplotMatrixView{
                 return uniqueXCategories.indexOf(a[xCol]) - uniqueXCategories.indexOf(b[xCol]);
             });
 
-            console.log("sorted data", combinedData);
-
             const line = d3.line()
                             .x(d => {
                                     return xScale(d[xCol]);
@@ -4523,7 +3506,7 @@ class ScatterplotMatrixView{
                 (p[yCol] === d[yCol])
             );
 
-            if(groupByAttribute){
+            if(groupByAttribute){       // Group by is active
                 groupedData = d3.group(combinedData, d => d[groupByAttribute]);
                 groupedData.forEach((groupArray, key) => {
                     const path = cellGroup.append("path")
@@ -4546,12 +3529,10 @@ class ScatterplotMatrixView{
                     }
                   });
             }
-            else{
+            else{       // No group by
                 const path = cellGroup.append("path")
                     .datum(combinedData)
                     .attr("fill", "none")
-                    // .attr("stroke", "steelblue")
-                    // .attr("stroke-width", 2)
                     .attr("stroke", d => {
                         let result = isPredicated(d);
                         console.log(`isPredicated(${d}):`, result);
@@ -4644,6 +3625,18 @@ class ScatterplotMatrixView{
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
+    /**
+     * Draw scatterplot when scatterplot icon is clicked.
+     * @param {*} givenData Data to visualize.
+     * @param {*} svg The overall matrix svg.
+     * @param {*} xCol The x attribute/column.
+     * @param {*} yCol The y attribute/column.
+     * @param {*} cellID Which cell in the matrix we are in.
+     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
+     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
+     * @param {*} animate If true, the plots should have transitions.
+     * @param {*} handleHeatmapClick Given to pass around. 
+     */
     restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
@@ -4683,6 +3676,18 @@ class ScatterplotMatrixView{
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
+    /**
+     * Draw heatmap when heatmap icon is clicked.
+     * @param {*} givenData Data to visualize.
+     * @param {*} svg The overall matrix svg.
+     * @param {*} xCol The x attribute/column.
+     * @param {*} yCol The y attribute/column.
+     * @param {*} cellID Which cell in the matrix we are in.
+     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
+     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
+     * @param {*} animate If true, the plots should have transitions.
+     * @param {*} handleHeatmapClick Given to pass around. 
+     */
     restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
         const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
         cellGroup.selectAll("*").remove();  
@@ -4723,6 +3728,17 @@ class ScatterplotMatrixView{
             .on("click", () => this.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
+    /**
+     * Draws preview plots in the Data Repair Toolkit box. Can only draw histograms or heatmaps. Plotting code is copied from the plotMatrix and drawHeatMap functions.
+     * @param {*} givenData Data to visualize.
+     * @param {*} originalData Data before the preview.
+     * @param {*} containerId 
+     * @param {*} isHistogram If true, the plot the user clicked on was a histogram plot.
+     * @param {*} groupByAttribute f active, the user-selected attribute to group by.
+     * @param {*} xCol The x attribute/column.
+     * @param {*} yCol The y attribute/column.
+     * @returns 
+     */
     drawPreviewPlot(givenData, originalData, containerId, isHistogram, groupByAttribute, xCol, yCol){
         const container = document.getElementById(containerId);
         container.innerHTML = ""; 
@@ -4758,7 +3774,7 @@ class ScatterplotMatrixView{
 
         const columnErrors = this.model.getColumnErrors();
 
-        if(isHistogram)
+        if(isHistogram)     // The user selected points on a histogram.
         {
             if(containerId === "preview-impute-average-y")
             {
@@ -4979,16 +3995,10 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.length))
                         .attr("height", d => height - yScale(d.length))
                         .attr("fill", d => getFillColorNoGroupbyNumeric(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
-                        // .attr("fill", (d) => {
-                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                        //     return isSelected ? "gold" : (d.category ? "gray" : "steelblue");
-                        // })
-                        // .attr("stroke", d => d.category ? "red" : "none")
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "none";
                         })
-                        // .attr("stroke-width", d => d.category ? 1 : 0)
                         .attr("stroke-width", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? 1 : 0
@@ -5130,10 +4140,6 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.length))
                         .attr("height", d => Math.max(0, height - yScale(d.length)))
                         .attr("fill", d => getFillColorNoGroupbyCategorical(d, xCol, columnErrors, this.errorColors, this.selectedPoints))
-                        // .attr("fill", (d) => {
-                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                        //     return isSelected ? "gold" : "steelblue";
-                        // })
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "none";
@@ -5544,23 +4550,6 @@ class ScatterplotMatrixView{
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
                         .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                        // .attr("fill", d => {
-                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-
-                        //     if (isSelected) {
-                        //         return "gold"; 
-                        //     }
-                        //     if (d.y === "NaN") {
-                        //         return "gray";
-                        //     }
-                        //     if (uniqueYStringBins.includes(d.y)) {
-                        //         return "gray";
-                        //     }
-        
-                        //     return colorScale(d.value); 
-                        // })
-                        // .attr("stroke", "gray")
-                        // .attr("stroke-width", 0.5)
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "gray";
@@ -5753,23 +4742,7 @@ class ScatterplotMatrixView{
                         .attr("y", d => yScale(d.y))
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
-                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                        // .attr("fill", d => {
-                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-
-                        //     if (isSelected) {
-                        //         return "gold"; 
-                        //     }
-                        //     if (d.y === "NaN") {
-                        //         return "gray";
-                        //     }
-                        //     if (uniqueXStringBins.includes(d.x)) {
-                        //         return "gray";
-                        //     }
-                        //     return colorScale(d.value); 
-                        // })
-                        // .attr("stroke", "gray")
-                        // .attr("stroke-width", 0.5)    
+                        .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))   
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "gray";
@@ -5952,12 +4925,6 @@ class ScatterplotMatrixView{
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
                         .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                        // .attr("fill", (d) => {
-                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-                        //     return isSelected ? "gold" : colorScale(d.value);
-                        // })
-                        // .attr("stroke", "gray")
-                        // .attr("stroke-width", 0.5)    
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "gray";
@@ -6025,45 +4992,17 @@ class ScatterplotMatrixView{
                     .append("title")  
                     .text(d => d);
             }
-            // svg.append("g")
-            //     .attr("transform", `translate(0, ${height})`)  // Position at bottom
-            //     .call(d3.axisBottom(xScale).tickFormat(d => d.length > 10 ? d.substring(0, 10) + "…" : d))  
-            //     .selectAll("text")
-            //     .style("text-anchor", "end")
-            //     .style("font-size", "8px")
-            //     .attr("dx", "-0.5em")
-            //     .attr("dy", "0.5em")
-            //     .attr("transform", "rotate(-45)");
-
-            // // Add y-axis
-            // svg.append("g")
-            //     .attr("transform", `translate(-15, 0)`)  // Position at left
-            //     .call(d3.axisLeft(yScale))
-            //     .selectAll("text")
-            //     .style("font-size", "8px");
         }
 
-    }
-
-    getScatterScale(data, column, size, isX = true) {
-        const isNumeric = data.every(d => typeof d[column] === "number" && !isNaN(d[column]));
-    
-        if (isNumeric) {
-            return d3.scaleLinear()
-                .domain([Math.min(0, d3.min(data, d => d[column])), d3.max(data, d => d[column]) + 1])
-                .range(isX ? [0, size] : [size, 0]); // X is left to right, Y is bottom to top
-        } else {
-            const uniqueCategories = [...new Set(data.map(d => String(d[column])))].sort();
-            
-            return d3.scaleBand()
-                .domain(uniqueCategories)
-                .range([0, size])
-                .padding(0.1);
-        }
     }
 
 }
 
+/**
+ * Sorts categories for axis tick labels.
+ * @param {*} categories 
+ * @returns Sorted categories.
+ */
 function sortCategories(categories) {
     // Sorting logic for scale categories that are not alphabetical or numerical
     const scaleCategories = ['Low', 'Medium', 'High'];
@@ -6091,6 +5030,17 @@ function sortCategories(categories) {
         });
 }
 
+/**
+ * Preprocessing that splits data into
+ *      All numeric,
+ *      Non-numeric X,
+ *      Non-numeric Y,
+ *      and all non-numeric.
+ * @param {*} data 
+ * @param {*} xCol 
+ * @param {*} yCol 
+ * @returns Multiple splits on the dataset to be used in plotting.
+ */
 function splitData (data, xCol, yCol){
     const isNumeric = col => data.some(d => typeof d[col] === "number" && !isNaN(d[col]));
 
@@ -6192,6 +5142,15 @@ function splitData (data, xCol, yCol){
     return {xIsNumeric, yIsNumeric, numericData, nonNumericXData, nonNumericYData, nonNumericData, combinedData, uniqueXCategories, uniqueYCategories, categorySpace, numericSpace, xIsNumericMajority, yIsNumericMajority};
 }
 
+/**
+ * Returns the fill color for a histogram bar when the data is numeric and there is no group by.
+ * @param {*} d 
+ * @param {*} xCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} selectedPoints 
+ * @returns The fill color.
+ */
 function getFillColorNoGroupbyNumeric(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
@@ -6230,34 +5189,19 @@ function getFillColorNoGroupbyNumeric(d, xCol, columnErrors, errorColors, select
     return "steelblue"; 
 }
 
+/**
+ * Returns the fill color for a histogram bar when the data is numeric and grouped.
+ * @param {*} d 
+ * @param {*} xCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} selectedPoints 
+ * @returns The fill color.
+ */
 function getFillColorNumeric(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));                            
     if (isSelected) return "gold";
 
-    // const category = d.data.category;
-
-    // if (category) {
-    //     // Check for missing values
-    //     if (category === "null" || category === "none" || category === "") return "saddlebrown";
-
-    //     // Check for specific categorical values
-    //     if (["'00'", "'4'", "'0'", "'21.5'"].includes(category)) return "hotpink";
-    // } else {
-
-    //     // Check for numeric outliers
-    //     const avgValue = d3.mean(d.data.groupIDs[d.group].map(id => {
-    //         const found = numericData.find(n => n.ID === id);
-    //         return found ? found[xCol] : undefined;
-    //     }).filter(v => !isNaN(v)));
-
-    //     if (avgValue !== undefined && Math.abs(avgValue - mean) > 2 * stdDev) {
-    //         return "red";
-    //     }
-    //     if (d.data.groupIDs[d.group].length < 3) return "gray";
-
-    // }
-
-    // return "steelblue"; 
     const allErrors = [];
 
     for (const id of d.data.groupIDs[d.group]) {
@@ -6292,6 +5236,15 @@ function getFillColorNumeric(d, xCol, columnErrors, errorColors, selectedPoints)
     return "steelblue"; 
 }
 
+/**
+* Returns the fill color for a histogram bar when the data is categorical and no group by.
+ * @param {*} d 
+ * @param {*} xCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} selectedPoints 
+ * @returns The fill color.
+ */
 function getFillColorNoGroupbyCategorical(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
@@ -6330,16 +5283,19 @@ function getFillColorNoGroupbyCategorical(d, xCol, columnErrors, errorColors, se
     return "steelblue"; 
 }
 
+/**
+ * Returns the fill color for a histogram bar when the data is categorical and grouped.
+ * @param {*} d 
+ * @param {*} xCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} selectedPoints 
+ * @returns The fill color.
+ */
 function getFillColorCategorical(d, xCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.data.groupIDs[d.group].some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
 
-    // const category = d.data.category;
-
-    // if (category === "none" || category === "" || category === "null") return "saddlebrown";
-
-    // if (["'00'", "'4'",  "'0'", "'21.5'"].includes(category)) return "hotpink";
-    // if (d.data.groupIDs[d.group].length < 3) return "gray";
     const allErrors = [];
 
     for (const id of d.data.groupIDs[d.group]) {
@@ -6374,6 +5330,17 @@ function getFillColorCategorical(d, xCol, columnErrors, errorColors, selectedPoi
     return "steelblue"; 
 }
 
+/**
+ * Returns the fill color for a heatmap bin when there is no group by.
+ * @param {*} d 
+ * @param {*} xCol 
+ * @param {*} yCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} colorScale 
+ * @param {*} selectedPoints 
+ * @returns The fill color
+ */
 function getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, errorColors, colorScale, selectedPoints) {
     const isSelected = d.ids.some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
@@ -6387,7 +5354,7 @@ function getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, errorColors, 
     }
 
     if (allErrors.length === 0) {
-        return colorScale(d.value); // no errors → normal heatmap color
+        return colorScale(d.value); // no errors means normal heatmap color
     }
 
     // Count frequency of each error type
@@ -6415,6 +5382,17 @@ function getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, errorColors, 
     return colorScale(d.value);
 }
 
+/**
+ * Returns the fill color for a heatmap bin when grouped.
+ * @param {*} d 
+ * @param {*} group 
+ * @param {*} xCol 
+ * @param {*} yCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} selectedPoints 
+ * @returns The fill color
+ */
 function getFillColorHeatmap(d, group, xCol, yCol, columnErrors, errorColors, selectedPoints) {
     const isSelected = d.ids[group].some(ID => selectedPoints.some(p => p.ID === ID));
     if (isSelected) return "gold";
@@ -6454,6 +5432,17 @@ function getFillColorHeatmap(d, group, xCol, yCol, columnErrors, errorColors, se
     return "steelblue"; 
 }
 
+/**
+ * Returns the fill color for a point.
+ * @param {*} d 
+ * @param {*} xCol 
+ * @param {*} yCol 
+ * @param {*} columnErrors 
+ * @param {*} errorColors 
+ * @param {*} selectedPoints 
+ * @param {*} colorScale 
+ * @returns The fill color.
+ */
 function getFillColorScatter(d, xCol, yCol, columnErrors, errorColors, selectedPoints, colorScale) {
     const allErrors = [];
     
@@ -6488,6 +5477,12 @@ function getFillColorScatter(d, xCol, yCol, columnErrors, errorColors, selectedP
     return "steelblue"; 
 }
 
+/**
+ * Truncates text to be used on axis labels, attribute summaries, and cells in the top 10 dirty data table.
+ * @param {*} text 
+ * @param {*} maxLength 
+ * @returns The truncated text.
+ */
 function truncateText(text, maxLength = 17) {
     if (typeof text !== "string") return text;
     return text.length > maxLength ? text.slice(0, maxLength - 3) + "..." : text;
