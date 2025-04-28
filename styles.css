@@ -55,8 +55,8 @@ body, html, h1 {
     max-height: 400px; 
     overflow-y: auto;
     margin-bottom: 50px;
-    position: relative;
-    top: -120px;
+    /* position: relative;
+    top: -120px; */
 }
 
 #dirty-rows-table {
