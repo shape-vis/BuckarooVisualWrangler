@@ -1,19 +1,19 @@
 class DataModel {
   constructor(initialData) {
-    this.originalData = initialData;
-    this.data = this.preprocessData(initialData);
-    this.filteredData = this.data;
-    this.selectedPoints = [];
-    this.dataStates = [];
-    this.redoStack = [];
-    this.dataTransformations = [];
-    this.transformationPoints = [];
-    this.selectedGroups = [];
-    this.groupByAttribute = null;
-    this.previewData = this.data;
-    this.fullFilteredData = this.data;
-    this.columnErrorMap = {};
-    this.originalFilename = null;
+    this.originalData = initialData;                // Maintain a copy of the original dataset
+    this.data = this.preprocessData(initialData);   // Preprocessed data should contain all string values in string-majority columns
+    this.filteredData = this.data;                  // this.filtered data gets updated as the user removes and transforms the dataset
+    this.selectedPoints = [];                       // The current user selection of points from interacting with the plots
+    this.dataStates = [];                           // Keeps a history of each state of the data as it is transformed
+    this.redoStack = [];                            // Tracks each state of the data for the undo/redo button
+    this.dataTransformations = [];                  // Tracks each transformation/repair on the data to be used in the exported python script
+    this.transformationPoints = [];                 // Tracks each selection of points the user applies a data transformation to
+    this.selectedGroups = [];                       // Selected groups by the user from the box plots pop-up
+    this.groupByAttribute = null;                   // Contains the attribute to group by if the user selects one
+    this.previewData = this.data;                   // Keep a separate dataset for the preview plots
+    this.fullFilteredData = this.data;              // Same as this.filtered data, except this holds all the columns, not just the 1-3 selected attributes
+    this.columnErrorMap = {};                       // Mapping of every error in the dataset with its corresponding column and row ID
+    this.originalFilename = null;                   // File name of the input data to be used in the exported python script
   }
 
   /**

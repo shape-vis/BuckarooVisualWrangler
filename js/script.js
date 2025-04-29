@@ -2,7 +2,8 @@ let activeDataset = "stackoverflow";
 let stackoverflowController;
 
 /**
- * Adds an ID column into the first index of the table to be used throughout in selection, wrangling, etc.
+ * Adds an ID column into the first index of the table to be used throughout in selection, wrangling, etc. If an ID column already exists, it moves it to the first index in the
+ * table. 
  * @param {*} table Data
  * @returns Data with ID column added if needed
  */
@@ -40,11 +41,11 @@ function setIDColumn(table) {
 }
 
 const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
-if (selectedSample) {
+if (selectedSample) {                                           // User selected one of the 3 available datasets                                 
   d3.csv(selectedSample).then(inputData => {
     localStorage.removeItem("selectedSample");
 
-    const table = setIDColumn(aq.from(inputData).slice(0, 200));
+    const table = setIDColumn(aq.from(inputData).slice(0, 200));    // Select only the first 200 rows to work with to speed up rendering time
     d3.select("#matrix-vis-stackoverflow").html("");
 
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
@@ -52,6 +53,7 @@ if (selectedSample) {
 
     attachButtonEventListeners(stackoverflowController);
 
+    // Export python script listener
     document.getElementById("export-script").addEventListener("click", function () {
       const { scriptContent, filename } = stackoverflowController.model.exportPythonScript();
       const blob = new Blob([scriptContent], { type: "text/x-python" });
@@ -104,7 +106,7 @@ else{       // User elected to upload their own dataset
        
            attachButtonEventListeners(stackoverflowController);
  
-           // Export python script
+           // Export python script listener
            document.getElementById("export-script").addEventListener("click", function () {
              console.log("Exporting script");
              const { scriptContent, filename } = stackoverflowController.model.exportPythonScript();

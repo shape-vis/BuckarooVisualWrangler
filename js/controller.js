@@ -5,7 +5,7 @@ class ScatterplotController {
       this.selectedAttributes = data.columnNames().slice(1).sort().slice(0,3); // Store selected columns
       this.xCol = null;
       this.yCol = null;
-      this.viewGroupsButton = false;
+      this.viewGroupsButton = false;                                           // True when the user has selected an attribute to group by and the legend will update to show group colors instead of error colors
       this.detectors = null;
       this.wranglers = null;
 
@@ -451,7 +451,7 @@ class ScatterplotController {
             document.getElementById("preview-impute-average-y").style.display = "none";
         }
 
-        /// Hard coded user repair function (remove all points with the average of xCol)
+        /// Hard coded user repair function (removes all points with the average of xCol). This is not in wranglers.json ///
 
         const isNumeric = currData.array(xCol).some(v => typeof v === "number" && !isNaN(v));
         let xAvg = 0;

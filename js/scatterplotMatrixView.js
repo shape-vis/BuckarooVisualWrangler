@@ -3,7 +3,7 @@ class ScatterplotMatrixView{
         this.container = container;
         this.model = model;
 
-        this.size = 180; // Size of each cell in matrix
+        this.size = 180;                                                        // Size of each cell in matrix
         this.xPadding = 175;
         this.yPadding = 90;
         this.labelPadding = 60;
@@ -13,25 +13,21 @@ class ScatterplotMatrixView{
         this.bottomMargin = 125; 
         this.rightMargin = 0; 
 
-        this.selection = null;
+        this.xScale = d3.scaleLinear().domain([0, 100]).range([0, this.size]);  // Default xScale to be changed within plotting code
+        this.yScale = d3.scaleLinear().domain([0, 100]).range([this.size, 0]);  // Default yScale to be changed within plotting code
 
-        this.xScale = d3.scaleLinear().domain([0, 100]).range([0, this.size]);
-        this.yScale = d3.scaleLinear().domain([0, 100]).range([this.size, 0]);
-        this.brushXCol = 0;
-        this.brushYCol = 0;
+        this.selectedPoints = [];                                               // The current user selection of points from interacting with the plots
+        this.predicatePoints = [];                                              // Predicate points do not meet the user's predicate condition and are outlined in red
+        this.viewGroupsButton = false;                                          // True when the user has selected an attribute to group by and the legend will update to show group colors instead of error colors
 
-        this.selectedPoints = [];
-        this.predicatePoints = [];
-        this.viewGroupsButton = false;
-
-        this.errorColors = {        // To be updated as new error detectors are added
+        this.errorColors = {                                                    // To be updated as new error detectors are added
             "mismatch": "hotpink",
             "missing": "saddlebrown",
             "anomaly": "red",
             "incomplete": "gray"
         };
 
-        this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];      // Preference given to which errors are highlighted if both are present in a row
+        this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];  // Preference given to which errors are highlighted if both are present in a row
     }
 
     /**
@@ -3839,7 +3835,7 @@ class ScatterplotMatrixView{
             let categoricalScale = null;
             let originalCategoricalScale = null;
             
-            if (numericData.length > 0)
+            if (numericData.length > 0)     // Histogram data is numeric
             {
                 uniqueCategories = sortCategories(uniqueCategories);
                 originalUniqueCategories = sortCategories(originalUniqueCategories);
@@ -3860,7 +3856,7 @@ class ScatterplotMatrixView{
                 const mean = d3.mean(values);
                 const stdDev = d3.deviation(values);
 
-                if (groupByAttribute) {
+                if (groupByAttribute) {     // Group by is active
                     const groups = Array.from(new Set(numericData.map(d => d[groupByAttribute])));
                     const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
             
@@ -3951,8 +3947,7 @@ class ScatterplotMatrixView{
                         .attr("width", binWidth)
                         .attr("height", d => yScale(d[0]) - yScale(d[1]));
                 }
-                else{
-                    // No group by
+                else{        // No group by
                     const histData = histogramGenerator(numericData.map(d => d[xCol])).map(bin => {
                         return {
                             x0: bin.x0,
@@ -4034,7 +4029,7 @@ class ScatterplotMatrixView{
                 svg.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
 
             }
-            else{   // Data is all categorical
+            else{   // Histogram data is all categorical
                 uniqueCategories = uniqueCategories.slice(1);
                 uniqueCategories = sortCategories(uniqueCategories);
 
@@ -4047,7 +4042,7 @@ class ScatterplotMatrixView{
 
                 let yScale = null;
 
-                if (groupByAttribute) {
+                if (groupByAttribute) {     // Group by is active
                     const groups = Array.from(new Set(nonNumericData.map(d => d[groupByAttribute])));
                     const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(groups);
                     
@@ -4115,7 +4110,7 @@ class ScatterplotMatrixView{
                         .attr("width", xScale.bandwidth())
                         .attr("height", d => yScale(d[0]) - yScale(d[1]));
                 }
-                else{
+                else{       // No group by
                     const histData = [];
 
                     uniqueCategories.forEach(category => {
@@ -4168,7 +4163,7 @@ class ScatterplotMatrixView{
                 svg.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
             }
         }
-        /// Draw Heatmap ///
+        /// User made selection on a heatmap ///
         else{
             const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
@@ -4258,7 +4253,7 @@ class ScatterplotMatrixView{
                             }) || yBinLabels[yBinLabels.length - 1] 
                 }));
 
-                if(groupByAttribute){
+                if(groupByAttribute){       // Group by is active
                     const groupedData = d3.rollups(
                         data,
                         v => {
@@ -4336,7 +4331,7 @@ class ScatterplotMatrixView{
                             });
                         });   
                 }
-                else{
+                else{       // No group by
                     const groupedData = d3.rollups(
                         data,
                         v => ({
@@ -4369,23 +4364,6 @@ class ScatterplotMatrixView{
                         .attr("width", xScale.bandwidth())
                         .attr("height", yScale.bandwidth())
                         .attr("fill", d => getFillColorHeatmapNoGroupby(d, xCol, yCol, columnErrors, this.errorColors, colorScale, this.selectedPoints))
-                        // .attr("fill", d => {
-                        //     const isSelected = d.ids.some(ID => this.selectedPoints.some(p => p.ID === ID));
-
-                        //     if (isSelected) {
-                        //         return "gold"; 
-                        //     }
-                        //     if (d.y === "NaN") {
-                        //         return "gray";
-                        //     }
-                        //     if (uniqueYStringBins.includes(d.y) || uniqueXStringBins.includes(d.x)) {
-                        //         return "gray";
-                        //     }
-        
-                        //     return colorScale(d.value); 
-                        // })
-                        // .attr("stroke", "gray")
-                        // .attr("stroke-width", 0.5)
                         .attr("stroke", (d) => {
                             const isPredicated = d.ids.some(ID => this.predicatePoints.some(p => p.ID === ID));
                             return isPredicated ? "red" : "gray";
@@ -4442,7 +4420,7 @@ class ScatterplotMatrixView{
                         : yBinLabels.find((label, i) => d[yCol] >= yBins[i].x0 && d[yCol] < yBins[i].x1) || yBinLabels[yBinLabels.length - 1]
                 }));
 
-                if(groupByAttribute){
+                if(groupByAttribute){       // Group by is active
                     const groupedData = d3.rollups(
                         data,
                         v => {
@@ -4517,7 +4495,7 @@ class ScatterplotMatrixView{
                             });
                         });                
                 }
-                else{
+                else{       // No group by
                     const groupedData = d3.rollups(
                         data,
                         v => ({
@@ -4634,7 +4612,7 @@ class ScatterplotMatrixView{
 
                 }));
 
-                if(groupByAttribute){
+                if(groupByAttribute){       // Group by is active
                     const groupedData = d3.rollups(
                         data,
                         v => {
@@ -4710,7 +4688,7 @@ class ScatterplotMatrixView{
                         });         
 
                 }
-                else{
+                else{       // No group by
                     const groupedData = d3.rollups(
                         data,
                         v => ({
@@ -4815,7 +4793,7 @@ class ScatterplotMatrixView{
 
             /// All non numeric plot ///
             else{   
-                if(groupByAttribute){
+                if(groupByAttribute){       // Group by is active
                     const groupedData = d3.rollups(
                         data,
                         v => {
@@ -4891,7 +4869,7 @@ class ScatterplotMatrixView{
                         });
 
                 }
-                else{
+                else{       // No group by
                     const groupedData = d3.rollups(
                         data,
                         v => ({
@@ -4993,9 +4971,7 @@ class ScatterplotMatrixView{
                     .text(d => d);
             }
         }
-
     }
-
 }
 
 /**
