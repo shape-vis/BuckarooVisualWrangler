@@ -1,6 +1,7 @@
 let activeDataset = "stackoverflow";
 let stackoverflowController;
 
+
 /**
  * Adds an ID column into the first index of the table to be used throughout in selection, wrangling, etc. If an ID column already exists, it moves it to the first index in the
  * table. 
@@ -67,10 +68,10 @@ if (selectedSample) {                                           // User selected
 
     (async () => {
       try {
-        const detectorResponse = await fetch('/data/detectors.json');
+        const detectorResponse = await fetch('detectors/detectors.json');
         const detectors = await detectorResponse.json();
 
-        const wranglerResponse = await fetch('/data/wranglers.json');
+        const wranglerResponse = await fetch('wranglers/wranglers.json');
         const wranglers = await wranglerResponse.json();
 
         await stackoverflowController.init(detectors, wranglers);
@@ -124,10 +125,10 @@ else{       // User elected to upload their own dataset
  
            (async () => {
                  try {
-                   const detectorResponse = await fetch('/data/detectors.json');
+                   const detectorResponse = await fetch('data/detectors.json');
                    const detectors = await detectorResponse.json();
              
-                   const wranglerResponse = await fetch('/data/wranglers.json');
+                   const wranglerResponse = await fetch('data/wranglers.json');
                    const wranglers = await wranglerResponse.json();
                
                    await stackoverflowController.init(detectors, wranglers);
