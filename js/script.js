@@ -1,6 +1,6 @@
 let activeDataset = "stackoverflow";
 let stackoverflowController;
-
+let cacheController;
 
 /**
  * Adds an ID column into the first index of the table to be used throughout in selection, wrangling, etc. If an ID column already exists, it moves it to the first index in the
@@ -47,10 +47,14 @@ if (selectedSample) {                                           // User selected
     localStorage.removeItem("selectedSample");
 
     const table = setIDColumn(aq.from(inputData).slice(0, 200));    // Select only the first 200 rows to work with to speed up rendering time
+
+    const fullTable = setIDColumn(aq.from(inputData).slice(0,1000));
     d3.select("#matrix-vis-stackoverflow").html("");
 
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
     stackoverflowController.model.originalFilename = selectedSample;
+
+    cacheController = new CacheController(fullTable);
 
     attachButtonEventListeners(stackoverflowController);
 
@@ -75,6 +79,7 @@ if (selectedSample) {                                           // User selected
         const wranglers = await wranglerResponse.json();
 
         await stackoverflowController.init(detectors, wranglers);
+        await cacheController.init(detectors);
       } catch (err) {
         console.error("Failed to load or run detectors:", err);
       }
