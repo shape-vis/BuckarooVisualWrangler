@@ -2,12 +2,12 @@
     {
         "ID": 1,
         "name": "Remove",
-        "code": "/wranglers/removeData.js"
+        "code": "wranglers/removeData.js"
     },
 
     {
         "ID": 2,
         "name": "Impute Average",
-        "code": "/wranglers/imputeAverage.js"
+        "code": "wranglers/imputeAverage.js"
     }
 ]

@@ -2,30 +2,30 @@
     {
         "ID": 1,
         "name": "barchart",
-        "code": "/visualizations/barchart.js"
+        "code": "visualizations/barchart.js"
     },
 
     {
         "ID": 2,
         "name": "heatmap",
-        "code": "/visualizations/heatmap.js"
+        "code": "visualizations/heatmap.js"
     },
 
     {
         "ID": 3,
         "name": "scatterplot",
-        "code": "/visualizations/scatterplot.js"
+        "code": "visualizations/scatterplot.js"
     },
 
     {
         "ID": 4,
         "name": "linechart",
-        "code": "/visualizations/linechart.js"
+        "code": "visualizations/linechart.js"
     },
 
     {
         "ID": 5,
         "name": "boxplot",
-        "code": "/visualizations/boxplots.js"
+        "code": "visualizations/boxplots.js"
     }
 ]
