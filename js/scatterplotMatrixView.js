@@ -9,8 +9,10 @@ visualizations = {};
 
     for (const visualization of visualizationData) {
       
-      console.log("loading visualization", visualization.name, "from", visualization.code);
-      visualization.module = await import(visualization.code);
+      const loc = window.location.href;
+      const dir = loc.substring(0, loc.lastIndexOf('/'));
+      console.log("loading visualization", loc, visualization.name, "from", visualization.code);
+      visualization.module = await import(dir + visualization.code);
       visualizations[visualization.name] = visualization
     }
     console.log("visualizations", visualizations);

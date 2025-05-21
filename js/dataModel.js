@@ -304,7 +304,10 @@ class DataModel {
   
     for (const detector of detectors) {
       const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
-      const module = await import(path);
+      const loc = window.location.href;
+      const dir = loc.substring(0, loc.lastIndexOf('/'));
+      console.log("detector path", loc, dir, path);
+      const module = await import(dir + path);
       const result = module.default(this.filteredData);
   
       for (const [column, idErrorMap] of Object.entries(result)) {

@@ -595,7 +595,9 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/wranglers/removeData.js");
+        const loc = window.location.href;
+        const dir = loc.substring(0, loc.lastIndexOf('/'));
+        const module = await import(dir+"/wranglers/removeData.js");
         const condition = module.default(selectedPoints); 
         const errorMap = controller.model.getColumnErrors();
 
@@ -645,7 +647,9 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/wranglers/imputeAverage.js");
+        const loc = window.location.href;
+        const dir = loc.substring(0, loc.lastIndexOf('/'));
+        const module = await import(dir+"/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.xCol, controller.model.getData())
         const transformation = module.default(controller.xCol, controller.model.getData(), selectedPoints);
         const errorMap = controller.model.getColumnErrors();
@@ -696,7 +700,9 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/wranglers/imputeAverage.js");
+        const loc = window.location.href;
+        const dir = loc.substring(0, loc.lastIndexOf('/'));
+        const module = await import(dir+"/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.yCol, controller.model.getData())
         const transformation = module.default(controller.yCol, controller.model.getData(), selectedPoints);
         const errorMap = controller.model.getColumnErrors();
