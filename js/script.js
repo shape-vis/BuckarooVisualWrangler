@@ -48,7 +48,7 @@ if (selectedSample) {                                           // User selected
 
     const table = setIDColumn(aq.from(inputData).slice(0, 200));    // Select only the first 200 rows to work with to speed up rendering time
 
-    const fullTable = setIDColumn(aq.from(inputData).slice(0,1000));
+    const fullTable = setIDColumn(aq.from(inputData).slice(0,1000)); // Run on full dataset, right now it's just 1k for dev time speedup
     d3.select("#matrix-vis-stackoverflow").html("");
 
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");

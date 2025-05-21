@@ -11,9 +11,9 @@ class CacheController {
      */
     async init(detectors) {
         this.detectors = detectors;
-
         await this.model.runDetectors(detectors);
-        console.log(this.model.getColumnErrorSummary());
-        console.log(this.model.columnErrorMap());
+        this.model.createEmptyDataTable(data);
+        this.model.selectRandomNonErrorSubset(populationSize);
     }
+
 }

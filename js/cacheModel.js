@@ -3,6 +3,7 @@ class CacheModel {
     this.originalData = initialData;                // Maintain a copy of the original dataset
     this.data = this.preprocessData(initialData);   // Preprocessed data should contain all string values in string-majority columns
     this.columnErrorMap = {};                       // Mapping of every error in the dataset with its corresponding column and row ID
+    this.nonColumnErrorMap = {};                    // Mapping of all the columns and rows without error
   }
 
   /**
@@ -77,7 +78,7 @@ class CacheModel {
    */
   async runDetectors(detectors) {
     this.columnErrorMap = {};
-  
+
     for (const detector of detectors) {
       const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
       const module = await import(path);
@@ -131,5 +132,20 @@ class CacheModel {
     }
   
     return result;
+  }
+
+  selectRandomNonErrorSubset(populationSize) {
+
+    for (let i = 0;i<populationSize;i++) {
+      let randomIndex = Math.floor(Math.random() * populationSize);
+
+    }
+  }
+
+  createEmptyDataTable(data) {
+    let columns = Object.keys(data[0]);
+    let emptyRows = [];
+    emptyRows.columns = columns;
+
   }
 }

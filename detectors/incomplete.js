@@ -31,6 +31,7 @@ export default function detectIncompleteData(table) {
             for (const id of valueToIds[category]) {
               if (!result[column]) result[column] = {};
               result[column][id] = "incomplete";
+
             }
           }
         }
