@@ -28,26 +28,24 @@ In Terminal, cd to the BuckarooVisualWrangler directory. Run this line: python -
     1. Install pyenv, install python
     ```
     pyenv exec python3 -m venv .venv
-    ```
+    
     2. Start the venv:
-    ```
+    
     source .venv/bin/activate
-    ```
+    
     3. Install the requirements:
     ```
     pip install -r requirements.txt
-    ```
+    
 
 ### To run dev server
     ```
     flask run
-    ```
 
 ### download postgresql
     - This is assuming you are using a Mac, and that you have HomeBrew installed, install this from home directory on your system (we are running the db locally during scaling dev)
     ```
     brew install postgresql
-    ```
 
 
 
