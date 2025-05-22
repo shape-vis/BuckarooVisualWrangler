@@ -24,28 +24,25 @@ In Terminal, cd to the BuckarooVisualWrangler directory. Run this line: python -
 - Use this setup the environment after cloning the repo
 - requirements.txt lays out the project dependencies for flask (server) to talk with the db (postgresql)
 ### Setup venv
-    - Setup a venv python environment in the top-level dir
-    1. Install pyenv, install python
-    ```
-    pyenv exec python3 -m venv .venv
+- Setup a venv python environment in the top-level dir
+1. Install pyenv, install python
+    `pyenv exec python3 -m venv .venv`
     
-    2. Start the venv:
+2. Start the venv:
+    `source .venv/bin/activate`
     
-    source .venv/bin/activate
-    
-    3. Install the requirements:
-    ```
-    pip install -r requirements.txt
+3. Install the requirements:
+    `pip install -r requirements.txt`
     
 
-### To run dev server
-    ```
-    flask run
+### To run flask server
+-This runs the flask server in dev mode
+    `flask run`
 
 ### download postgresql
-    - This is assuming you are using a Mac, and that you have HomeBrew installed, install this from home directory on your system (we are running the db locally during scaling dev)
-    ```
-    brew install postgresql
+- This is assuming you are using a Mac, and that you have HomeBrew installed, install this from home directory on your system (we are running the db locally during scaling dev)
+
+    `brew install postgresql`   
 
 
 
