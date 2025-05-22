@@ -21,8 +21,8 @@ In Terminal, cd to the BuckarooVisualWrangler directory. Run this line: python -
 
 ## How to start as a fullstack app
 ### Background info
-    - Use this setup the environment after cloning the repo
-    - requirements.txt lays out the project dependencies for flask (server) to talk with the db (postgresql)
+- Use this setup the environment after cloning the repo
+- requirements.txt lays out the project dependencies for flask (server) to talk with the db (postgresql)
 ### Setup venv
     - Setup a venv python environment in the top-level dir
     1. Install pyenv, install python
