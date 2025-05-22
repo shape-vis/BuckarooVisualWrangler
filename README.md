@@ -19,7 +19,7 @@ In Terminal, cd to the BuckarooVisualWrangler directory. Run this line: python -
 - Transform selected data by making a selection and exploring the preview plots to see what happens when a wrangling action is performed
 - Export a python script of the actions you took
 
-## How to start as a fullstack app
+## How to start as an app with frontend,server,db
 ### Background info
 - Use this setup the environment after cloning the repo
 - requirements.txt lays out the project dependencies for flask (server) to talk with the db (postgresql)
