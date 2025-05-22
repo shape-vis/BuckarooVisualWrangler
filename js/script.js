@@ -42,7 +42,8 @@ function setIDColumn(table) {
 }
 
 const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
-if (selectedSample) {                                           // User selected one of the 3 available datasets                                 
+console.log("This is the selected ",selectedSample)
+if (selectedSample) {                                           // User selected one of the 3 available datasets
   d3.csv(selectedSample).then(inputData => {
     localStorage.removeItem("selectedSample");
 
