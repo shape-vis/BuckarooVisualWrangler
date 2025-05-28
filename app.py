@@ -1,7 +1,7 @@
 #make it able to read the variables from the .env file
 import datetime
 import os
-from time import timezone
+from datetime import timezone, datetime
 import psycopg2
 from dotenv import load_dotenv
 from flask import Flask, request
@@ -12,6 +12,26 @@ from flask import Flask, request
 CREATE_ROOMS_TABLE = (
     "CREATE TABLE IF NOT EXISTS rooms (id SERIAL PRIMARY KEY, name TEXT);"
 )
+
+# Here, we use DATE(date) to turn the date column into a PostgreSQL DATE. 
+# Then when we use DISTINCT with that, it selects only the different individual dates. 
+# If we didn't do this, since we store hours, minutes, and seconds in our table,
+#  every row would be different even if the date is the same (since the times would differ).
+GLOBAL_NUMBER_OF_DAYS = (
+    """SELECT COUNT(DISTINCT DATE(date)) AS days FROM temperatures;"""
+)
+GLOBAL_AVG = """SELECT AVG(temperature) as average FROM temperatures;"""
+
+#get the room name
+ROOM_NAME = """SELECT name FROM rooms WHERE id = (%s)"""
+#calculate number of days that data is stored for this room
+ROOM_NUMBER_OF_DAYS = """SELECT COUNT(DISTINCT DATE(date)) AS days FROM temperatures WHERE room_id = (%s);"""
+#to get the all-time average of the room
+ROOM_ALL_TIME_AVG = (
+    "SELECT AVG(temperature) as average FROM temperatures WHERE room_id = (%s);"
+)
+
+GET_ALL_INFO = "SELECT * FROM courses;"
 
 # to create a new table for a new temperature recorded in the "house", 
 # This uses a FOREIGN KEY constraint to link the table to the rooms table. All this does 
@@ -73,10 +93,44 @@ def add_temp():
         with connection.cursor() as cursor:
             #Create a table for the temperatures if not already existing
             cursor.execute(CREATE_TEMPS_TABLE)
-            #Insert the temperature reading into the table.
+            #Insert the temperature reading into the table, these things in the tuple replace %s in the constants at the top.
             cursor.execute(INSERT_TEMP, (room_id, temperature, date))
     return {"message": "Temperature added."}, 201
 
+
+@app.get("/api/average")
+def get_global_avg():
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GLOBAL_AVG)
+            average = cursor.fetchone()[0]
+            cursor.execute(GLOBAL_NUMBER_OF_DAYS)
+            days = cursor.fetchone()[0]
+    return {"average": round(average, 2), "days": days}
+
+
+#not getting all
+@app.get("/api/all")
+def get_all():
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GET_ALL_INFO)
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            all = [dict(zip(columns,row)) for row in rows]
+    return {"all":all, "desc[0]":columns[0],"desc[1]":columns[1],"desc[2]":columns[2],"desc[3]":columns[3],"desc[4]":columns[4]}
+
+@app.get("/api/room/<int>:room_id>)")
+def get_room_all(room_id):
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(ROOM_NAME,(room_id,))
+            name = cursor.fetchone()[0]
+            cursor.execute(ROOM_ALL_TIME_AVG, (room_id,))
+            average = cursor.fetchone()[0]
+            cursor.execute(ROOM_NUMBER_OF_DAYS, (room_id,))
+            days = cursor.fetchone()[0]
+    return {"name": name, "average": round(average, 2), "days": days}
 
 @app.get("/")
 def home():
