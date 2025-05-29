@@ -544,6 +544,28 @@ class ScatterplotController {
 }
 
 /**
+     * The full pipeline test, view -> server -> db -> server -> view
+     */
+async function pipeline(){
+    console.log("mon button pushed");
+        const url = "/api/all"
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Response status: ${response.status}`);
+            }
+                const jsonInfo = await response.json();
+                let jsonText = JSON.stringify(jsonInfo);
+                console.log(jsonInfo);
+                console.log(jsonText);
+                d3.select("#db-test-body").text(jsonText);
+        } catch (error) {
+                console.error(error.message);
+            }
+}
+
+
+/**
  * Handler for user clicks in the Data Repair Toolkit. Calls logic for running data wranglers and re-plots the new dataset.
  * @param {*} controller 
  */
@@ -555,6 +577,8 @@ async function attachButtonEventListeners(controller){
     d3.select("#impute-average-x").on("click", null);
     d3.select("#impute-average-y").on("click", null);
 
+    d3.select("#mon-button").on("click", async () => pipeline());
+
     d3.select("#undo").on("click", async () => {
         console.log("Controller undo: ", controller);
         controller.model.undoLastTransformation();
@@ -564,6 +588,7 @@ async function attachButtonEventListeners(controller){
         const selectionEnabled = true;
         controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
     });
+
 
     d3.select("#redo").on("click", async () => {
         controller.model.redoLastTransformation();
@@ -595,7 +620,7 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/wranglers/removeData.js");
+        const module = await import("/static/wranglers/removeData.js");
         const condition = module.default(selectedPoints); 
         const errorMap = controller.model.getColumnErrors();
 
@@ -645,7 +670,7 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/wranglers/imputeAverage.js");
+        const module = await import("/static/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.xCol, controller.model.getData())
         const transformation = module.default(controller.xCol, controller.model.getData(), selectedPoints);
         const errorMap = controller.model.getColumnErrors();
@@ -696,7 +721,7 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/wranglers/imputeAverage.js");
+        const module = await import("/static/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.yCol, controller.model.getData())
         const transformation = module.default(controller.yCol, controller.model.getData(), selectedPoints);
         const errorMap = controller.model.getColumnErrors();
