@@ -4,7 +4,7 @@ import os
 from datetime import timezone, datetime
 import psycopg2
 from dotenv import load_dotenv
-from flask import Flask, request
+from flask import Flask, request, render_template
 
 #basic REST POST AND GET queries
 
@@ -134,4 +134,8 @@ def get_room_all(room_id):
 
 @app.get("/")
 def home():
-    return "Testing the get request"
+    return render_template('index.html')
+
+@app.route('/data_cleaning_vis_tool')
+def data_cleaning_vis_tool():
+    return render_template('data_cleaning_vis_tool.html')

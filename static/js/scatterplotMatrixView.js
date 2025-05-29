@@ -4,7 +4,7 @@ visualizations = {};
 
 (async () => {
   try {
-    const visualizationsResponse = await fetch('visualizations/visualizations.json');
+    const visualizationsResponse = await fetch('/static/visualizations/visualizations.json');
     let visualizationData = await visualizationsResponse.json();
 
     for (const visualization of visualizationData) {
@@ -714,7 +714,7 @@ class ScatterplotMatrixView{
                 .attr("y", -60)   
                 .attr("width", 45) 
                 .attr("height", 25)
-                .attr("xlink:href", "images/icons/heatmap.png")
+                .attr("xlink:href", "/static/images/icons/heatmap.png")
                 .attr("cursor", "pointer")
                 .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     
@@ -724,7 +724,7 @@ class ScatterplotMatrixView{
                     .attr("y", -35)   
                     .attr("width", 45) 
                     .attr("height", 25)
-                    .attr("xlink:href", "images/icons/scatterplot.png")
+                    .attr("xlink:href", "/static/images/icons/scatterplot.png")
                     .attr("cursor", "pointer")
                     .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -734,7 +734,7 @@ class ScatterplotMatrixView{
                     .attr("y", -10)   
                     .attr("width", 45) 
                     .attr("height", 25)
-                    .attr("xlink:href", "images/icons/linechart.png")
+                    .attr("xlink:href", "/static/images/icons/linechart.png")
                     .attr("cursor", "pointer")
                     .on("click", () => visualizations['linechart'].module.draw(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
                     // .on("click", () => switchToLineChart(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
@@ -776,7 +776,7 @@ class ScatterplotMatrixView{
             .attr("y", -60)   
             .attr("width", 45) 
             .attr("height", 25)
-            .attr("xlink:href", "images/icons/heatmap.png")
+            .attr("xlink:href", "/static/images/icons/heatmap.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -786,7 +786,7 @@ class ScatterplotMatrixView{
             .attr("y", -35)   
             .attr("width", 45) 
             .attr("height", 25)
-            .attr("xlink:href", "images/icons/scatterplot.png")
+            .attr("xlink:href", "/static/images/icons/scatterplot.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -796,7 +796,7 @@ class ScatterplotMatrixView{
             .attr("y", -10)   
             .attr("width", 45) 
             .attr("height", 25)
-            .attr("xlink:href", "images/icons/linechart.png")
+            .attr("xlink:href", "/static/images/icons/linechart.png")
             .attr("cursor", "pointer")
             .on("click", () => visualizations['linechart'].module.draw(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
             // .on("click", () => switchToLineChart(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
@@ -830,7 +830,7 @@ class ScatterplotMatrixView{
             .attr("y", -60)   
             .attr("width", 45) 
             .attr("height", 25)
-            .attr("xlink:href", "images/icons/heatmap.png")
+            .attr("xlink:href", "/static/images/icons/heatmap.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -840,7 +840,7 @@ class ScatterplotMatrixView{
             .attr("y", -35)   
             .attr("width", 45) 
             .attr("height", 25)
-            .attr("xlink:href", "images/icons/scatterplot.png")
+            .attr("xlink:href", "/static/images/icons/scatterplot.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -850,7 +850,7 @@ class ScatterplotMatrixView{
             .attr("y", -10)   
             .attr("width", 45) 
             .attr("height", 25)
-            .attr("xlink:href", "images/icons/linechart.png")
+            .attr("xlink:href", "/static/images/icons/linechart.png")
             .attr("cursor", "pointer")
             .on("click", () => visualizations['linechart'].module.draw(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
             // .on("click", () => switchToLineChart(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));

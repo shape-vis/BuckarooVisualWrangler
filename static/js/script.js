@@ -55,7 +55,7 @@ if (selectedSample) {                                           // User selected
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
     stackoverflowController.model.originalFilename = selectedSample;
 
-    cacheController = new CacheController(fullTable);
+    // cacheController = new CacheController(fullTable);
 
     attachButtonEventListeners(stackoverflowController);
 
@@ -73,14 +73,13 @@ if (selectedSample) {                                           // User selected
 
     (async () => {
       try {
-        const detectorResponse = await fetch('detectors/detectors.json');
+        const detectorResponse = await fetch('/static/detectors/detectors.json');  // Updated path
         const detectors = await detectorResponse.json();
 
-        const wranglerResponse = await fetch('wranglers/wranglers.json');
+        const wranglerResponse = await fetch('/static/wranglers/wranglers.json');  // Updated path
         const wranglers = await wranglerResponse.json();
 
         await stackoverflowController.init(detectors, wranglers);
-        await cacheController.init(detectors);
       } catch (err) {
         console.error("Failed to load or run detectors:", err);
       }
@@ -90,7 +89,7 @@ if (selectedSample) {                                           // User selected
 else{       // User elected to upload their own dataset
   document.getElementById('fileInput').addEventListener('change', function (event) {
 
-    fetch('data_cleaning_vis_tool.html') 
+    fetch('/data_cleaning_vis_tool') 
        .then(response => response.text())
        .then(html => {
          document.body.innerHTML = html;
@@ -131,10 +130,10 @@ else{       // User elected to upload their own dataset
  
            (async () => {
                  try {
-                   const detectorResponse = await fetch('data/detectors.json');
+                   const detectorResponse = await fetch('/static/detectors/detectors.json');
                    const detectors = await detectorResponse.json();
              
-                   const wranglerResponse = await fetch('data/wranglers.json');
+                   const wranglerResponse = await fetch('/static/wranglers/wranglers.json');
                    const wranglers = await wranglerResponse.json();
                
                    await stackoverflowController.init(detectors, wranglers);

@@ -2,24 +2,24 @@
     {
         "ID": 1,
         "name": "Mismatch",
-        "code": "/detectors/datatypeMismatch.js"
+        "code": "/static/detectors/datatypeMismatch.js"
     },
 
     {
         "ID": 2,
         "name": "Missing",
-        "code": "/detectors/missingValue.js"
+        "code": "/static/detectors/missingValue.js"
     },
 
     {
         "ID": 3,
         "name": "Anomaly",
-        "code": "/detectors/anomaly.js"
+        "code": "/static/detectors/anomaly.js"
     },
 
     {
         "ID": 4,
         "name": "Incomplete",
-        "code": "/detectors/incomplete.js"
+        "code": "/static/detectors/incomplete.js"
     }
 ]

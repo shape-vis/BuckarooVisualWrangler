@@ -657,7 +657,7 @@ export function draw(model, view, givenData, svg, xCol, yCol, cellID, groupByAtt
     .attr("y", -60)   
     .attr("width", 45) 
     .attr("height", 25)
-    .attr("xlink:href", "images/icons/heatmap.png")
+    .attr("xlink:href", "/static/images/icons/heatmap.png")
     .attr("cursor", "pointer")
     .on("click", () => view.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -667,7 +667,7 @@ export function draw(model, view, givenData, svg, xCol, yCol, cellID, groupByAtt
         .attr("y", -35)   
         .attr("width", 45) 
         .attr("height", 25)
-        .attr("xlink:href", "images/icons/scatterplot.png")
+        .attr("xlink:href", "/static/images/icons/scatterplot.png")
         .attr("cursor", "pointer")
         .on("click", () => view.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
@@ -677,7 +677,7 @@ export function draw(model, view, givenData, svg, xCol, yCol, cellID, groupByAtt
         .attr("y", -10)   
         .attr("width", 45) 
         .attr("height", 25)
-        .attr("xlink:href", "images/icons/linechart.png")
+        .attr("xlink:href", "/static/images/icons/linechart.png")
         .attr("cursor", "pointer")
         .on("click", () => view.switchToLineChart(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 }
