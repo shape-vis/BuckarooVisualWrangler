@@ -1,11 +1,7 @@
-#make it able to read the variables from the .env file
-import datetime
-import os
 from datetime import timezone, datetime
-import psycopg2
-from dotenv import load_dotenv
-from flask import Flask, request, render_template
-
+from flask import request, render_template
+from app import connection
+from app import app
 #basic REST POST AND GET queries
 
 # to create a new table for a new room in the "house"
@@ -48,14 +44,6 @@ INSERT_TEMP = (
 #That way they can use the id in subsequent requests to insert temperatures related to the new room:"
 INSERT_ROOM_RETURN_ID = "INSERT INTO rooms (name) VALUES (%s) RETURNING id;"
 
-#load the .env file and read the different variables in there and but them in the environment variables for this proccess
-load_dotenv()
-
-app = Flask(__name__)
-#sets the URL to the DB url specified for the local postgresql db on my local machine specified in .env
-url = os.getenv("DATABASE_URL")
-#a connection to the db, can use to insert or read data from the db
-connection = psycopg2.connect(url)
 
 #We tell Flask what endpoint to accept data in using a decorator (@)
 @app.post("/api/room")
