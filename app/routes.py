@@ -6,51 +6,18 @@
 from datetime import timezone, datetime
 from flask import request, render_template
 import pandas as pd
-from app import connection
+from app import connection, engine
 from app import app
 from app.service_helpers import clean_table_name
 
 # to create a new table for a new room in the "house"
-CREATE_ROOMS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS rooms (id SERIAL PRIMARY KEY, name TEXT);"
-)
-
-# Here, we use DATE(date) to turn the date column into a PostgreSQL DATE. 
-# Then when we use DISTINCT with that, it selects only the different individual dates. 
-# If we didn't do this, since we store hours, minutes, and seconds in our table,
-#  every row would be different even if the date is the same (since the times would differ).
-GLOBAL_NUMBER_OF_DAYS = (
-    """SELECT COUNT(DISTINCT DATE(date)) AS days FROM temperatures;"""
-)
-GLOBAL_AVG = """SELECT AVG(temperature) as average FROM temperatures;"""
-
-#get the room name
-ROOM_NAME = """SELECT name FROM rooms WHERE id = (%s)"""
-#calculate number of days that data is stored for this room
-ROOM_NUMBER_OF_DAYS = """SELECT COUNT(DISTINCT DATE(date)) AS days FROM temperatures WHERE room_id = (%s);"""
-#to get the all-time average of the room
-ROOM_ALL_TIME_AVG = (
-    "SELECT AVG(temperature) as average FROM temperatures WHERE room_id = (%s);"
-)
-
+CREATE_ROOMS_TABLE = ("CREATE TABLE IF NOT EXISTS rooms (id SERIAL PRIMARY KEY, name TEXT);")
 GET_ALL_INFO = "SELECT * FROM courses;"
-
-# to create a new table for a new temperature recorded in the "house", 
-# This uses a FOREIGN KEY constraint to link the table to the rooms table. All this does 
-# is ensure referential integrity (i.e. can't enter a room_id for a room that doesn't exist). 
-# Also using ON DELETE CASCADE means that if we delete a room, all its referenced temperatures will be deleted too.
-CREATE_TEMPS_TABLE = """CREATE TABLE IF NOT EXISTS temperatures (room_id INTEGER, temperature REAL, 
-                        date TIMESTAMP, FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE);"""
-
-INSERT_TEMP = (
-    "INSERT INTO temperatures (room_id, temperature, date) VALUES (%s, %s, %s);"
-)
-
 #to insert data we'll use the below, We'll get this query to return the id column that was inserted, so that we can send it back to the client of our API.
-#That way they can use the id in subsequent requests to insert temperatures related to the new room:"
+#That way they can use the id in subsequent requests to insert temperatures related to the new room:
 INSERT_ROOM_RETURN_ID = "INSERT INTO rooms (name) VALUES (%s) RETURNING id;"
 
-
+#this endpoint is just for reference of how to use a cursor object if not using pandas
 #We tell Flask what endpoint to accept data in using a decorator (@)
 @app.post("/api/room")
 def create_room():
@@ -72,63 +39,22 @@ def create_room():
     # It's a way for our API to tell the client succinctly the status of the request.        
     return {"id": room_id, "message": f"Room {name} created."}, 201
 
-@app.post("/api/temperature")
-def add_temp():
-    # For this, we'd expect the client to send a request that contains the temperature reading and the room id.
-    data = request.get_json()
-    temperature = data["temperature"]
-    room_id = data["room"]
-    # If the date is provided, use it. Otherwise use the current date.
-    try:
-        date = datetime.strptime(data["date"], "%m-%d-%Y %H:%M:%S")
-    except KeyError:
-        date = datetime.now(timezone.utc)
-    with connection:
-        with connection.cursor() as cursor:
-            #Create a table for the temperatures if not already existing
-            cursor.execute(CREATE_TEMPS_TABLE)
-            #Insert the temperature reading into the table, these things in the tuple replace %s in the constants at the top.
-            cursor.execute(INSERT_TEMP, (room_id, temperature, date))
-    return {"message": "Temperature added."}, 201
-
-
 @app.post("/api/upload")
 def upload_csv():
+    """
+    Handles when a user uploads a csv to the app, creates a new table with it in the database
+    :return: whether it was completed successfully
+    """
     #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
     #parse the file into a csv using pandas
     dataframe = pd.read_csv(csv_file)
-    dataframe_columns = dataframe.columns
-
     cleaned_table_name = clean_table_name(csv_file.filename)
-    print(cleaned_table_name)
-    # #get the query
-    # CREATE_TABLE = create_new_table_query(dataframe,dataframe_columns)
-
-    # with connection:
-    #     with connection.cursor() as cursor:
-    #         cursor.execute(CREATE_TABLE)
-    #         cursor.execute(INSERT_ROOM_RETURN_ID, (name,))
-    #         #We get the result of running our query, which should be the inserted row id.
-    #         room_id = cursor.fetchone()[0]
-    # # We return a Python dictionary, which Flask conveniently converts to JSON.
-    # # The return status code is 201, which means "Created". 
-    # # It's a way for our API to tell the client succinctly the status of the request.        
-    # return {"id": room_id, "message": f"Room {name} created."}, 201
-
-    #next step: create a data structure which maps the columns to their types, then makes a table with it in postgres
-
-    return {'status':'success'}
-
-@app.get("/api/average")
-def get_global_avg():
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(GLOBAL_AVG)
-            average = cursor.fetchone()[0]
-            cursor.execute(GLOBAL_NUMBER_OF_DAYS)
-            days = cursor.fetchone()[0]
-    return {"average": round(average, 2), "days": days}
+    try:
+        rows_inserted = dataframe.to_sql(cleaned_table_name, engine, if_exists='replace')
+        return{"success": True, "rows": rows_inserted}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 #not getting all
