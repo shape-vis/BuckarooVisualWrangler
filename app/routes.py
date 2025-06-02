@@ -8,6 +8,7 @@ from flask import request, render_template
 import pandas as pd
 from app import connection
 from app import app
+from app.service_helpers import clean_table_name
 
 # to create a new table for a new room in the "house"
 CREATE_ROOMS_TABLE = (
@@ -97,9 +98,25 @@ def upload_csv():
     csv_file = request.files['file']
     #parse the file into a csv using pandas
     dataframe = pd.read_csv(csv_file)
-    #get the columns of the csv
     dataframe_columns = dataframe.columns
-    
+
+    cleaned_table_name = clean_table_name(csv_file.filename)
+    print(cleaned_table_name)
+    # #get the query
+    # CREATE_TABLE = create_new_table_query(dataframe,dataframe_columns)
+
+    # with connection:
+    #     with connection.cursor() as cursor:
+    #         cursor.execute(CREATE_TABLE)
+    #         cursor.execute(INSERT_ROOM_RETURN_ID, (name,))
+    #         #We get the result of running our query, which should be the inserted row id.
+    #         room_id = cursor.fetchone()[0]
+    # # We return a Python dictionary, which Flask conveniently converts to JSON.
+    # # The return status code is 201, which means "Created". 
+    # # It's a way for our API to tell the client succinctly the status of the request.        
+    # return {"id": room_id, "message": f"Room {name} created."}, 201
+
+    #next step: create a data structure which maps the columns to their types, then makes a table with it in postgres
 
     return {'status':'success'}
 
