@@ -1,8 +1,13 @@
+#Buckaroo Project - June 1, 2025
+#This file handles all endpoints from the front-end
+
+
+
 from datetime import timezone, datetime
 from flask import request, render_template
+import pandas as pd
 from app import connection
 from app import app
-#basic REST POST AND GET queries
 
 # to create a new table for a new room in the "house"
 CREATE_ROOMS_TABLE = (
@@ -85,6 +90,17 @@ def add_temp():
             cursor.execute(INSERT_TEMP, (room_id, temperature, date))
     return {"message": "Temperature added."}, 201
 
+
+@app.post("/api/upload")
+def upload_csv():
+    print(request.files.items)
+    csv_file = request.files['file']
+    print(csv_file)
+
+    uploaded_csv = pd.read_csv(csv_file)
+    print(uploaded_csv)
+
+    return {'status':'success'}
 
 @app.get("/api/average")
 def get_global_avg():

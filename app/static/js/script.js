@@ -41,6 +41,26 @@ function setIDColumn(table) {
   return table;
 }
 
+/**
+ * Sends the user uploaded file to the endpoint in the server to add it to the DB - un-finished
+ * @param {} fileToSend 
+ */
+async function uploadFileToDB(fileToSend){
+    console.log("starting upload");
+        const url = "/api/upload"
+        try {
+            const response = await fetch(url, {
+              method: "POST",
+              body: fileToSend
+            });
+            if (!response.ok) {
+                throw new Error(`Response status: ${response.status}`);
+            }
+        } catch (error) {
+                console.error(error.message);
+            }
+}
+
 const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
 console.log("This is the selected ",selectedSample)
 if (selectedSample) {                                           // User selected one of the 3 available datasets
@@ -89,6 +109,22 @@ if (selectedSample) {                                           // User selected
 else{       // User elected to upload their own dataset
   document.getElementById('fileInput').addEventListener('change', function (event) {
 
+    /**
+     * Sends the uploaded file to the server to be added to the DB
+     */
+    const file = event.target.files[0];
+    console.log("file", file);
+    if (!file) return;
+    const fileToSend = new FormData();
+    fileToSend.append("file",file);
+
+    uploadFileToDB(fileToSend);
+
+    //next step: send the file to send using the last claude message to the server
+
+    /**
+     * On-browser functionality - old, but working
+     */
     fetch('/data_cleaning_vis_tool') 
        .then(response => response.text())
        .then(html => {
@@ -97,12 +133,14 @@ else{       // User elected to upload their own dataset
          const file = event.target.files[0];
          console.log("file", file);
          if (!file) return;
-             
+
          const reader = new FileReader();
        
          reader.onload = function (e) {
            const contents = e.target.result;
            const parsedData = d3.csvParse(contents);
+
+           //send the 
            const table = setIDColumn(aq.from(parsedData).slice(0, 200));
        
            d3.select("#matrix-vis-stackoverflow").html("");

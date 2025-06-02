@@ -1,3 +1,7 @@
+#Buckaroo Project - June 1, 2025
+#This file allows the app to use packages for maintainability
+
+
 #make it able to read the variables from the .env file
 import os
 import psycopg2
