@@ -93,12 +93,13 @@ def add_temp():
 
 @app.post("/api/upload")
 def upload_csv():
-    print(request.files.items)
+    #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
-    print(csv_file)
-
-    uploaded_csv = pd.read_csv(csv_file)
-    print(uploaded_csv)
+    #parse the file into a csv using pandas
+    dataframe = pd.read_csv(csv_file)
+    #get the columns of the csv
+    dataframe_columns = dataframe.columns
+    
 
     return {'status':'success'}
 
@@ -123,18 +124,6 @@ def get_all():
             rows = cursor.fetchall()
             all = [dict(zip(columns,row)) for row in rows]
     return {"all":all, "desc[0]":columns[0],"desc[1]":columns[1],"desc[2]":columns[2],"desc[3]":columns[3],"desc[4]":columns[4]}
-
-@app.get("/api/room/<int>:room_id>)")
-def get_room_all(room_id):
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(ROOM_NAME,(room_id,))
-            name = cursor.fetchone()[0]
-            cursor.execute(ROOM_ALL_TIME_AVG, (room_id,))
-            average = cursor.fetchone()[0]
-            cursor.execute(ROOM_NUMBER_OF_DAYS, (room_id,))
-            days = cursor.fetchone()[0]
-    return {"name": name, "average": round(average, 2), "days": days}
 
 @app.get("/")
 def home():
