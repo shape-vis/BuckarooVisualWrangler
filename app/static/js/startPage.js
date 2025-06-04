@@ -25,32 +25,27 @@ function userChoseProvidedDataset(selectedDatasetPath){
     const table = setIDColumn(aq.from(inputData).slice(0, 200));    // Select only the first 200 rows to work with to speed up rendering time
 
     const fullTable = setIDColumn(aq.from(inputData).slice(0,1000)); // Run on full dataset, right now it's just 1k for dev time speedup
-    d3.select("#matrix-vis-stackoverflow").html("");
-
-    stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
-    stackoverflowController.model.originalFilename = selectedSample;
-
-    attachButtonEventListeners(stackoverflowController);
-
-    exportPythonScriptListener(stackoverflowController);
-    initController(stackoverflowController);
-
+        initController(false,table,selectedSample);
   });
 }
 
-function userUploadedDataset(){
-    document.getElementById('fileInput').addEventListener('change', function (event) {
-
+function startDBFileUpload(uploadEvent){
     /**
      * Sends the uploaded file to the server to be added to the DB
      */
-    const file = event.target.files[0];
+    const file = uploadEvent.target.files[0];
     console.log("file", file);
     if (!file) return;
     const fileToSend = new FormData();
     fileToSend.append("file",file);
 
     uploadFileToDB(fileToSend);
+}
+
+function userUploadedDataset(){
+    document.getElementById('fileInput').addEventListener('change', function (event) {
+
+        startDBFileUpload(event);
 
     /**
      * On-browser functionality - old, but working
@@ -72,15 +67,7 @@ function userUploadedDataset(){
 
            //send the
            const table = setIDColumn(aq.from(parsedData).slice(0, 200));
-
-           d3.select("#matrix-vis-stackoverflow").html("");
-
-           stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
-           stackoverflowController.model.originalFilename = file.name;
-
-           attachButtonEventListeners(stackoverflowController);
-           exportPythonScriptListener(stackoverflowController);
-           initController(stackoverflowController);
+           initController(true, table, file.name);
          };
 
          reader.readAsText(file);
@@ -91,7 +78,23 @@ function userUploadedDataset(){
  });
 }
 
-function initController(controller){
+function initController(userUploadedFile, table, fileName){
+    d3.select("#matrix-vis-stackoverflow").html("");
+    stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
+
+    if(userUploadedFile) {
+        stackoverflowController.model.originalFilename = fileName;
+    }
+    attachButtonEventListeners(stackoverflowController);
+    exportPythonScriptListener(stackoverflowController);
+    initWranglersDetectors(stackoverflowController);
+}
+
+/**
+ * Loads the detectors and wranglers into the controller
+ * @param controller
+ */
+function initWranglersDetectors(controller){
     (async () => {
         try {
             const detectorResponse = await fetch('/static/detectors/detectors.json');
@@ -107,6 +110,10 @@ function initController(controller){
         })();
 }
 
+/**
+ * Exports into a python script
+ * @param controller
+ */
 function exportPythonScriptListener(controller){
     // Export python script listener
     document.getElementById("export-script").addEventListener("click", function () {
