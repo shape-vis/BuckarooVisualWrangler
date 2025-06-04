@@ -8,11 +8,12 @@ from flask import request, render_template
 import pandas as pd
 from app import connection, engine
 from app import app
-from app.service_helpers import clean_table_name
+from app.service_helpers import clean_table_name, get_whole_table_query
 
 # to create a new table for a new room in the "house"
 CREATE_ROOMS_TABLE = ("CREATE TABLE IF NOT EXISTS rooms (id SERIAL PRIMARY KEY, name TEXT);")
 GET_ALL_INFO = "SELECT * FROM courses;"
+
 #to insert data we'll use the below, We'll get this query to return the id column that was inserted, so that we can send it back to the client of our API.
 #That way they can use the id in subsequent requests to insert temperatures related to the new room:
 INSERT_ROOM_RETURN_ID = "INSERT INTO rooms (name) VALUES (%s) RETURNING id;"
@@ -53,6 +54,19 @@ def upload_csv():
     try:
         rows_inserted = dataframe.to_sql(cleaned_table_name, engine, if_exists='replace')
         return{"success": True, "rows": rows_inserted}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/get-sample")
+def get_sample():
+    filename = request.args.get("filename")
+    cleaned_table_name = clean_table_name(filename)
+    if not filename:
+        return {"success": False, "error": "Filename required"}
+    QUERY = get_whole_table_query(cleaned_table_name)
+    try:
+        sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
+        return sample_dataframe
     except Exception as e:
         return {"success": False, "error": str(e)}
 

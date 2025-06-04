@@ -2,69 +2,29 @@ let activeDataset = "stackoverflow";
 let stackoverflowController;
 let cacheController;
 
-/**
- * Adds an ID column into the first index of the table to be used throughout in selection, wrangling, etc. If an ID column already exists, it moves it to the first index in the
- * table. 
- * @param {*} table Data
- * @returns Data with ID column added if needed
- */
-function setIDColumn(table) {
-  const colNames = table.columnNames();
-  const hasID = colNames.includes("ID");
+import {getSampleData, uploadFileToDB} from './serverCalls.js';
+import setIDColumn from "./tableFunction.js";
 
-  if (!hasID) {
-    // Add new numeric ID column starting from 1
-    const idArray = Array.from({ length: table.numRows() }, (_, i) => i + 1);
-    const withID = table.assign({ ID: idArray });
-    return withID.select(['ID', ...withID.columnNames().filter(col => col !== 'ID')]);
-  }
-
-  // ID exists — check if it's numeric and unique
-  const idValues = table.array("ID");
-  const isNumeric = idValues.every(val => typeof val === "number" || (!isNaN(val) && val.trim() !== ""));
-  const isUnique = new Set(idValues).size === idValues.length;
-
-  if (!isNumeric || !isUnique) {
-    // Preserve original ID column, create new numeric ID
-    const idArray = Array.from({ length: table.numRows() }, (_, i) => i + 1);
-    let withBackup = table.rename({ ID: "Original_ID" });
-    let withNewID = withBackup.assign({ ID: idArray });
-    return withNewID.select(['ID', ...withNewID.columnNames().filter(col => col !== 'ID')]);
-  }
-
-  // ID is good, just move it to the front if needed
-  if (colNames[0] !== "ID") {
-    return table.select(["ID", ...colNames.filter(c => c !== "ID")]);
-  }
-
-  // Already in first position and valid
-  return table;
-}
-
-/**
- * Sends the user uploaded file to the endpoint in the server to add it to the DB - un-finished
- * @param {} fileToSend 
- */
-async function uploadFileToDB(fileToSend){
-    console.log("starting upload");
-        const url = "/api/upload"
-        try {
-            const response = await fetch(url, {
-              method: "POST",
-              body: fileToSend
-            });
-            if (!response.ok) {
-                throw new Error(`Response status: ${response.status}`);
-            }
-        } catch (error) {
-                console.error(error.message);
-            }
-}
 
 const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
 console.log("This is the selected ",selectedSample)
-if (selectedSample) {                                           // User selected one of the 3 available datasets
-  d3.csv(selectedSample).then(inputData => {
+if (selectedSample){ // User selected one of the 3 available datasets
+
+    // //add the selected file to the db first
+    // console.log(selectedSample)
+    // const fileToSend = new FormData();
+    // fileToSend.append("file",selectedSample);
+    //
+    // let uploadFlag = uploadFileToDB(fileToSend);
+    // // table was added to the db, now get the first 200
+    // if(uploadFlag){
+    //     let dataTableSample = getSampleData(selectedSample)
+    //     console.log(dataTableSample);
+    //     aq.table(dataTableSample);
+    //     const processedTable = setIDColumn(dataTableSample);
+    // }
+    // OLD implementation
+    d3.csv(selectedSample).then(inputData => {
     localStorage.removeItem("selectedSample");
 
     const table = setIDColumn(aq.from(inputData).slice(0, 200));    // Select only the first 200 rows to work with to speed up rendering time
@@ -74,8 +34,6 @@ if (selectedSample) {                                           // User selected
 
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
     stackoverflowController.model.originalFilename = selectedSample;
-
-    // cacheController = new CacheController(fullTable);
 
     attachButtonEventListeners(stackoverflowController);
 
@@ -119,8 +77,6 @@ else{       // User elected to upload their own dataset
     fileToSend.append("file",file);
 
     uploadFileToDB(fileToSend);
-
-    //next step: send the file to send using the last claude message to the server
 
     /**
      * On-browser functionality - old, but working

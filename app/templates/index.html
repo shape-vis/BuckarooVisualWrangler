@@ -19,9 +19,11 @@
 
         <script>
             function loadDataset(filename) {
+
               localStorage.setItem("selectedSample",filename);
               window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
             }
+
           </script>
     </head>
 
