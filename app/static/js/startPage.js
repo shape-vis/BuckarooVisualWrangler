@@ -5,8 +5,9 @@ let cacheController;
 import {getSampleData, uploadFileToDB} from './serverCalls.js';
 import setIDColumn from "./tableFunction.js";
 
+
 const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
-console.log("This is the selected ",selectedSample)
+console.log("This is the selected dataset by the user",selectedSample)
 
 // User selected one of the 3 available datasets
 if (selectedSample){
@@ -15,67 +16,75 @@ if (selectedSample){
 // User elected to upload their own dataset
 else{
     userUploadedDataset();
-
 }
 
-function userChoseProvidedDataset(selectedDatasetPath){
-    d3.csv(selectedSample).then(inputData => {
-    localStorage.removeItem("selectedSample");
+async function userChoseProvidedDataset(selectedSample) {
 
-    const table = setIDColumn(aq.from(inputData).slice(0, 200));    // Select only the first 200 rows to work with to speed up rendering time
+    let justTheFilename = selectedSample.substring(13, selectedSample.length);
+    const inputData = await getSampleData(justTheFilename);
 
-    const fullTable = setIDColumn(aq.from(inputData).slice(0,1000)); // Run on full dataset, right now it's just 1k for dev time speedup
-        initController(false,table,selectedSample);
-  });
+    // Convert JSON to Arquero table directly
+    const table = setIDColumn(aq.from(inputData));
+    initController(false, table, selectedSample);
 }
 
-function startDBFileUpload(uploadEvent){
+function startDBFileUpload(fileToUpload){
     /**
      * Sends the uploaded file to the server to be added to the DB
      */
-    const file = uploadEvent.target.files[0];
-    console.log("file", file);
-    if (!file) return;
     const fileToSend = new FormData();
-    fileToSend.append("file",file);
+    fileToSend.append("file",fileToUpload);
 
     uploadFileToDB(fileToSend);
 }
 
 function userUploadedDataset(){
-    document.getElementById('fileInput').addEventListener('change', function (event) {
+    document.getElementById('fileInput').addEventListener('change', async function (event) {
 
-        startDBFileUpload(event);
+        //upload the csv into the db to be used for front-end interface
+        const fileToUpload = event.target.files[0];
+        console.log(fileToUpload);
+        if (!fileToUpload) return;
+        const fileName = fileToUpload['name'];
+        startDBFileUpload(fileToUpload);
 
-    /**
-     * On-browser functionality - old, but working
-     */
-    fetch('/data_cleaning_vis_tool')
-       .then(response => response.text())
-       .then(html => {
-         document.body.innerHTML = html;
+        // //now treat it as a provided dataset
+        // // let justTheFilename = fileToUpload.substring(13, fileToUpload.length);
+        // const inputData = await getSampleData(fileName);
+        //
+        // // Convert JSON to Arquero table directly
+        // const table = setIDColumn(aq.from(inputData));
+        // initController(false, table, fileName);
 
-         const file = event.target.files[0];
-         console.log("file", file);
-         if (!file) return;
+        /**
+         * On-browser functionality - old, but working
+         */
+        fetch('/data_cleaning_vis_tool')
+            .then(response => response.text())
+            .then(html => {
+                document.body.innerHTML = html;
 
-         const reader = new FileReader();
+                const file = event.target.files[0];
+                console.log("file", file);
+                if (!file) return;
 
-         reader.onload = function (e) {
-           const contents = e.target.result;
-           const parsedData = d3.csvParse(contents);
+                const reader = new FileReader();
 
-           //send the
-           const table = setIDColumn(aq.from(parsedData).slice(0, 200));
-           initController(true, table, file.name);
-         };
+                reader.onload = function (e) {
+                    const contents = e.target.result;
+                    const parsedData = d3.csvParse(contents);
 
-         reader.readAsText(file);
-       })
-       .catch(error => {
-         console.error('Error fetching HTML:', error);
-       });
- });
+                    //send the
+                    const table = setIDColumn(aq.from(parsedData).slice(0, 200));
+                    initController(true, table, file.name);
+                };
+
+                reader.readAsText(file);
+            })
+            .catch(error => {
+                console.error('Error fetching HTML:', error);
+            });
+    });
 }
 
 function initController(userUploadedFile, table, fileName){

@@ -29,8 +29,7 @@ async function uploadFileToDB(fileToSend){
  */
 async function getSampleData(filename) {
     console.log("starting sample fetch from db");
-    let justTheFilename = filename.substring(13,filename.length);
-    const params = new URLSearchParams({filename: justTheFilename});
+    const params = new URLSearchParams({filename: filename});
     const url = `/api/get-sample?${params}`
     try{
         const response = await fetch(url, {method: "GET"});
@@ -38,6 +37,7 @@ async function getSampleData(filename) {
             throw new Error(`Response status: ${response.status}`);
         }
         const jsonTable = await response.json();
+        console.log(jsonTable[0]);
         return jsonTable;
     }
     catch (error){

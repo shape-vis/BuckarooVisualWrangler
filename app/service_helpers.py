@@ -21,5 +21,5 @@ def clean_table_name(csv_name):
 
 def get_whole_table_query(table_name):
     name = clean_table_name(table_name)
-    query = f"SELECT TOP * FROM {name} LIMIT 200"
+    query = f"SELECT * FROM {name}"
     return query

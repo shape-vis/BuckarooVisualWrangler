@@ -4,6 +4,8 @@
 
 
 from datetime import timezone, datetime
+
+import numpy as np
 from flask import request, render_template
 import pandas as pd
 from app import connection, engine
@@ -49,7 +51,7 @@ def upload_csv():
     #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
     #parse the file into a csv using pandas
-    dataframe = pd.read_csv(csv_file)
+    dataframe = pd.read_csv(csv_file,keep_default_na=False)
     cleaned_table_name = clean_table_name(csv_file.filename)
     try:
         rows_inserted = dataframe.to_sql(cleaned_table_name, engine, if_exists='replace')
@@ -63,9 +65,11 @@ def get_sample():
     cleaned_table_name = clean_table_name(filename)
     if not filename:
         return {"success": False, "error": "Filename required"}
-    QUERY = get_whole_table_query(cleaned_table_name)
+    QUERY = get_whole_table_query(cleaned_table_name) + " LIMIT 200"
     try:
-        sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
+        # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
+        sample_dataframe = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
+        print("First row:", sample_dataframe[0])  # See what keys exist
         return sample_dataframe
     except Exception as e:
         return {"success": False, "error": str(e)}

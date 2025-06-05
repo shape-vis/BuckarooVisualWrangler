@@ -319,6 +319,7 @@ class DataModel {
           this.columnErrorMap[column][id].push(errorType);
         }
       }
+      console.log("Completed detector", detector);
     }
   }
 
