@@ -21,11 +21,41 @@
 
         <script>
             function loadDataset(filename) {
-              localStorage.setItem("selectedSample",filename);
+                localStorage.setItem("userUploaded","no");
+                localStorage.setItem("selectedSample",filename);
               window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
             }
 
-          </script>
+            async function fileUpload() {
+                const uploadedFile = document.getElementById("fileInput").files[0];
+                const fileToSend = new FormData();
+                fileToSend.append("file",uploadedFile);
+                console.log("starting upload");
+                const url = "/api/upload"
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        body: fileToSend
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Response status: ${response.status}`);
+                    }
+                    if (response.statusText === "OK") {
+                        /** Add a way to tell the user that the csv was uploaded successfully*/
+                        localStorage.setItem("userUploaded", "yes");
+                        localStorage.setItem("selectedSample", uploadedFile['name'])
+                        console.log(uploadedFile);
+                        window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
+                    }
+                } catch (error) {
+                    console.error(error.message);
+                    /** Also should add something which tells the user on the UI that the error occurred */
+                }
+                // localStorage.setItem("userUpload",file.name)
+            }
+
+        </script>
+
     </head>
 
     <body>
@@ -49,7 +79,7 @@
                         <div class="dataset-button" onclick="loadDataset('/static/data/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>
                         <div class="file-upload" style="text-align: center; margin-left: auto; margin-right:auto; margin-top: 20px; font-size: 20px; color: darkslategrey;">
                             <label for="fileInput">Select a File:</label>
-                            <input type="file" id="fileInput" accept=".csv" />
+                            <input type="file" id="fileInput" accept=".csv" oninput="fileUpload()"/>
                         </div>
                     </div>
                 </div>
@@ -57,9 +87,9 @@
         </div>
     </body>
 
-    <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/scatterplotMatrixView.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/controller.js') }}"></script>
-    <script type="module" src="{{ url_for('static', filename='js/startPage.js') }}"></script>
+<!--    <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>-->
+<!--    <script src="{{ url_for('static', filename='js/scatterplotMatrixView.js') }}"></script>-->
+<!--    <script src="{{ url_for('static', filename='js/controller.js') }}"></script>-->
+<!--    <script type="module" src="{{ url_for('static', filename='js/dataSelection.js') }}"></script>-->
 
 </html>

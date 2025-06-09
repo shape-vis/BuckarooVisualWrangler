@@ -90,6 +90,6 @@ def get_all():
 def home():
     return render_template('index.html')
 
-@app.route('/data_cleaning_vis_tool')
+@app.get('/data_cleaning_vis_tool')
 def data_cleaning_vis_tool():
     return render_template('data_cleaning_vis_tool.html')
