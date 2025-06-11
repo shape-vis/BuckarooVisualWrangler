@@ -62,10 +62,11 @@ def upload_csv():
 @app.get("/api/get-sample")
 def get_sample():
     filename = request.args.get("filename")
+    data_size = request.args.get("datasize")
     cleaned_table_name = clean_table_name(filename)
     if not filename:
         return {"success": False, "error": "Filename required"}
-    QUERY = get_whole_table_query(cleaned_table_name) + " LIMIT 200"
+    QUERY = get_whole_table_query(cleaned_table_name) + " LIMIT "+ data_size
     try:
         # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
         sample_dataframe = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")

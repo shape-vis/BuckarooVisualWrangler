@@ -22,10 +22,10 @@ export default function detectAnomaly(table) {
             numericCount++;
           }
         }
-    
+
         // Only treat as numeric if there are enough valid numbers
         if (numericCount < 10) return;
-    
+
         const mean = d3.mean(values);
         const stdDev = d3.deviation(values);
     

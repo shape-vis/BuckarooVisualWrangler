@@ -22,7 +22,8 @@ if(userUploaded === "yes"){
 async function userChoseProvidedDataset(selectedSample) {
 
     let justTheFilename = selectedSample.substring(13, selectedSample.length);
-    const inputData = await getSampleData(justTheFilename);
+    let dataSize = 200;
+    const inputData = await getSampleData(justTheFilename,dataSize);
 
     // Convert JSON to Arquero table directly
     const table = setIDColumn(aq.from(inputData));
@@ -39,13 +40,15 @@ async function userUploadedDataset(fileName) {
         .then(async html => {
             document.body.innerHTML = html;
             console.log(html);
-            const inputData = await getSampleData(fileName);
+            let dataSize = 200;
+            const inputData = await getSampleData(fileName,dataSize);
 
             console.log("view data from db:", inputData);
             if (!inputData) return;
 
             const table = setIDColumn(aq.from(inputData));
             initController(true, table, fileName);
+
 
         })
         .catch(error => {

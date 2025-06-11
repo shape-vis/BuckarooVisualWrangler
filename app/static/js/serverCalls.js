@@ -27,9 +27,9 @@ async function uploadFileToDB(fileToSend){
  * Get the 200 line sample rows from the full datatable stored in the database
  * @returns {Promise<void>}
  */
-async function getSampleData(filename) {
+async function getSampleData(filename,dataSize) {
     console.log("starting sample fetch from db");
-    const params = new URLSearchParams({filename: filename});
+    const params = new URLSearchParams({filename: filename,datasize:dataSize});
     const url = `/api/get-sample?${params}`
     try{
         const response = await fetch(url, {method: "GET"});
