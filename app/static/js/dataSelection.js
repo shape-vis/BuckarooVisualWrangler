@@ -31,7 +31,6 @@ async function userChoseProvidedDataset(selectedSample) {
 }
 
 async function userUploadedDataset(fileName) {
-
     /**
      * On-browser functionality - old, but working
      */
