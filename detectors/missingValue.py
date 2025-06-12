@@ -20,7 +20,7 @@ def missing_value(data_frame):
     for cord in missing_coords:
         if cord[1] not in error_map:
             error_map[cord[1]] = {}
-            error_map[cord[1]][cord[0]] = "missing"
-        else: error_map[cord[1]][cord[0]] = "missing"
+            error_map[cord[1]][data_frame.loc[cord[0], 'ID']] = "missing"
+        else: error_map[cord[1]][data_frame.loc[cord[0], 'ID']] = "missing"
 
     return error_map
