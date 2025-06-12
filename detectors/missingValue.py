@@ -1,4 +1,8 @@
+from zipfile import error
+
 import pandas as pd
+from numpy.ma.core import indices
+
 
 def missing_value(data_frame):
     """
@@ -9,19 +13,14 @@ def missing_value(data_frame):
     """
     error_map = {}
 
-    #returns a tuple as -> (rows, columns)
-    shape = data_frame.shape
-    number_of_rows = shape[0]
-    number_of_columns = shape[1]
+    mask = data_frame.isna() | (data_frame.astype(str) == 'null') | (data_frame.astype(str) == 'undefined')
+    na_locations = mask.stack()
+    missing_coords = na_locations[na_locations].index.tolist()
 
-    for column in range(number_of_columns):
-        for row in range(number_of_rows):
-            data = data_frame.loc[row][column]
-            if pd.isnull(data) or str(data) == 'null' or str(data) == 'undefined':
-                if column in error_map:
-                    error_map[column][row] = "missing"
-                else:
-                    error_map[column] = {}
-                    error_map[column][row] = "missing"
+    for cord in missing_coords:
+        if cord[1] not in error_map:
+            error_map[cord[1]] = {}
+            error_map[cord[1]][cord[0]] = "missing"
+        else: error_map[cord[1]][cord[0]] = "missing"
 
     return error_map
