@@ -8,30 +8,23 @@ def anomaly(data_frame):
     """
     error_map = {}
 
-    # returns a tuple as -> (rows, columns)
-    shape = data_frame.shape
-    number_of_rows = shape[0]
-    number_of_columns = shape[1]
+    for column in data_frame.columns[1:]:
+        numeric_mask = pd.to_numeric(data_frame[column], errors='coerce').notna()
+        if numeric_mask.sum() < 10: continue
 
-    for column in range(number_of_columns):
-        #gets the count of numbers in the column
-        numeric_count = pd.to_numeric(data_frame[column], errors='coerce').notna().sum()
-        if numeric_count > 10:
-            mean_for_column = data_frame[column].mean()
-            std_dev_for_column = data_frame[column].std()
-            if std_dev_for_column is None or std_dev_for_column == 0:
-                continue
-            for row in range(number_of_rows):
-                continue
+        column_mean = data_frame[column].mean()
+        column_std = data_frame[column].std()
 
+        if column_std == 0 or column_std is None: continue
 
-            # for row in range(number_of_rows):
-            #     data = data_frame.loc[row][column]
-            #     if pd.isnull(data) or str(data) == 'null' or str(data) == 'undefined':
-            #         if column in error_map:
-            #             error_map[column][row] = "missing"
-            #         else:
-            #             error_map[column] = {}
-            #             error_map[column][row] = "missing"
+        anomaly_mask = np.abs((data_frame[column] - column_mean) > 2 * column_std)
+        row_locations = anomaly_mask[anomaly_mask].index
+
+        for row in row_locations:
+            if column not in error_map:
+                error_map[column] = {}
+                error_map[column][data_frame.loc[row, 'ID']] = "anomaly"
+            else:
+                error_map[column][data_frame.loc[row, 'ID']] = "missing"
 
     return error_map
