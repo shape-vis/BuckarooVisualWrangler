@@ -38,6 +38,12 @@ class AnomalyTests(unittest.TestCase):
         error_map = {"normal_col":{10: "anomaly"},"anomaly_col":{8:"anomaly"}}
         self.assertEqual(error_map,detected_df)
 
+    def test_uncleaned_stackoverflow_with_main_detector_result(self):
+        test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
+        detected_df = anomaly(test_dataframe)
+        expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly",
+                                                 214:"anomaly",222:"anomaly"}}
+        self.assertEqual(expected_error_map, detected_df)
 
 if __name__ == '__main__':
     unittest.main()

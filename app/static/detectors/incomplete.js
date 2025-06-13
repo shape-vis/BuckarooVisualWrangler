@@ -36,6 +36,6 @@ export default function detectIncompleteData(table) {
           }
         }
       });
-    
+    console.log(result);
       return result;
   }

@@ -35,5 +35,10 @@ class TestDataTypeMismatch(unittest.TestCase):
         detected_df = datatype_mismatch(df)
         self.assertEqual(expected_data,detected_df)
 
+    def test_stackoverflow(self):
+        test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
+        detected_df = datatype_mismatch(test_dataframe)
+        error_map = {"Age": {4: "mismatch", 5: "mismatch"}}
+        self.assertEqual(error_map, detected_df)
 if __name__ == '__main__':
     unittest.main()
