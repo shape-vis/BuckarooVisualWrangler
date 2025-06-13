@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from detectors.anomaly import anomaly
-from detectors.missingValue import missing_value
+from detectors.missing_value import missing_value
 
 
 class AnomalyTests(unittest.TestCase):

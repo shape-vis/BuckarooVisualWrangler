@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from detectors.missingValue import missing_value
+from detectors.missing_value import missing_value
 
 
 class MyTestCase(unittest.TestCase):
