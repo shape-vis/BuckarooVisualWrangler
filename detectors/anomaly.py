@@ -23,8 +23,8 @@ def anomaly(data_frame):
         for row in row_locations:
             if column not in error_map:
                 error_map[column] = {}
-                error_map[column][data_frame.loc[row, 'ID']] = "anomaly"
+                error_map[column][int(data_frame.loc[row, 'ID'])] = "anomaly"
             else:
-                error_map[column][data_frame.loc[row, 'ID']] = "missing"
+                error_map[column][int(data_frame.loc[row, 'ID'])] = "anomaly"
 
     return error_map

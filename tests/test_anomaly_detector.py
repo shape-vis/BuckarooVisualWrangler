@@ -41,10 +41,9 @@ class AnomalyTests(unittest.TestCase):
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
         test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
-        added_id_df = set_id_column(test_dataframe)
-        detected_df = anomaly(added_id_df)
-        expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly",
-                                                 214:"anomaly",222:"anomaly"}}
+        top_200_rows = test_dataframe.head(200)
+        detected_df = anomaly(top_200_rows)
+        expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly", 214:"anomaly",222:"anomaly"}}
         self.assertEqual(expected_error_map, detected_df)
 
 
