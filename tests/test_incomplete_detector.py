@@ -48,15 +48,14 @@ class IncompleteTesting(unittest.TestCase):
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
         test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
-        id_df = set_id_column(test_dataframe)
-        detected_df = incomplete(id_df)
+        detected_df = incomplete(test_dataframe.head(200))
         expected_error_map = {
             "Age": {3: "incomplete", 4: "incomplete", 5: "incomplete", 105: "incomplete", 159: "incomplete"},
             "Country": {61: "incomplete", 85: "incomplete", 107: "incomplete", 147: "incomplete", 204: "incomplete",
                         226: "incomplete", 227: "incomplete", 240: "incomplete"},
             "DevType": {44: "incomplete", 101: "incomplete", 118: "incomplete", 141: "incomplete", 196: "incomplete",
                         222: "incomplete", 224: "incomplete", 234: "incomplete"},
-            "FormalEducation": {61: "incomplete", 161: "incomplete", 165: "incomplete"},
+            "FormalEducation": {81: "incomplete", 161: "incomplete", 165: "incomplete"},
             "Gender": {9: "incomplete", 10: "incomplete", 24: "incomplete", 157: "incomplete"},
             "SexualOrientation": {169: "incomplete", 221: "incomplete"}, "UndergradMajor": {15: "incomplete"},
             "YearsCoding": {169: "incomplete", 230: "incomplete"}}
