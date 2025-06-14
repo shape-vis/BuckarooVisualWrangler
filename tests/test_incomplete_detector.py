@@ -2,6 +2,7 @@ import unittest
 
 import pandas as pd
 
+from app.set_id_column import set_id_column
 from detectors.incomplete import incomplete
 
 
@@ -47,7 +48,8 @@ class IncompleteTesting(unittest.TestCase):
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
         test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
-        detected_df = incomplete(test_dataframe)
+        id_df = set_id_column(test_dataframe)
+        detected_df = incomplete(id_df)
         expected_error_map = {
             "Age": {3: "incomplete", 4: "incomplete", 5: "incomplete", 105: "incomplete", 159: "incomplete"},
             "Country": {61: "incomplete", 85: "incomplete", 107: "incomplete", 147: "incomplete", 204: "incomplete",

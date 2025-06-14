@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+from app.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.missing_value import missing_value
 
@@ -40,10 +41,12 @@ class AnomalyTests(unittest.TestCase):
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
         test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
-        detected_df = anomaly(test_dataframe)
+        added_id_df = set_id_column(test_dataframe)
+        detected_df = anomaly(added_id_df)
         expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly",
                                                  214:"anomaly",222:"anomaly"}}
         self.assertEqual(expected_error_map, detected_df)
+
 
 if __name__ == '__main__':
     unittest.main()
