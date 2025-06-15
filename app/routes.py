@@ -10,15 +10,7 @@ from flask import request, render_template
 import pandas as pd
 from app import connection, engine
 from app import app
-from app.service_helpers import clean_table_name, get_whole_table_query
-
-# to create a new table for a new room in the "house"
-CREATE_ROOMS_TABLE = ("CREATE TABLE IF NOT EXISTS rooms (id SERIAL PRIMARY KEY, name TEXT);")
-GET_ALL_INFO = "SELECT * FROM courses;"
-
-#to insert data we'll use the below, We'll get this query to return the id column that was inserted, so that we can send it back to the client of our API.
-#That way they can use the id in subsequent requests to insert temperatures related to the new room:
-INSERT_ROOM_RETURN_ID = "INSERT INTO rooms (name) VALUES (%s) RETURNING id;"
+from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors
 
 #this endpoint is just for reference of how to use a cursor object if not using pandas
 #We tell Flask what endpoint to accept data in using a decorator (@)
@@ -52,10 +44,16 @@ def upload_csv():
     csv_file = request.files['file']
     #parse the file into a csv using pandas
     dataframe = pd.read_csv(csv_file,keep_default_na=False)
+    # file_errors = run_detectors(dataframe)
+    detected_data = run_detectors(dataframe)
+
     cleaned_table_name = clean_table_name(csv_file.filename)
+
     try:
+        #insert the undetected dataframe
         rows_inserted = dataframe.to_sql(cleaned_table_name, engine, if_exists='replace')
-        return{"success": True, "rows": rows_inserted}
+        detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='append')
+        return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -75,17 +73,6 @@ def get_sample():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-
-#not getting all
-@app.get("/api/all")
-def get_all():
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(GET_ALL_INFO)
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
-            all = [dict(zip(columns,row)) for row in rows]
-    return {"all":all, "desc[0]":columns[0],"desc[1]":columns[1],"desc[2]":columns[2],"desc[3]":columns[3],"desc[4]":columns[4]}
 
 @app.get("/")
 def home():

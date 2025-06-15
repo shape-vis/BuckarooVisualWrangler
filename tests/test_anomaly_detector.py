@@ -8,7 +8,7 @@ from detectors.anomaly import anomaly
 from detectors.missing_value import missing_value
 
 
-class AnomalyTests(unittest.TestCase):
+class TestAnomalyTests(unittest.TestCase):
     def test_anomaly_all_numeric(self):
         # Create test data with anomalies
         np.random.seed(12)
@@ -46,6 +46,28 @@ class AnomalyTests(unittest.TestCase):
         expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly", 214:"anomaly",222:"anomaly"}}
         self.assertEqual(expected_error_map, detected_df)
 
+    #----------Should finish building these tests if full integration doesn't work down the line-------#
+    # def test_crimes_report_with_main_detector_result(self):
+    #     test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+    #     detected_df = anomaly(test_dataframe.head(200))
+    #     expected_error_map = {
+    #         "LOCATION DESCRIPTION": {},
+    #         "PRIMARY DESCRIPTION": {},
+    #         "SECONDARY DESCRIPTION": {},
+    #         "BLOCK": {},
+    #         "CASE#": {},
+    #         "DATE OF OCCURRENCE": {},
+    #         "FBI CD": {},
+    #         "LOCATION": {},
+    #         "LONGITUDE": {}
+    #     }
+    #     self.assertEqual(expected_error_map, detected_df)
+    #
+    # def test_complaints_with_main_detector_result(self):
+    #     test_dataframe = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
+    #     detected_df = anomaly(test_dataframe.head(200))
+    #     expected_error_map = {}
+    #     self.assertEqual(expected_error_map, detected_df)
 
 if __name__ == '__main__':
     unittest.main()

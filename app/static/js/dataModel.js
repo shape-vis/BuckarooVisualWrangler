@@ -321,6 +321,7 @@ class DataModel {
       }
       console.log("Completed detector", detector);
     }
+    console.log("Error Map:",this.columnErrorMap)
   }
 
   /**

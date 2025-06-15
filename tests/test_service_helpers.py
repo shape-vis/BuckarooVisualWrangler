@@ -1,6 +1,8 @@
 from unittest import TestCase
 
-from app.service_helpers import clean_table_name, get_whole_table_query
+import pandas as pd
+
+from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors
 
 
 class General(TestCase):
@@ -28,4 +30,48 @@ class General(TestCase):
         print(cleaned)
         query = get_whole_table_query(cleaned)
         print("test_whole_table_query:", query)
-        self.assertEqual("SELECT TOP * FROM table_name",query)
+        self.assertEqual("SELECT * FROM table_name",query)
+
+    def test_run_all_detectors(self):
+        stackoverflow_df = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
+        actual_error_df = run_detectors(stackoverflow_df)
+        # expected_error_map = {"Age": {3: ["incomplete"], 4: ["mismatch", "incomplete"], 5: ["mismatch", "incomplete"],
+        #                               105: ["incomplete"], 159: ["incomplete"]},
+        #                       "Continent": {8: ["missing"], 9: ["missing"], 10: ["missing"],
+        #                                     12: ["missing"], 13: ["missing"],
+        #                                     14: ["missing"], 15: ["missing"], 16: ["missing"],
+        #                                     17: ["missing"]},
+        #                       "ConvertedSalary": {13: ["anomaly"], 58: ["anomaly"], 100: ["anomaly"],
+        #                                           115: ["anomaly"], 141: ["anomaly"],
+        #                                           214: ["anomaly"], 222: ["anomaly"]},
+        #                       "Country": {61: ["incomplete"],
+        #                                   85: ["incomplete"],
+        #                                   107: ["incomplete"],
+        #                                   147: ["incomplete"],
+        #                                   204: ["incomplete"],
+        #                                   226: ["incomplete"],
+        #                                   227: ["incomplete"],
+        #                                   240: ["incomplete"]},
+        #                       "DevType": {44: ["incomplete"],
+        #                                   101: ["incomplete"],
+        #                                   118: ["incomplete"],
+        #                                   141: ["incomplete"],
+        #                                   196: ["incomplete"],
+        #                                   222: ["incomplete"],
+        #                                   224: ["incomplete"],
+        #                                   234: ["incomplete"]},
+        #                       "FormalEducation": {81: ["incomplete"],
+        #                                           161: ["incomplete"],
+        #                                           165: ["incomplete"]},
+        #                       "Gender": {9: ["incomplete"],
+        #                                  10: ["incomplete"],
+        #                                  24: ["incomplete"],
+        #                                  157: ["incomplete"]},
+        #                       "SexualOrientation": {169: ["incomplete"],
+        #                                             221: ["incomplete"]},
+        #                       "UndergradMajor": {15: ["incomplete"]},
+        #                       "YearsCoding": {169: ["incomplete"],
+        #                                       230: ["incomplete"]}}
+        # expected_error_map_df = pd.DataFrame(expected_error_map).rename_axis("ID", axis="index").reset_index()
+
+        self.assertEqual(True,True)

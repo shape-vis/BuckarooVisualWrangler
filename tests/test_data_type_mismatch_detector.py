@@ -40,5 +40,28 @@ class TestDataTypeMismatch(unittest.TestCase):
         detected_df = datatype_mismatch(test_dataframe)
         error_map = {"Age": {4: "mismatch", 5: "mismatch"}}
         self.assertEqual(error_map, detected_df)
+
+    #----------Should finish building these tests if full integration doesn't work down the line-------#
+    # def test_crimes_report_with_main_detector_result(self):
+    #     test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+    #     detected_df = datatype_mismatch(test_dataframe.head(200))
+    #     expected_error_map = {
+    #         "LOCATION DESCRIPTION": {},
+    #         "PRIMARY DESCRIPTION": {},
+    #         "SECONDARY DESCRIPTION": {},
+    #         "BLOCK": {},
+    #         "CASE#": {},
+    #         "DATE OF OCCURRENCE": {},
+    #         "FBI CD": {},
+    #         "LOCATION": {},
+    #         "LONGITUDE": {}
+    #     }
+    #     self.assertEqual(expected_error_map, detected_df)
+    #
+    # def test_complaints_with_main_detector_result(self):
+    #     test_dataframe = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
+    #     detected_df = datatype_mismatch(test_dataframe.head(200))
+    #     expected_error_map = {}
+    #     self.assertEqual(expected_error_map, detected_df)
 if __name__ == '__main__':
     unittest.main()
