@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 
+from app.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
@@ -37,10 +38,15 @@ def run_detectors(data_frame):
     :param data_frame:
     :return:
     """
-    anomaly_df = pd.DataFrame(anomaly(data_frame)).rename_axis("ID", axis="index").reset_index()
-    incomplete_df = pd.DataFrame(incomplete(data_frame)).rename_axis("ID", axis="index").reset_index()
-    missing_value_df = pd.DataFrame(missing_value(data_frame)).rename_axis("ID", axis="index").reset_index()
-    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(data_frame)).rename_axis("ID", axis="index").reset_index()
+    df_with_id = set_id_column(data_frame.head(200))
+    anomaly_df = pd.DataFrame(anomaly(df_with_id)).rename_axis("ID", axis="index").reset_index()
+    print("anomaly_df ran")
+    incomplete_df = pd.DataFrame(incomplete(df_with_id)).rename_axis("ID", axis="index").reset_index()
+    print("incomplete_df ran")
+    missing_value_df = pd.DataFrame(missing_value(df_with_id)).rename_axis("ID", axis="index").reset_index()
+    print("missing_value_df ran")
+    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id)).rename_axis("ID", axis="index").reset_index()
+    print("datatype_mismatch_df ran")
     frames = [incomplete_df, missing_value_df,datatype_mismatch_df]
 
     result = anomaly_df.copy()

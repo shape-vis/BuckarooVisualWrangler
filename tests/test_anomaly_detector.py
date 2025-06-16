@@ -19,7 +19,7 @@ class TestAnomalyTests(unittest.TestCase):
             # 1 clear anomalies
         }
         df = pd.DataFrame(test_data)
-        detected_df = anomaly(df)
+        detected_df = anomaly(set_id_column(df))
         error_map = {"normal_col":{10: "anomaly"},"anomaly_col":{8:"anomaly"}}
         self.assertEqual(error_map,detected_df)
 
@@ -35,33 +35,70 @@ class TestAnomalyTests(unittest.TestCase):
             # 1 clear anomaly because the string row has some strings so doesn't meet the required threshold of numeric values
         }
         df = pd.DataFrame(test_data)
-        detected_df = anomaly(df)
+        detected_df = anomaly(set_id_column(df))
         error_map = {"normal_col":{10: "anomaly"},"anomaly_col":{8:"anomaly"}}
-        self.assertEqual(error_map,detected_df)
+        self.assertDictEqual(error_map,detected_df)
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
         test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
         top_200_rows = test_dataframe.head(200)
-        detected_df = anomaly(top_200_rows)
+        detected_df = anomaly(set_id_column(top_200_rows))
         expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly", 214:"anomaly",222:"anomaly"}}
-        self.assertEqual(expected_error_map, detected_df)
+        self.assertDictEqual(expected_error_map, detected_df)
 
-    #----------Should finish building these tests if full integration doesn't work down the line-------#
-    # def test_crimes_report_with_main_detector_result(self):
-    #     test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
-    #     detected_df = anomaly(test_dataframe.head(200))
-    #     expected_error_map = {
-    #         "LOCATION DESCRIPTION": {},
-    #         "PRIMARY DESCRIPTION": {},
-    #         "SECONDARY DESCRIPTION": {},
-    #         "BLOCK": {},
-    #         "CASE#": {},
-    #         "DATE OF OCCURRENCE": {},
-    #         "FBI CD": {},
-    #         "LOCATION": {},
-    #         "LONGITUDE": {}
-    #     }
-    #     self.assertEqual(expected_error_map, detected_df)
+    def test_crimes_report_with_main_detector_result(self):
+        test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+        detected_df = anomaly(set_id_column(test_dataframe.head(200)))
+        expected_error_map = {
+            " IUCR": {
+                "1": "anomaly",
+                "2": "anomaly",
+                "3": "anomaly"
+            },
+            "BEAT": {
+                "14": "anomaly",
+                "16": "anomaly",
+                "44": "anomaly",
+                "47": "anomaly",
+                "70": "anomaly",
+                "75": "anomaly",
+                "88": "anomaly",
+                "98": "anomaly",
+                "103": "anomaly",
+                "138": "anomaly",
+                "188": "anomaly"
+            },
+            "LATITUDE": {
+                "14": "anomaly",
+                "20": "anomaly",
+                "44": "anomaly",
+                "77": "anomaly"
+            },
+            "WARD": {
+                "14": "anomaly",
+                "44": "anomaly",
+                "63": "anomaly",
+                "153": "anomaly",
+                "194": "anomaly"
+            },
+            "X COORDINATE": {
+                "19": "anomaly",
+                "32": "anomaly",
+                "98": "anomaly",
+                "120": "anomaly",
+                "155": "anomaly",
+                "159": "anomaly",
+                "164": "anomaly",
+                "179": "anomaly"
+            },
+            "Y COORDINATE": {
+                "14": "anomaly",
+                "20": "anomaly",
+                "44": "anomaly",
+                "77": "anomaly"
+            }
+        }
+        self.assertEqual(detected_df, expected_error_map)
     #
     # def test_complaints_with_main_detector_result(self):
     #     test_dataframe = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
