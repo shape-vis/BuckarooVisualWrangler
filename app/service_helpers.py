@@ -32,34 +32,38 @@ def get_whole_table_query(table_name):
     query = f"SELECT * FROM {name}"
     return query
 
+def get_values_for_df_melt(df):
+  values = []
+  columns = df.columns
+  for column in columns:
+    if column not in ('ID', "Unnamed: 0", "column_id","error_type","row_id"):
+      values.append(column)
+  return values
+
+def perform_melt(dfs):
+  df_combined = pd.DataFrame()
+  for df in dfs:
+    melted_df = pd.melt(df, id_vars='ID', value_vars=get_values_for_df_melt(df))
+    melted_df.rename(columns={'ID': 'row_id','variable':'column_id','value':'error_type'}, inplace=True)
+    df_combined = pd.concat([df_combined,melted_df])
+  nan_mask = df_combined['error_type'].isna()
+  df_combined = df_combined[~nan_mask]
+  return df_combined
+
 def run_detectors(data_frame):
     """
     Runs all 4 detectors on the data and returns a dataframe of the complete errors
     :param data_frame:
     :return:
     """
-    df_with_id = set_id_column(data_frame.head(200))
-    anomaly_df = pd.DataFrame(anomaly(df_with_id)).rename_axis("ID", axis="index").reset_index()
-    print("anomaly_df ran")
-    incomplete_df = pd.DataFrame(incomplete(df_with_id)).rename_axis("ID", axis="index").reset_index()
-    print("incomplete_df ran")
-    missing_value_df = pd.DataFrame(missing_value(df_with_id)).rename_axis("ID", axis="index").reset_index()
-    print("missing_value_df ran")
-    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id)).rename_axis("ID", axis="index").reset_index()
-    print("datatype_mismatch_df ran")
+    df_with_id = set_id_column(data_frame)
+    anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
+    incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
+    missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
+    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     frames = [incomplete_df, missing_value_df,datatype_mismatch_df]
 
-    result = anomaly_df.copy()
-    for df in frames:
-        result = result.merge(df, on='ID', how='outer', suffixes=('', '_temp'))
-    for col in result.columns:
-        col_temp = col+'_temp'
-        if col != 'ID' and col_temp in result.columns:
-            both_exist = ~result[col].isna() & ~result[col + '_temp'].isna()
-            result.loc[both_exist, col] = result.loc[both_exist, col] + ',' + result.loc[both_exist, col + '_temp']
-            result = result.drop(columns=[col + '_temp'])
-
-    return result
+    return perform_melt(frames)
 
 
 

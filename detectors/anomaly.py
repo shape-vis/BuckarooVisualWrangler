@@ -18,7 +18,7 @@ def anomaly(data_frame):
 
         if column_std == 0 or column_std is None: continue
 
-        anomaly_mask = np.abs((data_frame[column] - column_mean) > 2 * column_std)
+        anomaly_mask = np.abs(data_frame[column] - column_mean) > 2 * column_std
         row_locations = anomaly_mask[anomaly_mask].index
 
         for row in row_locations:

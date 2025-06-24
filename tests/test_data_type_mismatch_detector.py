@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+from app.set_id_column import set_id_column
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.missing_value import missing_value
 
@@ -42,26 +43,50 @@ class TestDataTypeMismatch(unittest.TestCase):
         self.assertEqual(error_map, detected_df)
 
     #----------Should finish building these tests if full integration doesn't work down the line-------#
-    # def test_crimes_report_with_main_detector_result(self):
-    #     test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
-    #     detected_df = datatype_mismatch(test_dataframe.head(200))
-    #     expected_error_map = {
-    #         "LOCATION DESCRIPTION": {},
-    #         "PRIMARY DESCRIPTION": {},
-    #         "SECONDARY DESCRIPTION": {},
-    #         "BLOCK": {},
-    #         "CASE#": {},
-    #         "DATE OF OCCURRENCE": {},
-    #         "FBI CD": {},
-    #         "LOCATION": {},
-    #         "LONGITUDE": {}
-    #     }
-    #     self.assertEqual(expected_error_map, detected_df)
-    #
-    # def test_complaints_with_main_detector_result(self):
-    #     test_dataframe = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
-    #     detected_df = datatype_mismatch(test_dataframe.head(200))
-    #     expected_error_map = {}
-    #     self.assertEqual(expected_error_map, detected_df)
+    def test_crimes_report_with_main_detector_result(self):
+        test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+        detected_df = datatype_mismatch(set_id_column(test_dataframe.head(200)))
+        expected_error_map = {
+  "FBI CD": {
+    1: "mismatch",
+    2: "mismatch",
+    3: "mismatch"
+  }
+}
+        self.assertEqual(expected_error_map, detected_df)
+
+    def test_complaints_with_main_detector_result(self):
+        test_dataframe = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
+        detected_df = datatype_mismatch(set_id_column(test_dataframe.head(200)))
+        expected_error_map = {
+  "ZIP code": {
+    5: "mismatch",
+    19: "mismatch",
+    22: "mismatch",
+    23: "mismatch",
+    51: "mismatch",
+    66: "mismatch",
+    67: "mismatch",
+    71: "mismatch",
+    101: "mismatch",
+    106: "mismatch",
+    111: "mismatch",
+    114: "mismatch",
+    121: "mismatch",
+    122: "mismatch",
+    128: "mismatch",
+    134: "mismatch",
+    141: "mismatch",
+    147: "mismatch",
+    159: "mismatch",
+      167: 'mismatch',
+      184: 'mismatch',
+      186: 'mismatch',
+      187: 'mismatch',
+      198: 'mismatch',
+      200: 'mismatch'
+  }
+}
+        self.assertEqual(expected_error_map, detected_df)
 if __name__ == '__main__':
     unittest.main()

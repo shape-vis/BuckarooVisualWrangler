@@ -43,7 +43,7 @@ def upload_csv():
     #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
     #parse the file into a csv using pandas
-    dataframe = pd.read_csv(csv_file,keep_default_na=False)
+    dataframe = pd.read_csv(csv_file)
     # file_errors = run_detectors(dataframe)
     detected_data = run_detectors(dataframe)
 
@@ -52,7 +52,7 @@ def upload_csv():
     try:
         #insert the undetected dataframe
         rows_inserted = dataframe.to_sql(cleaned_table_name, engine, if_exists='replace')
-        detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='append')
+        detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='replace')
         return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted}
     except Exception as e:
         return {"success": False, "error": str(e)}

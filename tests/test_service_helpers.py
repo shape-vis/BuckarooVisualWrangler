@@ -32,7 +32,7 @@ class General(TestCase):
         print("test_whole_table_query:", query)
         self.assertEqual("SELECT * FROM table_name",query)
 
-    def test_run_all_detectors(self):
+    def test_run_all_detectors_stackoverflow(self):
         stackoverflow_df = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
         actual_error_df = run_detectors(stackoverflow_df)
         # expected_error_map = {"Age": {3: ["incomplete"], 4: ["mismatch", "incomplete"], 5: ["mismatch", "incomplete"],
@@ -73,5 +73,9 @@ class General(TestCase):
         #                       "YearsCoding": {169: ["incomplete"],
         #                                       230: ["incomplete"]}}
         # expected_error_map_df = pd.DataFrame(expected_error_map).rename_axis("ID", axis="index").reset_index()
+
+    def test_run_all_detectors_complaints(self):
+        stackoverflow_df = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
+        actual_error_df = run_detectors(stackoverflow_df)
 
         self.assertEqual(True,True)
