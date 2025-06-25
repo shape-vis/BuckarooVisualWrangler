@@ -2,7 +2,7 @@ let activeDataset = "stackoverflow";
 let stackoverflowController;
 let cacheController;
 
-import {getSampleData, uploadFileToDB} from './serverCalls.js';
+import {getSampleData, uploadFileToDB,getErrorData} from './serverCalls.js';
 import setIDColumn from "./tableFunction.js";
 
 
@@ -24,7 +24,8 @@ async function userChoseProvidedDataset(selectedSample) {
     let justTheFilename = selectedSample.substring(13, selectedSample.length);
     let dataSize = 200;
     const inputData = await getSampleData(justTheFilename,dataSize);
-
+    const errorData = await getErrorData(justTheFilename,dataSize)
+    console.log("error data from the db", errorData)
     // Convert JSON to Arquero table directly
     const table = setIDColumn(aq.from(inputData));
     initController(false, table, selectedSample);
@@ -41,8 +42,9 @@ async function userUploadedDataset(fileName) {
             console.log(html);
             let dataSize = 200;
             const inputData = await getSampleData(fileName,dataSize);
-
-            console.log("view data from db:", inputData);
+            const errorData = await getErrorData(fileName,dataSize)
+            console.log("table data from db:", inputData);
+            console.log("error data from db:", errorData)
             if (!inputData) return;
 
             const table = setIDColumn(aq.from(inputData));

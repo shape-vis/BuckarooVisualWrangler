@@ -27,8 +27,11 @@ def clean_table_name(csv_name):
         clean_name = 'table' + clean_name
     return clean_name.lower()
 
-def get_whole_table_query(table_name):
+def get_whole_table_query(table_name, get_errors):
     name = clean_table_name(table_name)
+    if get_errors:
+        query = f"SELECT * FROM errors{name}"
+        return query
     query = f"SELECT * FROM {name}"
     return query
 

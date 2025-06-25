@@ -8,6 +8,8 @@ from datetime import timezone, datetime
 import numpy as np
 from flask import request, render_template
 import pandas as pd
+from sqlalchemy import false
+
 from app import connection, engine
 from app import app
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors
@@ -59,20 +61,44 @@ def upload_csv():
 
 @app.get("/api/get-sample")
 def get_sample():
+    """
+    Constructs a postgresql query to get the undetected table data from the database
+    :return: a dictionary of the table dataa
+    """
     filename = request.args.get("filename")
     data_size = request.args.get("datasize")
     cleaned_table_name = clean_table_name(filename)
     if not filename:
         return {"success": False, "error": "Filename required"}
-    QUERY = get_whole_table_query(cleaned_table_name) + " LIMIT "+ data_size
+    QUERY = get_whole_table_query(cleaned_table_name,False) + " LIMIT "+ data_size
     try:
         # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
-        sample_dataframe = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
-        print("First row:", sample_dataframe[0])  # See what keys exist
-        return sample_dataframe
+        sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
+        print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
+        return sample_dataframe_as_dictionary
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.get("/api/get-errors")
+def get_errors():
+    """
+    Constructs a postgresql query to get the error table corresponding to the current file from the database
+    :return: a dictionary of the error table
+    """
+    filename = request.args.get("filename")
+    data_size = request.args.get("datasize")
+    cleaned_table_name = clean_table_name(filename)
+    if not filename:
+        return {"success": False, "error": "Filename required"}
+    QUERY = get_whole_table_query(cleaned_table_name,True) + " LIMIT "+ data_size
+    try:
+        error_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None)
+        error_dictionary = error_dictionary.to_dict(orient="records")
+        print("First row:", error_dictionary[0])  # See what keys exist
+
+        return error_dictionary
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/")
 def home():

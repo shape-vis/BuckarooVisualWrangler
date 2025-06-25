@@ -45,4 +45,26 @@ async function getSampleData(filename,dataSize) {
     }
 }
 
-export {uploadFileToDB,getSampleData};
+/**
+ * Get the 200 line sample rows from the full datatable stored in the database
+ * @returns {Promise<void>}
+ */
+async function getErrorData(filename,dataSize) {
+    console.log("starting error fetch from db");
+    const params = new URLSearchParams({filename: filename,datasize:dataSize});
+    const url = `/api/get-errors?${params}`
+    try{
+        const response = await fetch(url, {method: "GET"});
+        if (!response.ok){
+            throw new Error(`Response status: ${response.status}`);
+        }
+        const jsonTable = await response.json();
+        console.log(jsonTable[0]);
+        return jsonTable;
+    }
+    catch (error){
+        console.error(error.message)
+    }
+}
+
+export {uploadFileToDB,getSampleData, getErrorData};
