@@ -48,6 +48,8 @@ def perform_melt(dfs):
     df_combined = pd.concat([df_combined,melted_df])
   nan_mask = df_combined['error_type'].isna()
   df_combined = df_combined[~nan_mask]
+  df_combined.reset_index(drop=True, inplace=True)
+
   return df_combined
 
 def run_detectors(data_frame):
@@ -61,7 +63,7 @@ def run_detectors(data_frame):
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    frames = [incomplete_df, missing_value_df,datatype_mismatch_df]
+    frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
 
     return perform_melt(frames)
 
