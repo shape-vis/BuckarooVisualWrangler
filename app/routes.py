@@ -93,11 +93,12 @@ def get_errors():
     cleaned_table_name = clean_table_name(filename)
     if not filename:
         return {"success": False, "error": "Filename required"}
-    query = get_whole_table_query(cleaned_table_name,True) + " LIMIT "+ data_size
+    query = get_whole_table_query(cleaned_table_name,True)
     try:
-        full_error_df = pd.read_sql_query(query, engine,index_col=None)
+        full_error_df = pd.read_sql_query(query, engine)
         print("error_df from db: ",full_error_df)
         data_sized_error_dictionary = create_error_dict(full_error_df,data_size_int)
+        print(data_sized_error_dictionary)
         return data_sized_error_dictionary
     except Exception as e:
         return {"success": False, "error": str(e)}
