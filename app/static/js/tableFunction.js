@@ -6,7 +6,7 @@
  */
 export default function setIDColumn(table) {
   const colNames =  table.columnNames();
-  const hasID = colNames.includes("ID");
+  const hasID = colNames.includes("ID","id");
 
   if (!hasID) {
     // Add new numeric ID column starting from 1

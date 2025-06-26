@@ -28,7 +28,7 @@ async function userChoseProvidedDataset(selectedSample) {
     console.log("error data from the db", errorData)
     // Convert JSON to Arquero table directly
     const table = setIDColumn(aq.from(inputData));
-    initController(false, table, selectedSample);
+    initController(false, table, selectedSample,errorData);
 }
 
 async function userUploadedDataset(fileName) {
@@ -48,7 +48,7 @@ async function userUploadedDataset(fileName) {
             if (!inputData) return;
 
             const table = setIDColumn(aq.from(inputData));
-            initController(true, table, fileName);
+            initController(true, table, fileName,errorData);
 
 
         })
@@ -58,7 +58,7 @@ async function userUploadedDataset(fileName) {
     // });
 }
 
-function initController(userUploadedFile, table, fileName){
+function initController(userUploadedFile, table, fileName,errorData){
     d3.select("#matrix-vis-stackoverflow").html("");
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
 
@@ -67,14 +67,15 @@ function initController(userUploadedFile, table, fileName){
     }
     attachButtonEventListeners(stackoverflowController);
     exportPythonScriptListener(stackoverflowController);
-    initWranglersDetectors(stackoverflowController);
+    initWranglersDetectors(stackoverflowController,errorData);
 }
 
 /**
  * Loads the detectors and wranglers into the controller
  * @param controller
+ * @param errorData
  */
-function initWranglersDetectors(controller){
+function initWranglersDetectors(controller,errorData){
     (async () => {
         try {
             const detectorResponse = await fetch('/static/detectors/detectors.json');
@@ -83,7 +84,7 @@ function initWranglersDetectors(controller){
             const wranglerResponse = await fetch('/static/wranglers/wranglers.json');
             const wranglers = await wranglerResponse.json();
 
-            await controller.init(detectors, wranglers);
+            await controller.init(detectors, wranglers,errorData);
                 } catch (err) {
                     console.error("Failed to load or run detectors:", err);
                 }

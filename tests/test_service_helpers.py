@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import pandas as pd
 
-from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors
+from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict
 
 
 class General(TestCase):
@@ -79,3 +79,8 @@ class General(TestCase):
         actual_error_df = run_detectors(stackoverflow_df)
 
         self.assertEqual(True,True)
+
+    def test_create_error_dictionary(self):
+        stackoverflow_df = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
+        res_df = run_detectors(stackoverflow_df)
+        create_error_dict(res_df,200)

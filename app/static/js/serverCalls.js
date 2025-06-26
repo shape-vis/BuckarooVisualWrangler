@@ -46,7 +46,7 @@ async function getSampleData(filename,dataSize) {
 }
 
 /**
- * Get the 200 line sample rows from the full datatable stored in the database
+ * Get the data size sample rows from the full datatable stored in the database
  * @returns {Promise<void>}
  */
 async function getErrorData(filename,dataSize) {

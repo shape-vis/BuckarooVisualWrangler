@@ -14,14 +14,16 @@ class ScatterplotController {
 
     /**
      * Initialization of the controller runs error detectors and renders everything in the UI.
-     * @param {*} detectors 
-     * @param {*} wranglers 
+     * @param {*} detectors
+     * @param {*} wranglers
+     * @param errorData
      */
-    async init(detectors, wranglers) {
+    async init(detectors, wranglers,errorData) {
         this.detectors = detectors;
         this.wranglers = wranglers;
 
-        await this.model.runDetectors(detectors); 
+        // await this.model.runDetectors(detectors);
+        this.model.columnErrorMap = errorData;
         this.view.updateDirtyRowsTable(this.model.getFullFilteredData());
 
         this.view.populateDropdownFromTable(this.model.getFullData(), this);

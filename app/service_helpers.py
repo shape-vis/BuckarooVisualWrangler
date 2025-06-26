@@ -70,5 +70,22 @@ def run_detectors(data_frame):
 
     return perform_melt(frames)
 
+def create_error_dict(df, error_size):
+    try:
+        error_size_df = df[df['row_id'].between(1, error_size)]
+        result_dict = {}
+        for _, row in error_size_df.iterrows():
+            col = row['column_id']
+            row_id = row['row_id']
+            error_type = row['error_type']
+            if pd.notna(error_type):
+                if col not in result_dict:
+                    result_dict[col] = {}
+                if row_id not in result_dict[col]:
+                    result_dict[col][row_id] = []
+                result_dict[col][row_id].append(error_type)
+        return result_dict
+    except Exception as e:
+        return {"success": False, "error in the error_dictionary service helper": str(e)}
 
 

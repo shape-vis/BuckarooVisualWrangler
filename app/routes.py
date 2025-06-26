@@ -4,6 +4,7 @@
 
 
 from datetime import timezone, datetime
+from venv import create
 
 import numpy as np
 from flask import request, render_template
@@ -12,7 +13,8 @@ from sqlalchemy import false
 
 from app import connection, engine
 from app import app
-from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors
+from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict
+
 
 #this endpoint is just for reference of how to use a cursor object if not using pandas
 #We tell Flask what endpoint to accept data in using a decorator (@)
@@ -74,7 +76,7 @@ def get_sample():
     try:
         # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
         sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
-        print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
+        # print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
         return sample_dataframe_as_dictionary
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -87,16 +89,16 @@ def get_errors():
     """
     filename = request.args.get("filename")
     data_size = request.args.get("datasize")
+    data_size_int = int(data_size)
     cleaned_table_name = clean_table_name(filename)
     if not filename:
         return {"success": False, "error": "Filename required"}
-    QUERY = get_whole_table_query(cleaned_table_name,True) + " LIMIT "+ data_size
+    query = get_whole_table_query(cleaned_table_name,True) + " LIMIT "+ data_size
     try:
-        error_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None)
-        error_dictionary = error_dictionary.to_dict(orient="records")
-        print("First row:", error_dictionary[0])  # See what keys exist
-
-        return error_dictionary
+        full_error_df = pd.read_sql_query(query, engine,index_col=None)
+        print("error_df from db: ",full_error_df)
+        data_sized_error_dictionary = create_error_dict(full_error_df,data_size_int)
+        return data_sized_error_dictionary
     except Exception as e:
         return {"success": False, "error": str(e)}
 
