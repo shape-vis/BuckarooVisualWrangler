@@ -22,5 +22,6 @@ connection = psycopg2.connect(url)
 engine = create_engine(url)
 
 from app import routes
+from app import wrangler_routes
 
 

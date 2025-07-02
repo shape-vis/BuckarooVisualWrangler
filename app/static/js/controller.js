@@ -315,7 +315,7 @@ class ScatterplotController {
         }
 
         console.log("Selected bar points:", selectedPoints);
-
+        //the selected points is the current user selection of points from interacting with the plots
         this.model.setSelectedPoints(selectedPoints);
         this.view.setSelectedPoints(selectedPoints);
         this.updatePreviews(selectedPoints, groupByAttribute, column);
@@ -356,8 +356,11 @@ class ScatterplotController {
 
         console.log("Selected heatmap points:", selectedPoints);
 
+        //the selected points is the current user selection of points from interacting with the plots
         this.model.setSelectedPoints(selectedPoints);
+        //current user selection of points from interacting with the plots
         this.view.setSelectedPoints(selectedPoints);
+
         this.updatePreviews(selectedPoints, groupByAttribute, xCol, yCol);
 
         const selectionEnabled = true;
@@ -621,27 +624,32 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-impute-average-y").style.display = "none";
         document.getElementById("preview-user-function").style.display = "none";
 
+        //get the selected points that the user clicked on the matrix, can be a single point or many
         const selectedPoints = controller.model.getSelectedPoints();
+        //the remove data wrangler
         const module = await import("/static/wranglers/removeData.js");
-        const condition = module.default(selectedPoints); 
+        //the remove data wrangler returns a function which determines whether an id is in the selected one's
+        const condition = module.default(selectedPoints);
+        //gets the error map from the model
         const errorMap = controller.model.getColumnErrors();
-
+        //initializes a map to keep track of any errors that are found in the selected points
         const selectedPointsErrors = {};
+        //extracts just the id from the selected points, so they look like this: {1:1} - yeah doesn't make sense
         const selectedIDs = selectedPoints.map(d => d.ID);
-
+        //loops through each of the points in the selectedIds map, checks to see
         selectedIDs.forEach(id => {
             const errors = [];
 
-            // Check xCol
+            // Check to see if the selected point is in the xCol
             if (errorMap[controller.xCol] && errorMap[controller.xCol][id]) {
             errors.push(...errorMap[controller.xCol][id]);
             }
 
-            // Check yCol
+            // Checks to see if the selected point is in the yCol
             if (errorMap[controller.yCol] && errorMap[controller.yCol][id]) {
             errors.push(...errorMap[controller.yCol][id]);
             }
-
+            // the selected point should be added to the selectedPointsErrors dictionary based on the id as a key, and the error type as the value
             if (errors.length > 0) {
                 selectedPointsErrors[id] = errors;
             }

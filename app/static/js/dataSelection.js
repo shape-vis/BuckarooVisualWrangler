@@ -28,7 +28,7 @@ async function userChoseProvidedDataset(selectedSample) {
     console.log("error data from the db", errorData)
     // Convert JSON to Arquero table directly
     const table = setIDColumn(aq.from(inputData));
-    initController(false, table, selectedSample,errorData);
+    prepForControllerInit(false, table, selectedSample,errorData);
 }
 
 async function userUploadedDataset(fileName) {
@@ -48,7 +48,7 @@ async function userUploadedDataset(fileName) {
             if (!inputData) return;
 
             const table = setIDColumn(aq.from(inputData));
-            initController(true, table, fileName,errorData);
+            prepForControllerInit(true, table, fileName,errorData);
 
 
         })
@@ -58,7 +58,7 @@ async function userUploadedDataset(fileName) {
     // });
 }
 
-function initController(userUploadedFile, table, fileName,errorData){
+function prepForControllerInit(userUploadedFile, table, fileName,errorData){
     d3.select("#matrix-vis-stackoverflow").html("");
     stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
 
