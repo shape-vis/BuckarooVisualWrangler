@@ -730,17 +730,6 @@ class ScatterplotMatrixView{
                     .attr("cursor", "pointer")
                     .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
-                const lineViewButton = cellGroup.append("image")
-                    .attr("class", "linechart-button")
-                    .attr("x", -110)  
-                    .attr("y", -10)   
-                    .attr("width", 45) 
-                    .attr("height", 25)
-                    .attr("xlink:href", "images/icons/linechart.png")
-                    .attr("cursor", "pointer")
-                    .on("click", () => visualizations['linechart'].module.draw(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-                    // .on("click", () => switchToLineChart(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-
                 visualizations['heatmap'].module.draw(this.model, this, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);
                 // drawHeatMap(this.model, this, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);
             }
@@ -770,7 +759,7 @@ class ScatterplotMatrixView{
         visualizations['scatterplot'].module.draw(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
         // drawScatterplot(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
 
-        d3.select(this.parentNode).selectAll(".linechart-button, .heatmap-button").classed("active", false);
+        d3.select(this.parentNode).selectAll(".heatmap-button").classed("active", false);
 
         const heatMapViewButton = cellGroup.append("image")
             .attr("class", "heatmap-button")
@@ -792,16 +781,6 @@ class ScatterplotMatrixView{
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
 
-        const lineViewButton = cellGroup.append("image")
-            .attr("class", "linechart-button")
-            .attr("x", -110)  
-            .attr("y", -10)   
-            .attr("width", 45) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/linechart.png")
-            .attr("cursor", "pointer")
-            .on("click", () => visualizations['linechart'].module.draw(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-            // .on("click", () => switchToLineChart(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
     /**
@@ -823,7 +802,7 @@ class ScatterplotMatrixView{
         visualizations['heatmap'].module.draw(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
         // drawHeatMap(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
 
-        d3.select(this.parentNode).selectAll(".linechart-button, .scatterplot-button").classed("active", false);
+        d3.select(this.parentNode).selectAll(".scatterplot-button").classed("active", false);
 
 
         const heatMapViewButton = cellGroup.append("image")
@@ -845,17 +824,6 @@ class ScatterplotMatrixView{
             .attr("xlink:href", "images/icons/scatterplot.png")
             .attr("cursor", "pointer")
             .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-
-        const lineViewButton = cellGroup.append("image")
-            .attr("class", "linechart-button")
-            .attr("x", -110)  
-            .attr("y", -10)   
-            .attr("width", 45) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/linechart.png")
-            .attr("cursor", "pointer")
-            .on("click", () => visualizations['linechart'].module.draw(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-            // .on("click", () => switchToLineChart(this.model, this, givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
     }
 
     /**

@@ -265,14 +265,12 @@ body, html, h1 {
     display: block;
 }
 
-.linechart-button,
 .scatterplot-button,
 .heatmap-button {
     cursor: pointer;
     transition: fill 0.2s;
 }
 
-.linechart-button.active,
 .scatterplot-button.active,
 .heatmap-button.active {
     filter: brightness(1.2);

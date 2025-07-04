@@ -4,14 +4,23 @@ export function draw(view, data, groupByAttribute, cellGroup, columnErrors, svg,
 
     let histData = query_histogram1d(data, columnErrors, xCol);
 
+
     // scales
-    const xScale = d3.scaleBand()
-        .domain(histData.map(d => d.bin))
-        .range([0,view.size])
-       .padding(0.2);
+    let numHistData = histData.filter(d => d.type == "numeric")
+    let catHistData = histData.filter(d => d.type == "categorical")
+
+    let sizeDistNum = view.size * (numHistData.length / (catHistData.length + numHistData.length));
+
+    const xScaleNum = d3.scaleLinear()
+        .domain([d3.min(numHistData, (d) => d.bin[0]), d3.max(numHistData, (d) => d.bin[1])])
+        .range([0, sizeDistNum]);
+
+    const xScaleCat = d3.scaleBand()
+        .domain(catHistData.map(d => d.bin))
+        .range([sizeDistNum, view.size])
+        // .padding(0.2);
 
     const yScale = d3.scaleLinear()
-        //.domain([0, d3.max(data, d => d.apples + d.oranges + d.grapes)]).nice()
         .domain([0, d3.max(histData, d => d.length)]).nice()
         .range([view.size, 0]);
 
@@ -25,13 +34,15 @@ export function draw(view, data, groupByAttribute, cellGroup, columnErrors, svg,
         .join("g")
         .attr("class", "series")
         .selectAll("rect")
-            .data(d => {console.log(d); return d.counts})
+            .data(d => {return d.counts})
             .join("rect")
-            .attr("x", d => {console.log(xScale(d.bin), yScale(d.value)); return xScale(d.bin)})
+            .attr("x", d => { return d.type == "numeric" ? xScaleNum(d.bin.x0) : xScaleCat(d.bin) })
             .attr("y", d => yScale(d.value))
             .attr("height", d => yScale(0) - yScale(d.value))
-            .attr("width", xScale.bandwidth())
+            .attr("width", d => { return d.type == "numeric" ? (xScaleNum(d.bin.x1) - xScaleNum(d.bin.x0)) : xScaleCat.bandwidth() })
             .attr("fill", d => colorScale(d.name))
+            .attr("stroke", "white")
+            .attr("stroke-width", 2);
 
     // Draw axes
     cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
@@ -39,34 +50,43 @@ export function draw(view, data, groupByAttribute, cellGroup, columnErrors, svg,
     cellGroup
             .append("g")
             .attr("transform", `translate(0, ${view.size})`)
-            // .call(d3.axisBottom(xScale).tickFormat(d3.format(".2s")))
-            .call(d3.axisBottom(xScale))
+            .call(d3.axisBottom(xScaleCat))            
             .selectAll("text") 
+            .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d)  
             .attr("class", "bottom-axis-text")
-            // .style("text-anchor", "end") 
-            // .style("font-size", "8px")
             .attr("dx", "-0.5em") 
             .attr("dy", "0.5em")  
-            // .attr("transform", "rotate(-45)")
             .append("title")  
             .text(d => d);
-        
+            
+    cellGroup
+            .append("g")
+            .attr("transform", `translate(0, ${view.size})`)
+            .call(d3.axisBottom(xScaleNum).tickFormat(d3.format(".2s")))
+            .selectAll("text") 
+            .attr("class", "bottom-axis-text")
+            .attr("dx", "-0.5em") 
+            .attr("dy", "0.5em")  
+            .append("title")  
+            .text(d => d);
 
     const tooltip = d3.select("#tooltip");
     bars.on("mouseover", function(event, d) {
-            d3.select(this).attr("opacity", 0.5);
+            d3.select(this).attr("opacity", 0.5)
+
             tooltip.style("display", "block")
-                // .html(`<strong>Bin Range:</strong> ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}<br><strong>Count: </strong>${d.length}`)
-                .html(`<strong>Bin Range:</strong> ${d.bin}<br><strong>Error: </strong>${d.name}<br><strong>Count: </strong>${d.value}`)
+                .html(`<strong>Bin:</strong> ${d.desc}<br><strong>Error: </strong>${d.name}<br><strong>Count: </strong>${d.value}`)
                 .style("left", `${event.pageX + 10}px`)
                 .style("top", `${event.pageY + 10}px`);
         })
         .on("mousemove", function(event) {
-            tooltip.style("left", `${event.pageX + 10}px`)
+            tooltip
+                .style("left", `${event.pageX + 10}px`)
                 .style("top", `${event.pageY + 10}px`);
         })
         .on("mouseout", function() {
-            d3.select(this).attr("opacity", 1);
+            d3.select(this).attr("opacity", 1)
+
             tooltip.style("display", "none");
         })
         // .attr("data-ids", d => d.ids.join(","))

@@ -24,6 +24,9 @@
  * @param {*} handleHeatmapClick Handles user clicks on heatmap bins.
  */
 export function draw(model, view, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
+
+    let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
+
     const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 
     const columnErrors = model.getColumnErrors();
