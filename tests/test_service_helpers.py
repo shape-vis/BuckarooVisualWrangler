@@ -1,8 +1,11 @@
 from unittest import TestCase
 
 import pandas as pd
+from numpy.ma.testutils import assert_equal
 
-from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict
+from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
+    get_range_of_ids_query
+from wranglers.remove_data import remove_data
 
 
 class General(TestCase):
@@ -84,3 +87,11 @@ class General(TestCase):
         stackoverflow_df = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
         res_df = run_detectors(stackoverflow_df)
         create_error_dict(res_df,200)
+
+    def test_get_range_of_ids_query(self):
+        expected_query = "SELECT * FROM stackoverflow_db_uncleaned WHERE " +"'ID'"+ " BETWEEN 15 AND 256"
+        actual_query = get_range_of_ids_query(15,256,"stackoverflow_db_uncleaned",False)
+        print(expected_query, actual_query)
+        assert_equal(expected_query,actual_query)
+
+

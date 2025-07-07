@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 from flask import Flask
 from sqlalchemy import create_engine
 
-#load the .env file and read the different variables in there and but them in the environment variables for this proccess
+from data_management.data_instance import DataInstance
+from data_management.data_state import DataState
+
+#load the .env file and read the different variables in there and them in the environment variables for this proccess
 load_dotenv()
 
 app = Flask(__name__)
@@ -17,11 +20,11 @@ app = Flask(__name__)
 url = os.getenv("DATABASE_URL")
 #a connection to the db, can use to insert or read data from the db
 connection = psycopg2.connect(url)
+data_state_manager = DataState()
 
 #engine to use pandas with the db
 engine = create_engine(url)
 
 from app import routes
 from app import wrangler_routes
-
-
+#manages the different data instances of the data during the users session

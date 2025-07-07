@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 
+from app import data_state_manager
 from app.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
@@ -27,12 +28,31 @@ def clean_table_name(csv_name):
         clean_name = 'table' + clean_name
     return clean_name.lower()
 
+def init_session_data_state(df,error_df,data_state_manager):
+    table_dict = {"df":df,"error_df":error_df}
+    data_state_manager.set_original_df(df)
+    data_state_manager.set_original_error_table(error_df)
+    data_state_manager.set_current_state(table_dict)
+
+def update_data_state(wrangled_df, new_error_df):
+    new_state = {"df":wrangled_df,"error_df":new_error_df}
+    data_state_manager.set_current_state(new_state)
+
+
 def get_whole_table_query(table_name, get_errors):
     name = clean_table_name(table_name)
     if get_errors:
         query = f"SELECT * FROM errors{name}"
         return query
     query = f"SELECT * FROM {name}"
+    return query
+
+def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
+    name = clean_table_name(table_name)
+    if get_errors:
+        query = f"SELECT * FROM errors{name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
+        return query
+    query = f"SELECT * FROM {name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
     return query
 
 def get_values_for_df_melt(df):
@@ -70,6 +90,7 @@ def run_detectors(data_frame):
 
     return perform_melt(frames)
 
+
 def create_error_dict(df, error_size):
     try:
         error_size_df = df[df['row_id'].between(1, error_size)]
@@ -87,5 +108,8 @@ def create_error_dict(df, error_size):
         return result_dict
     except Exception as e:
         return {"success": False, "error in the error_dictionary service helper": str(e)}
+
+
+
 
 
