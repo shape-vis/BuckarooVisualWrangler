@@ -9,7 +9,7 @@ from detectors.missing_value import missing_value
 from wranglers.remove_data import remove_data
 
 
-class TestAnomalyTests(unittest.TestCase):
+class TestRemoveWranglerTests(unittest.TestCase):
     def test_basic_removal(self):
         df = pd.DataFrame({'ID': [1, 2, 3]}, index=[0, 1, 2])
         expected_df = pd.DataFrame({'ID': [2, 3]}, index=[1,2])

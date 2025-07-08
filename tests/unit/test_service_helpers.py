@@ -31,7 +31,7 @@ class General(TestCase):
         example_name = "$name.csv"
         cleaned = clean_table_name(example_name)
         print(cleaned)
-        query = get_whole_table_query(cleaned)
+        query = get_whole_table_query(cleaned,False)
         print("test_whole_table_query:", query)
         self.assertEqual("SELECT * FROM table_name",query)
 
