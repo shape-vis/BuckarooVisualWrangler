@@ -4,20 +4,21 @@ export function draw(view, data, groupByAttribute, cellGroup, columnErrors, svg,
 
     let histData = query_histogram1d(data, columnErrors, xCol);
 
-
     // scales
     let numHistData = histData.filter(d => d.type == "numeric")
     let catHistData = histData.filter(d => d.type == "categorical")
 
     let sizeDistNum = view.size * (numHistData.length / (catHistData.length + numHistData.length));
 
+    let spacing = (numHistData.length === 0 || catHistData.length === 0) ? 0 : 5
+
     const xScaleNum = d3.scaleLinear()
         .domain([d3.min(numHistData, (d) => d.bin[0]), d3.max(numHistData, (d) => d.bin[1])])
-        .range([0, sizeDistNum]);
+        .range([0, sizeDistNum-spacing]);
 
     const xScaleCat = d3.scaleBand()
         .domain(catHistData.map(d => d.bin))
-        .range([sizeDistNum, view.size])
+        .range([sizeDistNum+spacing, view.size])
         // .padding(0.2);
 
     const yScale = d3.scaleLinear()

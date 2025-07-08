@@ -438,6 +438,10 @@ body, html, h1 {
     font-size: 8px;
     transform: rotate(-45deg);
 }
+
+.left-axis-text {
+    font-size: 8px;
+}
 /* 
             .style("text-anchor", "end") 
             .style("font-size", "8px")

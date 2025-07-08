@@ -26,6 +26,101 @@
 export function draw(model, view, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
 
     let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
+    console.log("histData", histData);
+
+    let numHistDataX = histData.scaleX[0];
+    let catHistDataX = histData.scaleX[1];
+
+    let sizeDistNum = view.size * (numHistDataX.length / (catHistDataX.length + numHistDataX.length));
+
+    let spacingX = (numHistDataX.length === 0 || catHistDataX.length === 0) ? 0 : 5
+
+    const xScaleNum = numHistDataX.length === 0 ? null : 
+                        d3.scaleLinear()
+                            .domain([d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)])
+                            .range([0, sizeDistNum-spacingX]);
+
+    const xScaleCat = catHistDataX.length === 0 ? null :
+                         d3.scaleBand()
+                            .domain(catHistDataX.map(d => d))
+                            .range([sizeDistNum+spacingX, view.size])
+
+    if( xScaleCat !== null ){        
+        cellGroup
+                .append("g")
+                .attr("transform", `translate(0, ${view.size})`)
+                .call(d3.axisBottom(xScaleCat))            
+                .selectAll("text") 
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d )  
+                .attr("class", "bottom-axis-text")
+                .attr("dx", "-0.5em") 
+                .attr("dy", "0.5em")  
+                .append("title")  
+                .text(d => d);
+    }
+            
+    if( xScaleNum !== null ){
+        cellGroup
+                .append("g")
+                .attr("transform", `translate(0, ${view.size})`)
+                .call(d3.axisBottom(xScaleNum).tickFormat(d3.format(".2s")))
+                .selectAll("text") 
+                .attr("class", "bottom-axis-text")
+                .attr("dx", "-0.5em") 
+                .attr("dy", "0.5em")  
+                .append("title")  
+                .text(d => d);
+    }
+
+    let numHistDataY = histData.scaleY[0];
+    let catHistDataY = histData.scaleY[1];
+    let sizeDistY = view.size * (catHistDataY.length / (catHistDataY.length + numHistDataY.length));
+    let spacingY = (numHistDataY.length === 0 || catHistDataY.length === 0) ? 0 : 5
+    const yScaleNum = numHistDataY.length === 0 ? null : 
+                        d3.scaleLinear()
+                            .domain([d3.min(numHistDataY, (d) => d.x0), d3.max(numHistDataY, (d) => d.x1)])
+                            .range([view.size, sizeDistY+spacingY]);
+    const yScaleCat = catHistDataY.length === 0 ? null :
+                         d3.scaleBand()
+                            .domain(catHistDataY.map(d => d))
+                            .range([sizeDistY-spacingY, 0]);
+
+    if( yScaleCat !== null ){
+        cellGroup
+                .append("g")
+                .call(d3.axisLeft(yScaleCat))
+                .selectAll("text")
+                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d )
+                .attr("class", "left-axis-text")
+                .append("title")
+                .text(d => d);
+    }
+
+    if( yScaleNum !== null ){
+        cellGroup
+                .append("g")
+                .call(d3.axisLeft(yScaleNum).tickFormat(d3.format(".2s")))
+                .selectAll("text")
+                .attr("class", "left-axis-text")
+                .append("title")
+                .text(d => d);
+    }
+
+    let bars = cellGroup.append("g")
+                    .selectAll("rect")
+                    .data(histData.histograms)
+                    .enter()
+                    .append("rect")
+                        .attr("x", d => { console.log(d); return d.xType == "numeric" ? xScaleNum(numHistDataX[d.xBin].x0) : xScaleCat(d.xBin) })
+                        .attr("y", d => { console.log(d); return d.yType == "numeric" ? yScaleNum(numHistDataY[d.yBin].x1) : yScaleCat(d.yBin) })
+                        .attr("height", d => { return 10; } ) // yScale(0) - yScale(d.value))
+                        .attr("width", d => { return 10; } ) //  d.type == "numeric" ? (xScaleNum(d.bin.x1) - xScaleNum(d.bin.x0)) : xScaleCat.bandwidth() })
+                        // .attr("fill", d => colorScale(d.name))
+                        .attr("stroke", "white")
+                        .attr("stroke-width", 2);
+            
+            
+    return
 
     const uniqueGroups = [...new Set(givenData.objects().map(d => d[groupByAttribute]))];
 

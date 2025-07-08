@@ -1,40 +1,44 @@
 
 
-function numeric_categorical_histograms(data, xCol){
-    const numericData = data.filter(d => 
-        typeof d[xCol] === "number" && !isNaN(d[xCol])
-    );
-
-    const categoricalData = data.filter(d => 
-        typeof d[xCol] !== "number" || isNaN(d[xCol])
-    ).map(d => ({
-        ...d,
-        [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
-    }));
-
-    let numericBins = [];
-    let categoricalBins = [];
-
-    if(numericData.length > 0){
-        const xScale = d3.scaleLinear()
-            .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
-        
-        const histogramGenerator = d3.histogram()
-            .domain(xScale.domain())
-            .value(d => d[xCol])
-            .thresholds(10);
-
-        numericBins = histogramGenerator(numericData);  
-    }    
-
-    if(categoricalData.length > 0){
-        const groupedCategories = d3.group(categoricalData, d => String(d[xCol]));
-        categoricalBins = [...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
-    }
-
-    return {numericData, numericBins, categoricalData,  categoricalBins};
+function numericHistogramGenerator(filteredData, col){
+    const scale = d3.scaleLinear().domain([d3.min(filteredData, (d) => d[col]), d3.max(filteredData, (d) => d[col]) + 1])
+    return d3.histogram().domain(scale.domain()).value(d => d[col]).thresholds(10);
 }
 
+function numericHistogram(filteredData, col){
+    const scale = d3.scaleLinear().domain([d3.min(filteredData, (d) => d[col]), d3.max(filteredData, (d) => d[col]) + 1])
+    const histogramGenerator = d3.histogram().domain(scale.domain()).value(d => d[col]).thresholds(10);
+    return histogramGenerator(filteredData);  
+}
+
+function categoricalHistogram(filteredData, col){
+    const groupedCategories = d3.group(filteredData, d => String(d[col]));
+    return [...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()];
+}
+
+function numeric_categorical_histograms(data, xCol){
+    const numericData = data.filter(d => typeof d[xCol] === "number" && !isNaN(d[xCol]) );
+
+    const categoricalData = data.filter(d => typeof d[xCol] !== "number" || isNaN(d[xCol]) )
+                                .map(d => ({ ...d, [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] }));
+
+    let numericBins = (numericData.length > 0) ? numericHistogram(numericData, xCol) : [];
+    let categoricalBins = (categoricalData.length > 0) ? categoricalHistogram(categoricalData, xCol) : [];
+
+    return [numericData, numericBins, categoricalData,  categoricalBins ]
+}
+
+function numeric_categorical_histograms2(data, xCol){
+    const numericData = data.filter(d => typeof d[xCol] === "number" && !isNaN(d[xCol]) );
+
+    const categoricalData = data.filter(d => typeof d[xCol] !== "number" || isNaN(d[xCol]) )
+                                .map(d => ({ ...d, [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] }));
+
+    let numericBins = (numericData.length > 0) ? numericHistogramGenerator(numericData, xCol) : (x) => [];
+    let categoricalBins = (categoricalData.length > 0) ? categoricalHistogram(categoricalData, xCol) : [];
+
+    return [numericData, numericBins, categoricalData,  categoricalBins ]
+}
 
 
 function query_histogram1d( data, errors, xCol ) {
@@ -56,22 +60,7 @@ function query_histogram1d( data, errors, xCol ) {
 
     let histData = [];
 
-    const {numericData, numericBins, categoricalData,  categoricalBins} = numeric_categorical_histograms(data, xCol);
-
-    // const numericData = data.filter(d => 
-    //     typeof d[xCol] === "number" && !isNaN(d[xCol])
-    // );
-
-    // if(numericData.length > 0){
-    //     const xScale = d3.scaleLinear()
-    //         .domain([d3.min(numericData, (d) => d[xCol]), d3.max(numericData, (d) => d[xCol]) + 1])
-        
-    //     const histogramGenerator = d3.histogram()
-    //         .domain(xScale.domain())
-    //         .value(d => d[xCol])
-    //         .thresholds(10);
-
-    //     const bins = histogramGenerator(numericData);  
+    const [numericData, numericBins, categoricalData,  categoricalBins] = numeric_categorical_histograms(data, xCol);
 
     if( numericBins.length > 0 ){
 
@@ -87,16 +76,6 @@ function query_histogram1d( data, errors, xCol ) {
         });
     }
 
-    // const nonNumericData = data.filter(d => 
-    //     typeof d[xCol] !== "number" || isNaN(d[xCol])
-    // ).map(d => ({
-    //     ...d,
-    //     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
-    // }));
-
-    // if(nonNumericData.length > 0){
-    //     const groupedCategories = d3.group(nonNumericData, d => String(d[xCol]));
-    //     const uniqueCategories = [...[...groupedCategories.keys()].filter(d => d !== "NaN").sort()]
     if(categoricalBins.length > 0 ){
         categoricalBins.forEach(category => {
             let tmp_items = categoricalData.filter(d => String(d[xCol]) === category).map(d => d.ID);
@@ -110,15 +89,21 @@ function query_histogram1d( data, errors, xCol ) {
             });
         });    
     }
-
     return histData;
 }
 
 function query_histogram2d(data, errors, xCol, yCol) {
 
-    // console.log(data, xCol)
-    const {numericDataX, numericBinsX, categoricalDataX,  categoricalBinsX} = numeric_categorical_histograms(data, xCol);
-    const {numericDataY, numericBinsY, categoricalDataY,  categoricalBinsY} = numeric_categorical_histograms(data, yCol);
+    function get_errors(d,xCol,yCol){
+        let curErrors = [];
+        let ID = d.ID;
+        if( ID in errors[xCol] ) curErrors = curErrors.concat(errors[xCol][ID]);
+        if( ID in errors[yCol] ) curErrors = curErrors.concat(errors[yCol][ID]);
+        return curErrors;
+    }
+
+    const [numericDataX, numericBinsX, categoricalDataX,  categoricalBinsX] = numeric_categorical_histograms2(data, xCol);
+    const [numericDataY, numericBinsY, categoricalDataY,  categoricalBinsY] = numeric_categorical_histograms2(data, yCol);
 
     let numXnumY = data.filter(d =>  ( typeof d[xCol] === "number" && !isNaN(d[xCol]) ) &&  ( typeof d[yCol] === "number" && !isNaN(d[yCol]) ) );
     let numXcatY = data.filter(d =>  ( typeof d[xCol] === "number" && !isNaN(d[xCol]) ) && ( typeof d[yCol] !== "number" || isNaN(d[yCol]) ) );
@@ -141,31 +126,154 @@ function query_histogram2d(data, errors, xCol, yCol) {
         [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] 
     }));
 
-    console.log("numXnumY", numXnumY.length, "numXcatY", numXcatY.length, "catXnumY", catXnumY.length, "catXcatY", catXcatY.length);
-    
+    let ret = []
 
+    if( numXnumY.length > 0 ){
+        const xBins = numericBinsX(numXnumY);
+        const yBins = numericBinsY(numXnumY);
 
-    // const numericDataX = data.filter(d => 
-    //     typeof d[xCol] === "number" && !isNaN(d[xCol])
-    // );
+        xBins.forEach((xBin, binIdx) => {
+            xBin.forEach(d => {
+                d.__xbin = binIdx
+            });
+        });
 
-    // const nonNumericDataX = data.filter(d => 
-    //     typeof d[xCol] !== "number" || isNaN(d[xCol])
-    // ).map(d => ({
-    //     ...d,
-    //     [xCol]: typeof d[xCol] === "boolean" ? String(d[xCol]) : d[xCol] 
-    // }));
+        yBins.forEach((yBin, binIdx) => {
+            yBin.forEach(d => {
+                d.__ybin = binIdx
+            });
+        });
 
-    // const numericDataY = data.filter(d => 
-    //     typeof d[yCol] === "number" && !isNaN(d[yCol])
-    // );
+        let bins = [];
+        xBins.forEach((xBin, xBinIdx) => {
+            bins[xBinIdx] = [];
+            yBins.forEach((yBin, yBinIdx) => {
+                bins[xBinIdx][yBinIdx] = {};
+                ret.push({
+                    count: bins[xBinIdx][yBinIdx],
+                    xBin: xBinIdx,
+                    yBin: yBinIdx,
+                    xType: "numeric",
+                    yType: "numeric"
+                })
+            });
+        });
 
-    // const nonNumericDataY = data.filter(d => 
-    //     typeof d[yCol] !== "number" || isNaN(d[yCol])
-    // ).map(d => ({
-    //     ...d,
-    //     [yCol]: typeof d[yCol] === "boolean" ? String(d[yCol]) : d[yCol] 
-    // }));
+        numXnumY.forEach((d) => {
+            let xBinIdx = d.__xbin;
+            let yBinIdx = d.__ybin;
+            let curErrors = get_errors(d, xCol, yCol);
+            if( curErrors.length === 0 ){
+                bins[xBinIdx][yBinIdx]["clean"] = (bins[xBinIdx][yBinIdx]["clean"] || 0) + 1;
+            } else {
+                curErrors.forEach(err => {
+                    bins[xBinIdx][yBinIdx][err] = (bins[xBinIdx][yBinIdx][err] || 0) + 1;
+                });
+            }
+        });
+    }
 
+    if( catXcatY.length > 0 ){
+        let bins = {}
+        catXcatY.forEach((d) => {
+            let xCat = String(d[xCol]);
+            let yCat = String(d[yCol]);
+
+            let curErrors = get_errors(d, xCol, yCol);
+
+            if(!(xCat in bins)){
+                bins[xCat] = {};
+            }
+            if(!(yCat in bins[xCat])){
+                bins[xCat][yCat] = {};
+                ret.push({
+                    count: bins[xCat][yCat],
+                    xBin: xCat,
+                    yBin: yCat,
+                    xType: "categorical",
+                    yType: "categorical"
+                })
+            }
+            if( curErrors.length === 0 ){
+                bins[xCat][yCat]["clean"] = (bins[xCat][yCat]["clean"] || 0) + 1;
+            } else {
+                curErrors.forEach(err => {
+                    bins[xCat][yCat][err] = (bins[xCat][yCat][err] || 0) + 1;
+                });
+            }
+        });
+
+    }
+
+    if( numXcatY.length > 0 ){
+        const xBins = numericBinsX(numXcatY);
+
+        let bins = []
+        xBins.forEach((xBin, binIdx) => {
+            bins[binIdx] = {};
+            categoricalBinsY.forEach(cat => {
+                bins[binIdx][cat] = {};
+                ret.push({
+                    count: bins[binIdx][cat],
+                    xBin: binIdx,
+                    yBin: cat,
+                    xType: "numeric",
+                    yType: "categorical"
+                })
+            });
+            xBin.forEach(d => {
+                let curErrors = get_errors(d, xCol, yCol);
+
+                let yCat = String(d[yCol]);
+                if( curErrors.length === 0 ){
+                    bins[binIdx][yCat]["clean"] = (bins[binIdx][yCat]["clean"] || 0) + 1;
+                }
+                else {
+                    curErrors.forEach(err => {
+                        bins[binIdx][yCat][err] = (bins[binIdx][yCat][err] || 0) + 1;
+                    });
+                }
+            });
+        });
+    }
+
+    if( catXnumY.length > 0 ){
+        const yBins = numericBinsY(catXnumY);
+
+        let bins = {}
+        categoricalBinsX.forEach((cat, catIdx) => {
+            bins[cat] = [];
+            yBins.forEach((yBin, binIdxY) => {
+                bins[cat][binIdxY] = {};
+                ret.push({
+                    count: bins[cat][binIdxY],
+                    xBin: cat,
+                    yBin: binIdxY,
+                    xType: "categorical",
+                    yType: "numeric"
+                })
+            });
+        });
+
+        yBins.forEach((yBin, binIdxY) => {
+            yBin.forEach(d => {
+                let curErrors = get_errors(d, xCol, yCol);
+                let xCat = String(d[xCol]);
+                if( curErrors.length === 0 ){
+                    bins[xCat][binIdxY]["clean"] = (bins[xCat][binIdxY]["clean"] || 0) + 1;
+                }
+                else {
+                    curErrors.forEach(err => {
+                        bins[xCat][binIdxY][err] = (bins[xCat][binIdxY][err] || 0) + 1;
+                    });
+                }
+            });
+        });
+    }
+
+    return {histograms: ret,
+        scaleX: [numericBinsX(numericDataX), categoricalBinsX],
+        scaleY: [numericBinsY(numericDataY), categoricalBinsY],
+    };
 
 }
