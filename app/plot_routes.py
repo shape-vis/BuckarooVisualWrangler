@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from flask import request, render_template
 
-from app import app
+from app import app, data_state_manager
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict
 
@@ -45,17 +45,35 @@ def get_group_by():
 def undo():
     """
     Undoes the previous action performed on the data
-    :return:
+    :return: Nothing right now - can be changed according to what the view needs
     """
-    pass
+    try:
+        data_state_manager.undo()
+        # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
+        print(data_state_manager.get_current_state())
+        current_df = data_state_manager.get_current_state()["df"].to_dict("records")
+        # print(current_df)
+        return {"success": True, "df": current_df}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 
 @app.get("/api/plots/redo")
 def redo():
     """
     Redoes the previous action performed on the data
-    :return:
+    :return: Nothing right now - can be changed according to what the view needs
     """
-    pass
+    try:
+        data_state_manager.redo()
+        # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
+        print(data_state_manager.get_current_state())
+        current_df = data_state_manager.get_current_state()["df"].to_dict("records")
+        # print(current_df)
+        return {"success": True, "df": current_df}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 
 @app.get("/api/plots/summaries")
 def attribute_summaries():

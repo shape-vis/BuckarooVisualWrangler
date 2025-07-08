@@ -27,4 +27,5 @@ engine = create_engine(url)
 
 from app import routes
 from app import wrangler_routes
+from app import plot_routes
 #manages the different data instances of the data during the users session
