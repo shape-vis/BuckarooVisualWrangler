@@ -9,8 +9,10 @@ from flask import request, render_template
 from app import app
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
-    init_session_data_state
+    init_session_data_state, fetch_detected_and_undetected_current_dataset_from_db
 from app import data_state_manager
+from app.set_id_column import set_id_column
+
 
 #this endpoint is just for reference of how to use a cursor object if not using pandas
 #We tell Flask what endpoint to accept data in using a decorator (@)
@@ -47,16 +49,13 @@ def upload_csv():
     dataframe = pd.read_csv(csv_file)
 
     # run the detectors on the uploaded file for the starting data state
+    table_with_id_added = set_id_column(dataframe)
     detected_data = run_detectors(dataframe)
     cleaned_table_name = clean_table_name(csv_file.filename)
 
-    #set the first datastate for later wrangling purposes
-    print("starting initial data-state:")
-    init_session_data_state(dataframe,detected_data,data_state_manager)
-
     try:
         #insert the undetected dataframe
-        rows_inserted = dataframe.to_sql(cleaned_table_name, engine, if_exists='replace')
+        rows_inserted = table_with_id_added.to_sql(cleaned_table_name, engine, if_exists='replace')
         detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='replace')
         return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted}
     except Exception as e:
@@ -71,10 +70,13 @@ def get_sample():
     filename = request.args.get("filename")
     data_size = request.args.get("datasize")
     cleaned_table_name = clean_table_name(filename)
+
+
     if not filename:
         return {"success": False, "error": "Filename required"}
     QUERY = get_whole_table_query(cleaned_table_name,False) + " LIMIT "+ data_size
     try:
+        fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name,engine)
         # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
         sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
         # print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist

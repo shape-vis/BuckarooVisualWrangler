@@ -38,6 +38,18 @@ def update_data_state(wrangled_df, new_error_df):
     new_state = {"df":wrangled_df,"error_df":new_error_df}
     data_state_manager.set_current_state(new_state)
 
+def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name,engine):
+    try:
+        full_df_query = get_whole_table_query(cleaned_table_name,False)
+        error_df_query = get_whole_table_query(cleaned_table_name,True)
+        undetected_df = pd.read_sql_query(full_df_query, engine)
+        detected_df = pd.read_sql_query(error_df_query, engine)
+        # set the first datastate for later wrangling purposes
+        print("starting initial data-state:")
+        init_session_data_state(undetected_df, detected_df, data_state_manager)
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 def get_whole_table_query(table_name, get_errors):
     name = clean_table_name(table_name)

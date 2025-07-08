@@ -16,7 +16,7 @@ class DataState:
     """
 
     def __init__(self):
-        # state stack comprises a tuple of dataframes, [0] being normal, [1] being error associated with it
+        # state stack comprises of a dictionary of dataframes, [0] being normal, [1] being error associated with it
         self.left_state_stack = []
         self.right_state_stack = []
         self.original_error_table = None
