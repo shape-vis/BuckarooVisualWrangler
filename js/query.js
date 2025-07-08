@@ -40,6 +40,9 @@ function numeric_categorical_histograms2(data, xCol){
     return [numericData, numericBins, categoricalData,  categoricalBins ]
 }
 
+function numericHistogramToScale(histogram) {
+    return histogram.map( d => { console.log(d); return { x0: d.x0, x1: d.x1 } });
+}
 
 function query_histogram1d( data, errors, xCol ) {
 
@@ -89,8 +92,59 @@ function query_histogram1d( data, errors, xCol ) {
             });
         });    
     }
-    return histData;
+
+    const [numericDataX, numericBinsX, categoricalDataX,  categoricalBinsX] = numeric_categorical_histograms2(data, xCol);
+
+    const xBins = numericBinsX(numericDataX);
+
+    let ret = []
+    xBins.forEach((xBin, xBinIdx) => {
+        let bins = {"items": 0};
+        xBin.forEach(d => {
+            bins["items"] = (bins["items"] || 0) + 1;
+            (errors[xCol][d.ID] || []).forEach(err => {
+                bins[err] = (bins[err] || 0) + 1;
+            });
+        });
+        ret.push({
+            count: bins,
+            xBin: xBinIdx,
+            xType: "numeric",
+        })            
+    });
+
+
+    if( categoricalDataX.length > 0 ){
+        let bins = {}
+        categoricalDataX.forEach((d) => {
+            let xCat = String(d[xCol]);
+
+            if(!(xCat in bins)){
+                bins[xCat] = {"items": 0};
+                ret.push({
+                    count: bins[xCat],
+                    xBin: xCat,
+                    xType: "categorical",
+                })
+            }
+            bins[xCat]["items"] = (bins[xCat]["items"] || 0) + 1;
+            (errors[xCol][d.ID] || []).forEach(err => {
+                bins[xCat][err] = (bins[xCat][err] || 0) + 1;
+            });
+        });
+    }    
+
+
+    tmp = {
+        histograms: ret,
+        scaleX: [numericHistogramToScale(numericBinsX(numericDataX)), categoricalBinsX]
+    }
+    // console.log("query_histogram1d", tmp);
+    // return histData;
+
+    return tmp
 }
+
 
 function query_histogram2d(data, errors, xCol, yCol) {
 
@@ -148,7 +202,7 @@ function query_histogram2d(data, errors, xCol, yCol) {
         xBins.forEach((xBin, xBinIdx) => {
             bins[xBinIdx] = [];
             yBins.forEach((yBin, yBinIdx) => {
-                bins[xBinIdx][yBinIdx] = {};
+                bins[xBinIdx][yBinIdx] = {"items": 0};
                 ret.push({
                     count: bins[xBinIdx][yBinIdx],
                     xBin: xBinIdx,
@@ -162,14 +216,10 @@ function query_histogram2d(data, errors, xCol, yCol) {
         numXnumY.forEach((d) => {
             let xBinIdx = d.__xbin;
             let yBinIdx = d.__ybin;
-            let curErrors = get_errors(d, xCol, yCol);
-            if( curErrors.length === 0 ){
-                bins[xBinIdx][yBinIdx]["clean"] = (bins[xBinIdx][yBinIdx]["clean"] || 0) + 1;
-            } else {
-                curErrors.forEach(err => {
-                    bins[xBinIdx][yBinIdx][err] = (bins[xBinIdx][yBinIdx][err] || 0) + 1;
-                });
-            }
+            bins[xBinIdx][yBinIdx]["items"] = (bins[xBinIdx][yBinIdx]["items"] || 0) + 1;
+            get_errors(d, xCol, yCol).forEach(err => {
+                bins[xBinIdx][yBinIdx][err] = (bins[xBinIdx][yBinIdx][err] || 0) + 1;
+            });
         });
     }
 
@@ -179,13 +229,12 @@ function query_histogram2d(data, errors, xCol, yCol) {
             let xCat = String(d[xCol]);
             let yCat = String(d[yCol]);
 
-            let curErrors = get_errors(d, xCol, yCol);
 
             if(!(xCat in bins)){
                 bins[xCat] = {};
             }
             if(!(yCat in bins[xCat])){
-                bins[xCat][yCat] = {};
+                bins[xCat][yCat] = {"items": 0};
                 ret.push({
                     count: bins[xCat][yCat],
                     xBin: xCat,
@@ -194,15 +243,11 @@ function query_histogram2d(data, errors, xCol, yCol) {
                     yType: "categorical"
                 })
             }
-            if( curErrors.length === 0 ){
-                bins[xCat][yCat]["clean"] = (bins[xCat][yCat]["clean"] || 0) + 1;
-            } else {
-                curErrors.forEach(err => {
-                    bins[xCat][yCat][err] = (bins[xCat][yCat][err] || 0) + 1;
-                });
-            }
+            bins[xCat][yCat]["items"] = (bins[xCat][yCat]["items"] || 0) + 1;
+            get_errors(d, xCol, yCol).forEach(err => {
+                bins[xCat][yCat][err] = (bins[xCat][yCat][err] || 0) + 1;
+            });
         });
-
     }
 
     if( numXcatY.length > 0 ){
@@ -212,7 +257,7 @@ function query_histogram2d(data, errors, xCol, yCol) {
         xBins.forEach((xBin, binIdx) => {
             bins[binIdx] = {};
             categoricalBinsY.forEach(cat => {
-                bins[binIdx][cat] = {};
+                bins[binIdx][cat] = {"items": 0};
                 ret.push({
                     count: bins[binIdx][cat],
                     xBin: binIdx,
@@ -222,17 +267,11 @@ function query_histogram2d(data, errors, xCol, yCol) {
                 })
             });
             xBin.forEach(d => {
-                let curErrors = get_errors(d, xCol, yCol);
-
                 let yCat = String(d[yCol]);
-                if( curErrors.length === 0 ){
-                    bins[binIdx][yCat]["clean"] = (bins[binIdx][yCat]["clean"] || 0) + 1;
-                }
-                else {
-                    curErrors.forEach(err => {
-                        bins[binIdx][yCat][err] = (bins[binIdx][yCat][err] || 0) + 1;
-                    });
-                }
+                bins[binIdx][yCat]["items"] = (bins[binIdx][yCat]["items"] || 0) + 1;
+                get_errors(d, xCol, yCol).forEach(err => {
+                    bins[binIdx][yCat][err] = (bins[binIdx][yCat][err] || 0) + 1;
+                });
             });
         });
     }
@@ -244,7 +283,7 @@ function query_histogram2d(data, errors, xCol, yCol) {
         categoricalBinsX.forEach((cat, catIdx) => {
             bins[cat] = [];
             yBins.forEach((yBin, binIdxY) => {
-                bins[cat][binIdxY] = {};
+                bins[cat][binIdxY] = {"items": 0};
                 ret.push({
                     count: bins[cat][binIdxY],
                     xBin: cat,
@@ -257,23 +296,18 @@ function query_histogram2d(data, errors, xCol, yCol) {
 
         yBins.forEach((yBin, binIdxY) => {
             yBin.forEach(d => {
-                let curErrors = get_errors(d, xCol, yCol);
                 let xCat = String(d[xCol]);
-                if( curErrors.length === 0 ){
-                    bins[xCat][binIdxY]["clean"] = (bins[xCat][binIdxY]["clean"] || 0) + 1;
-                }
-                else {
-                    curErrors.forEach(err => {
-                        bins[xCat][binIdxY][err] = (bins[xCat][binIdxY][err] || 0) + 1;
-                    });
-                }
+                bins[xCat][binIdxY]["items"] = (bins[xCat][binIdxY]["items"] || 0) + 1;
+                get_errors(d, xCol, yCol).forEach(err => {
+                    bins[xCat][binIdxY][err] = (bins[xCat][binIdxY][err] || 0) + 1;
+                });
             });
         });
     }
 
     return {histograms: ret,
-        scaleX: [numericBinsX(numericDataX), categoricalBinsX],
-        scaleY: [numericBinsY(numericDataY), categoricalBinsY],
+        scaleX: [numericHistogramToScale(numericBinsX(numericDataX)), categoricalBinsX],
+        scaleY: [numericHistogramToScale(numericBinsY(numericDataY)), categoricalBinsY],
     };
 
 }
