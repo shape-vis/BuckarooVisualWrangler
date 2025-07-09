@@ -4,6 +4,7 @@
 import re
 
 import pandas as pd
+from pandas.core.dtypes.common import is_categorical_dtype
 
 from app import data_state_manager
 from app.set_id_column import set_id_column
@@ -122,6 +123,52 @@ def create_error_dict(df, error_size):
         return {"success": False, "error in the error_dictionary service helper": str(e)}
 
 
+def get_1d_bins(column_name, range,df):
+    print("in1dbins")
+    print("column name before str:",column_name)
+    column_name = str(column_name)
+    print("after: ",column_name)
+    frequencies = df.value_counts(subset=str(column_name))
+    print(frequencies)
+    return frequencies
 
+def get_2d_bins(column_a,column_b, range,bin_count):
+    column_a_categorical = is_categorical(column_a)
+    column_b_categorical = is_categorical(column_b)
+    column_a_bins = column_a
+    column_b_bins = column_b
+    if not column_a_categorical:
+        column_a_bins = create_bins_for_a_numeric_column(column_a,bin_count)
+    if not column_b_categorical:
+        column_b_bins = create_bins_for_a_numeric_column(column_b,bin_count )
+    return pd.crosstab(column_a_bins, column_b_bins,dropna=True)
 
+def is_categorical(column_a):
+    value_counts = column_a.value_counts()
+    type_count = {}
+    type_key = {}
+    largest_type = 0
+    value_type = None
+    # populate the count of each type in the column
+    for key, value in value_counts.items():
+        type_of_key = type(key).__name__
+        if (isinstance(key, str)) and (bool(re.fullmatch(r'^\d+(\.\d+)?$', key.strip()))): type_of_key = "numeric"
+        if type_of_key in type_count:
+            type_count[type_of_key] += value
+            if type_of_key in type_key:
+                type_key[type_of_key].append(key)
+        else:
+            type_count[type_of_key] = value
+            type_key[type_of_key] = [key]
+    types = type_count.items()
+    for key, value in types:
+        if value > largest_type:
+            largest_type = value
+            value_type = key
+    if value_type == "str":
+        return True
+    else:
+        return False
 
+def create_bins_for_a_numeric_column(column,bin_count):
+    return pd.cut(column, bins=bin_count)

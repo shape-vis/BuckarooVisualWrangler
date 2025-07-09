@@ -1,13 +1,9 @@
 #Buckaroo Project - July 2, 2025
 #This file handles all endpoints surrounding wranglers
-from array import ArrayType
 
-import numpy as np
-import pandas as pd
-from flask import request, render_template
+from flask import request
 
 from app import app
-from app import connection, engine
 from app.service_helpers import run_detectors, update_data_state
 from wranglers.impute_average import impute_average_on_ids
 from wranglers.remove_data import remove_data
@@ -30,9 +26,7 @@ def wrangle_remove():
     filename = request.args.get("filename")
     point_range_to_return = request.args.get("range")
     points_to_remove = (request.args.get("points"))
-    print(points_to_remove)
     points_to_remove_array = [points_to_remove]
-    print(points_to_remove_array)
     preview = request.args.get("preview")
     #these can be used later to set the different ranges the user wants to get data from
     # min_id = request.args.get()point_range_to_return["min"]
@@ -48,7 +42,6 @@ def wrangle_remove():
         current_df = current_state["df"]
         #remove the points from the df
         wrangled_df = remove_data(current_df, points_to_remove_array)
-        print("wrangled:",wrangled_df)
         #run the detectors on the new df
         new_error_df = run_detectors(wrangled_df)
 
@@ -92,7 +85,6 @@ def wrangle_impute():
         current_df = current_state["df"]
         # remove the points from the df
         wrangled_df = impute_average_on_ids(axis,current_df, points_to_remove_array)
-        print("wrangled:", wrangled_df)
         # run the detectors on the new df
         new_error_df = run_detectors(wrangled_df)
 

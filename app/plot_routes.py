@@ -7,8 +7,8 @@ from flask import request, render_template
 
 from app import app, data_state_manager
 from app import connection, engine
-from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict
-
+from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, get_2d_bins, \
+    get_1d_bins
 
 
 @app.get("/api/plots/1-d-histogram-data")
@@ -20,7 +20,16 @@ def get_1d_histogram():
         3. desired id min and max values of the table to return to the view
     :return: the data as a csv
     """
-    pass
+    tablename = request.args.get("tablename")
+    column_name = request.args.get("column")
+    range = request.args.get("range")
+    current_df = data_state_manager.get_current_state()["df"]
+    try:
+        print("in the try")
+        binned_data = get_1d_bins(column_name, range,current_df).to_json()
+        return {"Success":True,"binned_data":binned_data}
+    except Exception as e:
+        return {"Success": False, "Error": str(e)}
 
 @app.get("/api/plots/2-d-histogram-data")
 def get_2d_histogram():
@@ -28,7 +37,16 @@ def get_2d_histogram():
     Endpoint to return data to be used to construct the 1d histogram in the view - user will pass in parameters for the axis that is filled in
     :return: the data as a csv
     """
-    pass
+    table_name = request.args.get("tablename")
+    column_a = request.args.get("column_a")
+    column_b = request.args.get("column_b")
+    range = request.args.get("range")
+
+    try:
+        binned_data = get_2d_bins(column_a,column_b, range)
+        return {"Success": True, "binned_data": binned_data}
+    except Exception as e:
+        return {"Success": False, "Error": str(e)}
 
 #add endpoints for the scatterplots and also to have min max ranges for the numerical value and lists of values for categorical
 

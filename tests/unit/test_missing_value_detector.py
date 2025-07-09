@@ -42,7 +42,7 @@ class TestMissing(unittest.TestCase):
         self.assertEqual(error_map, detected_df)
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
+        test_dataframe = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
         detected_df = missing_value(test_dataframe.head(200))
         expected_error_map = {"Continent":{8:"missing",9:"missing",10:"missing",12:"missing",13:"missing",14:"missing",15:"missing",
                                            16:"missing",17:"missing"}}
@@ -50,7 +50,7 @@ class TestMissing(unittest.TestCase):
 
     #----------Should finish building these tests if full integration doesn't work down the line-------#
     def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+        test_dataframe = pd.read_csv('../../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
         detected_df = missing_value(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
   "LATITUDE": {

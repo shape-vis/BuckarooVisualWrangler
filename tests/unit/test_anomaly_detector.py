@@ -40,14 +40,14 @@ class TestAnomalyTests(unittest.TestCase):
         self.assertDictEqual(error_map,detected_df)
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
+        test_dataframe = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
         top_200_rows = test_dataframe.head(200)
         detected_df = anomaly(set_id_column(top_200_rows))
         expected_error_map = {"ConvertedSalary":{13:"anomaly",58:"anomaly",100:"anomaly",115:"anomaly",141:"anomaly", 214:"anomaly",222:"anomaly"}}
         self.assertDictEqual(expected_error_map, detected_df)
 
     def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+        test_dataframe = pd.read_csv('../../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
         detected_df = anomaly(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
             " IUCR": {
@@ -102,7 +102,7 @@ class TestAnomalyTests(unittest.TestCase):
         self.assertEqual(True, True)
     #
     def test_complaints_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../provided_datasets/complaints-2025-04-21_17_31.csv')
+        test_dataframe = pd.read_csv('../../provided_datasets/complaints-2025-04-21_17_31.csv')
         detected_df = anomaly(set_id_column(test_dataframe.head(200)))
         expected_error_map = {'Complaint ID': {35: 'anomaly',
                   58: 'anomaly',
