@@ -41,7 +41,7 @@ function numeric_categorical_histograms2(data, xCol){
 }
 
 function numericHistogramToScale(histogram) {
-    return histogram.map( d => { console.log(d); return { x0: d.x0, x1: d.x1 } });
+    return histogram.map( d => { return { x0: d.x0, x1: d.x1 } });
 }
 
 function query_histogram1d( data, errors, xCol ) {
@@ -137,7 +137,8 @@ function query_histogram1d( data, errors, xCol ) {
 
     tmp = {
         histograms: ret,
-        scaleX: [numericHistogramToScale(numericBinsX(numericDataX)), categoricalBinsX]
+        scaleX: { numeric: numericHistogramToScale(numericBinsX(numericDataX)), 
+                    categorical: categoricalBinsX }
     }
     // console.log("query_histogram1d", tmp);
     // return histData;
@@ -306,8 +307,152 @@ function query_histogram2d(data, errors, xCol, yCol) {
     }
 
     return {histograms: ret,
-        scaleX: [numericHistogramToScale(numericBinsX(numericDataX)), categoricalBinsX],
-        scaleY: [numericHistogramToScale(numericBinsY(numericDataY)), categoricalBinsY],
+        scaleX: {numeric: numericHistogramToScale(numericBinsX(numericDataX)), categorical: categoricalBinsX},
+        scaleY: {numeric: numericHistogramToScale(numericBinsY(numericDataY)), categorical: categoricalBinsY},
     };
 
 }
+
+
+function query_sample2d(data, errors, xCol, yCol, errorSamples, totalSamples ) {
+
+    function get_errors(d,xCol,yCol){
+        let curErrors = [];
+        let ID = d.ID;
+        if( ID in errors[xCol] ) curErrors = curErrors.concat(errors[xCol][ID]);
+        if( ID in errors[yCol] ) curErrors = curErrors.concat(errors[yCol][ID]);
+        return curErrors;
+    }
+
+
+    let errorData = data.filter( d => errors[xCol][d.ID] || errors[yCol][d.ID] )
+    let nonErrorData = data.filter( d => !(errors[xCol][d.ID] || errors[yCol][d.ID]) )
+
+    console.log("errorSamples", errorData.length, "nonErrorSamples", nonErrorData.length);
+
+    while( errorData.length > errorSamples ){
+        let idx = Math.floor(Math.random() * errorData.length);
+        errorData.splice(idx, 1);
+    }
+    while( (errorData.length + nonErrorData.length) > totalSamples ){
+        let idx = Math.floor(Math.random() * nonErrorData.length);
+        nonErrorData.splice(idx, 1);
+    }
+    let workingData = errorData.concat(nonErrorData);
+
+    let numXnumY = workingData.filter(d =>  ( typeof d[xCol] === "number" && !isNaN(d[xCol]) ) &&  ( typeof d[yCol] === "number" && !isNaN(d[yCol]) ) );
+    let numXcatY = workingData.filter(d =>  ( typeof d[xCol] === "number" && !isNaN(d[xCol]) ) && ( typeof d[yCol] !== "number" || isNaN(d[yCol]) ) );
+    let catXnumY = workingData.filter(d =>  ( typeof d[xCol] !== "number" || isNaN(d[xCol]) ) && ( typeof d[yCol] === "number" && !isNaN(d[yCol]) ) );
+    let catXcatY = workingData.filter(d =>  ( typeof d[xCol] !== "number" || isNaN(d[xCol]) ) && ( typeof d[yCol] !== "number" || isNaN(d[yCol]) ) );
+
+    let outData = []
+    if( numXnumY.length > 0 ){
+        numXnumY.forEach(d => {
+            outData.push({
+                ID: d.ID,
+                xType: "numeric",
+                yType: "numeric",
+                x: d[xCol],
+                y: d[yCol],
+                errors: get_errors(d, xCol, yCol)
+            });
+        });
+    }
+
+    if( numXcatY.length > 0 ){
+        numXcatY.forEach(d => {
+            outData.push({
+                ID: d.ID,
+                xType: "numeric",
+                yType: "categorical",
+                x: d[xCol],
+                y: String(d[yCol]),
+                errors: get_errors(d, xCol, yCol)
+            });
+        });
+    }
+
+    if( catXnumY.length > 0 ){
+        catXnumY.forEach(d => {
+            outData.push({
+                ID: d.ID,
+                xType: "categorical",
+                yType: "numeric",
+                x: String(d[xCol]),
+                y: d[yCol],
+                errors: get_errors(d, xCol, yCol)
+            });
+        });
+    }
+
+    if( catXcatY.length > 0 ){
+        catXcatY.forEach(d => {
+            outData.push({
+                ID: d.ID,
+                xType: "categorical",
+                yType: "categorical",
+                x: String(d[xCol]),
+                y: String(d[yCol]),
+                errors: get_errors(d, xCol, yCol)
+            });
+        });
+    }
+            
+
+
+
+    const [numericDataX, numericBinsX, categoricalDataX,  categoricalBinsX] = numeric_categorical_histograms2(workingData, xCol);
+    const [numericDataY, numericBinsY, categoricalDataY,  categoricalBinsY] = numeric_categorical_histograms2(workingData, yCol);
+
+    const scaleX = numericDataX.length > 0 ? [d3.min(numericDataX, (d) => d[xCol]), d3.max(numericDataX, (d) => d[xCol]) + 1] : [];
+    const scaleY = numericDataY.length > 0 ? [d3.min(numericDataY, (d) => d[yCol]), d3.max(numericDataY, (d) => d[yCol]) + 1] : [];
+
+    return {data: outData,
+        scaleX: {numeric: scaleX, categorical: categoricalBinsX},
+        scaleY: {numeric: scaleY, categorical: categoricalBinsY},
+    };
+
+}
+
+function query_attribute_summary(controller, table) {
+    // Get the column error summary from the controller model
+    const columnErrors = controller.model.getColumnErrorSummary(); 
+    const attributes = table.columnNames().slice(1);
+
+    let attrDist = {};
+    attributes.forEach(attr => {
+        // Initialize the error counts for each attribute
+        let data = table.array(attr);
+        const numericData = data.filter(d => typeof d === "number" && !isNaN(d) );
+
+        const categoricalData = data.filter(d => typeof d !== "number" || isNaN(d))
+                                    .map(d => (typeof d === "boolean" ? String(d) : d));
+
+                                            attrDist[attr] = {}
+        if (numericData.length > 0){
+            attrDist[attr]["numeric"] = {
+                mean: d3.mean(numericData),
+                min: d3.min(numericData),
+                max: d3.max(numericData)
+            };
+        }
+
+        if (categoricalData.length > 0){
+            const categoricalCounts = d3.rollup(categoricalData, v => v.length, d => String(d));
+            const modeCat = (categoricalCounts.size === 0) ? null: [...categoricalCounts].sort((a, b) => b[1] - a[1])[0][0];
+            attrDist[attr]["categorical"] = {
+                categories: [...categoricalCounts].length,
+                mode: modeCat
+            };
+        }
+    });
+
+    // Return the summary data
+    return {
+        columnErrors: columnErrors,
+        attributes: attributes,
+        attributeDistributions: attrDist
+    };
+
+}
+

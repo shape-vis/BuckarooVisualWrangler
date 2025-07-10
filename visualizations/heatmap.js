@@ -2,44 +2,6 @@
 
 
 
-let defs = null;
-let patterns = {};
-
-function generate_pattern(svg, colorScale, errorArray) {
-
-    if( defs === null){
-        svg.selectAll("defs").remove(); // Remove previous cell groups
-        defs = svg.append("defs")
-    }
-
-    let patternName = errorArray.join("_") + "_pattern";
-    if ( patternName in patterns ){
-        return `url(#${patternName})`
-    }
-
-    let pattern = defs.append("pattern")
-        .attr("id", patternName)
-        .attr("width", 10)
-        .attr("height", 10)
-        .attr("patternUnits", "userSpaceOnUse")
-    
-    for( let i = -10; i < 10; ){
-        errorArray.forEach( (error, idx) => {    
-            pattern.append("line")
-                .attr("x1", i)
-                .attr("y1", 0)
-                .attr("x2", i + 20)
-                .attr("y2", 20)
-                .attr("stroke", colorScale(error))
-                .attr("stroke-width", 1)
-            i += 1.5
-        })
-    }
-    patterns[patternName] = pattern;
-
-    return `url(#${patternName})`;
-
-}
 
 /**
  * Plots heatmaps on the off-diagonals. Heatmaps are colored by a gradient colorscale based on frequency. A bin is colored an error color if it contains a data point with
@@ -64,7 +26,7 @@ function generate_pattern(svg, colorScale, errorArray) {
  * @param {*} animate If true, the plots should have transitions.
  * @param {*} handleHeatmapClick Handles user clicks on heatmap bins.
  */
-export function draw(model, view, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick){
+export function draw(model, view, cellGroup, svg, givenData, xCol, yCol, groupByAttribute ){
 
     view.errorColors['none'] = "steelblue";
     const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
@@ -72,8 +34,49 @@ export function draw(model, view, cellGroup, svg, i, j, givenData, xCol, yCol, g
     let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
     // console.log("histData", histData);
 
-    let numHistDataX = histData.scaleX[0];
-    let catHistDataX = histData.scaleX[1];
+
+    let defs = null;
+    let patterns = {};
+
+    function generate_pattern(svg, colorScale, errorArray) {
+
+        if( defs === null){
+            // svg.selectAll("defs").remove(); // Remove previous cell groups
+            defs = svg.append("defs")
+        }
+
+        let patternName = errorArray.join("_") + "_pattern";
+        console.log("patternName", patternName);
+        if ( patternName in patterns ){
+            return `url(#${patternName})`
+        }
+
+        let pattern = defs.append("pattern")
+            .attr("id", patternName)
+            .attr("width", 10)
+            .attr("height", 10)
+            .attr("patternUnits", "userSpaceOnUse")
+        
+        for( let i = -10; i < 10; ){
+            errorArray.forEach( (error, idx) => {    
+                pattern.append("line")
+                    .attr("x1", i)
+                    .attr("y1", 0)
+                    .attr("x2", i + 20)
+                    .attr("y2", 20)
+                    .attr("stroke", colorScale(error))
+                    .attr("stroke-width", 2)
+                i += 2.5
+            })
+        }
+        patterns[patternName] = pattern;
+
+        return `url(#${patternName})`;
+
+    }    
+
+    let numHistDataX = histData.scaleX.numeric;
+    let catHistDataX = histData.scaleX.categorical;
 
     let sizeDistNum = view.size * (numHistDataX.length / (catHistDataX.length + numHistDataX.length));
 
@@ -116,8 +119,8 @@ export function draw(model, view, cellGroup, svg, i, j, givenData, xCol, yCol, g
                 .text(d => d);
     }
 
-    let numHistDataY = histData.scaleY[0];
-    let catHistDataY = histData.scaleY[1];
+    let numHistDataY = histData.scaleY.numeric;
+    let catHistDataY = histData.scaleY.categorical;
     let sizeDistY = view.size * (catHistDataY.length / (catHistDataY.length + numHistDataY.length));
     let spacingY = (numHistDataY.length === 0 || catHistDataY.length === 0) ? 0 : 5
     const yScaleNum = numHistDataY.length === 0 ? null : 
@@ -171,40 +174,30 @@ export function draw(model, view, cellGroup, svg, i, j, givenData, xCol, yCol, g
                         .attr("stroke-width", 1);
             
 
-    const tooltip = d3.select("#tooltip");
-    bars.on("mouseover", function(event, d) {
-            console.log("mouseover", d);
-            d3.select(this).attr("opacity", 0.5)
 
+    createTooltip(bars,
+        d => {
             let xBin = d.xType == "numeric" ? `${Math.round(numHistDataX[d.xBin].x0)}-${Math.round(numHistDataX[d.xBin].x1)}` : d.xBin;
             let yBin = d.yType == "numeric" ? `${Math.round(numHistDataY[d.yBin].x0)}-${Math.round(numHistDataY[d.yBin].x1)}` : d.yBin;
-
             let errorList = "";
             Object.keys(d.count).forEach(key => {
                 if( key === "items") return; // Skip items count in tooltip
                 errorList += `<br> - ${key}: ${d.count[key]}`;
             });
-            if( errorList !== "") errorList = "<br><strong>Errors: </strong>" + errorList;
-
-            tooltip.style("display", "block")
-                .html(`<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`)
-                .style("left", `${event.pageX + 10}px`)
-                .style("top", `${event.pageY + 10}px`);
-        })
-        .on("mousemove", function(event) {
-            tooltip
-                .style("left", `${event.pageX + 10}px`)
-                .style("top", `${event.pageY + 10}px`);
-        })
-        .on("mouseout", function() {
-            d3.select(this).attr("opacity", 1)
-
-            tooltip.style("display", "none");
-        })
-        // .attr("data-ids", d => d.ids.join(","))
-        .on("click", function (event, d) {
-            if (!selectionEnabled) return;
-            handleBarClick(event, d, xCol, groupByAttribute)
-        });
+            if( errorList !== "") errorList = "<br><strong>Errors: </strong> " + errorList; 
+            return `<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`;
+        },
+        (d) => {
+            console.log("Left click on heatmap bin", d);
+        },
+        (d) => {
+            // Right click handler, if needed
+            console.log("Right click on heatmap bin", d);
+        },
+        (d) => {
+            // Double click handler, if needed
+            console.log("Double click on heatmap bin", d);
+        }
+    );
 }
 

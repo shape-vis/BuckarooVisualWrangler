@@ -1,5 +1,4 @@
 
-
 visualizations = {};
 
 (async () => {
@@ -27,8 +26,86 @@ visualizations = {};
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ScatterplotMatrixView{
     constructor(container, model) {
+
+        this.matrixView = new MatrixView(container, model);
+        this.tableView = new TableView(container, model);
+        this.attributeSummaryView = new AttributeSummaryView(container, model);
+
         this.container = container;
         this.model = model;
 
@@ -122,128 +199,17 @@ class ScatterplotMatrixView{
     
         dropdownMenu.appendChild(deselectAllButton);
 
-        // Populate list of columns legend (attribute-list)
-        const columnListContainer = document.getElementById("attribute-list");
-        if (columnListContainer) {
-            const ul = document.getElementById("attribute-summary-list");
-            ul.innerHTML = "";
 
-            const columnErrors = this.model.getColumnErrorSummary(); 
-            
-            const sortedAttributes = attributes.sort((a, b) => {
-                const errorsA = Object.values(columnErrors[a] || {}).reduce((sum, pct) => sum + pct, 0);
-                const errorsB = Object.values(columnErrors[b] || {}).reduce((sum, pct) => sum + pct, 0);
-                return errorsB - errorsA; // descending order
-              });       
+        /*****************************/
+        /*****************************/
+        /*****************************/
+        /*****************************/
+        this.attributeSummaryView.populateDropdownFromTable(table, controller);
+        /*****************************/
+        /*****************************/
+        /*****************************/
+        /*****************************/
 
-            sortedAttributes.forEach(attr => {
-                const li = document.createElement("li");
-                li.style.display = "flex";
-                li.style.flexDirection = "column";
-                li.style.gap = "4px";
-                li.style.marginBottom = "16px";
-
-                const topRow = document.createElement("div");
-                topRow.style.display = "flex";
-                topRow.style.alignItems = "center";
-                topRow.style.gap = "6px";
-
-                const label = document.createElement("span");
-                label.textContent = attr;
-                label.style.fontSize = "16px";
-                label.style.fontWeight = "1000";
-                label.style.marginRight = "10px";
-                topRow.appendChild(label);
-        
-                const errorTypes = columnErrors[attr] || {};
-
-                Object.entries(errorTypes).forEach(([type, pct]) => {
-                    const box = document.createElement("span");
-                    box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
-                    box.classList.add("error-scent");
-        
-                    box.style.backgroundColor = {
-                        "mismatch": "rgba(255, 105, 180, 0.7)",  // hotpink
-                        "missing": "rgba(139, 69, 19, 0.7)",     // saddlebrown
-                        "anomaly": "rgba(255, 0, 0, 0.7)",       // red
-                        "incomplete": "rgba(128, 128, 128, 0.7)" // gray
-                      }[type];
-                
-                    const percentText = document.createElement("span");
-                    percentText.textContent = `${Math.round(pct * 100)}%`;
-                    percentText.style.fontSize = "10px";
-                    percentText.style.fontWeight = "bold";
-                    percentText.style.color = "black";
-                    percentText.style.position = "absolute";
-                    percentText.style.top = "0";
-                    percentText.style.right = "0";
-                    percentText.style.transform = "translate(75%, 15%)";
-                    box.appendChild(percentText);
-        
-                    topRow.appendChild(box);
-                });
-
-                li.appendChild(topRow);
-
-                const columnData = table.array(attr).filter(d => d !== "" && d !== null && d !== undefined);
-                const isNumeric = columnData.some(v => typeof v === "number" && !isNaN(v));
-
-                const stats = document.createElement("div");
-                stats.classList.add("column-stats");
-
-                if (isNumeric) {
-                    const mean = d3.mean(columnData);
-                    const min = d3.min(columnData);
-                    const max = d3.max(columnData);
-                    stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>
-                                        <div>Range: ${min} - ${max}</div>`;
-                } else {
-                    const mode = [...d3.rollup(columnData, v => v.length, d => d)]
-                        .sort((a, b) => b[1] - a[1])[0][0];
-                    const sortedVals = sortCategories(columnData.slice());
-                    const min = sortedVals[0];
-                    const max = sortedVals[sortedVals.length - 1];
-
-                    stats.innerHTML = `<div>Mode: ${truncateText(mode, 50)}</div>
-                                        <div>Range: ${truncateText(min, 50)} - ${truncateText(max, 50)}</div>`;
-                }
-
-                li.appendChild(stats);
-
-                const totalRows = table.objects().length;
-                const errorEntries = Object.entries(errorTypes);
-                const errorSum = errorEntries.reduce((sum, [_, pct]) => sum + pct, 0);
-                const cleanPct = Math.max(0, 1 - errorSum);
-
-                const barContainer = document.createElement("div");
-                barContainer.classList.add("error-bar-container");
-
-                errorEntries.forEach(([type, pct]) => {
-                    const segment = document.createElement("div");
-                    segment.classList.add("bar-segment");
-                    segment.style.width = `${pct * 100}%`;
-                    segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
-
-                    segment.style.backgroundColor = this.errorColors[type];
-                    barContainer.appendChild(segment);
-                });
-
-                if (cleanPct > 0) {
-                const cleanSegment = document.createElement("div");
-                cleanSegment.classList.add("bar-segment");
-                cleanSegment.style.backgroundColor = "steelblue";
-                cleanSegment.style.width = `${cleanPct * 100}%`;
-                cleanSegment.title = `Clean: ${(cleanPct * 100).toFixed(1)}%`;
-                barContainer.appendChild(cleanSegment);
-                }
-
-                li.appendChild(barContainer);
-        
-                ul.appendChild(li);
-            });
-        
-            columnListContainer.appendChild(ul);
-        }
         
         attributes.forEach((attr, index) => {
             let label = document.createElement("label");
@@ -321,151 +287,7 @@ class ScatterplotMatrixView{
      * @returns If the container does not exist, else should just update the UI.
      */
     updateColumnErrorIndicators(table, controller) {
-        const columnErrors = controller.model.getColumnErrorSummary(); 
-        const attributes = table.columnNames().slice(1);
-
-        const sortBy = document.getElementById("sort-errors").value || "total";
-        console.log("sortBy", sortBy);
-
-        const container = document.getElementById("attribute-list");
-        if (!container) return;
-
-        const sortedAttributes = attributes.sort((a, b) => {
-          const errorsA = columnErrors[a] || {};
-          const errorsB = columnErrors[b] || {};
-
-          // Primary: specific error type (or 0 if not present)
-          const primaryA = sortBy === "total" ? 0 : (errorsA[sortBy] || 0);
-          const primaryB = sortBy === "total" ? 0 : (errorsB[sortBy] || 0);
-
-          // Secondary: total error percentage
-          const totalA = Object.values(errorsA).reduce((sum, pct) => sum + pct, 0);
-          const totalB = Object.values(errorsB).reduce((sum, pct) => sum + pct, 0);
-
-          if (sortBy === "total") {
-              // Sort by total error only
-              return totalB - totalA;
-          } else {
-              // First by specific error type
-              if (primaryB !== primaryA) {
-              return primaryB - primaryA;
-              }
-              // Then by total error percentage
-              return totalB - totalA;
-          }
-        });
-      
-        const ul = document.getElementById("attribute-summary-list");
-        ul.innerHTML = "";
-            
-        sortedAttributes.forEach(attr => {
-            const li = document.createElement("li");
-            li.style.display = "flex";
-            li.style.flexDirection = "column";
-            li.style.gap = "4px";
-            li.style.marginBottom = "16px";
-
-            const topRow = document.createElement("div");
-            topRow.style.display = "flex";
-            topRow.style.alignItems = "center";
-            topRow.style.gap = "6px";
-
-            const label = document.createElement("span");
-            label.textContent = attr;
-            label.style.fontSize = "16px";
-            label.style.fontWeight = "1000";
-            label.style.marginRight = "10px";
-            topRow.appendChild(label);
-    
-            const errorTypes = columnErrors[attr] || {};
-    
-            Object.entries(errorTypes).forEach(([type, pct]) => {
-                const box = document.createElement("span");
-                box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
-                box.classList.add("error-scent");
-    
-                box.style.backgroundColor = {
-                    "mismatch": "rgba(255, 105, 180, 0.7)",  // hotpink
-                    "missing": "rgba(139, 69, 19, 0.7)",     // saddlebrown
-                    "anomaly": "rgba(255, 0, 0, 0.7)",       // red
-                    "incomplete": "rgba(128, 128, 128, 0.7)" // gray
-                  }[type];
-                  
-                const percentText = document.createElement("span");
-                percentText.textContent = `${Math.round(pct * 100)}%`;
-                percentText.style.fontSize = "10px";
-                percentText.style.fontWeight = "bold";
-                percentText.style.color = "black";
-                percentText.style.position = "absolute";
-                percentText.style.top = "0";
-                percentText.style.right = "0";
-                percentText.style.transform = "translate(75%, 15%)";
-                box.appendChild(percentText);
-    
-                topRow.appendChild(box);
-            });
-
-            li.appendChild(topRow);
-
-            const columnData = table.array(attr).filter(d => d !== "" && d !== null && d !== undefined);
-            const isNumeric = columnData.some(v => typeof v === "number" && !isNaN(v));
-
-            const stats = document.createElement("div");
-            stats.classList.add("column-stats");
-
-            if (isNumeric) {
-                const mean = d3.mean(columnData);
-                const min = d3.min(columnData);
-                const max = d3.max(columnData);
-                stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>
-                                    <div>Range: ${min} - ${max}</div>`;
-            } else {
-                const mode = [...d3.rollup(columnData, v => v.length, d => d)]
-                    .sort((a, b) => b[1] - a[1])[0][0];
-                const sortedVals = sortCategories(columnData.slice());
-                const min = sortedVals[0];
-                const max = sortedVals[sortedVals.length - 1];
-
-                stats.innerHTML = `<div>Mode: ${truncateText(mode, 50)}</div>
-                                    <div>Range: ${truncateText(min, 50)} - ${truncateText(max, 50)}</div>`;
-            }
-
-            li.appendChild(stats);
-
-            const totalRows = table.objects().length;
-            const errorEntries = Object.entries(errorTypes);
-            const errorSum = errorEntries.reduce((sum, [_, pct]) => sum + pct, 0);
-            const cleanPct = Math.max(0, 1 - errorSum);
-
-            const barContainer = document.createElement("div");
-            barContainer.classList.add("error-bar-container");
-
-            errorEntries.forEach(([type, pct]) => {
-            const segment = document.createElement("div");
-            segment.classList.add("bar-segment");
-            segment.style.width = `${pct * 100}%`;
-            segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
-
-            segment.style.backgroundColor = this.errorColors[type];
-
-            barContainer.appendChild(segment);
-            });
-
-            if (cleanPct > 0) {
-            const cleanSegment = document.createElement("div");
-            cleanSegment.classList.add("bar-segment");
-            cleanSegment.style.backgroundColor = "steelblue";
-            cleanSegment.style.width = `${cleanPct * 100}%`;
-            cleanSegment.title = `Clean: ${(cleanPct * 100).toFixed(1)}%`;
-            barContainer.appendChild(cleanSegment);
-            }
-
-            li.appendChild(barContainer);
-    
-            ul.appendChild(li);
-        });
-    
-        container.appendChild(ul);
+        this.attributeSummaryView.updateColumnErrorIndicators(table, controller);
     }
 
     /**
@@ -475,99 +297,7 @@ class ScatterplotMatrixView{
      * @returns 
      */
     updateDirtyRowsTable(data) {
-        const columnErrors = this.model.getColumnErrors();
-      
-        // Count errors per row ID
-        const rowErrorCounts = {};
-        for (const col in columnErrors) {
-          for (const id in columnErrors[col]) {
-            if (!rowErrorCounts[id]) {
-              rowErrorCounts[id] = { count: 0 };
-            }
-            rowErrorCounts[id].count += 1;          }
-        }
-      
-        // Build full row objects with their error counts
-        const fullData = data.objects().map(row => {
-          const id = String(row.ID);
-          return {
-            ...row,
-            __errorCount__: rowErrorCounts[id] ? rowErrorCounts[id].count : 0,
-          };
-        });
-      
-        // Sort by error count descending and take top 10
-        const topRows = fullData
-          .sort((a, b) => b.__errorCount__ - a.__errorCount__)
-          .slice(0, 10);
-      
-        const wrapper = document.getElementById("dirty-rows-table-wrapper");
-        wrapper.innerHTML = "";
-      
-        if (topRows.length === 0) {
-          wrapper.innerHTML = "<p>No rows with errors found.</p>";
-          return;
-        }
-      
-        const table = document.createElement("table");
-        table.id = "dirty-rows-table";
-        table.style.borderCollapse = "collapse";
-        table.style.width = "100%";
-      
-        const thead = document.createElement("thead");
-        const headerRow = document.createElement("tr");
-      
-        const columns = ['Error Count', ...Object.keys(topRows[0]).filter(c => c !== '__errorCount__')];
-      
-        columns.forEach(col => {
-          const th = document.createElement("th");
-          th.textContent = col;
-          th.style.border = "1px solid #ddd";
-          th.style.padding = "6px";
-          th.style.backgroundColor = "#f0f0f0";
-          headerRow.appendChild(th);
-        });
-        thead.appendChild(headerRow);
-      
-        const tbody = document.createElement("tbody");
-        topRows.forEach(row => {
-          const tr = document.createElement("tr");
-      
-          columns.forEach(col => {
-            const td = document.createElement("td");
-      
-            // Handle 'Error Count' column separately
-            if (col === 'Error Count') {
-              td.textContent = row.__errorCount__;
-            } else {
-              const cellValue = row[col];
-              if (typeof cellValue === "string" && cellValue.length > 50) {
-                  td.textContent = truncateText(cellValue, 50);
-                  td.title = cellValue; // Show full value as tooltip
-              } else {
-                  td.textContent = cellValue;
-              }
-      
-              // Color in cell if it has errors
-              const errorList = columnErrors[col]?.[row.ID];
-              if (errorList && errorList.length > 0) {
-                const topErrorType = this.errorPriority.find(type => errorList.includes(type));
-                td.style.backgroundColor = this.errorColors[topErrorType];
-                td.style.color = "white";
-              }
-            }
-      
-            td.style.border = "1px solid #ddd";
-            td.style.padding = "6px";
-            tr.appendChild(td);
-          });
-      
-          tbody.appendChild(tr);
-        });
-      
-        table.appendChild(thead);
-        table.appendChild(tbody);
-        wrapper.appendChild(table);
+        this.tableView.updateDirtyRowsTable(data);
     }      
 
     /**
@@ -664,167 +394,10 @@ class ScatterplotMatrixView{
      * @param {*} handleHeatmapClick Passes to drawHeatMap to handle user selected bins.
      */
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {  
-        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
-
-        const columnErrors = this.model.getColumnErrors();
-
-        let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
-        let matrixWidth = columns.length * this.size + (columns.length - 1) * this.xPadding; // 3 * 175 + (2) * 25 = 575
-        let matrixHeight = columns.length * this.size + (columns.length - 1) * this.yPadding; // 3 * 175 + (2) * 25 = 575
-
-        let svgWidth = matrixWidth + this.labelPadding + this.leftMargin + this.rightMargin;
-        let svgHeight = matrixHeight + this.labelPadding + this.topMargin + this.bottomMargin;
-
-        this.topMargin = 100;
-
-        const container = d3.select(this.container);
-        container.selectAll("*").remove();
-    
-        const svg = container
-            .append("svg")
-            .attr("width", svgWidth) // 575 + 20 + 60 + 60 = 715
-            .attr("height", svgHeight);
-                
-        columns.forEach((xCol, i) => {
-            columns.forEach((yCol, j) => {
-            const cellID = `cell-${i}-${j}`;
-            const cellGroup = svg
-                .append("g")
-                .attr("id", cellID)
-                .attr("transform", `translate(${this.leftMargin + j * (this.size + this.xPadding)}, ${this.topMargin + i * (this.size + this.yPadding)})`);
-
-            if (i === j) {      // On the diagonal, so this should be a bar plot.
-                let data = [];
-
-                if (groupByAttribute){
-                    data = givenData.select(["ID", xCol, groupByAttribute]).objects();
-                }
-                else{
-                    data = givenData.select(["ID", xCol]).objects();
-                }
-
-                visualizations['barchart'].module.draw(this, data, groupByAttribute, cellGroup, columnErrors, svg, i, j, animate, selectionEnabled, handleBarClick, xCol );
-                // drawBarchart(this, data, groupByAttribute, cellGroup, columnErrors, svg, i, j, animate, selectionEnabled, handleBarClick, xCol );
-
-            
-            } 
-            // Plot off diagonal cells
-            else {
-                const heatMapViewButton = cellGroup.append("image")
-                .attr("class", "heatmap-button active")
-                .attr("x", -110)  
-                .attr("y", -60)   
-                .attr("width", 45) 
-                .attr("height", 25)
-                .attr("xlink:href", "images/icons/heatmap.png")
-                .attr("cursor", "pointer")
-                .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-    
-                const scatterViewButton = cellGroup.append("image")
-                    .attr("class", "scatterplot-button")
-                    .attr("x", -110)  
-                    .attr("y", -35)   
-                    .attr("width", 45) 
-                    .attr("height", 25)
-                    .attr("xlink:href", "images/icons/scatterplot.png")
-                    .attr("cursor", "pointer")
-                    .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-
-                visualizations['heatmap'].module.draw(this.model, this, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);
-                // drawHeatMap(this.model, this, cellGroup, svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);
-            }
-            });
-        });
-    }
-
-
-
-
-    /**
-     * Draw scatterplot when scatterplot icon is clicked.
-     * @param {*} givenData Data to visualize.
-     * @param {*} svg The overall matrix svg.
-     * @param {*} xCol The x attribute/column.
-     * @param {*} yCol The y attribute/column.
-     * @param {*} cellID Which cell in the matrix we are in.
-     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
-     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
-     * @param {*} animate If true, the plots should have transitions.
-     * @param {*} handleHeatmapClick Given to pass around. 
-     */
-    restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
-        const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
-        cellGroup.selectAll("*").remove();  
-        const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        visualizations['scatterplot'].module.draw(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
-        // drawScatterplot(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
-
-        d3.select(this.parentNode).selectAll(".heatmap-button").classed("active", false);
-
-        const heatMapViewButton = cellGroup.append("image")
-            .attr("class", "heatmap-button")
-            .attr("x", -110)  
-            .attr("y", -60)   
-            .attr("width", 45) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/heatmap.png")
-            .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-
-        const scatterViewButton = cellGroup.append("image")
-            .attr("class", "scatterplot-button active")
-            .attr("x", -110)  
-            .attr("y", -35)   
-            .attr("width", 45) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/scatterplot.png")
-            .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
+        this.matrixView.plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick);
 
     }
 
-    /**
-     * Draw heatmap when heatmap icon is clicked.
-     * @param {*} givenData Data to visualize.
-     * @param {*} svg The overall matrix svg.
-     * @param {*} xCol The x attribute/column.
-     * @param {*} yCol The y attribute/column.
-     * @param {*} cellID Which cell in the matrix we are in.
-     * @param {*} groupByAttribute If active, the user-selected attribute to group by.
-     * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
-     * @param {*} animate If true, the plots should have transitions.
-     * @param {*} handleHeatmapClick Given to pass around. 
-     */
-    restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick) {
-        const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
-        cellGroup.selectAll("*").remove();  
-        const [, i, j] = cellID.split("-").map(d => parseInt(d));
-        visualizations['heatmap'].module.draw(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
-        // drawHeatMap(this.model, this, cellGroup,  svg, i, j, givenData, xCol, yCol, groupByAttribute, selectionEnabled, animate, handleHeatmapClick);  
-
-        d3.select(this.parentNode).selectAll(".scatterplot-button").classed("active", false);
-
-
-        const heatMapViewButton = cellGroup.append("image")
-            .attr("class", "heatmap-button active")
-            .attr("x", -110)  
-            .attr("y", -60)   
-            .attr("width", 45) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/heatmap.png")
-            .attr("cursor", "pointer")
-            .on("click", () => this.restoreHeatmap(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-
-        const scatterViewButton = cellGroup.append("image")
-            .attr("class", "scatterplot-button")
-            .attr("x", -110)  
-            .attr("y", -35)   
-            .attr("width", 45) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/scatterplot.png")
-            .attr("cursor", "pointer")
-            .on("click", () => this.restoreScatterplot(givenData, svg, xCol, yCol, cellID, groupByAttribute, selectionEnabled, animate, handleHeatmapClick));
-    }
 
     /**
      * Draws preview plots in the Data Repair Toolkit box. Can only draw histograms or heatmaps. Plotting code is copied from the plotMatrix and drawHeatMap functions.
