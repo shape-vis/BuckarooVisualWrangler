@@ -9,8 +9,8 @@ class MatrixView {
         this.model = model;
 
         this.size = 180;                                                        // Size of each cell in matrix
-        this.xPadding = 100;
-        this.yPadding = 90;
+        this.xPadding = 85;
+        this.yPadding = 70;
         this.labelPadding = 60;
 
         this.leftMargin = 30;
@@ -18,14 +18,16 @@ class MatrixView {
         this.bottomMargin = 0; 
         this.rightMargin = 30; 
 
-        this.errorColors = {                                                    // To be updated as new error detectors are added
-            "mismatch": "hotpink",
-            "missing": "saddlebrown",
-            "anomaly": "red",
-            "incomplete": "gray"
-        };
+        this.errorTypes = {"total": "Total Error %",
+                            "missing": "Missing Values", 
+                            "mismatch": "Data Type Mismatch", 
+                            "anomaly": "Average Anomalies (Outliers)", 
+                            "incomplete": "Incomplete Data (< 3 points)", 
+                            "none": "None"};
 
-        // this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];  // Preference given to which errors are highlighted if both are present in a row
+        this.errorColors = d3.scaleOrdinal()
+                                .domain(Object.keys(this.errorTypes))
+                                .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);        
     }
 
 
@@ -46,23 +48,42 @@ class MatrixView {
      */
     plotMatrix(givenData, groupByAttribute, selectedGroups, selectionEnabled, animate, handleBrush, handleBarClick, handleHeatmapClick) {  
 
+        // console.log("Plotting matrix with data:", givenData);
+        // console.log("Group by attribute:", groupByAttribute);
+
         const columnErrors = this.model.getColumnErrors();
+
 
         let columns = givenData.columnNames().slice(1).filter(col => col !== groupByAttribute);
 
         let matrixWidth = columns.length * this.size + (columns.length) * this.xPadding;
         let matrixHeight = columns.length * this.size + (columns.length) * this.yPadding;
 
-        let svgWidth = matrixWidth + this.leftMargin + this.rightMargin;
-        let svgHeight = matrixHeight + this.topMargin + this.bottomMargin;
+        // let svgWidth = matrixWidth + this.leftMargin + this.rightMargin;
+        // let svgHeight = matrixHeight + this.topMargin + this.bottomMargin;
 
-        const container = d3.select(this.container);
-        container.selectAll("*").remove();
+        let ySize = (900 - this.topMargin - this.bottomMargin - (columns.length) * this.yPadding) / columns.length;
+        let xSize = (900 - this.leftMargin - this.rightMargin - (columns.length) * this.xPadding) / columns.length;
+
+        // console.log("xSize, ySize:", xSize, ySize);
+
+        this.size = Math.min(xSize, ySize);
+
+
+        // const container = d3.select(this.container);
+        // container.selectAll("*").remove();
     
-        const svg = container
-            .append("svg")
-            .attr("width", svgWidth) // 575 + 20 + 60 + 60 = 715
-            .attr("height", svgHeight);
+        const svg = d3.select(this.container).select("#main-svg");
+        svg.selectAll("*").remove();
+        // const svg = container
+        //     .append("svg")
+        //     .attr("width", svgWidth) // 575 + 20 + 60 + 60 = 715
+        //     .attr("height", svgHeight);
+
+        {
+            const { total, ...legend } = this.errorTypes;
+            drawLegend(svg, legend, this.errorColors);
+        }
 
         let labels = svg.append("g")
         columns.forEach((col, i) => {
@@ -80,8 +101,8 @@ class MatrixView {
         });
 
                 
-        columns.forEach((xCol, i) => {
-            columns.forEach((yCol, j) => {
+        columns.forEach((xCol, j) => {
+            columns.forEach((yCol, i) => {
             const cellID = `cell-${i}-${j}`;
             const cellGroup = svg
                 .append("g")
@@ -89,58 +110,16 @@ class MatrixView {
                 .attr("transform", `translate(${this.leftMargin + (j+1) * this.xPadding + j * this.size}, ${this.topMargin + i * (this.size + this.yPadding)})`);
 
                 if (i === j) {      // On the diagonal, so this should be a bar plot.
-                    let data = [];
-
-                    if (groupByAttribute){
-                        data = givenData.select(["ID", xCol, groupByAttribute]).objects();
-                    }
-                    else{
-                        data = givenData.select(["ID", xCol]).objects();
-                    }
-
-                    visualizations['barchart'].module.draw(this, data, groupByAttribute, cellGroup, columnErrors, svg, xCol );
+                    let attr = ["ID", xCol];
+                    if (groupByAttribute) attr.push(groupByAttribute);
+                    visualizations['barchart'].module.draw(this, givenData.select(attr).objects(), groupByAttribute, cellGroup, columnErrors, svg, xCol );
                 } 
-                else {
-                    this.updateDrawing('heatmap', givenData, svg, yCol, xCol, cellID, groupByAttribute );
+                else if (i < j) {   // Upper diagonal, so this should be a scatterplot.
+                    visualizations['scatterplot'].module.draw(this.model, this, cellGroup, svg, givenData, xCol, yCol, groupByAttribute );
+                } else {
+                    visualizations['heatmap'].module.draw(this.model, this, cellGroup,  svg, givenData, xCol, yCol, groupByAttribute);  
                 }
             });
         });
     }
-
-
-    updateDrawing( drawingType, givenData, svg, xCol, yCol, cellID, groupByAttribute ) {
-        const cellGroup = d3.select(`#matrix-vis-stackoverflow`).select(`#${cellID}`); // Hardcoded for stackoverflow tab
-        cellGroup.selectAll("*").remove();  
-        const [, i, j] = cellID.split("-").map(d => parseInt(d));
-
-        if (drawingType === 'heatmap') {
-            visualizations['heatmap'].module.draw(this.model, this, cellGroup,  svg, givenData, xCol, yCol, groupByAttribute);  
-            d3.select(this.parentNode).selectAll(".scatterplot-button").classed("active", false);
-        }
-        if (drawingType === 'scatterplot') {
-            visualizations['scatterplot'].module.draw(this.model, this, cellGroup, svg, givenData, xCol, yCol, groupByAttribute );
-            d3.select(this.parentNode).selectAll(".heatmap-button").classed("active", false);
-        }
-
-        const heatMapViewButton = cellGroup.append("image")
-            .attr("class", "heatmap-button" + (drawingType === 'heatmap' ? " active" : ""))
-            .attr("x", this.size)  
-            .attr("y", 0)   
-            .attr("width", 25) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/heatmap.png")
-            .attr("cursor", "pointer")
-            .on("click", () => this.updateDrawing('heatmap', givenData, svg, xCol, yCol, cellID, groupByAttribute));
-
-        const scatterViewButton = cellGroup.append("image")
-            .attr("class", "scatterplot-button" + (drawingType === 'scatterplot' ? " active" : ""))
-            .attr("x", this.size)  
-            .attr("y", 25)   
-            .attr("width", 25) 
-            .attr("height", 25)
-            .attr("xlink:href", "images/icons/scatterplot.png")
-            .attr("cursor", "pointer")
-            .on("click", () => this.updateDrawing('scatterplot', givenData, svg, xCol, yCol, cellID, groupByAttribute));
-    }
-
 }

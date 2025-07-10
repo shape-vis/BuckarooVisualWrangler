@@ -45,17 +45,25 @@ class ScatterplotController {
      * Update the user-selected attribute to group by.
      * @param {*} attribute 
      */
-    updateGrouping(attribute) {
-        console.log("User selected group by:", attribute);
-        
-        this.model.setGroupByAttribute(attribute); 
+    updateGrouping(attributes, groupByAttribute) {
+        console.log("User selected group by:", this.selectedAttributes, attributes);
 
-        const selectedColumns = new Set([...this.selectedAttributes]); 
-        if (attribute && !selectedColumns.has(attribute)) {
-            selectedColumns.add(attribute);  
+        this.model.setGroupByAttribute(groupByAttribute);
+
+        // const selectedColumns = new Set([...this.selectedAttributes]); 
+        // if (attribute && !selectedColumns.has(attribute)) {
+        //     selectedColumns.add(attribute);  
+        // }
+
+        this.selectedAttributes = ["ID", ...attributes];
+        if (groupByAttribute) {
+            this.selectedAttributes.push(groupByAttribute);
         }
 
-        this.model.setFilteredData(this.model.getFullData().select([...selectedColumns]));
+        console.log("Selected columns after grouping:", this.selectedAttributes);
+
+        // this.model.setFilteredData(this.model.getFullData().select([...attributes]));
+        this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes));
         this.render(false, true);
     }
 
@@ -376,10 +384,10 @@ class ScatterplotController {
      * Listens for user clicks switching between "View Errors" and "View Groups" in the Visual Encoding Options.
      */
     setupEventListeners() {
-        d3.selectAll("input[name='legend-toggle']").on("change", () => {
-            const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
-            this.updateLegendContent(selectedValue, this.model.getGroupByAttribute());
-        });
+        // d3.selectAll("input[name='legend-toggle']").on("change", () => {
+        //     const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
+        //     this.updateLegendContent(selectedValue, this.model.getGroupByAttribute());
+        // });
 
         document.querySelectorAll(".tab-button").forEach(button => {
             button.addEventListener("click", function() {
@@ -489,56 +497,56 @@ class ScatterplotController {
      * @param {*} groupByAttribute 
      */
     updateLegendContent(type, groupByAttribute) {
-        const legendContainer = d3.select("#legend-content");
-        legendContainer.selectAll(".legend-item").remove();
+        // const legendContainer = d3.select("#legend-content");
+        // legendContainer.selectAll(".legend-item").remove();
 
-        if (type === "errors") {
-            const errorTypes = ["Missing Values", "Data Type Mismatch", "Average Anomalies (Outliers)", "Incomplete Data (< 3 points)", "Clean"];
-            const errorColors = d3.scaleOrdinal()
-                .domain(errorTypes)
-                .range(["saddlebrown", "hotpink", "red", "gray", "steelblue"]);
+        // if (type === "errors") {
+        //     const errorTypes = ["Missing Values", "Data Type Mismatch", "Average Anomalies (Outliers)", "Incomplete Data (< 3 points)", "None"];
+        //     const errorColors = d3.scaleOrdinal()
+        //         .domain(errorTypes)
+        //         .range(["saddlebrown", "hotpink", "red", "gray", "steelblue"]);
 
-            errorTypes.forEach(error => {
-                const legendItem = legendContainer.append("div")
-                    .attr("class", "legend-item");
+        //     errorTypes.forEach(error => {
+        //         const legendItem = legendContainer.append("div")
+        //             .attr("class", "legend-item");
 
-                legendItem.append("span")
-                    .attr("class", "legend-color")
-                    .style("background-color", errorColors(error));
+        //         legendItem.append("span")
+        //             .attr("class", "legend-color")
+        //             .style("background-color", errorColors(error));
 
-                legendItem.append("span")
-                    .text(error);
-            });
+        //         legendItem.append("span")
+        //             .text(error);
+        //     });
 
-            if (this.viewGroupsButton) { 
-                this.viewGroupsButton = false;
-                this.view.setViewGroupsButton(false); 
-                this.render(false, true);
-            }
+        //     if (this.viewGroupsButton) { 
+        //         this.viewGroupsButton = false;
+        //         this.view.setViewGroupsButton(false); 
+        //         this.render(false, true);
+        //     }
 
-        } else if (type === "groups" && groupByAttribute) {
-            console.log("Switching to group legend");
-            const uniqueGroups = Array.from(new Set(this.model.getData().objects().map(d => d[groupByAttribute])));
-            const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
+        // } else if (type === "groups" && groupByAttribute) {
+        //     console.log("Switching to group legend");
+        //     const uniqueGroups = Array.from(new Set(this.model.getData().objects().map(d => d[groupByAttribute])));
+        //     const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
 
-            uniqueGroups.forEach(group => {
-                const legendItem = legendContainer.append("div")
-                    .attr("class", "legend-item");
+        //     uniqueGroups.forEach(group => {
+        //         const legendItem = legendContainer.append("div")
+        //             .attr("class", "legend-item");
 
-                legendItem.append("span")
-                    .attr("class", "legend-color")
-                    .style("background-color", colorScale(group));
+        //         legendItem.append("span")
+        //             .attr("class", "legend-color")
+        //             .style("background-color", colorScale(group));
 
-                legendItem.append("span")
-                    .text(group);
-            });
+        //         legendItem.append("span")
+        //             .text(group);
+        //     });
 
-            if (!this.viewGroupsButton) { 
-                this.viewGroupsButton = true;
-                this.view.setViewGroupsButton(true);
-                this.render(false, true);
-            }
-        }
+        //     if (!this.viewGroupsButton) { 
+        //         this.viewGroupsButton = true;
+        //         this.view.setViewGroupsButton(true);
+        //         this.render(false, true);
+        //     }
+        // }
     }
 
 }

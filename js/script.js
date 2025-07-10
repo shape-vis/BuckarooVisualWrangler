@@ -47,9 +47,9 @@ if (selectedSample) {                                           // User selected
     localStorage.removeItem("selectedSample");
 
     const table = setIDColumn(aq.from(inputData).slice(0, 400));    // Select only the first 200 rows to work with to speed up rendering time
-    d3.select("#matrix-vis-stackoverflow").html("");
+    // d3.select("#matrix-vis-stackoverflow").html("");
 
-    stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
+    stackoverflowController = new ScatterplotController(table, "#matrix-vis");
     stackoverflowController.model.originalFilename = selectedSample;
 
     attachButtonEventListeners(stackoverflowController);
@@ -100,9 +100,9 @@ else{       // User elected to upload their own dataset
            const parsedData = d3.csvParse(contents);
            const table = setIDColumn(aq.from(parsedData).slice(0, 400));
        
-           d3.select("#matrix-vis-stackoverflow").html("");
+          //  d3.select("#matrix-vis-stackoverflow").html("");
        
-           stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
+           stackoverflowController = new ScatterplotController(table, "#matrix-vis");
            stackoverflowController.model.originalFilename = file.name;
        
            attachButtonEventListeners(stackoverflowController);

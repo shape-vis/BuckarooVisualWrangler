@@ -166,38 +166,40 @@ class ScatterplotMatrixView{
      * @param {*} controller 
      */
     populateDropdownFromTable(table, controller) {
-        const dropdownMenu = document.getElementById("dropdown-menu");
-        const dropdownButton = document.getElementById("dropdown-button");
-        const groupDropdown = document.getElementById("group-dropdown");
+
+        console.log("Populating dropdown from table:", table, controller);
+        // const dropdownMenu = document.getElementById("dropdown-menu");
+        // const dropdownButton = document.getElementById("dropdown-button");
+        // const groupDropdown = document.getElementById("group-dropdown");
         const predicateDropdown = document.getElementById("predicate-dropdown");
     
-        dropdownMenu.innerHTML = ""; 
-        groupDropdown.innerHTML = '<option value="">None</option>'; 
+        // dropdownMenu.innerHTML = ""; 
+        // groupDropdown.innerHTML = '<option value="">None</option>'; 
         predicateDropdown.innerHTML = '<option value="">None</option>'; 
 
-        let selectedAttributes = new Set();
+        // let selectedAttributes = new Set();
     
         const attributes = table.columnNames().slice(1).sort();
     
-        if (attributes.length >= 3) {
-            selectedAttributes = new Set(attributes.slice(0, 3)); 
-            controller.updateSelectedAttributes(Array.from(selectedAttributes)); 
-        }
+        // if (attributes.length >= 3) {
+        //     selectedAttributes = new Set(attributes.slice(0, 3)); 
+        //     controller.updateSelectedAttributes(Array.from(selectedAttributes)); 
+        // }
     
-        let deselectAllButton = document.createElement("button");
-        deselectAllButton.textContent = "Deselect All";
-        deselectAllButton.classList.add("deselect-button");
-        deselectAllButton.addEventListener("click", function (event) {
-            event.preventDefault();
-            selectedAttributes.clear();
-            document.querySelectorAll("#dropdown-menu input[type='checkbox']").forEach(checkbox => {
-                checkbox.checked = false;
-            });
-            controller.updateSelectedAttributes([]); 
-            updateDropdownButton();
-        });
+        // let deselectAllButton = document.createElement("button");
+        // deselectAllButton.textContent = "Deselect All";
+        // deselectAllButton.classList.add("deselect-button");
+        // deselectAllButton.addEventListener("click", function (event) {
+        //     event.preventDefault();
+        //     selectedAttributes.clear();
+        //     document.querySelectorAll("#dropdown-menu input[type='checkbox']").forEach(checkbox => {
+        //         checkbox.checked = false;
+        //     });
+        //     controller.updateSelectedAttributes([]); 
+        //     updateDropdownButton();
+        // });
     
-        dropdownMenu.appendChild(deselectAllButton);
+        // dropdownMenu.appendChild(deselectAllButton);
 
 
         /*****************************/
@@ -212,72 +214,72 @@ class ScatterplotMatrixView{
 
         
         attributes.forEach((attr, index) => {
-            let label = document.createElement("label");
-            let checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = attr;
+            // let label = document.createElement("label");
+            // let checkbox = document.createElement("input");
+            // checkbox.type = "checkbox";
+            // checkbox.value = attr;
     
-            if (selectedAttributes.has(attr)) {
-                checkbox.checked = true;
-            }
+            // if (selectedAttributes.has(attr)) {
+            //     checkbox.checked = true;
+            // }
     
-            checkbox.addEventListener("change", function () {
-                if (checkbox.checked) {
-                    if (selectedAttributes.size < 3) {
-                        selectedAttributes.add(attr);
-                    } else {
-                        checkbox.checked = false; 
-                        alert("You can select up to 3 attributes only.");
-                    }
-                } else {
-                    selectedAttributes.delete(attr);
-                }
+            // checkbox.addEventListener("change", function () {
+            //     if (checkbox.checked) {
+            //         if (selectedAttributes.size < 3) {
+            //             selectedAttributes.add(attr);
+            //         } else {
+            //             checkbox.checked = false; 
+            //             alert("You can select up to 3 attributes only.");
+            //         }
+            //     } else {
+            //         selectedAttributes.delete(attr);
+            //     }
     
-                controller.updateSelectedAttributes(Array.from(selectedAttributes)); 
-                updateDropdownButton();
-            });
+            //     controller.updateSelectedAttributes(Array.from(selectedAttributes)); 
+            //     updateDropdownButton();
+            // });
     
-            label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(attr));
-            dropdownMenu.appendChild(label);
+            // label.appendChild(checkbox);
+            // label.appendChild(document.createTextNode(attr));
+            // dropdownMenu.appendChild(label);
 
-            let groupOption = document.createElement("option");
-            groupOption.value = attr;
-            groupOption.textContent = attr;
-            groupDropdown.appendChild(groupOption);
+            // let groupOption = document.createElement("option");
+            // groupOption.value = attr;
+            // groupOption.textContent = attr;
+            //groupDropdown.appendChild(groupOption);
             let predicateOption = document.createElement("option");
             predicateOption.value = attr;
             predicateOption.textContent = attr;
             predicateDropdown.appendChild(predicateOption);
         });
     
-        function updateDropdownButton() {
-            dropdownButton.textContent = `Select Attributes (${selectedAttributes.size}/3)`;
-        }
+        // function updateDropdownButton() {
+        //     dropdownButton.textContent = `Select Attributes (${selectedAttributes.size}/3)`;
+        // }
     
-        dropdownButton.onclick = function () {
-            dropdownMenu.classList.toggle("show");
-        };
+        // dropdownButton.onclick = function () {
+        //     dropdownMenu.classList.toggle("show");
+        // };
     
-        document.addEventListener("click", function (event) {
-            if (!dropdownMenu.contains(event.target) && event.target !== dropdownButton) {
-                dropdownMenu.classList.remove("show");
-            }
-        });
+        // document.addEventListener("click", function (event) {
+        //     if (!dropdownMenu.contains(event.target) && event.target !== dropdownButton) {
+        //         dropdownMenu.classList.remove("show");
+        //     }
+        // });
 
-        groupDropdown.addEventListener("change", function () {
-            controller.updateGrouping(this.value);
-        });
+        // groupDropdown.addEventListener("change", function () {
+        //     controller.updateGrouping(this.value);
+        // });
 
         predicateDropdown.addEventListener("change", () => {
             this.handlePredicateChange(table, controller);
         });
               
-        document.getElementById("sort-errors").addEventListener("change", () => {
-            this.updateColumnErrorIndicators(table, controller);
-          });
+        // document.getElementById("sort-errors").addEventListener("change", () => {
+        //     this.updateColumnErrorIndicators(table, controller);
+        //   });
 
-        updateDropdownButton();
+        // updateDropdownButton();
     }
 
     /**

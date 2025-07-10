@@ -5,42 +5,27 @@
 class AttributeSummaryView {
     constructor(container, model) {
 
-        this.matrixView = new MatrixView(container, model);
-        this.tableView = new TableView(container, model);
-
         this.container = container;
-        this.model = model;
-
-        this.size = 180;                                                        // Size of each cell in matrix
-        this.xPadding = 175;
-        this.yPadding = 90;
-        this.labelPadding = 60;
-
-        this.leftMargin = 115;
-        this.topMargin = 0;
-        this.bottomMargin = 125; 
-        this.rightMargin = 0; 
-
-        this.xScale = d3.scaleLinear().domain([0, 100]).range([0, this.size]);  // Default xScale to be changed within plotting code
-        this.yScale = d3.scaleLinear().domain([0, 100]).range([this.size, 0]);  // Default yScale to be changed within plotting code
-
-        this.selectedPoints = [];                                               // The current user selection of points from interacting with the plots
-        this.predicatePoints = [];                                              // Predicate points do not meet the user's predicate condition and are outlined in red
-        this.viewGroupsButton = false;                                          // True when the user has selected an attribute to group by and the legend will update to show group colors instead of error colors
-
-        this.errorColors = {                                                    // To be updated as new error detectors are added
-            "mismatch": "hotpink",
-            "missing": "saddlebrown",
-            "anomaly": "red",
-            "incomplete": "gray"
-        };
-
-        this.errorPriority = ["anomaly", "mismatch", "missing", "incomplete"];  // Preference given to which errors are highlighted if both are present in a row
 
         this.selectedAttributes = ["ConvertedSalary"];                                         // The attributes currently selected by the user to be displayed in the matrix
         this.groupByAttribute = null;
 
         this.attributeElements = {}
+
+        this.errorTypes = {"total": "Total Error %",
+                            "missing": "Missing Values", 
+                            "mismatch": "Data Type Mismatch", 
+                            "anomaly": "Average Anomalies (Outliers)", 
+                            "incomplete": "Incomplete Data (< 3 points)", 
+                            "none": "None"};
+
+        this.errorColors = d3.scaleOrdinal()
+                                .domain(Object.keys(this.errorTypes))
+                                .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
+
+        this.sortBy = "total";  // Default sort by total errors
+
+        this.sortElements = {}
         
     }
 
@@ -50,11 +35,64 @@ class AttributeSummaryView {
      * @param {*} controller 
      */
     populateDropdownFromTable(table, controller) {
-        this.updateColumnErrorIndicators(table, controller);
+        this.createSortingLegend(table, controller);
+
+        const summaryData = query_attribute_summary(controller,table);
+        const sortedAttributes = this.sortAttributes(summaryData.attributes, summaryData.columnErrors);
+
+        this.selectedAttributes = sortedAttributes.slice(0, 3);  // Default to first 3 attributes
+        controller.updateGrouping (this.selectedAttributes, this.groupByAttribute)
+
+
+        this.updateColumnErrorIndicators(table, controller, summaryData, sortedAttributes);
+
+
     }
 
+    createSortingLegend(table, controller){
 
-    createGroupByButton(attr){
+        // const legendContainer = d3.select("#attribute-sorting");
+        const legendContainer = document.getElementById("attribute-sorting");
+        legendContainer.innerHTML = "";
+        // legendContainer.selectAll(".legend-item").remove();
+
+        const legendTitle = document.createElement("div");
+        legendTitle.textContent = "Sort Attributes By";
+        legendTitle.classList.add("attribute-sorting-title");
+        legendContainer.append(legendTitle);
+
+        Object.keys(this.errorTypes).forEach((error, i) => {
+            const legendItem = document.createElement("div")
+            legendItem.classList.add("attribute-sorting-item");
+            legendContainer.append(legendItem)
+
+            const legendBox = document.createElement("span");
+            legendBox.classList.add(( error === this.sortBy ) ? "attribute-sorting-item-color-selected" : "attribute-sorting-item-color" );
+            legendBox.style.backgroundColor = this.errorColors(error);
+            legendItem.append(legendBox);
+            this.sortElements[error] = legendBox;
+
+            const legendText = document.createElement("span");
+            legendText.textContent = this.errorTypes[error];
+            legendItem.append(legendText);
+
+            legendItem.onclick = () => {
+                if( this.sortBy === error ) return;  // No change
+
+                this.sortElements[this.sortBy].classList.toggle("attribute-sorting-item-color-selected");
+                this.sortElements[this.sortBy].classList.toggle("attribute-sorting-item-color");
+
+                legendBox.classList.toggle("attribute-sorting-item-color-selected");
+                legendBox.classList.toggle("attribute-sorting-item-color");
+
+                this.sortBy = error;
+
+                this.updateColumnErrorIndicators(table, controller)
+            };
+        });
+    }
+
+    createGroupByButton(attr, controller){
         const groupByButton = document.createElement("div")
         groupByButton.classList.add( "rotatedButton");
         if( this.groupByAttribute === attr ) groupByButton.classList.add( "rotatedButtonSelected")
@@ -75,6 +113,8 @@ class AttributeSummaryView {
                 this.attributeElements[this.groupByAttribute].groupByButtonText.classList.toggle('rotatedButtonTextSelected');
             }
             this.groupByAttribute = (isSelected) ? attr : null;  // Toggle the groupByAttribute based on selection
+
+            controller.updateGrouping (this.selectedAttributes, this.groupByAttribute)
         };  
 
         this.attributeElements[attr].groupByButton = groupByButton;
@@ -84,7 +124,7 @@ class AttributeSummaryView {
     }
 
 
-    createSelectButton(attr) {
+    createSelectButton(attr, controller) {
         const selButton = document.createElement("div")
         selButton.classList.add("rotatedButton") 
         if( this.selectedAttributes.includes(attr) ) selButton.classList.add("rotatedButtonSelected");
@@ -114,6 +154,9 @@ class AttributeSummaryView {
                 this.attributeElements[removeAttr].selButtonText.classList.toggle('rotatedButtonTextSelected');
                 this.attributeElements[removeAttr].selButtonText.textContent = 'Select';
             }
+
+            controller.updateGrouping (this.selectedAttributes, this.groupByAttribute)
+
         };  
 
         this.attributeElements[attr].selButton = selButton;
@@ -123,24 +166,28 @@ class AttributeSummaryView {
     }
 
     sortAttributes(attributes, columnErrors) {
-        const sortBy = document.getElementById("sort-errors").value || "total";
-        console.log("sortBy", sortBy);
+        // const sortBy = document.getElementById("sort-errors").value || "total";
+        // console.log("sortBy", sortBy);
 
         return attributes.sort((a, b) => {
           const errorsA = columnErrors[a] || {};
           const errorsB = columnErrors[b] || {};
 
           // Primary: specific error type (or 0 if not present)
-          const primaryA = sortBy === "total" ? 0 : (errorsA[sortBy] || 0);
-          const primaryB = sortBy === "total" ? 0 : (errorsB[sortBy] || 0);
+          const primaryA = this.sortBy === "total" ? 0 : (errorsA[this.sortBy] || 0);
+          const primaryB = this.sortBy === "total" ? 0 : (errorsB[this.sortBy] || 0);
 
           // Secondary: total error percentage
           const totalA = Object.values(errorsA).reduce((sum, pct) => sum + pct, 0);
           const totalB = Object.values(errorsB).reduce((sum, pct) => sum + pct, 0);
 
-          if (sortBy === "total") {
+          if (this.sortBy === "total") {
               // Sort by total error only
               return totalB - totalA;
+          }
+          else if (this.sortBy === "none") {
+              // Sort by clean percentage (ascending)
+              return totalA - totalB;
           } else {
               // First by specific error type
               if (primaryB !== primaryA) {
@@ -159,16 +206,20 @@ class AttributeSummaryView {
      * @param {*} controller 
      * @returns If the container does not exist, else should just update the UI.
      */
-    updateColumnErrorIndicators(table, controller) {
+    updateColumnErrorIndicators(table, controller, summaryData = null, sortedAttributes = null) {
 
-        let summaryData = query_attribute_summary(controller,table);
-        console.log("summaryData", summaryData);
+        if (summaryData === null) {
+            summaryData = query_attribute_summary(controller,table);
+        }
+        // console.log("summaryData", summaryData);
 
         const columnErrors = summaryData.columnErrors;
         const attributes = summaryData.attributes;
         const attributeDistributions = summaryData.attributeDistributions;
 
-        const sortedAttributes = this.sortAttributes(attributes, columnErrors);
+        if (sortedAttributes === null) {
+            sortedAttributes = this.sortAttributes(attributes, columnErrors);
+        }
 
         const container = document.getElementById("attribute-list");
         if (!container) return;
@@ -186,8 +237,8 @@ class AttributeSummaryView {
             li.style.gap = "4px";
             li.style.marginBottom = "16px";
 
-            li.appendChild(this.createSelectButton(attr));
-            li.appendChild(this.createGroupByButton(attr));
+            li.appendChild(this.createSelectButton(attr,controller));
+            li.appendChild(this.createGroupByButton(attr,controller));
 
             //
             //
@@ -218,13 +269,8 @@ class AttributeSummaryView {
                 const box = document.createElement("span");
                 box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
                 box.classList.add("error-scent");
-    
-                box.style.backgroundColor = {
-                    "mismatch": "rgba(255, 105, 180, 0.7)",  // hotpink
-                    "missing": "rgba(139, 69, 19, 0.7)",     // saddlebrown
-                    "anomaly": "rgba(255, 0, 0, 0.7)",       // red
-                    "incomplete": "rgba(128, 128, 128, 0.7)" // gray
-                  }[type];
+                box.style.backgroundColor = this.errorColors(type);
+
                   
                 const percentText = document.createElement("span");
                 percentText.textContent = `${Math.round(pct * 100)}%`;
@@ -242,9 +288,6 @@ class AttributeSummaryView {
 
             div.appendChild(topRow);
 
-            const columnData = table.array(attr).filter(d => d !== "" && d !== null && d !== undefined);
-            const isNumeric = columnData.some(v => typeof v === "number" && !isNaN(v));
-
             const stats = document.createElement("div");
             stats.classList.add("column-stats");
 
@@ -252,36 +295,17 @@ class AttributeSummaryView {
 
             let statsHTML = "";
             if ("numeric" in attrDist) {
-                statsHTML += `<div>Mean: ${attrDist.numeric.mean.toFixed(2)}</div>
-                              <div>Range: ${attrDist.numeric.min} - ${attrDist.numeric.max}</div>`;
+                statsHTML += `<div>Numeric Mean: ${attrDist.numeric.mean.toFixed(2)}</div>
+                              <div>Numeric Range: ${attrDist.numeric.min} - ${attrDist.numeric.max}</div>`;
             }
             if ("categorical" in attrDist) {
-                statsHTML += `<div>Mode Category: ${truncateText(attrDist.categorical.mode, 50)}</div>
+                statsHTML += `<div>Category Mode: ${truncateText(attrDist.categorical.mode, 50)}</div>
                               <div>Category Count: ${attrDist.categorical.categories}</div>`;
             }
             stats.innerHTML = statsHTML;
             
-
-            // if (isNumeric) {
-            //     const mean = d3.mean(columnData);
-            //     const min = d3.min(columnData);
-            //     const max = d3.max(columnData);
-            //     stats.innerHTML = `<div>Mean: ${mean.toFixed(2)}</div>
-            //                         <div>Range: ${min} - ${max}</div>`;
-            // } else {
-            //     const mode = [...d3.rollup(columnData, v => v.length, d => d)]
-            //         .sort((a, b) => b[1] - a[1])[0][0];
-            //     const sortedVals = sortCategories(columnData.slice());
-            //     const min = sortedVals[0];
-            //     const max = sortedVals[sortedVals.length - 1];
-
-            //     stats.innerHTML = `<div>Mode: ${truncateText(mode, 50)}</div>
-            //                         <div>Range: ${truncateText(min, 50)} - ${truncateText(max, 50)}</div>`;
-            // }
-
             div.appendChild(stats);
 
-            const totalRows = table.objects().length;
             const errorEntries = Object.entries(errorTypes);
             const errorSum = errorEntries.reduce((sum, [_, pct]) => sum + pct, 0);
             const cleanPct = Math.max(0, 1 - errorSum);
@@ -295,7 +319,7 @@ class AttributeSummaryView {
                 segment.style.width = `${pct * 100}%`;
                 segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
-                segment.style.backgroundColor = this.errorColors[type];
+                segment.style.backgroundColor = this.errorColors(type);
 
                 barContainer.appendChild(segment);
             });

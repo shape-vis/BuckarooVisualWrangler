@@ -28,8 +28,9 @@ export function draw(view, data, groupByAttribute, cellGroup, columnErrors, svg,
 
 
 
-    view.errorColors['none'] = "steelblue";
-    const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
+    // view.errorColors['none'] = "steelblue";
+    // const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
+    const colorScale = view.errorColors
     
     let myData = []
     histData.histograms.forEach(d => {
@@ -106,7 +107,7 @@ export function draw(view, data, groupByAttribute, cellGroup, columnErrors, svg,
     createTooltip(bars, 
         d => {
             let bin = d.type == "numeric" ? `${Math.round(numHistDataX[d.bin].x0)}-${Math.round(numHistDataX[d.bin].x1)}` : d.bin;
-            return `<strong>Bin:</strong> ${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>"${d.name}`;
+            return `<strong>Bin:</strong> ${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
         },
         (d) => {
             console.log("Left click on bar", d);

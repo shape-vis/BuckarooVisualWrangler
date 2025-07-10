@@ -328,7 +328,7 @@ function query_sample2d(data, errors, xCol, yCol, errorSamples, totalSamples ) {
     let errorData = data.filter( d => errors[xCol][d.ID] || errors[yCol][d.ID] )
     let nonErrorData = data.filter( d => !(errors[xCol][d.ID] || errors[yCol][d.ID]) )
 
-    console.log("errorSamples", errorData.length, "nonErrorSamples", nonErrorData.length);
+    // console.log("errorSamples", errorData.length, "nonErrorSamples", nonErrorData.length);
 
     while( errorData.length > errorSamples ){
         let idx = Math.floor(Math.random() * errorData.length);

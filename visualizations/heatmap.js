@@ -28,8 +28,9 @@
  */
 export function draw(model, view, cellGroup, svg, givenData, xCol, yCol, groupByAttribute ){
 
-    view.errorColors['none'] = "steelblue";
-    const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
+    // view.errorColors['none'] = "steelblue";
+    // const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
+    const colorScale = view.errorColors
     
     let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
     // console.log("histData", histData);
@@ -39,6 +40,7 @@ export function draw(model, view, cellGroup, svg, givenData, xCol, yCol, groupBy
     let patterns = {};
 
     function generate_pattern(svg, colorScale, errorArray) {
+        let patternSize = 30;
 
         if( defs === null){
             // svg.selectAll("defs").remove(); // Remove previous cell groups
@@ -46,24 +48,24 @@ export function draw(model, view, cellGroup, svg, givenData, xCol, yCol, groupBy
         }
 
         let patternName = errorArray.join("_") + "_pattern";
-        console.log("patternName", patternName);
+        // console.log("patternName", patternName);
         if ( patternName in patterns ){
             return `url(#${patternName})`
         }
 
         let pattern = defs.append("pattern")
             .attr("id", patternName)
-            .attr("width", 10)
-            .attr("height", 10)
+            .attr("width", patternSize)
+            .attr("height", patternSize)
             .attr("patternUnits", "userSpaceOnUse")
-        
-        for( let i = -10; i < 10; ){
-            errorArray.forEach( (error, idx) => {    
+
+        for( let i = -patternSize; i < patternSize; ){
+            errorArray.forEach( (error, idx) => {
                 pattern.append("line")
-                    .attr("x1", i)
-                    .attr("y1", 0)
-                    .attr("x2", i + 20)
-                    .attr("y2", 20)
+                    .attr("x1", i-1)
+                    .attr("y1", 0-1)
+                    .attr("x2", i + patternSize+1)
+                    .attr("y2", patternSize+1)
                     .attr("stroke", colorScale(error))
                     .attr("stroke-width", 2)
                 i += 2.5
