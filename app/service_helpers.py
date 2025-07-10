@@ -141,6 +141,7 @@ def get_2d_bins(column_a,column_b, range,bin_count):
         column_a_bins = create_bins_for_a_numeric_column(column_a,bin_count)
     if not column_b_categorical:
         column_b_bins = create_bins_for_a_numeric_column(column_b,bin_count )
+    print("before crosstab")
     return pd.crosstab(column_a_bins, column_b_bins,dropna=True)
 
 def is_categorical(column_a):

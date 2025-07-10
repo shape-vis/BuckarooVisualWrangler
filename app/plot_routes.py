@@ -41,10 +41,15 @@ def get_2d_histogram():
     column_a = request.args.get("column_a")
     column_b = request.args.get("column_b")
     range = request.args.get("range")
-
+    bin_count = int(request.args.get("bin_count"))
+    df = data_state_manager.get_current_state()["df"]
+    column_a = df[column_a]
+    column_b = df[column_b]
     try:
-        binned_data = get_2d_bins(column_a,column_b, range)
-        return {"Success": True, "binned_data": binned_data}
+        binned_data = get_2d_bins(column_a,column_b, range,bin_count)
+        print(binned_data)
+        ret_val = binned_data.to_json()
+        return {"Success": True, "binned_data": ret_val}
     except Exception as e:
         return {"Success": False, "Error": str(e)}
 
@@ -75,7 +80,7 @@ def undo():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-
+#need range for 1d,2d, and scatterplot implement
 @app.get("/api/plots/redo")
 def redo():
     """
@@ -99,3 +104,7 @@ def attribute_summaries():
     Populates the error attribute summaries
     :return:
     """
+    
+@app.get("/api/plots/scatterplot")
+def get_scatterplot_data():
+    pass
