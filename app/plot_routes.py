@@ -4,11 +4,12 @@
 import numpy as np
 import pandas as pd
 from flask import request, render_template
+from sqlalchemy import column
 
 from app import app, data_state_manager
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, get_2d_bins, \
-    get_1d_bins
+    get_1d_bins, group_by_attribute, is_categorical, create_bins_for_a_numeric_column
 
 
 @app.get("/api/plots/1-d-histogram-data")
@@ -41,6 +42,8 @@ def get_2d_histogram():
     column_a = request.args.get("column_a")
     column_b = request.args.get("column_b")
     range = request.args.get("range")
+
+    #TODO: Make this an optional parameter
     bin_count = int(request.args.get("bin_count"))
     df = data_state_manager.get_current_state()["df"]
     column_a = df[column_a]
@@ -59,10 +62,21 @@ def get_2d_histogram():
 @app.get("/api/plots/group-by")
 def get_group_by():
     """
-    Endpoint to return the data according to the specified categorical data the user wishes to group an attribute by - ex. group ages by continent
+    Endpoint to return the data according to the specified column the user wishes to group by a specific attribute - ex. group ages by continent
     :return: the data as a csv
     """
-    pass
+    column_a_name = request.args.get("column_a")
+    group_by_name = request.args.get("group_by")
+    df = data_state_manager.get_current_state()["df"]
+    column_a = df[column_a_name]
+    group_by = df[group_by_name]
+    try:
+        if is_categorical(column_a) and is_categorical(group_by):
+            new_df = group_by_attribute(df, column_a_name, group_by_name).to_json()
+            return {"Success": True, "group_by": new_df}
+        return {"Success": False, "Error": "Both column input to the group_by are not categorical"}
+    except Exception as e:
+       return {"Success": False, "Error": str(e)}
 
 @app.get("/api/plots/undo")
 def undo():

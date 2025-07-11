@@ -1,10 +1,14 @@
+from inspect import stack
 from unittest import TestCase
 
 import pandas as pd
 from numpy.ma.testutils import assert_equal
+from sqlalchemy import column
+from sqlalchemy.testing import assert_raises
 
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
-    get_range_of_ids_query, get_1d_bins, is_categorical, create_bins_for_a_numeric_column, get_2d_bins
+    get_range_of_ids_query, get_1d_bins, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
+    group_by_attribute
 from wranglers.remove_data import remove_data
 
 
@@ -126,4 +130,10 @@ class General(TestCase):
         test_data2 = pd.Series(['Animal', 'Animal', 'Dog', 'Boy', 'Bottle','Animal'])
         actual_df = get_2d_bins(test_data1,test_data2,10,10)
         assert_equal(actual_df["Animal"]["B"],2)
+
+    def test_group_by_categorical_group(self):
+        stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
+        new_df = group_by_attribute(stackoverflow_df,"Age","Continent")
+        other_df = stackoverflow_df.pivot_table("ID", index='Age', columns='Continent', aggfunc='count')
+        pd.testing.assert_frame_equal(new_df,other_df)
 

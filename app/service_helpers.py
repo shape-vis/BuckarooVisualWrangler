@@ -122,6 +122,9 @@ def create_error_dict(df, error_size):
     except Exception as e:
         return {"success": False, "error in the error_dictionary service helper": str(e)}
 
+def group_by_attribute(df, column_a, group_by):
+    ret = df.pivot_table("ID", index=column_a, columns=group_by, aggfunc="count")
+    return ret
 
 def get_1d_bins(column_name, range,df):
     print("in1dbins")
@@ -143,6 +146,8 @@ def get_2d_bins(column_a,column_b, range,bin_count):
         column_b_bins = create_bins_for_a_numeric_column(column_b,bin_count )
     print("before crosstab")
     return pd.crosstab(column_a_bins, column_b_bins,dropna=True)
+
+    #make the number of bins for numeric be an option
 
 def is_categorical(column_a):
     value_counts = column_a.value_counts()
