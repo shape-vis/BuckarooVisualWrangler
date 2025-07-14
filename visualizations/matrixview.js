@@ -28,10 +28,51 @@ class MatrixView {
         this.errorColors = d3.scaleOrdinal()
                                 .domain(Object.keys(this.errorTypes))
                                 .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);        
+
+        this.defs = null;
+        this.patterns = {};
+
     }
 
 
 
+
+    generate_pattern(colorScale, errorArray) {
+        let patternSize = 30;
+
+        if( this.defs === null){
+            // svg.selectAll("defs").remove(); // Remove previous cell groups
+            this.defs = this.svg.append("defs")
+        }
+
+        let patternName = errorArray.join("_") + "_pattern";
+        // console.log("patternName", patternName);
+        if ( patternName in this.patterns ){
+            return `url(#${patternName})`
+        }
+
+        let pattern = this.defs.append("pattern")
+            .attr("id", patternName)
+            .attr("width", patternSize)
+            .attr("height", patternSize)
+            .attr("patternUnits", "userSpaceOnUse")
+
+        for( let i = -patternSize; i < patternSize; ){
+            errorArray.forEach( (error, idx) => {
+                pattern.append("line")
+                    .attr("x1", i-1)
+                    .attr("y1", 0-1)
+                    .attr("x2", i + patternSize+1)
+                    .attr("y2", patternSize+1)
+                    .attr("stroke", colorScale(error))
+                    .attr("stroke-width", 2)
+                i += 2.5
+            })
+        }
+        this.patterns[patternName] = pattern;
+
+        return `url(#${patternName})`;
+    }    
 
     /**
      * Initial plotting code upon browser loading. Plots bar plots on diagonal and calls drawHeatMap to plot off-diagonal plots. Categorizes data for the bar plot as numeric or 
@@ -73,8 +114,10 @@ class MatrixView {
         // const container = d3.select(this.container);
         // container.selectAll("*").remove();
     
-        const svg = d3.select(this.container).select("#main-svg");
-        svg.selectAll("*").remove();
+        this.svg = d3.select(this.container).select("#main-svg");
+        this.svg.selectAll("*").remove();
+        this.defs = null;
+        this.patterns = {};
         // const svg = container
         //     .append("svg")
         //     .attr("width", svgWidth) // 575 + 20 + 60 + 60 = 715
@@ -82,10 +125,10 @@ class MatrixView {
 
         {
             const { total, ...legend } = this.errorTypes;
-            drawLegend(svg, legend, this.errorColors);
+            drawLegend(this.svg, legend, this.errorColors);
         }
 
-        let labels = svg.append("g")
+        let labels = this.svg.append("g")
         columns.forEach((col, i) => {
             labels.append("text")
                 .attr("x", this.leftMargin + (i+1) * this.xPadding + i * (this.size) + this.size / 2)
@@ -104,7 +147,7 @@ class MatrixView {
         columns.forEach((xCol, j) => {
             columns.forEach((yCol, i) => {
             const cellID = `cell-${i}-${j}`;
-            const cellGroup = svg
+            const cellGroup = this.svg
                 .append("g")
                 .attr("id", cellID)
                 .attr("transform", `translate(${this.leftMargin + (j+1) * this.xPadding + j * this.size}, ${this.topMargin + i * (this.size + this.yPadding)})`);
@@ -112,12 +155,12 @@ class MatrixView {
                 if (i === j) {      // On the diagonal, so this should be a bar plot.
                     let attr = ["ID", xCol];
                     if (groupByAttribute) attr.push(groupByAttribute);
-                    visualizations['barchart'].module.draw(this, givenData.select(attr).objects(), groupByAttribute, cellGroup, columnErrors, svg, xCol );
+                    visualizations['barchart'].module.draw(this.model, this, givenData.select(attr).objects(), cellGroup, xCol );
                 } 
                 else if (i < j) {   // Upper diagonal, so this should be a scatterplot.
-                    visualizations['scatterplot'].module.draw(this.model, this, cellGroup, svg, givenData, xCol, yCol, groupByAttribute );
+                    visualizations['scatterplot'].module.draw(this.model, this, cellGroup, givenData, xCol, yCol );
                 } else {
-                    visualizations['heatmap'].module.draw(this.model, this, cellGroup,  svg, givenData, xCol, yCol, groupByAttribute);  
+                    visualizations['heatmap'].module.draw(this.model, this, cellGroup,  givenData, xCol, yCol);  
                 }
             });
         });

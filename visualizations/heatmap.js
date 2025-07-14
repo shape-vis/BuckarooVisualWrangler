@@ -26,156 +26,60 @@
  * @param {*} animate If true, the plots should have transitions.
  * @param {*} handleHeatmapClick Handles user clicks on heatmap bins.
  */
-export function draw(model, view, cellGroup, svg, givenData, xCol, yCol, groupByAttribute ){
+export function draw(model, view, cellGroup, givenData, xCol, yCol ){
 
-    // view.errorColors['none'] = "steelblue";
-    // const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
-    const colorScale = view.errorColors
-    
     let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
     // console.log("histData", histData);
 
 
-    let defs = null;
-    let patterns = {};
-
-    function generate_pattern(svg, colorScale, errorArray) {
-        let patternSize = 30;
-
-        if( defs === null){
-            // svg.selectAll("defs").remove(); // Remove previous cell groups
-            defs = svg.append("defs")
-        }
-
-        let patternName = errorArray.join("_") + "_pattern";
-        // console.log("patternName", patternName);
-        if ( patternName in patterns ){
-            return `url(#${patternName})`
-        }
-
-        let pattern = defs.append("pattern")
-            .attr("id", patternName)
-            .attr("width", patternSize)
-            .attr("height", patternSize)
-            .attr("patternUnits", "userSpaceOnUse")
-
-        for( let i = -patternSize; i < patternSize; ){
-            errorArray.forEach( (error, idx) => {
-                pattern.append("line")
-                    .attr("x1", i-1)
-                    .attr("y1", 0-1)
-                    .attr("x2", i + patternSize+1)
-                    .attr("y2", patternSize+1)
-                    .attr("stroke", colorScale(error))
-                    .attr("stroke-width", 2)
-                i += 2.5
-            })
-        }
-        patterns[patternName] = pattern;
-
-        return `url(#${patternName})`;
-
-    }    
+    let backgroundBox = createBackgroundBox(cellGroup, view.size, view.size);
 
     let numHistDataX = histData.scaleX.numeric;
+    const numDomainX = numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)];
     let catHistDataX = histData.scaleX.categorical;
-
-    let sizeDistNum = view.size * (numHistDataX.length / (catHistDataX.length + numHistDataX.length));
-
-    let spacingX = (numHistDataX.length === 0 || catHistDataX.length === 0) ? 0 : 5
-
-    const xScaleNum = numHistDataX.length === 0 ? null : 
-                        d3.scaleLinear()
-                            .domain([d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)])
-                            .range([0, sizeDistNum-spacingX]);
-
-    const xScaleCat = catHistDataX.length === 0 ? null :
-                         d3.scaleBand()
-                            .domain(catHistDataX.map(d => d))
-                            .range([sizeDistNum+spacingX, view.size])
-
-    if( xScaleCat !== null ){        
-        cellGroup
-                .append("g")
-                .attr("transform", `translate(0, ${view.size})`)
-                .call(d3.axisBottom(xScaleCat))            
-                .selectAll("text") 
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d )  
-                .attr("class", "bottom-axis-text")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .append("title")  
-                .text(d => d);
-    }
-            
-    if( xScaleNum !== null ){
-        cellGroup
-                .append("g")
-                .attr("transform", `translate(0, ${view.size})`)
-                .call(d3.axisBottom(xScaleNum).tickFormat(d3.format(".2s")))
-                .selectAll("text") 
-                .attr("class", "bottom-axis-text")
-                .attr("dx", "-0.5em") 
-                .attr("dy", "0.5em")  
-                .append("title")  
-                .text(d => d);
-    }
+    const catDomainX = catHistDataX.length === 0 ? null : catHistDataX.map(d => d);
 
     let numHistDataY = histData.scaleY.numeric;
+    const numDomainY = numHistDataY.length === 0 ? null : [d3.min(numHistDataY, (d) => d.x0), d3.max(numHistDataY, (d) => d.x1)];
     let catHistDataY = histData.scaleY.categorical;
-    let sizeDistY = view.size * (catHistDataY.length / (catHistDataY.length + numHistDataY.length));
-    let spacingY = (numHistDataY.length === 0 || catHistDataY.length === 0) ? 0 : 5
-    const yScaleNum = numHistDataY.length === 0 ? null : 
-                        d3.scaleLinear()
-                            .domain([d3.min(numHistDataY, (d) => d.x0), d3.max(numHistDataY, (d) => d.x1)])
-                            .range([view.size, sizeDistY+spacingY]);
-    const yScaleCat = catHistDataY.length === 0 ? null :
-                         d3.scaleBand()
-                            .domain(catHistDataY.map(d => d))
-                            .range([sizeDistY-spacingY, 0]);
+    const catDomainY = catHistDataY.length === 0 ? null : catHistDataY.map(d => d);
 
-    if( yScaleCat !== null ){
-        cellGroup
-                .append("g")
-                .call(d3.axisLeft(yScaleCat))
-                .selectAll("text")
-                .text(d => d.length > 10 ? d.substring(0, 10) + "…" : d )
-                .attr("class", "left-axis-text")
-                .append("title")
-                .text(d => d);
-    }
+    const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numDomainX, catDomainX, "horizontal");
+    const yScale = createHybridScales(view.size, numHistDataY, catHistDataY, numDomainY, catDomainY, "vertical");
 
-    if( yScaleNum !== null ){
-        cellGroup
-                .append("g")
-                .call(d3.axisLeft(yScaleNum).tickFormat(d3.format(".2s")))
-                .selectAll("text")
-                .attr("class", "left-axis-text")
-                .append("title")
-                .text(d => d);
-    }
+    xScale.draw(cellGroup);
+    yScale.draw(cellGroup);
+
+    const colorScale = view.errorColors
+    
+    let selected = []
+    let barColor = d => {
+                            if( selected.includes(d) ) return "gold";
+                            let keys = Object.keys(d.count).filter( key => key !== "items" ); 
+                            if( keys.length === 0 ) return colorScale("none")
+                            if( keys.length === 1 ) return colorScale(keys[0])
+                            return view.generate_pattern(colorScale, keys)
+                        } 
 
     let bars = cellGroup.append("g")
                     .selectAll("rect")
                     .data(histData.histograms.filter( d => d.count.items > 0 ))
                     .enter()
                     .append("rect")
-                        .attr("x", d => { return d.xType == "numeric" ? xScaleNum(numHistDataX[d.xBin].x0) : xScaleCat(d.xBin) })
-                        .attr("y", d => { return d.yType == "numeric" ? yScaleNum(numHistDataY[d.yBin].x1) : yScaleCat(d.yBin) })
-                        .attr("height", d => { return d.yType == "numeric" ? yScaleNum(numHistDataY[d.yBin].x0) - yScaleNum(numHistDataY[d.yBin].x1) : yScaleCat.bandwidth() } )
-                        // .attr("height", d => { return 10 } )
-                        .attr("width", d => { return d.xType == "numeric" ? xScaleNum(numHistDataX[d.xBin].x1)-xScaleNum(numHistDataX[d.xBin].x0) : xScaleCat.bandwidth() } )
-                        // .attr("fill", d => colorScale(d.name))
-                        .attr("fill", d => { 
-                            let keys = Object.keys(d.count).filter( key => key !== "items" ); 
-                            if( keys.length === 0 ) return colorScale("none")
-                            if( keys.length === 1 ) return colorScale(keys[0])
-                            return generate_pattern(svg,colorScale, keys)
-                         })
+                        .attr("x", d => { return xScale.apply(d.xType == "numeric" ? numHistDataX[d.xBin].x0 : d.xBin, d.xType) })
+                        .attr("y", d => { return yScale.apply(d.yType == "numeric" ? numHistDataY[d.yBin].x1 : d.yBin, d.yType) })
+                        .attr("height", d => {  return d.yType == "numeric" ? yScale.numericalBandwidth(numHistDataY[d.yBin].x1,numHistDataY[d.yBin].x0):  yScale.categoricalBandwidth() } )
+                        .attr("width", d => { return d.xType == "numeric" ? xScale.numericalBandwidth(numHistDataX[d.xBin].x0,numHistDataX[d.xBin].x1) : xScale.categoricalBandwidth() } )
+                        .attr("fill", barColor)
                         .attr("stroke", "white")
                         .attr("stroke-width", 1);
             
 
+    backgroundBox.on("click", function(event) {
+        console.log("Clicked on heatmap background", event);
+        selected = []; // Reset selection
+        bars.attr("fill", barColor); // Update colors of all bars
+    });
 
     createTooltip(bars,
         d => {
@@ -189,8 +93,19 @@ export function draw(model, view, cellGroup, svg, givenData, xCol, yCol, groupBy
             if( errorList !== "") errorList = "<br><strong>Errors: </strong> " + errorList; 
             return `<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`;
         },
-        (d) => {
-            console.log("Left click on heatmap bin", d);
+        (d, event) => {
+            console.log("Left click on heatmap bin", d, event);
+            if ( event.shiftKey ) {
+                if (selected.includes(d)) {
+                    selected = selected.filter(item => item !== d);
+                } else {
+                    selected.push(d);
+                }
+            }
+            else{   
+                selected = [d]; // Reset selection to only the clicked bin
+            }
+            bars.attr("fill", barColor); // Update colors of all bars
         },
         (d) => {
             // Right click handler, if needed
