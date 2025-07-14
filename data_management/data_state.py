@@ -16,12 +16,12 @@ class DataState:
     """
 
     def __init__(self):
-        # state stack comprises of a dictionary of dataframes, {"df":df,"error_df":error_df}
+        # state stack comprises of a dictionary of dataframes, {"df":df,"error_df":error_df,"error_dist":error_dist_df}
         self.left_state_stack = []
         self.right_state_stack = []
         self.original_error_table = None
-        self.original_df = None
         self.original_cached_for_current_session = False
+        self.current_error_dist = None
 
     """
     Setter,Getter functions for the data state management

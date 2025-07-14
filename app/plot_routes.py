@@ -9,7 +9,8 @@ from sqlalchemy import column
 from app import app, data_state_manager
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, get_2d_bins, \
-    get_1d_bins, group_by_attribute, is_categorical, create_bins_for_a_numeric_column
+    get_1d_bins, group_by_attribute, is_categorical, create_bins_for_a_numeric_column, add_normal_row_to_error_dist, \
+    get_error_dist
 
 
 @app.get("/api/plots/1-d-histogram-data")
@@ -118,6 +119,17 @@ def attribute_summaries():
     Populates the error attribute summaries
     :return:
     """
+    try:
+        #get the current error table
+        current_data_state = data_state_manager.get_current_state()
+        normal_df = current_data_state['df']
+        error_df = current_data_state['error_df']
+        full_summary = add_normal_row_to_error_dist(get_error_dist(error_df),normal_df)
+        full_summary_dict = full_summary.to_dict(orient="records")
+        return {"success": True, "data": full_summary_dict}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
     
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():

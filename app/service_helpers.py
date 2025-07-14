@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 from pandas.core.dtypes.common import is_categorical_dtype
+from sqlalchemy.dialects.mssql.information_schema import columns
 
 from app import data_state_manager
 from app.set_id_column import set_id_column
@@ -100,9 +101,30 @@ def run_detectors(data_frame):
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
-
     return perform_melt(frames)
 
+def get_error_dist(error_df):
+    res = error_df.pivot_table("row_id", index="error_type", columns='column_id', aggfunc="count")
+    res_mask = res.fillna(0)
+    return res_mask
+
+def add_normal_row_to_error_dist(error_distribution,normal_df):
+  new_row = {}
+  for col in error_distribution.columns:
+    print(col)
+    normal_column_size = normal_df[col].size
+    error_distribution_column_size = error_distribution[col].sum()
+    new_row[col] = [(normal_column_size - error_distribution_column_size)/normal_column_size]
+
+  for col in normal_df.columns:
+      if col not in new_row.keys() and col != "ID":
+          new_row[col] = [1]
+
+  row_to_add = pd.DataFrame(data=new_row,index=['no_errors'])
+  full_dist_with_nans = pd.concat([error_distribution,row_to_add],axis=0)
+  full_dist_without_nans = full_dist_with_nans.fillna(0)
+  renamed_index_df = full_dist_without_nans.rename_axis("error_type")
+  return renamed_index_df
 
 def create_error_dict(df, error_size):
     try:
