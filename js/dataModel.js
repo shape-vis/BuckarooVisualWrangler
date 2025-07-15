@@ -14,6 +14,7 @@ class DataModel {
     this.fullFilteredData = this.data;              // Same as this.filtered data, except this holds all the columns, not just the 1-3 selected attributes
     this.columnErrorMap = {};                       // Mapping of every error in the dataset with its corresponding column and row ID
     this.originalFilename = null;                   // File name of the input data to be used in the exported python script
+
   }
 
   /**
@@ -277,22 +278,6 @@ class DataModel {
     return this.filteredData.derive({ 
       [column]: aq.escape(condition)
     });
-  }
-
-  /**
-   * Sets selected points as a result of the user's selection.
-   * @param {*} points 
-   */
-  setSelectedPoints(points) {
-    this.selectedPoints = points;
-  }
-
-  /**
-   * 
-   * @returns The user selected points.
-   */
-  getSelectedPoints() {
-    return this.selectedPoints;
   }
 
   /**

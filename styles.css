@@ -269,6 +269,23 @@ body, html, h1 {
     display: block;
 }
 
+.selectionOptions {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 5px;
+    border-radius: 4px;
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+}
+
+.selectionOptions.visible {
+    display: block;
+}
+
 .scatterplot-button,
 .heatmap-button {
     cursor: pointer;
@@ -501,6 +518,46 @@ body, html, h1 {
             .attr("dx", "-0.5em") 
             .attr("dy", "0.5em")  
             .attr("transform", "rotate(-45)") */
+
+
+.svgButton {
+    stroke: gray;
+    fill: lightgray;
+    cursor: pointer;
+    width: 140px;
+    height: 25px;
+    x: 0px; /* Centering the button */
+    y: 0px; /* Centering the button vertically */
+}
+
+.svgButtonText{
+    font-size: 14px;
+    fill: black;
+    cursor: pointer;
+    font-family: sans-serif;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+
+.svgButtonDisabled {
+    stroke: lightgray;
+    fill: whitesmoke;
+    /* cursor: pointer; */
+    width: 140px;
+    height: 25px;
+    x: 0px; /* Centering the button */
+    y: 0px; /* Centering the button vertically */
+}
+
+.svgButtonTextDisabled{
+    font-size: 14px;
+    fill: gray;
+    /* cursor: pointer; */
+    font-family: sans-serif;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
 
 
 .rotatedButton {

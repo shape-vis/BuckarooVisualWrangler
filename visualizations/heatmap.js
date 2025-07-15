@@ -14,25 +14,21 @@
  * These cases are all handled separately. Within each case, there are two options: 
  *      Group by is active or group by is not active. 
  * These two cases are handled separately.
- * @param {*} cellGroup The DOM element for the cell.
- * @param {*} svg The overall matrix svg.
- * @param {*} i Which row in the matrix we are in.
- * @param {*} j Which column in the matrix we are in.
+ *
+ * @param {*} model The data model.
+ * @param {*} view The view to plot the heatmap in.
+ * @param {*} canvas The DOM element for the cell.
  * @param {*} givenData Data to visualize.
  * @param {*} xCol The x attribute/column.
  * @param {*} yCol The y attribute/column.
- * @param {*} groupByAttribute If active, the user-selected attribute to group by.
- * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
- * @param {*} animate If true, the plots should have transitions.
- * @param {*} handleHeatmapClick Handles user clicks on heatmap bins.
  */
-export function draw(model, view, cellGroup, givenData, xCol, yCol ){
+export function draw(model, view, canvas, givenData, xCol, yCol ){
 
     let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
     // console.log("histData", histData);
 
 
-    let backgroundBox = createBackgroundBox(cellGroup, view.size, view.size);
+    let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
     let numHistDataX = histData.scaleX.numeric;
     const numDomainX = numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)];
@@ -47,8 +43,8 @@ export function draw(model, view, cellGroup, givenData, xCol, yCol ){
     const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numDomainX, catDomainX, "horizontal");
     const yScale = createHybridScales(view.size, numHistDataY, catHistDataY, numDomainY, catDomainY, "vertical");
 
-    xScale.draw(cellGroup);
-    yScale.draw(cellGroup);
+    xScale.draw(canvas);
+    yScale.draw(canvas);
 
     const colorScale = view.errorColors
     
@@ -58,10 +54,10 @@ export function draw(model, view, cellGroup, givenData, xCol, yCol ){
                             let keys = Object.keys(d.count).filter( key => key !== "items" ); 
                             if( keys.length === 0 ) return colorScale("none")
                             if( keys.length === 1 ) return colorScale(keys[0])
-                            return view.generate_pattern(colorScale, keys)
+                            return generate_pattern(view.svg, colorScale, keys)
                         } 
 
-    let bars = cellGroup.append("g")
+    let bars = canvas.append("g")
                     .selectAll("rect")
                     .data(histData.histograms.filter( d => d.count.items > 0 ))
                     .enter()
@@ -94,6 +90,8 @@ export function draw(model, view, cellGroup, givenData, xCol, yCol ){
             return `<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`;
         },
         (d, event) => {
+            selectionControlPanel.clearSelection(canvas);
+
             console.log("Left click on heatmap bin", d, event);
             if ( event.shiftKey ) {
                 if (selected.includes(d)) {
@@ -106,6 +104,16 @@ export function draw(model, view, cellGroup, givenData, xCol, yCol ){
                 selected = [d]; // Reset selection to only the clicked bin
             }
             bars.attr("fill", barColor); // Update colors of all bars
+
+            selectionControlPanel.setSelection( canvas, "heatmap", [model, view, canvas, givenData, xCol, yCol],
+                {
+                    data: selected,
+                    scaleX: histData.scaleX,
+                    scaleY: histData.scaleY,
+                }, () => {
+                    selected = []; // Reset selection after callback
+                    bars.attr("fill", barColor); // Update colors of all bars
+                });
         },
         (d) => {
             // Right click handler, if needed

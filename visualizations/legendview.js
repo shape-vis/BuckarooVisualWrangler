@@ -1,31 +1,35 @@
 
 
-function drawLegend(svg, legendItems, legendColormap ){
+function drawLegend(svg, legendItems, legendColormap, x, y ){
+
+    const legendHeight = 15 * Object.keys(legendItems).length + 30;
+    const legendWidth = 195;
 
     const legendGroup = svg.append("g")
         .attr("class", "svg-legend")
-        .attr("transform", "translate(900,25)");
+        .attr("transform", `translate(${x},${y})`);
 
     legendGroup.append("rect")
-        .attr("width", 195)
-        .attr("height", 15*Object.keys(legendItems).length + 22)
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
         .attr("stroke", "black")
         .attr("rx", 5)
         .attr("ry", 5)
         .attr("fill", "none")
 
     legendGroup.append("text")
-        .attr("x", 5)
-        .attr("y", 14)
+        .attr("x", 5 + legendWidth / 2)
+        .attr("y", 20)
         .attr("font-weight", "bold")
-        .attr("font-size", "12px")
+        .attr("font-size", "14px")
+        .attr("text-anchor", "middle")
         .text("Legend")
 
 
     Object.keys(legendItems).forEach((item, index) => {
         const legendItem = legendGroup.append("g")
             // .attr("class", "legend-item")
-            .attr("transform", `translate(5, ${22 + index * 15})`);
+            .attr("transform", `translate(5, ${30 + index * 15})`);
 
         legendItem.append("rect")
             .attr("width", 10)
@@ -37,5 +41,8 @@ function drawLegend(svg, legendItems, legendColormap ){
             .attr("y", 8)
             .text(legendItems[item]);
     });
+
+
 }
+
 

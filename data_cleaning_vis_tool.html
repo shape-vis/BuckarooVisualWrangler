@@ -88,10 +88,10 @@
 
         <div class="toolbox-wrapper">
           <div id="toolbox">
-            <form id="radio-buttons-form">
+            <!-- <form id="radio-buttons-form"> -->
               <h3>Data Repair Toolkit</h3>
               <p>Explore options below for selecting and repairing data.</p>
-              <h4>Select an option:</h4>
+              <!-- <h4>Select an option:</h4>
               <label>
                 <input type="radio" name="options" value="allData" checked />
                 View all data
@@ -99,14 +99,18 @@
               <label>
                 <input type="radio" name="options" value="selectData" />
                 Select data
-              </label>
-            </form>
-            <div class="undo-redo-container">
-              <button id="undo">Undo</button>
-              <button id="redo">Redo</button>
-              <button id="clear-selection">Clear Selection</button>
-            </div>
-            <button id="remove-selected-data">Remove Selected Data</button>
+              </label> -->
+            <!-- </form> -->
+            <!-- <div class="undo-redo-container">
+              <button id="undo" disabled>Undo Last Repair</button>
+              <button id="redo" disabled>Redo Last Repair</button> -->
+              <!-- <button id="clear-selection">Clear Selection</button> -->
+            <!-- </div> -->
+
+            <!-- <button id="zoom-data" disabled>Zoom Selected Data</button>
+            <button id="repair-data" disabled>Repair Selected Data</button>
+ -->
+            <!-- <button id="remove-selected-data">Remove Selected Data</button>
             <div id="preview-remove"></div>
             <button id="impute-average-x">
               Impute selected data with average for X
@@ -118,13 +122,14 @@
             <div id="preview-impute-average-y"></div>
             <button id="user-function">
               Apply user specified repair
-            </button>
-            <div id="preview-user-function"></div>
+            </button> -->
+            <div id="preview-area"></div>
           </div>
         </div>
       </div>
 
       <div id="tooltip" class="tooltip"></div>
+      <div id="selectionOptions" class="selectionOptions">Zoom In<br>Preview Repairs</div>
     </div>
   </body>
   <script src="js/dataModel.js"></script>
@@ -133,6 +138,7 @@
     <script src="visualizations/legendview.js"></script>
     <script src="visualizations/matrixview.js"></script>
     <script src="visualizations/tableview.js"></script>
+  <script src="visualizations/repairpanel.js"></script>
     <script src="visualizations/attributesummaryview.js"></script>
   <script src="js/scatterplotMatrixView.js"></script>
   <script src="js/controller.js"></script>

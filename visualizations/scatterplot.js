@@ -9,23 +9,19 @@
  *      x is numeric & y is categorical,
  *      both x & y are categorical.
  * Group by is handled within the "fill" for each circle.
- * @param {*} cellGroup The DOM element for the cell.
- * @param {*} svg The overall matrix svg.
- * @param {*} i Which row in the matrix we are in.
- * @param {*} j Which column in the matrix we are in.
+ * 
+ * @param {*} model The data model.
+ * @param {*} view The view to plot the scatterplot in.
+ * @param {*} canvas The DOM element for the cell.
  * @param {*} givenData Data to visualize.
  * @param {*} xCol The x attribute/column.
  * @param {*} yCol The y attribute/column.
- * @param {*} groupByAttribute If active, the user-selected attribute to group by.
- * @param {*} selectionEnabled If true, the user can click on bins in the visualization to select.
- * @param {*} animate If true, the plots should have transitions.
- * @param {*} handleHeatmapClick Given to pass around. 
  */
 
 
 
 
-export function draw(model, view, cellGroup, givenData, xCol, yCol){
+export function draw(model, view, canvas, givenData, xCol, yCol){
 
     let sampleData = query_sample2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol, 50, 100);
     // console.log("sampleData", sampleData);
@@ -38,41 +34,28 @@ export function draw(model, view, cellGroup, givenData, xCol, yCol){
     let numHistDataY = sampleData.scaleY.numeric;
     let catHistDataY = sampleData.scaleY.categorical;
 
-
-    let selectActive = false;
-    let selectStart = [0,0];
-    let selectEnd = [0,0];
-    let selectionBox = null;
-    let selectedData = [];
-
-    let backgroundBox = createBackgroundBox(cellGroup, view.size, view.size);
+    let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
     const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : numHistDataX, catHistDataX.length === 0 ? null :catHistDataX.map(d => d), "horizontal");
     const yScale = createHybridScales(view.size, numHistDataY, catHistDataY, numHistDataY.length === 0 ? null : numHistDataY, catHistDataY.length === 0 ? null :catHistDataY.map(d => d), "vertical");
 
-    xScale.draw(cellGroup);
-    yScale.draw(cellGroup);
+    xScale.draw(canvas);
+    yScale.draw(canvas);
 
+    let selectedData = [];
+    const selectionBox = createSelectionBox(canvas);
 
     let circleFillFunc = d => {
-        // console.log("d", d);
-                let x = xScale.apply(d.x, d.xType )
-                let y = yScale.apply(d.y, d.yType );
-                if( x > Math.min(selectStart[0], selectEnd[0]) &&
-                    x < Math.max(selectStart[0], selectEnd[0]) &&
-                    y > Math.min(selectStart[1], selectEnd[1]) &&
-                    y < Math.max(selectStart[1], selectEnd[1]) ){
-                        selectedData.push(d);
-                        return "gold";
-                    }
+                if( selectedData.includes(d) )
+                    return "gold";
                 if (d.errors.length === 0) 
                     return colorScale('none');
                 if (d.errors.length === 1) 
                     return colorScale(d.errors[0]);
-                return view.generate_pattern(colorScale, d.errors);
+                return generate_pattern(view.svg, colorScale, d.errors);
             }
 
-    const circles = cellGroup.selectAll("circle")
+    const circles = canvas.selectAll("circle")
             .data(sampleData.data)
             .join("circle")
                 .attr("cx", d => xScale.apply(d.x, d.xType))
@@ -81,35 +64,27 @@ export function draw(model, view, cellGroup, givenData, xCol, yCol){
                 .attr("fill", circleFillFunc )
 
 
-    selectionBox = cellGroup.append("rect")
-        .attr("stroke", "transparent")
-        .attr("fill", "none")
-        .attr("stroke-width", 3)
-
     backgroundBox.call(d3.drag()
         .on("start", function(event, d) {
-            selectStart = [event.x, event.y];
-            selectActive = true;
+            selectionControlPanel.clearSelection(canvas);
+            selectionBox.start(event.x, event.y);
         })
         .on("drag", function(event, d) {
-            selectEnd = [event.x, event.y];
-            selectedData = []
-            selectionBox
-                .attr("width", Math.abs(selectStart[0] - selectEnd[0]))
-                .attr("height", Math.abs(selectStart[1] - selectEnd[1]))
-                .attr("x", Math.min(selectStart[0], selectEnd[0]))
-                .attr("y", Math.min(selectStart[1], selectEnd[1]))
-                .attr("stroke", "black" )
-                .attr("fill", "#0000ff20")
-            circles
-                .attr("fill", circleFillFunc )
+            selectionBox.update(event.x, event.y);
+            selectedData = sampleData.data.filter(d => selectionBox.inRange(xScale.apply(d.x, d.xType), yScale.apply(d.y, d.yType)));
+            circles.attr("fill", circleFillFunc )
         })
         .on("end", function(event, d) {
-            selectActive = false;
-            selectionBox
-                .attr("stroke", "transparent" )
-                .attr("fill", "none");
-            console.log("Selected data points:", selectedData);
+            selectionBox.end(event.x, event.y);
+            selectionControlPanel.setSelection( canvas, "scatterplot", [model, view, canvas, givenData, xCol, yCol],
+                {
+                    data: selectedData,
+                    scaleX: sampleData.scaleX,
+                    scaleY: sampleData.scaleY,
+                }, () => {
+                    selectedData = [];
+                    circles.attr("fill", circleFillFunc )
+                });
         }));
 
 

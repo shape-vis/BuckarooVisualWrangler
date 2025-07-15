@@ -1,12 +1,14 @@
 
 
-export function draw(model, view, data, cellGroup, xCol) {
+export function draw(model, view, canvas, givenData, xCol) {
 
-    let histData = query_histogram1d(data, model.getColumnErrors(), xCol);
+    console.log("Drawing bar chart for column:", xCol);
+
+    let histData = query_histogram1d(givenData.select(["ID", xCol]).objects(), model.getColumnErrors(), xCol);
     // console.log("histData", histData);
 
 
-    let backgroundBox = createBackgroundBox(cellGroup, view.size, view.size);
+    let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
 
     let numHistDataX = histData.scaleX.numeric;
@@ -59,7 +61,7 @@ export function draw(model, view, data, cellGroup, xCol) {
     }
 
     // Draw bars
-    let bars = cellGroup.append("g")
+    let bars = canvas.append("g")
         .selectAll("rect")
         .data(myData)
         .join("rect")
@@ -72,11 +74,11 @@ export function draw(model, view, data, cellGroup, xCol) {
             .attr("stroke-width", 2);    
 
 
-    xScale.draw(cellGroup);
+    xScale.draw(canvas);
 
 
     // Draw axes
-    cellGroup.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
+    canvas.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
     
 
     backgroundBox.on("click", function(event) {
@@ -91,6 +93,8 @@ export function draw(model, view, data, cellGroup, xCol) {
             return `<strong>Bin: </strong>${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
         },
         (d, event) => {
+            selectionControlPanel.clearSelection(canvas);
+
             console.log("Left click on bar", d, event);
             if ( event.shiftKey ) {
                 // If shift is pressed, toggle selection
@@ -104,6 +108,18 @@ export function draw(model, view, data, cellGroup, xCol) {
                 selected = [d]; // Reset selection to only the clicked bar
             }
             bars.attr("fill", barColor); // Update colors of all bars
+
+            selectionControlPanel.setSelection( canvas, "barchart", [model, view, canvas, givenData, xCol],
+                {
+                    data: selected,
+                    scaleX: histData.scaleX,
+                    scaleY: histData.scaleY,
+                }, () => {
+                    console.log("Selection cleared", this);
+                    selected = []; // Reset selection after callback
+                    bars.attr("fill", barColor); // Update colors of all bars
+                });
+
         },
         (d) => {
             console.log("Right click on bar", d);

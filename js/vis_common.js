@@ -34,6 +34,16 @@ function createTooltip( target_objects, html_function, left_click_handler = (d)=
         });    
 }
 
+function showSectionOptions(x,y) {
+    const sectionOptions = d3.select("#selectionOptions");
+    sectionOptions.style("display", "block")
+        .style("left", `${x}px`)
+        .style("top", `${y}px`);
+}
+function hideSectionOptions() {
+    d3.select("#selectionOptions").style("display", "none");
+}
+
 
 function createBackgroundBox(canvas, width, height) {
     return canvas.append("rect")
@@ -148,3 +158,79 @@ function createHybridScales(size, numHistData, catHistData, numDomain, catDomain
 }
 
 
+function createSelectionBox(canvas){
+    const box = canvas.append("rect")
+        .attr("stroke", "transparent")
+        .attr("fill", "none")
+        .attr("stroke-width", 3)
+
+    let selectStart = [0,0];
+    let selectEnd = [0,0];
+
+    function start(x,y) {
+        selectStart = selectEnd = [x,y];
+    }
+
+    function update(x,y) {
+        selectEnd = [x,y];
+        box
+            .attr("width", Math.abs(selectStart[0] - selectEnd[0]))
+            .attr("height", Math.abs(selectStart[1] - selectEnd[1]))
+            .attr("x", Math.min(selectStart[0], selectEnd[0]))
+            .attr("y", Math.min(selectStart[1], selectEnd[1]))
+            .attr("stroke", "black" )
+            .attr("fill", "#0000ff20")
+    }
+
+    function end(x,y) {
+        selectEnd = [x,y];
+        box
+            .attr("stroke", "transparent" )
+            .attr("fill", "none");
+    }
+
+    function inRange( x,y ) {
+        return x > Math.min(selectStart[0], selectEnd[0]) &&
+               x < Math.max(selectStart[0], selectEnd[0]) &&
+               y > Math.min(selectStart[1], selectEnd[1]) &&
+               y < Math.max(selectStart[1], selectEnd[1]);
+    }
+
+    return { start, update, end, box, inRange }
+}
+
+
+
+function generate_pattern( svg, colorScale, errorArray) {
+    let patternSize = 30;
+
+    let defs = svg.select("defs");
+    if( defs.empty() ){
+        defs = svg.append("defs");
+    }
+
+    let patternName = errorArray.join("_") + "_pattern";
+    if( defs.selectAll(`#${patternName}`).empty() ){
+        let pattern = defs.append("pattern")
+                            .attr("id", patternName)
+                            .attr("width", patternSize)
+                            .attr("height", patternSize)
+                            .attr("patternUnits", "userSpaceOnUse")
+
+        for( let i = -patternSize; i < patternSize; ){
+            errorArray.forEach( (error, idx) => {
+                pattern.append("line")
+                            .attr("x1", i-1)
+                            .attr("y1", 0-1)
+                            .attr("x2", i + patternSize+1)
+                            .attr("y2", patternSize+1)
+                            .attr("stroke", colorScale(error))
+                            .attr("stroke-width", 2)
+                i += 2.5
+            })
+        }
+
+    }
+
+    return `url(#${patternName})`;
+}    
