@@ -3,6 +3,7 @@
 
 import re
 
+import numpy as np
 import pandas as pd
 from pandas.core.dtypes.common import is_categorical_dtype
 from sqlalchemy.dialects.mssql.information_schema import columns
@@ -108,6 +109,7 @@ def get_error_dist(error_df):
     res_mask = res.fillna(0)
     return res_mask
 
+
 def add_normal_row_to_error_dist(error_distribution,normal_df):
   new_row = {}
   for col in error_distribution.columns:
@@ -148,15 +150,6 @@ def group_by_attribute(df, column_a, group_by):
     ret = df.pivot_table("ID", index=column_a, columns=group_by, aggfunc="count")
     return ret
 
-def get_1d_bins(column_name, range,df):
-    print("in1dbins")
-    print("column name before str:",column_name)
-    column_name = str(column_name)
-    print("after: ",column_name)
-    frequencies = df.value_counts(subset=str(column_name))
-    print(frequencies)
-    return frequencies
-
 def get_2d_bins(column_a,column_b, range,bin_count):
     column_a_categorical = is_categorical(column_a)
     column_b_categorical = is_categorical(column_b)
@@ -170,6 +163,17 @@ def get_2d_bins(column_a,column_b, range,bin_count):
     return pd.crosstab(column_a_bins, column_b_bins,dropna=True)
 
     #make the number of bins for numeric be an option
+
+def slice_data_by_min_max_ranges(min_val,max_val,df,error_df):
+    min_val_int = int(min_val)
+    max_val_int = int(max_val)
+    sliced_max_df = df[df["ID"] <= max_val_int]
+    sliced_min_max_df = sliced_max_df[sliced_max_df["ID"] >= min_val_int]
+
+    sliced_error_max_df = error_df[error_df["row_id"] <= max_val_int]
+    sliced_min_max_error_df = sliced_error_max_df[sliced_error_max_df["row_id"] >= min_val_int]
+
+    return sliced_min_max_df, sliced_min_max_error_df
 
 def is_categorical(column_a):
     value_counts = column_a.value_counts()

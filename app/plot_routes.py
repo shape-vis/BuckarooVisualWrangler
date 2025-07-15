@@ -1,16 +1,19 @@
 #Buckaroo Project - July 2, 2025
 #This file handles all endpoints surrounding plots
+from email.policy import default
 
 import numpy as np
 import pandas as pd
 from flask import request, render_template
+from numpy import number
 from sqlalchemy import column
 
 from app import app, data_state_manager
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, get_2d_bins, \
-    get_1d_bins, group_by_attribute, is_categorical, create_bins_for_a_numeric_column, add_normal_row_to_error_dist, \
+ group_by_attribute, is_categorical, create_bins_for_a_numeric_column, add_normal_row_to_error_dist, \
     get_error_dist
+from data_management.data_integration import generate_1d_histogram_data
 
 
 @app.get("/api/plots/1-d-histogram-data")
@@ -24,11 +27,13 @@ def get_1d_histogram():
     """
     tablename = request.args.get("tablename")
     column_name = request.args.get("column")
-    range = request.args.get("range")
-    current_df = data_state_manager.get_current_state()["df"]
+    min_id = request.args.get("min_id",default=0)
+    max_id = request.args.get("max_id", default=200)
+    number_of_bins = request.args.get("bins",default=10)
+
     try:
         print("in the try")
-        binned_data = get_1d_bins(column_name, range,current_df).to_json()
+        binned_data = generate_1d_histogram_data(column_name,number_of_bins,min_id,max_id)
         return {"Success":True,"binned_data":binned_data}
     except Exception as e:
         return {"Success": False, "Error": str(e)}
