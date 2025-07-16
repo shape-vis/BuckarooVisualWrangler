@@ -36,6 +36,13 @@ def get_column_bin_assignments(dataframe, column_name, number_of_bins):
     """Create bin assignments for any column type"""
     column_data = dataframe[column_name].dropna()
 
+    if len(column_data) == 0:
+        # Treat as categorical with single "null" category
+        scale_data = ["null"]
+        # All rows get assigned to bin 0 (the null bin)
+        bin_assignments = np.zeros(len(dataframe), dtype=int)
+        return bin_assignments, scale_data, "categorical"
+
     if is_categorical(column_data):
         unique_categories = column_data.unique()
         category_to_bin = {category: index for index, category in enumerate(unique_categories)}
@@ -53,21 +60,19 @@ def create_row_to_bin_mapping(dataframe, column_names, all_bin_assignments):
     row_to_bin_mapping = {}
 
     for row_index, data_row in dataframe.iterrows():
-        # Check if row has valid data for all columns - (if all rows don't have invalid values do this)
-        if all(pd.notna(data_row[col]) for col in column_names):
-            # Get bin coordinates for this row
-            bin_coordinates = []
-            valid_row = True
+        # Get bin coordinates for this row
+        bin_coordinates = []
+        valid_row = True
 
-            for bin_assignments in all_bin_assignments:
-                if row_index < len(bin_assignments) and bin_assignments[row_index] >= 0:
-                    bin_coordinates.append(bin_assignments[row_index])
-                else:
-                    valid_row = False
-                    break
+        for bin_assignments in all_bin_assignments:
+            if row_index < len(bin_assignments) and bin_assignments[row_index] >= 0:
+                bin_coordinates.append(bin_assignments[row_index])
+            else:
+                valid_row = False
+                break
 
-            if valid_row:
-                row_to_bin_mapping[data_row['ID']] = tuple(bin_coordinates)
+        if valid_row:
+            row_to_bin_mapping[data_row['ID']] = tuple(bin_coordinates)
 
     return row_to_bin_mapping
 

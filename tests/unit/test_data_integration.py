@@ -542,20 +542,347 @@ class TestDataIntegrationEdgeCases(unittest.TestCase):
         self.assertEqual(column_type, 'categorical')
         self.assertEqual(len(scale_data), 1)
 
-    def test_all_null_column(self):
-        """Test with column containing all null values."""
-        null_df = pd.DataFrame({
-            'ID': [1, 2, 3],
-            'Country': [None, None, None]
+    def test_null_column_preserves_item_count(self):
+        """Test that all-null columns preserve correct item counts."""
+        all_null_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4, 5],
+            'null_column': [None, None, None, None, None]
         })
 
         bin_assignments, scale_data, column_type = get_column_bin_assignments(
-            null_df, 'Country', 3
+            all_null_df, 'null_column', 3
         )
 
-        self.assertEqual(column_type, 'categorical')
-        self.assertEqual(len(scale_data), 0)
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            all_null_df,
+            ['null_column'],
+            [bin_assignments]
+        )
 
+        # All 5 rows should be mapped
+        self.assertEqual(len(row_to_bin_mapping), 5)
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+
+        # All items should be in the null bin
+        self.assertEqual(items_per_bin[(0,)], 5)
+
+        result = build_histogram_entries(
+            items_per_bin, {}, [scale_data], [column_type]
+        )
+
+        self.assertEqual(len(result), 1)
+        entry = result[0]
+        self.assertEqual(entry['xBin'], 'null')
+        self.assertEqual(entry['count']['items'], 5)  # All 5 items preserved
+
+    def test_mixed_null_preserves_counts_2d(self):
+        """Test that 2D with null column preserves all item counts."""
+        mixed_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4, 5, 6],
+            'null_column': [None, None, None, None, None, None],
+            'country': ['USA', 'Canada', 'USA', 'Canada', 'USA', 'Germany']
+        })
+
+        null_bins, null_scale, null_type = get_column_bin_assignments(mixed_df, 'null_column', 3)
+        country_bins, country_scale, country_type = get_column_bin_assignments(mixed_df, 'country', 3)
+
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            mixed_df,
+            ['null_column', 'country'],
+            [null_bins, country_bins]
+        )
+
+        # All 6 rows should be mapped
+        self.assertEqual(len(row_to_bin_mapping), 6)
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+
+        # Verify total items preserved
+        total_items = sum(items_per_bin.values())
+        self.assertEqual(total_items, 6)
+
+        result = build_histogram_entries(
+            items_per_bin, {}, [null_scale, country_scale], [null_type, country_type]
+        )
+
+        # Should have bins for (null, USA), (null, Canada), (null, Germany)
+        total_histogram_items = sum(entry['count']['items'] for entry in result)
+        self.assertEqual(total_histogram_items, 6)  # All items preserved
+
+        # Verify specific country counts
+        country_counts = mixed_df['country'].value_counts()
+        for entry in result:
+            self.assertEqual(entry['xBin'], 'null')
+            country = entry['yBin']
+            expected_count = country_counts[country]
+            actual_count = entry['count']['items']
+            self.assertEqual(actual_count, expected_count,
+                             f"Country {country} should have {expected_count} items, got {actual_count}")
+
+    def test_get_column_bin_assignments_all_null_column(self):
+        """Test getting bin assignments for column with all null values."""
+        all_null_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4],
+            'null_column': [None, None, None, None]
+        })
+
+        bin_assignments, scale_data, column_type = get_column_bin_assignments(
+            all_null_df, 'null_column', 3
+        )
+
+        # Should be treated as categorical with single "null" category
+        self.assertEqual(column_type, 'categorical')
+        self.assertEqual(len(scale_data), 1)
+        self.assertEqual(scale_data[0], 'null')
+
+        # All rows should be assigned to bin 0
+        self.assertEqual(len(bin_assignments), 4)
+        self.assertTrue(all(assignment == 0 for assignment in bin_assignments))
+
+    def test_build_histogram_entries_with_null_column(self):
+        """Test building histogram entries when column has all null values."""
+        all_null_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4],
+            'null_column': [None, None, None, None]
+        })
+
+        bin_assignments, scale_data, column_type = get_column_bin_assignments(
+            all_null_df, 'null_column', 3
+        )
+
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            all_null_df,
+            ['null_column'],
+            [bin_assignments]
+        )
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+        errors_per_bin = {}  # No errors for this test
+
+        result = build_histogram_entries(
+            items_per_bin, errors_per_bin, [scale_data], [column_type]
+        )
+
+        # Should have one entry for the null column
+        self.assertEqual(len(result), 1)
+
+        entry = result[0]
+        self.assertEqual(entry['xBin'], 'null')  # Should be "null", not "null column"
+        self.assertEqual(entry['xType'], 'categorical')
+        self.assertEqual(entry['count']['items'], 4)  # All 4 rows in the null bin
+
+    def test_mixed_null_and_regular_columns_2d(self):
+        """Test 2D histogram with one null column and one regular column."""
+        mixed_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4],
+            'null_column': [None, None, None, None],
+            'country': ['USA', 'Canada', 'USA', 'Canada']
+        })
+
+        null_bins, null_scale, null_type = get_column_bin_assignments(mixed_df, 'null_column', 3)
+        country_bins, country_scale, country_type = get_column_bin_assignments(mixed_df, 'country', 3)
+
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            mixed_df,
+            ['null_column', 'country'],
+            [null_bins, country_bins]
+        )
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+
+        result = build_histogram_entries(
+            items_per_bin, {}, [null_scale, country_scale], [null_type, country_type]
+        )
+
+        # Should have entries for: (null, USA) and (null, Canada)
+        self.assertEqual(len(result), 2)  # 1 null category × 2 countries
+
+        for entry in result:
+            self.assertEqual(entry['xBin'], 'null')  # Should be "null"
+            self.assertEqual(entry['xType'], 'categorical')
+            self.assertIn(entry['yBin'], ['USA', 'Canada'])
+            self.assertEqual(entry['yType'], 'categorical')
+
+    def test_2d_both_null_columns(self):
+        """Test 2D histogram with both columns being null."""
+        both_null_df = pd.DataFrame({
+            'ID': [1, 2, 3],
+            'null_col1': [None, None, None],
+            'null_col2': [None, None, None]
+        })
+
+        null1_bins, null1_scale, null1_type = get_column_bin_assignments(both_null_df, 'null_col1', 3)
+        null2_bins, null2_scale, null2_type = get_column_bin_assignments(both_null_df, 'null_col2', 3)
+
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            both_null_df,
+            ['null_col1', 'null_col2'],
+            [null1_bins, null2_bins]
+        )
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+
+        result = build_histogram_entries(
+            items_per_bin, {}, [null1_scale, null2_scale], [null1_type, null2_type]
+        )
+
+        # Should have one entry: (null, null)
+        self.assertEqual(len(result), 1)
+
+        entry = result[0]
+        self.assertEqual(entry['xBin'], 'null')
+        self.assertEqual(entry['yBin'], 'null')
+        self.assertEqual(entry['xType'], 'categorical')
+        self.assertEqual(entry['yType'], 'categorical')
+        self.assertEqual(entry['count']['items'], 3)  # All 3 rows
+
+    def test_2d_null_and_numeric_basic_functionality(self):
+        """Test 2D histogram with null column and numeric column - basic functionality."""
+        mixed_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4, 5, 6],
+            'null_column': [None, None, None, None, None, None],
+            'salary': [45000, 55000, 75000, 85000, 95000, 105000]
+        })
+
+        # Get bin assignments
+        null_bins, null_scale, null_type = get_column_bin_assignments(mixed_df, 'null_column', 3)
+        salary_bins, salary_scale, salary_type = get_column_bin_assignments(mixed_df, 'salary', 3)
+
+        # Verify column types
+        self.assertEqual(null_type, 'categorical')
+        self.assertEqual(salary_type, 'numeric')
+
+        # Verify scales
+        self.assertEqual(null_scale, ['null'])
+        self.assertEqual(len(salary_scale), 3)  # 3 numeric intervals
+
+        # Create mapping and count items
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            mixed_df,
+            ['null_column', 'salary'],
+            [null_bins, salary_bins]
+        )
+
+        # All 6 rows should be mapped
+        self.assertEqual(len(row_to_bin_mapping), 6)
+
+        # Verify each row maps to (0, salary_bin) since null column is always bin 0
+        for row_id, bin_coords in row_to_bin_mapping.items():
+            self.assertEqual(bin_coords[0], 0)  # null column always bin 0
+            self.assertIn(bin_coords[1], [0, 1, 2])  # salary bin should be 0, 1, or 2
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+
+        # Build histogram entries
+        result = build_histogram_entries(
+            items_per_bin, {}, [null_scale, salary_scale], [null_type, salary_type]
+        )
+
+        # Should have 3 entries: (null, 0), (null, 1), (null, 2)
+        self.assertEqual(len(result), 3)
+
+        # Verify structure of each entry
+        for entry in result:
+            self.assertEqual(entry['xBin'], 'null')  # Categorical null
+            self.assertIn(entry['yBin'], [0, 1, 2])  # Numeric bin index
+            self.assertEqual(entry['xType'], 'categorical')
+            self.assertEqual(entry['yType'], 'numeric')
+            self.assertIn('count', entry)
+            self.assertIn('items', entry['count'])
+            self.assertGreaterEqual(entry['count']['items'], 0)
+
+    def test_2d_null_and_numeric_item_distribution(self):
+        """Test 2D histogram with null column and numeric column - verify item distribution."""
+        # Create data with known salary distribution
+        mixed_df = pd.DataFrame({
+            'ID': [1, 2, 3, 4, 5, 6, 7, 8],
+            'null_column': [None, None, None, None, None, None, None, None],
+            'salary': [30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000]
+        })
+
+        # Get bin assignments with 4 bins to have clear distribution
+        null_bins, null_scale, null_type = get_column_bin_assignments(mixed_df, 'null_column', 3)
+        salary_bins, salary_scale, salary_type = get_column_bin_assignments(mixed_df, 'salary', 4)
+
+        # Verify salary values fall into expected bins
+        salaries = [30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000]
+
+        # Create mapping
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            mixed_df,
+            ['null_column', 'salary'],
+            [null_bins, salary_bins]
+        )
+
+        # Verify each salary maps to correct bin
+        for i, salary in enumerate(salaries):
+            row_id = i + 1
+            bin_coords = row_to_bin_mapping[row_id]
+            salary_bin = bin_coords[1]
+
+            # Verify salary falls within the assigned interval
+            assigned_interval = salary_scale[salary_bin]
+            self.assertGreaterEqual(salary, assigned_interval.left,
+                                    f"Salary {salary} should be >= {assigned_interval.left}")
+            self.assertLessEqual(salary, assigned_interval.right,
+                            f"Salary {salary} should be =< {assigned_interval.right}")
+
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+
+        # Verify total items preserved
+        total_items = sum(items_per_bin.values())
+        self.assertEqual(total_items, 8)
+
+        # Build histogram entries
+        result = build_histogram_entries(
+            items_per_bin, {}, [null_scale, salary_scale], [null_type, salary_type]
+        )
+
+        # Should have 4 entries for 4 salary bins
+        self.assertEqual(len(result), 4)
+
+        # Verify total items in histogram entries
+        total_histogram_items = sum(entry['count']['items'] for entry in result)
+        self.assertEqual(total_histogram_items, 8)
+
+        # Verify specific bin distributions
+        salary_bin_counts = {}
+        for row_id, bin_coords in row_to_bin_mapping.items():
+            salary_bin = bin_coords[1]
+            salary_bin_counts[salary_bin] = salary_bin_counts.get(salary_bin, 0) + 1
+
+        # Check each histogram entry matches expected counts
+        for entry in result:
+            self.assertEqual(entry['xBin'], 'null')
+            salary_bin_index = entry['yBin']
+            expected_count = salary_bin_counts[salary_bin_index]
+            actual_count = entry['count']['items']
+            self.assertEqual(actual_count, expected_count,
+                             f"Salary bin {salary_bin_index} should have {expected_count} items, got {actual_count}")
+
+        # Verify scale information in response
+        scale_x_info = create_scale_info(null_scale, null_type)
+        scale_y_info = create_scale_info(salary_scale, salary_type)
+
+        # X scale should be categorical with null
+        self.assertEqual(scale_x_info['categorical'], ['null'])
+        self.assertEqual(scale_x_info['numeric'], [])
+
+        # Y scale should be numeric with 4 intervals
+        self.assertEqual(scale_y_info['categorical'], [])
+        self.assertEqual(len(scale_y_info['numeric']), 4)
+
+        # Verify numeric ranges are properly formatted
+        for i, range_info in enumerate(scale_y_info['numeric']):
+            self.assertIn('x0', range_info)
+            self.assertIn('x1', range_info)
+            self.assertLess(range_info['x0'], range_info['x1'])
+
+            # Verify range matches the interval
+            interval = salary_scale[i]
+            self.assertEqual(range_info['x0'], int(interval.left))
+            self.assertEqual(range_info['x1'], int(interval.right))
 
 class TestDataIntegrationIntegration(unittest.TestCase):
 
