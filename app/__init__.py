@@ -9,8 +9,9 @@ from dotenv import load_dotenv
 from flask import Flask
 from sqlalchemy import create_engine
 
-from data_management.data_instance import DataInstance
 from data_management.data_state import DataState
+# from data_management.data_integration import *
+
 
 #load the .env file and read the different variables in there and them in the environment variables for this proccess
 load_dotenv()

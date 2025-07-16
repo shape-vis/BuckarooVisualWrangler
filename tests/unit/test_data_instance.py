@@ -1,6 +1,7 @@
 import unittest
 import pandas as pd
 
+from app.plot_routes import *
 from data_management.data_instance import DataInstance
 
 

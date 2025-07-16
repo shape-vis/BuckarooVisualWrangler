@@ -1,4 +1,6 @@
 
+from data_management.data_integration import generate_1d_histogram_data, generate_2d_histogram_data
+
 """Need to have this class store:
 
     Wrangle performed

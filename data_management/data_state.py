@@ -20,6 +20,7 @@ class DataState:
         self.left_state_stack = []
         self.right_state_stack = []
         self.original_error_table = None
+        self.original_df = None
         self.original_cached_for_current_session = False
         self.current_error_dist = None
 

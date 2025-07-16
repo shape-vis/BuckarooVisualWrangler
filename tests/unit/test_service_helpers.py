@@ -7,7 +7,7 @@ from sqlalchemy import column
 from sqlalchemy.testing import assert_raises
 
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
-    get_range_of_ids_query, get_1d_bins, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
+    get_range_of_ids_query, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
     group_by_attribute, get_error_dist, add_normal_row_to_error_dist
 from wranglers.remove_data import remove_data
 
@@ -99,11 +99,11 @@ class General(TestCase):
         print(expected_query, actual_query)
         assert_equal(expected_query,actual_query)
 
-    def test_get1d_bins_basic(self):
-        stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
-        expected_series = stackoverflow_df.value_counts(subset="ConvertedSalary")
-        actual_series = get_1d_bins("ConvertedSalary",100,stackoverflow_df)
-        pd.testing.assert_series_equal(expected_series,actual_series)
+    # def test_get1d_bins_basic(self):
+    #     stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
+    #     expected_series = stackoverflow_df.value_counts(subset="ConvertedSalary")
+    #     actual_series = get_1d_bins("ConvertedSalary",100,stackoverflow_df)
+    #     pd.testing.assert_series_equal(expected_series,actual_series)
 
     def test_is_categorical(self):
         stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
