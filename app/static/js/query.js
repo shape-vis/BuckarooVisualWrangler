@@ -46,12 +46,20 @@ function numericHistogramToScale(histogram) {
 
 function query_histogram1d( data, errors, xCol ) {
 
+    console.log("query_histogram1d", data, errors, xCol);
+
     function find_error_items( type, bin, desc, ids ) {
         let items = []
         let counts = {}
         ids.forEach(id => {
-            items.push({id: id, error: id in errors[xCol] ? errors[xCol][id] : null });
-            let err = (id in errors[xCol]) ? counts[errors[xCol][id]] : "none"
+            // console.log("id", id, errors, xCol, id in errors);
+            let err = "none"
+            if( xCol in errors ){
+                items.push({id: id, error: id in errors[xCol] ? errors[xCol][id] : null });
+                err = (id in errors[xCol]) ? counts[errors[xCol][id]] : "none"
+            }
+            else
+                items.push({id: id, error: null });
             counts[err] = (counts[err] || 0) + 1;
         });
         let val_output = [];
@@ -128,9 +136,11 @@ function query_histogram1d( data, errors, xCol ) {
                 })
             }
             bins[xCat]["items"] = (bins[xCat]["items"] || 0) + 1;
-            (errors[xCol][d.ID] || []).forEach(err => {
-                bins[xCat][err] = (bins[xCat][err] || 0) + 1;
-            });
+            if( xCol in errors ){
+                (errors[xCol][d.ID] || []).forEach(err => {
+                                bins[xCat][err] = (bins[xCat][err] || 0) + 1;
+                            });
+            }
         });
     }    
 
@@ -149,11 +159,15 @@ function query_histogram1d( data, errors, xCol ) {
 
 function query_histogram2d(data, errors, xCol, yCol) {
 
+    console.log("query_histogram2d", data, errors, xCol, yCol);
+
     function get_errors(d,xCol,yCol){
+        if( errors === undefined || errors === null ) return [];
+        // console.log("get_errors", errors, d, xCol, yCol);
         let curErrors = [];
         let ID = d.ID;
-        if( ID in errors[xCol] ) curErrors = curErrors.concat(errors[xCol][ID]);
-        if( ID in errors[yCol] ) curErrors = curErrors.concat(errors[yCol][ID]);
+        if( xCol in errors && ID in errors[xCol] ) curErrors = curErrors.concat(errors[xCol][ID]);
+        if( yCol in errors && ID in errors[yCol] ) curErrors = curErrors.concat(errors[yCol][ID]);
         return curErrors;
     }
 
@@ -316,17 +330,19 @@ function query_histogram2d(data, errors, xCol, yCol) {
 
 function query_sample2d(data, errors, xCol, yCol, errorSamples, totalSamples ) {
 
+    console.log("query_sample2d", data, errors, xCol, yCol, errorSamples, totalSamples);
+
     function get_errors(d,xCol,yCol){
         let curErrors = [];
         let ID = d.ID;
-        if( ID in errors[xCol] ) curErrors = curErrors.concat(errors[xCol][ID]);
-        if( ID in errors[yCol] ) curErrors = curErrors.concat(errors[yCol][ID]);
+        if( xCol in errors && ID in errors[xCol] ) curErrors = curErrors.concat(errors[xCol][ID]);
+        if( yCol in errors && ID in errors[yCol] ) curErrors = curErrors.concat(errors[yCol][ID]);
         return curErrors;
     }
 
 
-    let errorData = data.filter( d => errors[xCol][d.ID] || errors[yCol][d.ID] )
-    let nonErrorData = data.filter( d => !(errors[xCol][d.ID] || errors[yCol][d.ID]) )
+    let errorData = data.filter( d => (xCol in errors && errors[xCol][d.ID]) || (yCol in errors && errors[yCol][d.ID]) )
+    let nonErrorData = data.filter( d => !(xCol in errors && errors[xCol][d.ID]) && !(yCol in errors && errors[yCol][d.ID]) )
 
     // console.log("errorSamples", errorData.length, "nonErrorSamples", nonErrorData.length);
 
