@@ -48,19 +48,20 @@ body, html, h1 {
     margin: 15px;
     padding: 10px;
     align-items: center;
-    width: 1400px;
+    width: 1100px;
     background-color: #f5f5f5;
     border: 2px solid #ccc;
     border-radius: 5px;
-    max-height: 400px; 
+    /* max-height: 400px;  */
     overflow-y: auto;
+    overflow-x: scroll;
     margin-bottom: 50px;
     /* position: relative;
     top: -120px; */
 }
 
 #dirty-rows-table {
-    font-size: 14px; 
+    font-size: 10px; 
   }
 
 #left-panel {
@@ -68,8 +69,8 @@ body, html, h1 {
     flex-direction: column;
     align-items: flex-start;
     flex-shrink: 0;
-    margin-right: 20px;
-    height: 900px;
+    /* margin-right: 20px; */
+    /* height: 900px; */
     background-color: #f5f5f5;
     padding: 0 10px;
 }
@@ -81,7 +82,7 @@ body, html, h1 {
     border: 2px solid #ccc;
     border-radius: 4px;
     font-size: 0.85rem;
-    max-height: 425px;
+    /* max-height: 425px; */
     overflow-y: auto;
     width: 260px;
 }
@@ -163,18 +164,21 @@ body, html, h1 {
     max-width: 1300px;
 }
 
-#matrix-vis-practice, #matrix-vis-stackoverflow {
+#matrix-vis {
     flex-grow: 1;
     display: flex;
     justify-content: center;
     align-items: center;
     min-width: 1050px;
-    margin-left: 50px;
+    margin-left: 20px;
 }
 
 .toolbox-wrapper {
     display: flex;
     flex-direction: column;
+    background-color: #f5f5f5;
+    min-height: 100vh;
+    padding: 0 10px;
 }
 
 #toolbox {
@@ -188,7 +192,7 @@ body, html, h1 {
     background-color: #f5f5f5;
     width: 260px;
     min-height: 200px;
-    margin-left: 70px;
+    /* margin-left: 20px; */
     margin-top: 20px;
 }
 
@@ -265,14 +269,29 @@ body, html, h1 {
     display: block;
 }
 
-.linechart-button,
+.selectionOptions {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 5px;
+    border-radius: 4px;
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+}
+
+.selectionOptions.visible {
+    display: block;
+}
+
 .scatterplot-button,
 .heatmap-button {
     cursor: pointer;
     transition: fill 0.2s;
 }
 
-.linechart-button.active,
 .scatterplot-button.active,
 .heatmap-button.active {
     filter: brightness(1.2);
@@ -348,6 +367,10 @@ body, html, h1 {
     text-overflow: ellipsis;
 }
 
+.svg-legend {
+    font-size: 10px;
+}
+
 #legend {
     left: 10px;
     top: 320px;
@@ -379,6 +402,51 @@ body, html, h1 {
     margin-right: 5px;
     border: 1px solid black;
     flex-shrink: 0;
+}
+
+
+#attribute-sorting{
+    border: 2px solid #ccc;
+    border-radius: 5px;
+        padding: 5px;
+    margin-bottom: 10px;;
+}
+
+.attribute-sorting-item {
+    display: flex;
+    align-items: center;
+    margin: 2px 0;
+    margin-top: 5px;
+    font-size: 14px;
+    max-width: 260px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    cursor: pointer;
+}
+
+.attribute-sorting-item-color {
+    width: 15px;
+    height: 15px;
+    margin-right: 5px;
+    border: 1px solid black;
+    flex-shrink: 0;
+}
+
+.attribute-sorting-item-color-selected {
+    width: 11px;
+    height: 11px;
+    margin-right: 5px;
+    border: 3px solid red;
+    flex-shrink: 0;
+}
+
+.attribute-sorting-title {
+    font-weight: bold;
+    margin-bottom: 2px;
+    text-align: center;
+    border-bottom: solid 1px black;
+    width: 100%;
 }
 
 .modal {
@@ -434,3 +502,99 @@ body, html, h1 {
     display: flex;
     flex-direction: column;
 }
+
+.bottom-axis-text {
+    text-anchor: end;
+    font-size: 8px;
+    transform: rotate(-45deg);
+}
+
+.left-axis-text {
+    font-size: 8px;
+}
+/* 
+            .style("text-anchor", "end") 
+            .style("font-size", "8px")
+            .attr("dx", "-0.5em") 
+            .attr("dy", "0.5em")  
+            .attr("transform", "rotate(-45)") */
+
+
+.svgButton {
+    stroke: gray;
+    fill: lightgray;
+    cursor: pointer;
+    width: 140px;
+    height: 25px;
+    x: 0px; /* Centering the button */
+    y: 0px; /* Centering the button vertically */
+}
+
+.svgButtonText{
+    font-size: 14px;
+    fill: black;
+    cursor: pointer;
+    font-family: sans-serif;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+
+.svgButtonDisabled {
+    stroke: lightgray;
+    fill: whitesmoke;
+    /* cursor: pointer; */
+    width: 140px;
+    height: 25px;
+    x: 0px; /* Centering the button */
+    y: 0px; /* Centering the button vertically */
+}
+
+.svgButtonTextDisabled{
+    font-size: 14px;
+    fill: gray;
+    /* cursor: pointer; */
+    font-family: sans-serif;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+
+.rotatedButton {
+      /* transform: rotate(270deg); */
+      /* transform-origin: center; */
+      padding: 5px 5px;
+      color: black;
+      background-color: lightgray;
+      border: none;
+      cursor: pointer;
+      font-family: sans-serif;
+      font-size: 10px;
+      display: flex;
+      justify-content: center; align-items: center;
+      width: 12px;
+      height: 75px;
+    }
+
+.rotatedButtonText {
+      transform: rotate(270deg);
+      transform-origin: center;
+      /* display: inline-block; */
+      font-family: sans-serif;
+      font-size: 10px;
+      /* width: 100%;
+      height: 100%; */
+      margin-left: 10px;
+      text-align: center;
+      /* line-height: 1.2em; */
+      color: black;
+    }
+
+    .rotatedButtonTextSelected {
+      color: white;
+    }
+
+.rotatedButtonSelected {
+      background-color: gray;
+      color: white;
+    }
