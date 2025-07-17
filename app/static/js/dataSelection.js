@@ -86,7 +86,7 @@ function initWranglersDetectors(controller,errorData){
 
             await controller.init(detectors, wranglers,errorData);
                 } catch (err) {
-                    console.error("Failed to load or run detectors:", err);
+                    console.error("Failed to init controller:", err);
                 }
         })();
 }

@@ -5,7 +5,7 @@ export function draw(model, view, canvas, givenData, xCol) {
     console.log("Drawing bar chart for column:", xCol);
 
     let histData = query_histogram1d(givenData.select(["ID", xCol]).objects(), model.getColumnErrors(), xCol);
-    // console.log("histData", histData);
+    console.log("histData", histData);
 
 
     let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
