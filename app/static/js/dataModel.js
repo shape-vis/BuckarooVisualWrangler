@@ -14,6 +14,7 @@ class DataModel {
     this.fullFilteredData = this.data;              // Same as this.filtered data, except this holds all the columns, not just the 1-3 selected attributes
     this.columnErrorMap = {};                       // Mapping of every error in the dataset with its corresponding column and row ID
     this.originalFilename = null;                   // File name of the input data to be used in the exported python script
+
   }
 
   /**
@@ -280,22 +281,6 @@ class DataModel {
   }
 
   /**
-   * Sets selected points as a result of the user's selection.
-   * @param {*} points 
-   */
-  setSelectedPoints(points) {
-    this.selectedPoints = points;
-  }
-
-  /**
-   * 
-   * @returns The user selected points.
-   */
-  getSelectedPoints() {
-    return this.selectedPoints;
-  }
-
-  /**
    * Loads and runs the detectors to build a column error map that contains all the error types and their associated IDs.
    * @param {*} detectors 
    */
@@ -304,7 +289,10 @@ class DataModel {
   
     for (const detector of detectors) {
       const path = detector.code.startsWith("/") ? detector.code : `/${detector.code}`;
-      const module = await import(path);
+      const loc = window.location.href;
+      const dir = loc.substring(0, loc.lastIndexOf('/'));
+      console.log("detector path", loc, dir, path);
+      const module = await import(dir + path);
       const result = module.default(this.filteredData);
   
       for (const [column, idErrorMap] of Object.entries(result)) {

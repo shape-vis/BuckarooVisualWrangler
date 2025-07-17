@@ -47,17 +47,25 @@ class ScatterplotController {
      * Update the user-selected attribute to group by.
      * @param {*} attribute 
      */
-    updateGrouping(attribute) {
-        console.log("User selected group by:", attribute);
-        
-        this.model.setGroupByAttribute(attribute); 
+    updateGrouping(attributes, groupByAttribute) {
+        console.log("User selected group by:", this.selectedAttributes, attributes);
 
-        const selectedColumns = new Set([...this.selectedAttributes]); 
-        if (attribute && !selectedColumns.has(attribute)) {
-            selectedColumns.add(attribute);  
+        this.model.setGroupByAttribute(groupByAttribute);
+
+        // const selectedColumns = new Set([...this.selectedAttributes]);
+        // if (attribute && !selectedColumns.has(attribute)) {
+        //     selectedColumns.add(attribute);
+        // }
+
+        this.selectedAttributes = ["ID", ...attributes];
+        if (groupByAttribute) {
+            this.selectedAttributes.push(groupByAttribute);
         }
 
-        this.model.setFilteredData(this.model.getFullData().select([...selectedColumns]));
+        console.log("Selected columns after grouping:", this.selectedAttributes);
+
+        // this.model.setFilteredData(this.model.getFullData().select([...attributes]));
+        this.model.setFilteredData(this.model.getFullData().select(this.selectedAttributes));
         this.render(false, true);
     }
 
@@ -155,10 +163,10 @@ class ScatterplotController {
     render(selectionEnabled, animate) {
         if(selectionEnabled)
         {
-            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, animate, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
+            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute());
         }
         else{
-            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, animate);
+            this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute());
         }
     }
 
@@ -206,166 +214,9 @@ class ScatterplotController {
         this.view.setPredicatePoints(predicatePoints);
 
         const selectionEnabled = false;
-        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
+        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute());
     }
   
-    /**
-     * Not currently used, but handles user selections on the scatterplots using brushing.
-     * @param {*} event 
-     * @param {*} xScale 
-     * @param {*} yScale 
-     * @param {*} categoricalXScale 
-     * @param {*} categoricalYScale 
-     * @param {*} xCol 
-     * @param {*} yCol 
-     * @returns 
-     */
-    handleBrush(event, xScale, yScale, categoricalXScale, categoricalYScale, xCol, yCol) {
-        document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;
-        document.getElementById("impute-average-y").textContent = `Impute average for ${yCol}`;
-        this.xCol = xCol;
-        this.yCol = yCol;
-        const selection = event.selection;
-
-        if (!selection) return; 
-
-        const [[x0, y0], [x1, y1]] = selection; 
-
-        const selectedPoints = this.model.getData().objects().filter(d => {
-            let xPos, yPos;
-
-            if(categoricalXScale != null && categoricalYScale != null )
-            {
-                if (typeof d[xCol] === "number" && !isNaN(d[xCol]) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
-                    xPos = xScale(d[xCol]);
-                    yPos = yScale(d[yCol]);
-                } else if ((typeof d[xCol] !== "number" || isNaN(d[xCol])) && typeof d[yCol] === "number" && !isNaN(d[yCol])) {
-                    xPos = categoricalXScale(d[xCol]);
-                    yPos = yScale(d[yCol]);
-                } else if ((typeof d[xCol] === "number" && !isNaN(d[xCol])) && (typeof d[yCol] !== "number" || isNaN(d[yCol]))) {
-                    xPos = xScale(d[xCol]);
-                    yPos = categoricalYScale(d[yCol]);
-                } else {
-                    xPos = categoricalXScale(d[xCol]);
-                    yPos = categoricalYScale(d[yCol]);
-                }
-            }
-            else if(categoricalXScale != null)
-            {
-                if (typeof d[xCol] === "number" && !isNaN(d[xCol])) {
-                    xPos = xScale(d[xCol]);
-                }
-                else {
-                    xPos = categoricalXScale(d[xCol]);
-                }
-
-                yPos = yScale(d[yCol]);
-            }
-            else if(categoricalYScale != null)
-            {
-                if (typeof d[yCol] === "number" && !isNaN(d[yCol])) {
-                    yPos = yScale(d[yCol]);
-                }
-                else {
-                    yPos = categoricalYScale(d[yCol]);
-                }
-
-                xPos = xScale(d[xCol]);
-            }
-            else
-            {
-                xPos = xScale(d[xCol]);
-                yPos = yScale(d[yCol]);
-            }
-            
-
-            return xPos >= x0 && xPos <= x1 && yPos >= y0 && yPos <= y1;
-        });
-
-        console.log("Scatter points:", selectedPoints);
-               
-        this.model.setSelectedPoints(selectedPoints);
-        this.view.setSelectedPoints(selectedPoints);
-        this.updatePreviews(selectedPoints, groupByAttribute, xCol, yCol);
-        this.view.enableBrushing(this.model.getData(), this.handleBrush.bind(this), this.handleBarClick.bind(this), this.model.getGroupByAttribute());
-    }
-  
-    /**
-     * Handler for user clicks on histograms.
-     * @param {*} event 
-     * @param {*} barData 
-     * @param {*} column 
-     * @param {*} groupByAttribute 
-     * @param {*} group 
-     */
-    handleBarClick(event, barData, column, groupByAttribute, group) {
-        console.log("Bar data: ", barData);
-        document.getElementById("impute-average-x").textContent = `Impute average for ${column}`;
-        document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
-
-        this.xCol = column;
-        let selectedPoints = [];
-
-        if(groupByAttribute)
-        {
-            selectedPoints = this.model.getData().objects().filter(d => barData.data.groupIDs[group].includes(d.ID));     
-        }
-        else{
-            selectedPoints = this.model.getData().objects().filter(d => barData.ids.includes(d.ID));
-        }
-
-        console.log("Selected bar points:", selectedPoints);
-        //the selected points is the current user selection of points from interacting with the plots
-        this.model.setSelectedPoints(selectedPoints);
-        this.view.setSelectedPoints(selectedPoints);
-        this.updatePreviews(selectedPoints, groupByAttribute, column);
-
-        const selectionEnabled = true;
-        this.view.plotMatrix(this.model.getData(), this.model.getGroupByAttribute(), this.model.getSelectedGroups(), selectionEnabled, false, this.handleBrush.bind(this), this.handleBarClick.bind(this), this.handleHeatmapClick.bind(this));
-
-        barX0 = barData.x0;
-        barX1 = barData.x1;
-        selectedBar = barData;
-    }
-
-    /**
-     * Handler for user clicks on heatmaps.
-     * @param {*} event 
-     * @param {*} data 
-     * @param {*} xCol 
-     * @param {*} yCol 
-     * @param {*} groupByAttribute 
-     * @param {*} group 
-     */
-    handleHeatmapClick(event, data, xCol, yCol, groupByAttribute, group) {
-        console.log("Heatmap data: ", data);
-        document.getElementById("impute-average-x").textContent = `Impute average for ${xCol}`;
-        document.getElementById("impute-average-y").textContent = `Impute for ${yCol}`;
-
-        this.xCol = xCol;
-        this.yCol = yCol;
-        let selectedPoints = [];
-
-        if(groupByAttribute)
-        {
-            selectedPoints = this.model.getData().objects().filter(d => data.ids[group].includes(d.ID));        
-        }
-        else{
-            selectedPoints = this.model.getData().objects().filter(d => data.ids.includes(d.ID));
-        }
-
-        console.log("Selected heatmap points:", selectedPoints);
-
-        //the selected points is the current user selection of points from interacting with the plots
-        this.model.setSelectedPoints(selectedPoints);
-        //current user selection of points from interacting with the plots
-        this.view.setSelectedPoints(selectedPoints);
-
-        this.updatePreviews(selectedPoints, groupByAttribute, xCol, yCol);
-
-        const selectionEnabled = true;
-        this.render(selectionEnabled, false);        
-    }
 
     /**
      * Handler for user selection of groups through checkboxes in the boxplot pop up.
@@ -381,10 +232,10 @@ class ScatterplotController {
      * Listens for user clicks switching between "View Errors" and "View Groups" in the Visual Encoding Options.
      */
     setupEventListeners() {
-        d3.selectAll("input[name='legend-toggle']").on("change", () => {
-            const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
-            this.updateLegendContent(selectedValue, this.model.getGroupByAttribute());
-        });
+        // d3.selectAll("input[name='legend-toggle']").on("change", () => {
+        //     const selectedValue = d3.select("input[name='legend-toggle']:checked").node().value;
+        //     this.updateLegendContent(selectedValue, this.model.getGroupByAttribute());
+        // });
 
         document.querySelectorAll(".tab-button").forEach(button => {
             button.addEventListener("click", function() {
@@ -418,71 +269,7 @@ class ScatterplotController {
         }
     }
 
-    /**
-     * Updates the preview plots of selected data by calling the view.
-     * @param {*} selectedPoints 
-     * @param {*} groupByAttribute 
-     * @param {*} xCol 
-     * @param {*} yCol 
-     * @returns 
-     */
-    updatePreviews(selectedPoints, groupByAttribute, xCol, yCol){
-        const currData = this.model.getData();
 
-        if (selectedPoints.length === 0) {
-            document.getElementById("preview-remove").style.display = "none";
-            document.getElementById("preview-impute-average-x").style.display = "none";
-            document.getElementById("preview-impute-average-y").style.display = "none";
-            document.getElementById("preview-user-function").style.display = "none";
-            return;
-        }
-    
-        let isHistogram = false;
-        if(!yCol)   isHistogram = true;
-        const removedData = this.model.getPreviewData((row) => !selectedPoints.some((point) => point.ID === row.ID));
-        console.log("removedData", removedData);
-        this.view.drawPreviewPlot(removedData, currData, "preview-remove", isHistogram, groupByAttribute, xCol, yCol);
-    
-        const imputedXData = this.model.previewAverage(xCol);
-        console.log("imputedXData", imputedXData);
-        this.view.drawPreviewPlot(imputedXData, currData, "preview-impute-average-x", isHistogram, groupByAttribute, xCol, yCol);
-    
-        if(yCol){
-            const imputedYData = this.model.previewAverage(yCol);
-            console.log("imputedYData", imputedYData);
-            this.view.drawPreviewPlot(imputedYData, currData, "preview-impute-average-y", isHistogram, groupByAttribute, xCol, yCol);
-        }
-        else{
-            document.getElementById("preview-impute-average-y").style.display = "none";
-        }
-
-        /// Hard coded user repair function (removes all points with the average of xCol). This is not in wranglers.json ///
-
-        const isNumeric = currData.array(xCol).some(v => typeof v === "number" && !isNaN(v));
-        let xAvg = 0;
-
-        /// Calculate numeric average ///
-        if(isNumeric){
-            const columnValues = currData.array(xCol).filter((v) => !isNaN(v) && v > 0);
-            xAvg = columnValues.length > 0 
-                ? parseFloat((columnValues.reduce((a, b) => a + b, 0) / columnValues.length).toFixed(1))
-                : 0;           
-        }
-        /// Calculate categorical mode ///
-        else{
-            const frequencyMap = currData.array(xCol).reduce((acc, val) => {
-                acc[val] = (acc[val] || 0) + 1;
-                return acc;
-            }, {});
-    
-            xAvg = Object.keys(frequencyMap).reduce((a, b) =>
-                frequencyMap[a] > frequencyMap[b] ? a : b
-            );   
-        }
-
-        const removedXAvg = currData.filter(aq.escape(d => d[xCol] !== xAvg));
-        this.view.drawPreviewPlot(removedXAvg, currData, "preview-user-function", isHistogram, groupByAttribute, xCol, yCol);
-    }
 
     updateLegend(groupByAttribute) {
         this.updateLegendContent("errors", groupByAttribute);
@@ -494,129 +281,17 @@ class ScatterplotController {
      * @param {*} groupByAttribute 
      */
     updateLegendContent(type, groupByAttribute) {
-        const legendContainer = d3.select("#legend-content");
-        legendContainer.selectAll(".legend-item").remove();
 
-        if (type === "errors") {
-            const errorTypes = ["Missing Values", "Data Type Mismatch", "Average Anomalies (Outliers)", "Incomplete Data (< 3 points)", "Clean"];
-            const errorColors = d3.scaleOrdinal()
-                .domain(errorTypes)
-                .range(["saddlebrown", "hotpink", "red", "gray", "steelblue"]);
-
-            errorTypes.forEach(error => {
-                const legendItem = legendContainer.append("div")
-                    .attr("class", "legend-item");
-
-                legendItem.append("span")
-                    .attr("class", "legend-color")
-                    .style("background-color", errorColors(error));
-
-                legendItem.append("span")
-                    .text(error);
-            });
-
-            if (this.viewGroupsButton) { 
-                this.viewGroupsButton = false;
-                this.view.setViewGroupsButton(false); 
-                this.render(false, true);
-            }
-
-        } else if (type === "groups" && groupByAttribute) {
-            console.log("Switching to group legend");
-            const uniqueGroups = Array.from(new Set(this.model.getData().objects().map(d => d[groupByAttribute])));
-            const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(uniqueGroups);
-
-            uniqueGroups.forEach(group => {
-                const legendItem = legendContainer.append("div")
-                    .attr("class", "legend-item");
-
-                legendItem.append("span")
-                    .attr("class", "legend-color")
-                    .style("background-color", colorScale(group));
-
-                legendItem.append("span")
-                    .text(group);
-            });
-
-            if (!this.viewGroupsButton) { 
-                this.viewGroupsButton = true;
-                this.view.setViewGroupsButton(true);
-                this.render(false, true);
-            }
-        }
     }
 
 }
-
-/**
-     * The full pipeline test, view -> server -> db -> server -> view
-     */
-async function pipeline(){
-    console.log("mon button pushed");
-        const url = "/api/all"
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Response status: ${response.status}`);
-            }
-                const jsonInfo = await response.json();
-                let jsonText = JSON.stringify(jsonInfo);
-                console.log(jsonInfo);
-                console.log(jsonText);
-                d3.select("#db-test-body").text(jsonText);
-        } catch (error) {
-                console.error(error.message);
-            }
-}
-
 
 /**
  * Handler for user clicks in the Data Repair Toolkit. Calls logic for running data wranglers and re-plots the new dataset.
  * @param {*} controller 
  */
 async function attachButtonEventListeners(controller){
-    d3.select("#undo").on("click", null);
-    d3.select("#redo").on("click", null);
-    d3.select("#clear-selection").on("click", null);
-    d3.select("#remove-selected-data").on("click", null);
-    d3.select("#impute-average-x").on("click", null);
-    d3.select("#impute-average-y").on("click", null);
 
-    d3.select("#mon-button").on("click", async () => pipeline());
-
-    d3.select("#undo").on("click", async () => {
-        console.log("Controller undo: ", controller);
-        controller.model.undoLastTransformation();
-        await controller.model.runDetectors(controller.detectors);
-        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
-        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
-        const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
-    });
-
-
-    d3.select("#redo").on("click", async () => {
-        controller.model.redoLastTransformation();
-        await controller.model.runDetectors(controller.detectors);
-        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
-        controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
-        const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
-    });
-
-    d3.select("#clear-selection").on("click", () => {
-        document.getElementById("impute-average-x").textContent = "Impute selected data with average for X";
-        document.getElementById("impute-average-y").textContent = "Impute selected data with average for Y";
-        document.getElementById("preview-remove").style.display = "none";
-        document.getElementById("preview-impute-average-x").style.display = "none";
-        document.getElementById("preview-impute-average-y").style.display = "none";
-        document.getElementById("preview-user-function").style.display = "none";
-
-        controller.view.setSelectedPoints([]);
-        const selectionEnabled = true;
-        const animate = false;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, animate, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
-    });
 
     d3.select("#remove-selected-data").on("click", async () => {
         document.getElementById("preview-remove").style.display = "none";
@@ -626,11 +301,10 @@ async function attachButtonEventListeners(controller){
 
         //get the selected points that the user clicked on the matrix, can be a single point or many
         const selectedPoints = controller.model.getSelectedPoints();
-        //the remove data wrangler
-        const module = await import("/static/wranglers/removeData.js");
-        //the remove data wrangler returns a function which determines whether an id is in the selected one's
+        const loc = window.location.href;
+        const dir = loc.substring(0, loc.lastIndexOf('/'));
+        const module = await import(dir+"/static/wranglers/removeData.js");
         const condition = module.default(selectedPoints);
-        //gets the error map from the model
         const errorMap = controller.model.getColumnErrors();
         //initializes a map to keep track of any errors that are found in the selected points
         const selectedPointsErrors = {};
@@ -670,7 +344,7 @@ async function attachButtonEventListeners(controller){
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute());
     });
 
     d3.select("#impute-average-x").on("click", async () => {
@@ -680,7 +354,9 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/static/wranglers/imputeAverage.js");
+        const loc = window.location.href;
+        const dir = loc.substring(0, loc.lastIndexOf('/'));
+        const module = await import(dir+"/static/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.xCol, controller.model.getData())
         const transformation = module.default(controller.xCol, controller.model.getData(), selectedPoints);
         const errorMap = controller.model.getColumnErrors();
@@ -716,12 +392,12 @@ async function attachButtonEventListeners(controller){
             value: imputedValue,
             idErrors: selectedPointsErrors
           });
-        controller.view.setSelectedPoints([]);
+        // controller.view.setSelectedPoints([]);
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute() );
     });
 
     d3.select("#impute-average-y").on("click", async () => {
@@ -731,7 +407,9 @@ async function attachButtonEventListeners(controller){
         document.getElementById("preview-user-function").style.display = "none";
 
         const selectedPoints = controller.model.getSelectedPoints();
-        const module = await import("/static/wranglers/imputeAverage.js");
+        const loc = window.location.href;
+        const dir = loc.substring(0, loc.lastIndexOf('/'));
+        const module = await import(dir+"/static/wranglers/imputeAverage.js");
         const imputedValue = computeAverage(controller.yCol, controller.model.getData())
         const transformation = module.default(controller.yCol, controller.model.getData(), selectedPoints);
         const errorMap = controller.model.getColumnErrors();
@@ -767,28 +445,14 @@ async function attachButtonEventListeners(controller){
             value: imputedValue,
             idErrors: selectedPointsErrors
           });
-        controller.view.setSelectedPoints([]);
+        // controller.view.setSelectedPoints([]);
         await controller.model.runDetectors(controller.detectors);
         controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
         controller.view.updateColumnErrorIndicators(controller.model.getFullFilteredData(), controller);
         const selectionEnabled = true;
-        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute(), controller.model.getSelectedGroups(), selectionEnabled, true, controller.handleBrush.bind(controller), controller.handleBarClick.bind(controller), controller.handleHeatmapClick.bind(controller));
+        controller.view.plotMatrix(controller.model.getData(), controller.model.getGroupByAttribute() );
     });
 
-    const radioButtons = document.querySelectorAll("input[name='options']");
-
-    radioButtons.forEach((radio) => {
-        radio.addEventListener("change", (event) => {
-            if (event.target.value === "selectData" && event.target.checked) {
-                const selectionEnabled = true;
-                controller.render(selectionEnabled, false);
-            } else {
-                const selectionEnabled = false;
-                const animate = true;
-                controller.render(selectionEnabled, animate);
-            }
-        });
-    });
 }     
 
 /**

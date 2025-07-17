@@ -15,17 +15,5 @@
         "ID": 3,
         "name": "scatterplot",
         "code": "/static/visualizations/scatterplot.js"
-    },
-
-    {
-        "ID": 4,
-        "name": "linechart",
-        "code": "/static/visualizations/linechart.js"
-    },
-
-    {
-        "ID": 5,
-        "name": "boxplot",
-        "code": "/static/visualizations/boxplots.js"
     }
 ]

@@ -31,32 +31,16 @@
 
     <div class="matrix-and-dropdown-container">
       <div id="left-panel">
+        <div id="attribute-list">
+          <div id="attribute-list-header">
+            <h3>Attribute Summaries</h3>
+          </div>
+          <div id="attribute-sorting"></div>
+          <ul id="attribute-summary-list"></ul>
+        </div>
+
         <div class="dropdown-container">
           <h3 style="align-self: center; text-align: center; width: 100%; margin-top: 5px; margin-bottom: 5px;">Dataset Configuration</h3>
-          <div id="attribute-dropdown" class="dropdown">
-            <button id="dropdown-button">Select Attributes (3/3)</button>
-            <div id="dropdown-menu" class="dropdown-content"></div>
-          </div>
-
-          <div id="group-dropdown-container">
-            <label for="group-dropdown">Group by:</label>
-            <select id="group-dropdown">
-              <option value="">None</option>
-            </select>
-
-            <div id="group-selection-popup" class="modal" style="display: none">
-              <div class="modal-content">
-                <h3 id="overall-average">Overall Salary Average: $XYZ</h3>    <!-- This is hard-coded for the StackOverflow dataset -->
-                <ul id="group-list"></ul>
-                <div class="modal-buttons">
-                  <button id="plot-groups">Plot Selected Groups</button>
-                  <button id="close-popup">Cancel</button>
-                </div>
-              </div>
-            </div>
-
-            <button id="select-groups-btn">Select Groups</button>
-          </div>
 
           <div id="predicate-dropdown-container">
             <label for="predicate-dropdown">Add a Predicate to a Column:</label>
@@ -67,7 +51,7 @@
             <div id="condition-container"></div>
           </div>
         </div>
-        <div id="legend">
+        <!-- <div id="legend">
           <h3>Visual Encoding Options</h3>
           <div class="legend-radio-buttons">
             <input
@@ -88,40 +72,26 @@
             <label for="view-groups">View Groups</label>
           </div>
           <div id="legend-content"></div>
-        </div>
+        </div> -->
 
-        <div id="attribute-list">
-          <div id="attribute-list-header">
-            <h3>Attribute Summaries</h3>
-            <label>
-              Sort by:
-              <select id="sort-errors">
-                <option value="total">Total Error %</option>
-                <option value="missing">Missing</option>
-                <option value="incomplete">Incomplete</option>
-                <option value="mismatch">Mismatch</option>
-                <option value="anomaly">Avg Anomalies (Outliers)</option>
-              </select>
-            </label>
-          </div>
-          <ul id="attribute-summary-list"></ul>
-        </div>
+
       </div>
 
       <div class="matrix-and-toolbox">
-        <div id="tab1" class="tab-content">
-          <div id="matrix-vis-practice"></div>
-        </div>
         <div id="tab2" class="tab-content active">
-          <div id="matrix-vis-stackoverflow"></div>
+          <div id="matrix-vis"><svg id="main-svg" width="1100" height="900"></svg></div>
+              <div id="dirty-rows-container">
+      <h3>Top 10 Rows with Most Errors</h3>
+      <div id="dirty-rows-table-wrapper"></div>
+    </div>
         </div>
 
         <div class="toolbox-wrapper">
           <div id="toolbox">
-            <form id="radio-buttons-form">
+            <!-- <form id="radio-buttons-form"> -->
               <h3>Data Repair Toolkit</h3>
               <p>Explore options below for selecting and repairing data.</p>
-              <h4>Select an option:</h4>
+              <!-- <h4>Select an option:</h4>
               <label>
                 <input type="radio" name="options" value="allData" checked />
                 View all data
@@ -129,15 +99,18 @@
               <label>
                 <input type="radio" name="options" value="selectData" />
                 Select data
-              </label>
-            </form>
-            <div class="undo-redo-container">
-              <button id="undo">Undo</button>
-              <button id="mon-button">mon-button</button>
-              <button id="redo">Redo</button>
-              <button id="clear-selection">Clear Selection</button>
-            </div>
-            <button id="remove-selected-data">Remove Selected Data</button>
+              </label> -->
+            <!-- </form> -->
+            <!-- <div class="undo-redo-container">
+              <button id="undo" disabled>Undo Last Repair</button>
+              <button id="redo" disabled>Redo Last Repair</button> -->
+              <!-- <button id="clear-selection">Clear Selection</button> -->
+            <!-- </div> -->
+
+            <!-- <button id="zoom-data" disabled>Zoom Selected Data</button>
+            <button id="repair-data" disabled>Repair Selected Data</button>
+ -->
+            <!-- <button id="remove-selected-data">Remove Selected Data</button>
             <div id="preview-remove"></div>
             <button id="impute-average-x">
               Impute selected data with average for X
@@ -149,20 +122,14 @@
             <div id="preview-impute-average-y"></div>
             <button id="user-function">
               Apply user specified repair
-            </button>
-            <div id="preview-user-function"></div>
-            <div id="db-test-header">This is where the DB result should appear:</div>
-              <p id="db-test-body"></p>
-            </div>
+            </button> -->
+            <div id="preview-area"></div>
           </div>
         </div>
       </div>
 
       <div id="tooltip" class="tooltip"></div>
-    </div>
-    <div id="dirty-rows-container">
-      <h3>Top 10 Rows with Most Errors</h3>
-      <div id="dirty-rows-table-wrapper"></div>
+      <div id="selectionOptions" class="selectionOptions">Zoom In<br>Preview Repairs</div>
     </div>
   </body>
   <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>
@@ -172,3 +139,12 @@
   <script type = "module" src="{{url_for('static', filename='js/tableFunction.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='js/dataSelection.js') }}"></script>
 </html>
+  <script src="js/query.js"></script>
+  <script src="js/vis_common.js"></script>
+    <script src="visualizations/legendview.js"></script>
+    <script src="visualizations/matrixview.js"></script>
+    <script src="visualizations/tableview.js"></script>
+  <script src="visualizations/repairpanel.js"></script>
+    <script src="visualizations/attributesummaryview.js"></script>
+  <script type="module" src="js/script.js"></script>
+  </html>
