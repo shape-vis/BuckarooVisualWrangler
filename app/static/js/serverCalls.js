@@ -67,4 +67,25 @@ async function getErrorData(filename,dataSize) {
     }
 }
 
-export {uploadFileToDB,getSampleData, getErrorData};
+/**
+ * Get the data size sample rows from the full datatable stored in the database
+ * @returns {Promise<void>}
+ */
+async function queryHistogram1d(filename,columnName, dataSize,minId,maxId,binCount) {
+    console.log("1d histogram fetch");
+    const params = new URLSearchParams({tablename: filename,
+        column:columnName,
+        min_id:minId,
+        max_id:maxId,
+        bins:binCount});
+    const url = `/api/plots/1-d-histogram-data?${params}`
+    try{
+        const response = await fetch(url, {method: "GET"});
+        return await response.json();
+    }
+    catch (error){
+        console.error(error.message)
+    }
+}
+
+export {uploadFileToDB,getSampleData, getErrorData, queryHistogram1d};

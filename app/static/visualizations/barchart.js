@@ -8,6 +8,7 @@ export function draw(model, view, canvas, givenData, xCol) {
     console.log("histData", histData);
 
 
+
     let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
 
@@ -72,7 +73,7 @@ export function draw(model, view, canvas, givenData, xCol) {
             .attr("fill", barColor)
             .attr("stroke", "white")
             .attr("stroke-width", 2);    
-
+    console.log("Bars created:", bars.size());
 
     xScale.draw(canvas);
 
@@ -108,7 +109,7 @@ export function draw(model, view, canvas, givenData, xCol) {
                 selected = [d]; // Reset selection to only the clicked bar
             }
             bars.attr("fill", barColor); // Update colors of all bars
-
+            console.log("First bar position:", bars.node()?.getAttribute('x'), bars.node()?.getAttribute('y'));
             selectionControlPanel.setSelection( canvas, "barchart", [model, view, canvas, givenData, xCol],
                 {
                     data: selected,

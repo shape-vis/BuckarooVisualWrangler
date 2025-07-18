@@ -22,7 +22,7 @@ if(userUploaded === "yes"){
 async function userChoseProvidedDataset(selectedSample) {
 
     let justTheFilename = selectedSample.substring(13, selectedSample.length);
-    let dataSize = 200;
+    let dataSize = 400;
     const inputData = await getSampleData(justTheFilename,dataSize);
     const errorData = await getErrorData(justTheFilename,dataSize)
     console.log("error data from the db", errorData)
@@ -40,7 +40,7 @@ async function userUploadedDataset(fileName) {
         .then(async html => {
             document.body.innerHTML = html;
             console.log(html);
-            let dataSize = 200;
+            let dataSize = 400;
             const inputData = await getSampleData(fileName,dataSize);
             const errorData = await getErrorData(fileName,dataSize)
             console.log("table data from db:", inputData);
@@ -60,7 +60,7 @@ async function userUploadedDataset(fileName) {
 
 function prepForControllerInit(userUploadedFile, table, fileName,errorData){
     d3.select("#matrix-vis-stackoverflow").html("");
-    stackoverflowController = new ScatterplotController(table, "#matrix-vis-stackoverflow");
+    stackoverflowController = new ScatterplotController(table, "#matrix-vis");
 
     if(userUploadedFile) {
         stackoverflowController.model.originalFilename = fileName;
