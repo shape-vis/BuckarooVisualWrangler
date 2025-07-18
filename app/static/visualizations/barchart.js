@@ -1,13 +1,24 @@
+import {queryHistogram1d} from "../js/serverCalls.js";
 
 
-export function draw(model, view, canvas, givenData, xCol) {
+export async function draw(model, view, canvas, givenData, xCol) {
 
     console.log("Drawing bar chart for column:", xCol);
 
-    let histData = query_histogram1d(givenData.select(["ID", xCol]).objects(), model.getColumnErrors(), xCol);
-    console.log("histData", histData);
-
-
+    let min_id_to_select = 1
+    let max_id_to_select = 400
+    let binsToCreate = 10
+    // let histData = query_histogram1d(givenData.select(["ID", xCol]).objects(), model.getColumnErrors(), xCol);
+    // console.log("histData", histData);
+    let histData;
+    try {
+        let response = await queryHistogram1d(xCol, min_id_to_select, max_id_to_select, binsToCreate)
+        histData = response["binned_data"]
+    }
+    catch (error){
+        console.error(error.message)
+    }
+    console.log("1d histData from the server", histData)
 
     let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
@@ -15,18 +26,17 @@ export function draw(model, view, canvas, givenData, xCol) {
     let numHistDataX = histData.scaleX.numeric;
     let catHistDataX = histData.scaleX.categorical;
 
-    const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)], catHistDataX.length === 0 ? null :catHistDataX.map(d => d));
+    const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)], catHistDataX.length === 0 ? null : catHistDataX.map(d => d));
 
     const yScale = d3.scaleLinear()
         .domain([0, d3.max(histData.histograms, d => d.count.items)]).nice()
         .range([view.size, 0]);
 
 
-
     // view.errorColors['none'] = "steelblue";
     // const colorScale = d3.scaleOrdinal().domain(Object.keys(view.errorColors)).range(Object.values(view.errorColors));
     const colorScale = view.errorColors
-    
+
     let myData = []
     histData.histograms.forEach(d => {
         let items = d.count.items;
@@ -57,7 +67,7 @@ export function draw(model, view, canvas, givenData, xCol) {
 
     let selected = []
     let barColor = d => {
-        if( selected.includes(d) ) return "gold";
+        if (selected.includes(d)) return "gold";
         return colorScale(d.name);
     }
 
@@ -66,13 +76,15 @@ export function draw(model, view, canvas, givenData, xCol) {
         .selectAll("rect")
         .data(myData)
         .join("rect")
-            .attr("x", d => xScale.apply( d.type == "numeric" ? numHistDataX[d.bin].x0 : d.bin, d.type ))
-            .attr("y", d => yScale(d.top))
-            .attr("height", d => yScale(d.bottom) - yScale(d.top) )
-            .attr("width", d => { return d.type == "numeric" ? (xScale.numericalBandwidth(numHistDataX[d.bin].x0, numHistDataX[d.bin].x1)) : xScale.categoricalBandwidth() })
-            .attr("fill", barColor)
-            .attr("stroke", "white")
-            .attr("stroke-width", 2);    
+        .attr("x", d => xScale.apply(d.type == "numeric" ? numHistDataX[d.bin].x0 : d.bin, d.type))
+        .attr("y", d => yScale(d.top))
+        .attr("height", d => yScale(d.bottom) - yScale(d.top))
+        .attr("width", d => {
+            return d.type == "numeric" ? (xScale.numericalBandwidth(numHistDataX[d.bin].x0, numHistDataX[d.bin].x1)) : xScale.categoricalBandwidth()
+        })
+        .attr("fill", barColor)
+        .attr("stroke", "white")
+        .attr("stroke-width", 2);
     console.log("Bars created:", bars.size());
 
     xScale.draw(canvas);
@@ -80,15 +92,15 @@ export function draw(model, view, canvas, givenData, xCol) {
 
     // Draw axes
     canvas.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
-    
 
-    backgroundBox.on("click", function(event) {
+
+    backgroundBox.on("click", function (event) {
         console.log("Clicked on heatmap background", event);
         selected = []; // Reset selection
         bars.attr("fill", barColor); // Update colors of all bars
-    });    
+    });
 
-    createTooltip(bars, 
+    createTooltip(bars,
         d => {
             let bin = d.type == "numeric" ? `${Math.round(numHistDataX[d.bin].x0)}-${Math.round(numHistDataX[d.bin].x1)}` : d.bin;
             return `<strong>Bin: </strong>${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
@@ -97,20 +109,19 @@ export function draw(model, view, canvas, givenData, xCol) {
             selectionControlPanel.clearSelection(canvas);
 
             console.log("Left click on bar", d, event);
-            if ( event.shiftKey ) {
+            if (event.shiftKey) {
                 // If shift is pressed, toggle selection
                 if (selected.includes(d)) {
                     selected = selected.filter(item => item !== d);
                 } else {
                     selected.push(d);
                 }
-            }
-            else{
+            } else {
                 selected = [d]; // Reset selection to only the clicked bar
             }
             bars.attr("fill", barColor); // Update colors of all bars
             console.log("First bar position:", bars.node()?.getAttribute('x'), bars.node()?.getAttribute('y'));
-            selectionControlPanel.setSelection( canvas, "barchart", [model, view, canvas, givenData, xCol],
+            selectionControlPanel.setSelection(canvas, "barchart", [model, view, canvas, givenData, xCol],
                 {
                     data: selected,
                     scaleX: histData.scaleX,
@@ -129,6 +140,6 @@ export function draw(model, view, canvas, givenData, xCol) {
             console.log("Double click on bar", d);
         }
     );
-       
+
 
 }

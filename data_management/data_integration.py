@@ -165,7 +165,7 @@ def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
 
     # Get filtered data ( get the window of min/max data from the datatable)
     main_df, error_df = get_filtered_dataframes(min_id, max_id)
-
+    print("got filtered df")
     # Process each column to get bin assignments and scale data
     all_bin_assignments = []
     all_scale_data = []
@@ -179,6 +179,7 @@ def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
         all_scale_data.append(scale_data)
         all_column_types.append(column_type)
 
+    print("bin assignments, and scale data compiled")
     # Create mappings and count items/errors
     row_to_bin_mapping = create_row_to_bin_mapping(main_df, column_names, all_bin_assignments)
     relevant_errors = get_relevant_errors(error_df, column_names)

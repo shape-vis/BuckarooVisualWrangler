@@ -1,18 +1,16 @@
-
-
-
+import {queryHistogram2d} from "../js/serverCalls.js";
 
 
 /**
  * Plots heatmaps on the off-diagonals. Heatmaps are colored by a gradient colorscale based on frequency. A bin is colored an error color if it contains a data point with
- * that error. If group by is active, the bins are colored by group. 
- * Plots can be 4 categories: 
- *      both x & y are numeric, 
- *      x is categorical & y is numeric, 
+ * that error. If group by is active, the bins are colored by group.
+ * Plots can be 4 categories:
+ *      both x & y are numeric,
+ *      x is categorical & y is numeric,
  *      x is numeric & y is categorical,
  *      both x & y are categorical.
- * These cases are all handled separately. Within each case, there are two options: 
- *      Group by is active or group by is not active. 
+ * These cases are all handled separately. Within each case, there are two options:
+ *      Group by is active or group by is not active.
  * These two cases are handled separately.
  *
  * @param {*} model The data model.
@@ -22,11 +20,21 @@
  * @param {*} xCol The x attribute/column.
  * @param {*} yCol The y attribute/column.
  */
-export function draw(model, view, canvas, givenData, xCol, yCol ){
+export async function draw(model, view, canvas, givenData, xCol, yCol) {
 
-    let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
-    // console.log("histData", histData);
-
+    // let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
+    // // console.log("histData", histData);
+    let histData;
+    let minId = 1
+    let maxId = 400
+    let binsToCreate = 10
+    try {
+        let response = await queryHistogram2d(xCol, yCol, minId, maxId, binsToCreate)
+        histData = response["binned_data"]
+    } catch (error) {
+        console.error(error.message)
+    }
+    console.log("2d histData from the server", histData)
 
     let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
@@ -47,31 +55,39 @@ export function draw(model, view, canvas, givenData, xCol, yCol ){
     yScale.draw(canvas);
 
     const colorScale = view.errorColors
-    
+
     let selected = []
     let barColor = d => {
-                            if( selected.includes(d) ) return "gold";
-                            let keys = Object.keys(d.count).filter( key => key !== "items" ); 
-                            if( keys.length === 0 ) return colorScale("none")
-                            if( keys.length === 1 ) return colorScale(keys[0])
-                            return generate_pattern(view.svg, colorScale, keys)
-                        } 
+        if (selected.includes(d)) return "gold";
+        let keys = Object.keys(d.count).filter(key => key !== "items");
+        if (keys.length === 0) return colorScale("none")
+        if (keys.length === 1) return colorScale(keys[0])
+        return generate_pattern(view.svg, colorScale, keys)
+    }
 
     let bars = canvas.append("g")
-                    .selectAll("rect")
-                    .data(histData.histograms.filter( d => d.count.items > 0 ))
-                    .enter()
-                    .append("rect")
-                        .attr("x", d => { return xScale.apply(d.xType == "numeric" ? numHistDataX[d.xBin].x0 : d.xBin, d.xType) })
-                        .attr("y", d => { return yScale.apply(d.yType == "numeric" ? numHistDataY[d.yBin].x1 : d.yBin, d.yType) })
-                        .attr("height", d => {  return d.yType == "numeric" ? yScale.numericalBandwidth(numHistDataY[d.yBin].x1,numHistDataY[d.yBin].x0):  yScale.categoricalBandwidth() } )
-                        .attr("width", d => { return d.xType == "numeric" ? xScale.numericalBandwidth(numHistDataX[d.xBin].x0,numHistDataX[d.xBin].x1) : xScale.categoricalBandwidth() } )
-                        .attr("fill", barColor)
-                        .attr("stroke", "white")
-                        .attr("stroke-width", 1);
-            
+        .selectAll("rect")
+        .data(histData.histograms.filter(d => d.count.items > 0))
+        .enter()
+        .append("rect")
+        .attr("x", d => {
+            return xScale.apply(d.xType == "numeric" ? numHistDataX[d.xBin].x0 : d.xBin, d.xType)
+        })
+        .attr("y", d => {
+            return yScale.apply(d.yType == "numeric" ? numHistDataY[d.yBin].x1 : d.yBin, d.yType)
+        })
+        .attr("height", d => {
+            return d.yType == "numeric" ? yScale.numericalBandwidth(numHistDataY[d.yBin].x1, numHistDataY[d.yBin].x0) : yScale.categoricalBandwidth()
+        })
+        .attr("width", d => {
+            return d.xType == "numeric" ? xScale.numericalBandwidth(numHistDataX[d.xBin].x0, numHistDataX[d.xBin].x1) : xScale.categoricalBandwidth()
+        })
+        .attr("fill", barColor)
+        .attr("stroke", "white")
+        .attr("stroke-width", 1);
 
-    backgroundBox.on("click", function(event) {
+
+    backgroundBox.on("click", function (event) {
         console.log("Clicked on heatmap background", event);
         selected = []; // Reset selection
         bars.attr("fill", barColor); // Update colors of all bars
@@ -83,29 +99,28 @@ export function draw(model, view, canvas, givenData, xCol, yCol ){
             let yBin = d.yType == "numeric" ? `${Math.round(numHistDataY[d.yBin].x0)}-${Math.round(numHistDataY[d.yBin].x1)}` : d.yBin;
             let errorList = "";
             Object.keys(d.count).forEach(key => {
-                if( key === "items") return; // Skip items count in tooltip
+                if (key === "items") return; // Skip items count in tooltip
                 errorList += `<br> - ${key}: ${d.count[key]}`;
             });
-            if( errorList !== "") errorList = "<br><strong>Errors: </strong> " + errorList; 
+            if (errorList !== "") errorList = "<br><strong>Errors: </strong> " + errorList;
             return `<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`;
         },
         (d, event) => {
             selectionControlPanel.clearSelection(canvas);
 
             console.log("Left click on heatmap bin", d, event);
-            if ( event.shiftKey ) {
+            if (event.shiftKey) {
                 if (selected.includes(d)) {
                     selected = selected.filter(item => item !== d);
                 } else {
                     selected.push(d);
                 }
-            }
-            else{   
+            } else {
                 selected = [d]; // Reset selection to only the clicked bin
             }
             bars.attr("fill", barColor); // Update colors of all bars
 
-            selectionControlPanel.setSelection( canvas, "heatmap", [model, view, canvas, givenData, xCol, yCol],
+            selectionControlPanel.setSelection(canvas, "heatmap", [model, view, canvas, givenData, xCol, yCol],
                 {
                     data: selected,
                     scaleX: histData.scaleX,

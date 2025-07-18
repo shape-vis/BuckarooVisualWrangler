@@ -28,7 +28,7 @@ def get_1d_histogram():
         3. desired id min and max values of the table to return to the view
     :return: the data as a csv
     """
-    tablename = request.args.get("tablename")
+    # tablename = request.args.get("tablename")
     column_name = request.args.get("column")
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
@@ -36,7 +36,7 @@ def get_1d_histogram():
 
     try:
         print("in the try")
-        binned_data = generate_1d_histogram_data(column_name, number_of_bins, min_id, max_id)
+        binned_data = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
         return {"Success": True, "binned_data": binned_data}
     except Exception as e:
         return {"Success": False, "Error": str(e)}
@@ -48,7 +48,7 @@ def get_2d_histogram():
     Endpoint to return data to be used to construct the 1d histogram in the view - user will pass in parameters for the axis that is filled in
     :return: the data as a csv
     """
-    tablename = request.args.get("tablename")
+    # tablename = request.args.get("tablename")
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
     min_id = request.args.get("min_id", default=0)

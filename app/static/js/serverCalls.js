@@ -68,12 +68,12 @@ async function getErrorData(filename,dataSize) {
 }
 
 /**
- * Get the data size sample rows from the full datatable stored in the database
+ * Get the data for the 1d histogram in the view
  * @returns {Promise<void>}
  */
-async function queryHistogram1d(filename,columnName, dataSize,minId,maxId,binCount) {
+async function queryHistogram1d(columnName,minId,maxId,binCount) {
     console.log("1d histogram fetch");
-    const params = new URLSearchParams({tablename: filename,
+    const params = new URLSearchParams({
         column:columnName,
         min_id:minId,
         max_id:maxId,
@@ -88,4 +88,31 @@ async function queryHistogram1d(filename,columnName, dataSize,minId,maxId,binCou
     }
 }
 
-export {uploadFileToDB,getSampleData, getErrorData, queryHistogram1d};
+/**
+ * Get the data for the 2d histogram in the view
+ * @param xColumn
+ * @param yColumn
+ * @param inId
+ * @param maxId
+ * @param binCount
+ * @returns {Promise<any>}
+ */
+async function queryHistogram2d(xColumn,yColumn,minId,maxId,binCount) {
+    console.log("2d histogram fetch");
+    const params = new URLSearchParams({
+        x_column:xColumn,
+        y_column:yColumn,
+        min_id:minId,
+        max_id:maxId,
+        bins:binCount});
+    const url = `/api/plots/2-d-histogram-data?${params}`
+    try{
+        const response = await fetch(url, {method: "GET"});
+        return await response.json();
+    }
+    catch (error){
+        console.error(error.message)
+    }
+}
+
+export {uploadFileToDB,getSampleData, getErrorData, queryHistogram1d, queryHistogram2d};
