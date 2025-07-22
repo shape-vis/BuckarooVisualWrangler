@@ -1,5 +1,5 @@
 #Buckaroo Project - June 1, 2025
-#This file helps deliver on services the server provides
+#This file helps deliver on endpoint services
 
 import re
 

@@ -14,6 +14,7 @@ from app.service_helpers import clean_table_name, get_whole_table_query, run_det
     group_by_attribute, is_categorical, create_bins_for_a_numeric_column, add_normal_row_to_error_dist, \
     get_error_dist
 from data_management.data_integration import *
+from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
 
 
 # from data_management.data_integration import generate_1d_histogram_data
@@ -63,8 +64,23 @@ def get_2d_histogram():
     except Exception as e:
         return {"Success": False, "Error": str(e)}
 
+@app.get("/api/plots/scatterplot")
+def get_scatterplot_data():
+    x_column_name = request.args.get("x_column")
+    y_column_name = request.args.get("y_column")
+    min_id = request.args.get("min_id", default=0)
+    max_id = request.args.get("max_id", default=200)
+    error_sample_count = request.args.get("error_sample_count", default=30)
+    total_sample_count = request.args.get("total_sample_count", default=100)
 
-#add endpoints for the scatterplots and also to have min max ranges for the numerical value and lists of values for categorical
+    try:
+        # print("in the try")
+        scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
+        # print(scatterplot_data)
+        return {"Success": True, "scatterplot_data": scatterplot_data}
+
+    except Exception as e:
+        return {"Success": False, "Error": str(e)}
 
 
 @app.get("/api/plots/group-by")
@@ -141,6 +157,4 @@ def attribute_summaries():
         return {"success": False, "error": str(e)}
 
 
-@app.get("/api/plots/scatterplot")
-def get_scatterplot_data():
-    pass
+

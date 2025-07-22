@@ -115,4 +115,25 @@ async function queryHistogram2d(xColumn,yColumn,minId,maxId,binCount) {
     }
 }
 
+export async function querySample2d(xColumn, yColumn, minId, maxId, errorSamples, totalSamples) {
+    console.log("2d sample fetch");
+    const params = new URLSearchParams({
+        x_column:xColumn,
+        y_column:yColumn,
+        min_id:minId,
+        max_id:maxId,
+        error_sample_count:errorSamples,
+        total_sample_count:totalSamples});
+
+    const url = `/api/plots/scatterplot?${params}`
+    try{
+        const response = await fetch(url, {method: "GET"});
+        return await response.json();
+    }
+    catch (error){
+        console.error(error.message)
+    }
+}
+
+
 export {uploadFileToDB,getSampleData, getErrorData, queryHistogram1d, queryHistogram2d};

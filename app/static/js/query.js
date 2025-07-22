@@ -340,16 +340,21 @@ function query_sample2d(data, errors, xCol, yCol, errorSamples, totalSamples ) {
         return curErrors;
     }
 
-
+    //get the error data from the errormap in the model, filter to only the errors present in either x or y column selected
     let errorData = data.filter( d => (xCol in errors && errors[xCol][d.ID]) || (yCol in errors && errors[yCol][d.ID]) )
+    //do the same but for those not in the error map
     let nonErrorData = data.filter( d => !(xCol in errors && errors[xCol][d.ID]) && !(yCol in errors && errors[yCol][d.ID]) )
 
     console.log("errorSamples", errorData.length, "nonErrorSamples", nonErrorData.length);
 
+    //this randomly removes some of the data from the errormap to be used in generating the scatterplot when there is more than the desired sample sizeß
     while( errorData.length > errorSamples ){
+        //get a random id to select
         let idx = Math.floor(Math.random() * errorData.length);
+        //splice(start, deleteCount) - so this means delete an error from at the random id selected
         errorData.splice(idx, 1);
     }
+    //does the same as above but for the non error data
     while( (errorData.length + nonErrorData.length) > totalSamples ){
         let idx = Math.floor(Math.random() * nonErrorData.length);
         nonErrorData.splice(idx, 1);
