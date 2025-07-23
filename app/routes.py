@@ -14,28 +14,6 @@ from app import data_state_manager
 from app.set_id_column import set_id_column
 
 
-#this endpoint is just for reference of how to use a cursor object if not using pandas
-#We tell Flask what endpoint to accept data in using a decorator (@)
-@app.post("/api/room")
-def create_room():
-    #We expect the client to send us JSON data, 
-    # which we retrieve from the incoming request using request.get_json().
-    data = request.get_json()
-    name = data["name"]
-    with connection:
-        # We connect to the database and use a cursor to interact with it. 
-        # Here we use context managers so we don't have to remember to close the connection manually.
-        with connection.cursor() as cursor:
-            # We create the table (since it only runs IF NOT EXISTS), and insert the record.
-            cursor.execute(CREATE_ROOMS_TABLE)
-            cursor.execute(INSERT_ROOM_RETURN_ID, (name,))
-            #We get the result of running our query, which should be the inserted row id.
-            room_id = cursor.fetchone()[0]
-    # We return a Python dictionary, which Flask conveniently converts to JSON.
-    # The return status code is 201, which means "Created". 
-    # It's a way for our API to tell the client succinctly the status of the request.        
-    return {"id": room_id, "message": f"Room {name} created."}, 201
-
 @app.post("/api/upload")
 def upload_csv():
     """

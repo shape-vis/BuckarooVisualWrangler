@@ -135,5 +135,20 @@ export async function querySample2d(xColumn, yColumn, minId, maxId, errorSamples
     }
 }
 
+export async function queryAttributeSummaries(minId, maxId) {
+    const params = new URLSearchParams({
+        min_id:minId,
+        max_id:maxId,});
+
+    const url = `/api/plots/summaries?${params}`
+    try{
+        const response = await fetch(url, {method: "GET"});
+        return await response.json();
+    }
+    catch (error){
+        console.error(error.message)
+    }
+}
+
 
 export {uploadFileToDB,getSampleData, getErrorData, queryHistogram1d, queryHistogram2d};

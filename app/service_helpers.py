@@ -3,10 +3,7 @@
 
 import re
 
-import numpy as np
 import pandas as pd
-from pandas.core.dtypes.common import is_categorical_dtype
-from sqlalchemy.dialects.mssql.information_schema import columns
 
 from app import data_state_manager
 from app.set_id_column import set_id_column
@@ -33,6 +30,8 @@ def clean_table_name(csv_name):
 
 def init_session_data_state(df,error_df,data_state_manager):
     table_dict = {"df":df,"error_df":error_df}
+    print("current session main df:", df)
+    print("current session error df:", error_df)
     data_state_manager.set_original_df(df)
     data_state_manager.set_original_error_table(error_df)
     data_state_manager.set_current_state(table_dict)
@@ -104,29 +103,15 @@ def run_detectors(data_frame):
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
     return perform_melt(frames)
 
-def get_error_dist(error_df):
+def get_error_dist(error_df,normal_df):
     res = error_df.pivot_table("row_id", index="error_type", columns='column_id', aggfunc="count")
     res_mask = res.fillna(0)
+    total_ids = normal_df['ID'].count()
+    res_mask.iloc[:, 0:] = res_mask.iloc[:, 0:].div(total_ids)
+
+    # Flatten the multi-level columns
+    res_mask = res_mask.reset_index()
     return res_mask
-
-
-def add_normal_row_to_error_dist(error_distribution,normal_df):
-  new_row = {}
-  for col in error_distribution.columns:
-    print(col)
-    normal_column_size = normal_df[col].size
-    error_distribution_column_size = error_distribution[col].sum()
-    new_row[col] = [(normal_column_size - error_distribution_column_size)/normal_column_size]
-
-  for col in normal_df.columns:
-      if col not in new_row.keys() and col != "ID":
-          new_row[col] = [1]
-
-  row_to_add = pd.DataFrame(data=new_row,index=['no_errors'])
-  full_dist_with_nans = pd.concat([error_distribution,row_to_add],axis=0)
-  full_dist_without_nans = full_dist_with_nans.fillna(0)
-  renamed_index_df = full_dist_without_nans.rename_axis("error_type")
-  return renamed_index_df
 
 def create_error_dict(df, error_size):
     try:
@@ -165,10 +150,15 @@ def get_2d_bins(column_a,column_b, range,bin_count):
     #make the number of bins for numeric be an option
 
 def slice_data_by_min_max_ranges(min_val,max_val,df,error_df):
+    print("in min/max ranges")
     min_val_int = int(min_val)
     max_val_int = int(max_val)
-    sliced_max_df = df[df["ID"] <= max_val_int]
-    sliced_min_max_df = sliced_max_df[sliced_max_df["ID"] >= min_val_int]
+
+    if "ID" not in df.columns:
+        df = set_id_column(df)
+
+    sliced_max_df = df[df["ID" or "index"] <= max_val_int]
+    sliced_min_max_df = sliced_max_df[sliced_max_df["ID" or "index"] >= min_val_int]
 
     sliced_error_max_df = error_df[error_df["row_id"] <= max_val_int]
     sliced_min_max_error_df = sliced_error_max_df[sliced_error_max_df["row_id"] >= min_val_int]
@@ -198,6 +188,8 @@ def is_categorical(column_a):
             largest_type = value
             value_type = key
     if value_type == "str":
+        return True
+    if value_type is None:
         return True
     else:
         return False

@@ -119,7 +119,7 @@ def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
     """Generate histogram data for 1D or 2D histograms"""
     if len(column_names) > 2:
         raise ValueError("Maximum 2 dimensions supported for now")
-
+    print("generating histogram data")
     # Get filtered data ( get the window of min/max data from the datatable)
     main_df, error_df = get_filtered_dataframes(min_id, max_id)
     print("got filtered df")
@@ -135,6 +135,7 @@ def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
         all_bin_assignments.append(bin_assignments)
         all_scale_data.append(scale_data)
         all_column_types.append(column_type)
+        print("Added column to bin assignments and scale data:", column_name)
 
     print("bin assignments, and scale data compiled")
     # Create mappings and count items/errors

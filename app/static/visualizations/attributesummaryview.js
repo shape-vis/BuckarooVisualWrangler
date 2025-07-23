@@ -1,12 +1,8 @@
 
-
-
-
 class AttributeSummaryView {
     constructor(container, model) {
 
         this.container = container;
-
         this.selectedAttributes = ["ConvertedSalary"];                                         // The attributes currently selected by the user to be displayed in the matrix
         this.groupByAttribute = null;
 
@@ -32,16 +28,30 @@ class AttributeSummaryView {
     /**
      * Populates the list of columns in the "Select Attributes" dropdown menu. Also initially populates the Attribute Summaries box.
      * @param {*} table Data
-     * @param {*} controller 
+     * @param {*} controller
      */
-    populateDropdownFromTable(table, controller) {
+    async populateDropdownFromTable(table, controller) {
         this.createSortingLegend(table, controller);
 
-        const summaryData = query_attribute_summary(controller,table);
+        // const summaryData = query_attribute_summary(controller,table);
+        // console.log("Summary Data:",summaryData)
+
+        let minID = 0;
+        let maxID = 400;
+        let summaryData;
+        try {
+            const { queryAttributeSummaries } = await import("../js/serverCalls.js");
+            let response = await queryAttributeSummaries(minID, maxID)
+            summaryData = response["data"]
+        } catch (error) {
+            console.error(error.message)
+        }
+        console.log("attribute summaries from the server", summaryData)
+
         const sortedAttributes = this.sortAttributes(summaryData.attributes, summaryData.columnErrors);
 
         this.selectedAttributes = sortedAttributes.slice(0, 3);  // Default to first 3 attributes
-        controller.updateGrouping (this.selectedAttributes, this.groupByAttribute)
+        controller.updateGrouping(this.selectedAttributes, this.groupByAttribute)
 
 
         this.updateColumnErrorIndicators(table, controller, summaryData, sortedAttributes);

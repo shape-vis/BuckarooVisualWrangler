@@ -10,11 +10,11 @@ visualizations = {};
       
       const loc = window.location.href;
       const dir = loc.substring(0, loc.lastIndexOf('/'));
-      console.log("loading visualization", loc, visualization.name, "from", visualization.code);
+      // console.log("loading visualization", loc, visualization.name, "from", visualization.code);
       visualization.module = await import(dir + visualization.code);
       visualizations[visualization.name] = visualization
     }
-    console.log("visualizations", visualizations);
+    // console.log("visualizations", visualizations);
     // console.log("visualizations", visualizations);
 
   } catch (err) {

@@ -1,18 +1,11 @@
 #Buckaroo Project - July 2, 2025,
 #This file handles all endpoints surrounding plots
-from email.policy import default
 
-import numpy as np
-import pandas as pd
-from flask import request, render_template
-from numpy import number
-from sqlalchemy import column
+from flask import request
 
-from app import app, data_state_manager
-from app import connection, engine
-from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, get_2d_bins, \
-    group_by_attribute, is_categorical, create_bins_for_a_numeric_column, add_normal_row_to_error_dist, \
-    get_error_dist
+from app import app
+from app.service_helpers import group_by_attribute
+from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
 from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
 
@@ -49,7 +42,6 @@ def get_2d_histogram():
     Endpoint to return data to be used to construct the 1d histogram in the view - user will pass in parameters for the axis that is filled in
     :return: the data as a csv
     """
-    # tablename = request.args.get("tablename")
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
     min_id = request.args.get("min_id", default=0)
@@ -57,7 +49,6 @@ def get_2d_histogram():
     number_of_bins = request.args.get("bins", default=10)
 
     try:
-        print("in the try")
         binned_data = generate_2d_histogram_data(x_column_name, y_column_name, number_of_bins, number_of_bins, min_id,
                                                  max_id)
         return {"Success": True, "binned_data": binned_data}
@@ -74,11 +65,8 @@ def get_scatterplot_data():
     total_sample_count = request.args.get("total_sample_count", default=100)
 
     try:
-        # print("in the try")
         scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
-        # print(scatterplot_data)
         return {"Success": True, "scatterplot_data": scatterplot_data}
-
     except Exception as e:
         return {"Success": False, "Error": str(e)}
 
@@ -144,15 +132,13 @@ def attribute_summaries():
     Populates the error attribute summaries
     :return:
     """
+    min_id = request.args.get("min_id", default=0)
+    max_id = request.args.get("max_id", default=200)
     try:
         #get the current error table
-        current_data_state = data_state_manager.get_current_state()
-        normal_df = current_data_state['df']
-        error_df = current_data_state['error_df']
-        full_summary = add_normal_row_to_error_dist(get_error_dist(error_df), normal_df)
-        full_summary_dict = full_summary.to_dict(orient="records")
-        return {"success": True, "data": full_summary_dict}
-
+        print("in the get summaries")
+        table_attribute_summaries = generate_complete_json(int(min_id), int(max_id))
+        return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
