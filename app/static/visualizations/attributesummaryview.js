@@ -41,7 +41,7 @@ class AttributeSummaryView {
         let summaryData;
         try {
             const { queryAttributeSummaries } = await import("../js/serverCalls.js");
-            let response = await queryAttributeSummaries(minID, maxID)
+            let response = await queryAttributeSummaries(controller.model.getSampleIDRangeMin(), controller.model.getSampleIDRangeMax())
             summaryData = response["data"]
         } catch (error) {
             console.error(error.message)
@@ -212,14 +212,21 @@ class AttributeSummaryView {
 
     /**
      * Updates the Attribute Summaries as data is wrangled and if the user changes which error type to sort on.
-     * @param {*} table 
-     * @param {*} controller 
+     * @param {*} table
+     * @param {*} controller
      * @returns If the container does not exist, else should just update the UI.
      */
-    updateColumnErrorIndicators(table, controller, summaryData = null, sortedAttributes = null) {
+    async updateColumnErrorIndicators(table, controller, summaryData = null, sortedAttributes = null) {
 
         if (summaryData === null) {
-            summaryData = query_attribute_summary(controller,table);
+            // summaryData = query_attribute_summary(controller,table);
+            try {
+                const {queryAttributeSummaries} = await import("../js/serverCalls.js");
+                let response = await queryAttributeSummaries(controller.model.getSampleIDRangeMin(), controller.model.getSampleIDRangeMax())
+                summaryData = response["data"]
+            } catch (error) {
+                console.error(error.message)
+            }
         }
         // console.log("summaryData", summaryData);
 
@@ -233,10 +240,10 @@ class AttributeSummaryView {
 
         const container = document.getElementById("attribute-list");
         if (!container) return;
-        
+
         const ul = document.getElementById("attribute-summary-list");
         ul.innerHTML = "";
-            
+
         sortedAttributes.forEach(attr => {
             this.attributeElements[attr] = {}
 
@@ -247,8 +254,8 @@ class AttributeSummaryView {
             li.style.gap = "4px";
             li.style.marginBottom = "16px";
 
-            li.appendChild(this.createSelectButton(attr,controller));
-            li.appendChild(this.createGroupByButton(attr,controller));
+            li.appendChild(this.createSelectButton(attr, controller));
+            li.appendChild(this.createGroupByButton(attr, controller));
 
             //
             //
@@ -272,16 +279,16 @@ class AttributeSummaryView {
             label.style.fontWeight = "1000";
             label.style.marginRight = "10px";
             topRow.appendChild(label);
-    
+
             const errorTypes = columnErrors[attr] || {};
-    
+
             Object.entries(errorTypes).forEach(([type, pct]) => {
                 const box = document.createElement("span");
                 box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
                 box.classList.add("error-scent");
                 box.style.backgroundColor = this.errorColors(type);
 
-                  
+
                 const percentText = document.createElement("span");
                 percentText.textContent = `${Math.round(pct * 100)}%`;
                 percentText.style.fontSize = "10px";
@@ -292,7 +299,7 @@ class AttributeSummaryView {
                 percentText.style.right = "0";
                 percentText.style.transform = "translate(75%, 15%)";
                 box.appendChild(percentText);
-    
+
                 topRow.appendChild(box);
             });
 
@@ -313,7 +320,7 @@ class AttributeSummaryView {
                               <div>Category Count: ${attrDist.categorical.categories}</div>`;
             }
             stats.innerHTML = statsHTML;
-            
+
             div.appendChild(stats);
 
             const errorEntries = Object.entries(errorTypes);
@@ -344,10 +351,10 @@ class AttributeSummaryView {
             }
 
             div.appendChild(barContainer);
-    
+
             ul.appendChild(li);
         });
-    
+
         container.appendChild(ul);
     }
 }

@@ -25,15 +25,13 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
     // let histData = query_histogram2d(givenData.select(["ID", xCol, yCol]).objects(), model.getColumnErrors(), xCol, yCol);
     // // console.log("histData", histData);
     let histData;
-    let minId = 1
-    let maxId = 400
+    // let minId = 1
+    // let maxId = 400
     let binsToCreate = 10
     try {
-        let response = await queryHistogram2d(xCol, yCol, minId, maxId, binsToCreate)
+        let response = await queryHistogram2d(xCol, yCol, model.getSampleIDRangeMin(), model.getSampleIDRangeMax(), binsToCreate)
         histData = response["binned_data"]
-    } catch (error) {
-        console.error(error.message)
-    }
+
     console.log("2d histData from the server", histData)
 
     let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
@@ -139,5 +137,8 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
             console.log("Double click on heatmap bin", d);
         }
     );
+}catch (error) {
+        console.error(error.message)
+    }
 }
 

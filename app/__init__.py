@@ -60,4 +60,5 @@ engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{
 from app import routes
 from app import wrangler_routes
 from app import plot_routes
+from app import db_plot_routes
 #manages the different data instances of the data during the users session
