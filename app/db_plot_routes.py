@@ -25,15 +25,15 @@ def get_1d_histogram_db():
     tablename = request.args.get("tablename")
     cleaned_name = clean_table_name(tablename)
     column_name = request.args.get("column")
-    # min_id = request.args.get("min_id", default=0)
-    # max_id = request.args.get("max_id", default=200)
-    # number_of_bins = request.args.get("bins", default=10)
-    query = f"SELECT generate_1dhistogram_with_errors('{cleaned_name}', 'errors{cleaned_name}', '{column_name}');"
+    min_id = request.args.get("min_id", default=0)
+    max_id = request.args.get("max_id", default=200)
+    number_of_bins = request.args.get("bins", default=10)
+    query = f"SELECT generate_one_d_histogram_with_errors('{cleaned_name}', 'errors{cleaned_name}', '{column_name}', {number_of_bins}, {min_id}, {max_id});"
 
     try:
         print("in the try")
         binned_data = pd.read_sql_query(query, engine).to_dict()
-        histogram = binned_data["generate_1dhistogram_with_errors"][0]
+        histogram = binned_data["generate_one_d_histogram_with_errors"][0]
         return {"Success": True, "binned_data": histogram}
     except Exception as e:
         return {"Success": False, "Error": str(e)}

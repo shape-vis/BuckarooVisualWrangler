@@ -13,7 +13,8 @@ export async function draw(model, view, canvas, givenData, xCol,previewFlag) {
     let histData;
     try {
         if(model.getUsingDb()){
-            let response = await queryHistogram1dDB(xCol, model.originalFilename)
+            let response = await queryHistogram1dDB(xCol, model.originalFilename,
+                model.getSampleIDRangeMin(),model.getSampleIDRangeMax(), binsToCreate)
             histData = response ["binned_data"]
         }
         else {
