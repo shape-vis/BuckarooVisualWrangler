@@ -1,0 +1,19 @@
+[
+    {
+        "ID": 1,
+        "name": "barchart",
+        "code": "/static/visualizations/barchart.js"
+    },
+
+    {
+        "ID": 2,
+        "name": "heatmap",
+        "code": "/static/visualizations/heatmap.js"
+    },
+
+    {
+        "ID": 3,
+        "name": "scatterplot",
+        "code": "/static/visualizations/scatterplot.js"
+    }
+]

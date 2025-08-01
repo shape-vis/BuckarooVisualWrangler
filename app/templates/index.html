@@ -1,0 +1,230 @@
+<!--<!DOCTYPE html>-->
+<!--<html lang="en">-->
+<!--    <head>-->
+<!--        <meta charset="UTF-8" />-->
+
+<!--        <title>Buckaroo Direct Manipulation Visual Data Cleaning Tool</title>-->
+
+<!--        <link rel="icon" type="image/png" href="{{ url_for('static',filename='images/favicon/favicon-96x96.png')}}" sizes="96x96" />-->
+<!--        <link rel="icon" type="image/svg+xml" href="{{ url_for('static',filename='images/favicon/favicon.svg')}}" />-->
+<!--        <link rel="shortcut icon" href="{{ url_for('static',filename='images/favicon/favicon.ico')}}" />-->
+<!--        <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static',filename='images/favicon/apple-touch-icon.png')}}" />-->
+<!--        <link rel="manifest" href="{{ url_for('static',filename='images/favicon/site.webmanifest')}}" />-->
+
+<!--        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles.css')}}" />-->
+<!--        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />-->
+
+<!--        <script src="https://d3js.org/d3.v7.min.js"></script>-->
+
+<!--        &lt;!&ndash;Arquero will be imported into the aq global object &ndash;&gt;-->
+<!--        <script src="https://cdn.jsdelivr.net/npm/arquero@latest"></script>-->
+
+<!--        <script>-->
+<!--            function loadDataset(filename) {-->
+<!--                localStorage.setItem("userUploaded","no");-->
+<!--                localStorage.setItem("selectedSample",filename);-->
+<!--              window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";-->
+<!--            }-->
+
+<!--            async function fileUpload() {-->
+<!--                const uploadedFile = document.getElementById("fileInput").files[0];-->
+<!--                const fileToSend = new FormData();-->
+<!--                fileToSend.append("file",uploadedFile);-->
+<!--                console.log("starting upload");-->
+<!--                const url = "/api/upload"-->
+<!--                try {-->
+<!--                    const response = await fetch(url, {-->
+<!--                        method: "POST",-->
+<!--                        body: fileToSend-->
+<!--                    });-->
+<!--                    if (!response.ok) {-->
+<!--                        throw new Error(`Response status: ${response.status}`);-->
+<!--                    }-->
+<!--                    if (response.statusText === "OK") {-->
+<!--                        /** Add a way to tell the user that the csv was uploaded successfully*/-->
+<!--                        localStorage.setItem("userUploaded", "yes");-->
+<!--                        localStorage.setItem("selectedSample", uploadedFile['name'])-->
+<!--                        console.log(uploadedFile);-->
+<!--                        window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";-->
+<!--                    }-->
+<!--                } catch (error) {-->
+<!--                    console.error(error.message);-->
+<!--                    /** Also should add something which tells the user on the UI that the error occurred */-->
+<!--                }-->
+<!--                // localStorage.setItem("userUpload",file.name)-->
+<!--            }-->
+<!--        </script>-->
+
+<!--        <script>-->
+<!--            function storeDataRangeValues(minVal,maxVal){-->
+<!--                localStorage.setItem("minIDVal",minVal);-->
+<!--                localStorage.setItem("maxIDVal",maxVal);-->
+<!--            }-->
+<!--        </script>-->
+
+<!--    </head>-->
+
+<!--    <body>-->
+<!--        <div id="header">-->
+<!--            <h1>Buckaroo Visual Wrangler 🤠</h1>-->
+<!--        </div>-->
+
+<!--        <div class="matrix-and-toolbox">-->
+<!--            <div id="tab1" class="tab-content">-->
+<!--            <div id="matrix-vis-practice"></div>-->
+<!--            </div>-->
+<!--            <div id="tab2" class="tab-content active">-->
+<!--                <div id="matrix-vis-stackoverflow"></div>-->
+<!--                <div id="placeholder-message" style="text-align: center; margin-top: 200px; margin-left: 750px; font-size: 40px; color: darkslategrey;">-->
+<!--                    <div>Welcome to Buckaroo!</div>-->
+<!--                    <div style="font-size: 24px; margin-top: 10px; color: gray;">-->
+<!--                        Start by selecting a dataset or uploading your own:-->
+<!--                        <br><br>-->
+<!--                        <div class="dataset-button" onclick="loadDataset('/static/data/stackoverflow_db_uncleaned.csv')">StackOverflow Survey</div>-->
+<!--                        <div class="dataset-button" onclick="loadDataset('/static/data/Crimes_-_One_year_prior_to_present_20250421.csv')"> Chicago Crime</div>-->
+<!--                        <div class="dataset-button" onclick="loadDataset('/static/data/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>-->
+<!--                        <div class="file-upload" style="text-align: center; margin-left: auto; margin-right:auto; margin-top: 20px; font-size: 20px; color: darkslategrey;">-->
+<!--                            <label for="fileInput">Select a File:</label>-->
+<!--                            <input type="file" id="fileInput" accept=".csv" oninput="fileUpload()"/>-->
+<!--                        </div>-->
+<!--                        <div class="data-size-range">-->
+<!--                            <label for="min-id">Min ID:</label>-->
+<!--                            <input type="number" value="0 "id="min-id" name="min-id" min="0" max="49000" />-->
+<!--                            <label for="max-id">Max ID:</label>-->
+<!--                            <input type="number" value="400" id="max-id" name="max-id" min="0" max="50000" />-->
+
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </body>-->
+
+<!--&lt;!&ndash;    <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>&ndash;&gt;-->
+<!--&lt;!&ndash;    <script src="{{ url_for('static', filename='js/scatterplotMatrixView.js') }}"></script>&ndash;&gt;-->
+<!--&lt;!&ndash;    <script src="{{ url_for('static', filename='js/controller.js') }}"></script>&ndash;&gt;-->
+<!--&lt;!&ndash;    <script type="module" src="{{ url_for('static', filename='js/dataSelection.js') }}"></script>&ndash;&gt;-->
+
+<!--</html>-->
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+
+        <title>Buckaroo Direct Manipulation Visual Data Cleaning Tool</title>
+
+        <link rel="icon" type="image/png" href="{{ url_for('static',filename='images/favicon/favicon-96x96.png')}}" sizes="96x96" />
+        <link rel="icon" type="image/svg+xml" href="{{ url_for('static',filename='images/favicon/favicon.svg')}}" />
+        <link rel="shortcut icon" href="{{ url_for('static',filename='images/favicon/favicon.ico')}}" />
+        <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static',filename='images/favicon/apple-touch-icon.png')}}" />
+        <link rel="manifest" href="{{ url_for('static',filename='images/favicon/site.webmanifest')}}" />
+
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles.css')}}" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+
+        <!--Arquero will be imported into the aq global object -->
+        <script src="https://cdn.jsdelivr.net/npm/arquero@latest"></script>
+
+        <script>
+            function loadDataset(filename) {
+                const minId = document.getElementById("min-id").value;
+                const maxId = document.getElementById("max-id").value;
+                storeDataRangeValues(minId, maxId);
+
+                localStorage.setItem("userUploaded","no");
+                localStorage.setItem("selectedSample",filename);
+              window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
+            }
+
+            async function fileUpload() {
+                const uploadedFile = document.getElementById("fileInput").files[0];
+                const minId = document.getElementById("min-id").value;
+                const maxId = document.getElementById("max-id").value;
+                storeDataRangeValues(minId, maxId);
+
+                const fileToSend = new FormData();
+                fileToSend.append("file",uploadedFile);
+                console.log("starting upload");
+                const url = "/api/upload"
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        body: fileToSend
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Response status: ${response.status}`);
+                    }
+                    if (response.statusText === "OK") {
+                        /** Add a way to tell the user that the csv was uploaded successfully*/
+                        localStorage.setItem("userUploaded", "yes");
+                        localStorage.setItem("selectedSample", uploadedFile['name'])
+                        console.log(uploadedFile);
+                        window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
+                    }
+                } catch (error) {
+                    console.error(error.message);
+                    /** Also should add something which tells the user on the UI that the error occurred */
+                }
+                // localStorage.setItem("userUpload",file.name)
+            }
+        </script>
+
+        <script>
+            function storeDataRangeValues(minVal,maxVal){
+                localStorage.setItem("minIDVal",minVal);
+                localStorage.setItem("maxIDVal",maxVal);
+                const useDb = document.getElementById("use-db").checked;
+                localStorage.setItem("useDatabase", useDb);
+            }
+        </script>
+
+    </head>
+
+    <body>
+        <div id="header">
+            <h1>Buckaroo Visual Wrangler 🤠</h1>
+        </div>
+
+        <div class="matrix-and-toolbox">
+            <div id="tab1" class="tab-content">
+            <div id="matrix-vis-practice"></div>
+            </div>
+            <div id="tab2" class="tab-content active">
+                <div id="matrix-vis-stackoverflow"></div>
+                <div id="placeholder-message" style="text-align: center; margin-top: 200px; margin-left: 750px; font-size: 40px; color: darkslategrey;">
+                    <div>Welcome to Buckaroo!</div>
+                    <div style="font-size: 24px; margin-top: 10px; color: gray;">
+                        Start by selecting a dataset or uploading your own:
+                        <br><br>
+                        <div class="dataset-button" onclick="loadDataset('/static/data/stackoverflow_db_uncleaned.csv')">StackOverflow Survey</div>
+                        <div class="dataset-button" onclick="loadDataset('/static/data/Crimes_-_One_year_prior_to_present_20250421.csv')"> Chicago Crime</div>
+                        <div class="dataset-button" onclick="loadDataset('/static/data/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>
+                        <div class="file-upload" style="text-align: center; margin-left: auto; margin-right:auto; margin-top: 20px; font-size: 20px; color: darkslategrey;">
+                            <label for="fileInput">Select a File:</label>
+                            <input type="file" id="fileInput" accept=".csv" oninput="fileUpload()"/>
+                        </div>
+                        <div style="font-size: 14px;" class="data-size-range">
+                            <label for="min-id">Min ID:</label>
+                            <input type="number" value="0"id="min-id" name="min-id" min="0" max="49000" />
+
+                            <label for="max-id">Max ID:</label>
+                            <input type="number" value="400" id="max-id" name="max-id" min="0" max="50000" />
+
+                            <label for="use-db">Use Database:</label>
+                            <input type="checkbox" id="use-db" name="use-db" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+
+<!--    <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>-->
+<!--    <script src="{{ url_for('static', filename='js/scatterplotMatrixView.js') }}"></script>-->
+<!--    <script src="{{ url_for('static', filename='js/controller.js') }}"></script>-->
+<!--    <script type="module" src="{{ url_for('static', filename='js/dataSelection.js') }}"></script>-->
+
+</html>

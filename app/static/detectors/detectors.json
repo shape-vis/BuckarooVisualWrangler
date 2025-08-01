@@ -1,0 +1,25 @@
+[
+    {
+        "ID": 1,
+        "name": "Mismatch",
+        "code": "/static/detectors/datatypeMismatch.js"
+    },
+
+    {
+        "ID": 2,
+        "name": "Missing",
+        "code": "/static/detectors/missingValue.js"
+    },
+
+    {
+        "ID": 3,
+        "name": "Anomaly",
+        "code": "/static/detectors/anomaly.js"
+    },
+
+    {
+        "ID": 4,
+        "name": "Incomplete",
+        "code": "/static/detectors/incomplete.js"
+    }
+]
