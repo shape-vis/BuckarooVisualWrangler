@@ -2,13 +2,17 @@
 #This file handles all endpoints surrounding plots
 
 from flask import request
-
-from app import app
+from pprint import pprint
+import os, json, uuid
+from app import app, engine
 from app.service_helpers import group_by_attribute
 from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
 from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
-
+from pathlib import Path
+import hashlib
+from postgres_wrangling import query
+import traceback
 
 # from data_management.data_integration import generate_1d_histogram_data
 
@@ -31,27 +35,112 @@ def get_1d_histogram():
     try:
         print("in the try")
         binned_data = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
+
         return {"Success": True, "binned_data": binned_data}
     except Exception as e:
         return {"Success": False, "Error": str(e)}
 
 
+EXPORT_DIR = Path("histogram_exports")          # change if you prefer another location
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)   # create once, no-op later
+
+def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
+    """
+    Return a stable hexadecimal digest of a JSON-serialisable object.
+    - Uses a *canonical* JSON encoding (sorted keys, no extra spaces)
+      so logically identical dicts give identical hashes.
+    """
+    canonical = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+    h = hashlib.new(algo)
+    h.update(canonical.encode("utf-8"))
+    return h.hexdigest()
+
 @app.get("/api/plots/2-d-histogram-data")
 def get_2d_histogram():
     """
-    Endpoint to return data to be used to construct the 1d histogram in the view - user will pass in parameters for the axis that is filled in
-    :return: the data as a csv
+    Endpoint to return data to be used to construct the 2-D histogram in the view.
+    Saves the histogram bin counts to disk as JSON, using a content hash
+    so that the same data always re-uses the same file.
+    # Generates a complete 2-D histogram (heat-map) for any two columns in the
+    # `stackoverflow_db_uncleaned` table, using pure SQL:
+    #   • Slices rows by `index` between `min_id` and `max_id`.
+    #   • Detects whether each axis is numeric or categorical.
+    #   • Numeric axes are binned with `width_bucket`; categorical axes keep
+    #     distinct values intact.
+    #   • Builds every possible (x-bin, y-bin) pair with a CROSS JOIN, then
+    #     left-joins the real counts so bins with zero observations are included.
+    #   • Returns a JSON-ready dict containing:
+    #       - "histograms": list of records {"xBin", "yBin", "count", "xType", "yType"}
+    #       - "scaleX" / "scaleY": numeric bin ranges or categorical labels.
+    #   • No Python aggregation is performed—everything is computed inside Postgres,
+    #     making it efficient even for large tables.
     """
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
-    number_of_bins = request.args.get("bins", default=10)
+    min_id         = int(request.args.get("min_id", 0))
+    max_id         = int(request.args.get("max_id", 200))
+    number_of_bins = int(request.args.get("bins", 10))
 
     try:
-        binned_data = generate_2d_histogram_data(x_column_name, y_column_name, number_of_bins, number_of_bins, min_id,
-                                                 max_id)
-        return {"Success": True, "binned_data": binned_data}
+        result = query.generate_2d_histogram_data(
+            x_column=x_column_name,
+            y_column=y_column_name,
+            bins=number_of_bins,
+            min_id=min_id,
+            max_id=max_id
+        )
+        with open("histogram_exports/blah.json", "w") as fp:
+            json.dump({
+                "x_column_name": x_column_name,
+                "y_column_name": y_column_name,
+                "min_id": min_id,
+                "max_id": max_id,
+                "number_of_bins": number_of_bins,
+                "binned_data": result
+                
+                }, fp, ensure_ascii=False, indent=2)
+        return {
+            "Success":     True,
+            "binned_data": result,
+        }
+    except Exception as e:
+        print(traceback.print_exc())
+        return {"Success": False, "Error": str(e)}
+
+    try:
+        binned_data = generate_2d_histogram_data(
+            x_column_name, y_column_name,
+            number_of_bins, number_of_bins,
+            min_id, max_id,
+        )
+
+            # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
+            # print(dataframe.head(5))
+
+        # ── Compute deterministic file name ──────────────────────────────────
+        digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
+        file_name  = f"{digest[:16]}.json"            # shorten if you like
+        file_path  = EXPORT_DIR / file_name
+
+        # ── Write only if it doesn't exist already ───────────────────────────
+        with file_path.open("w", encoding="utf-8") as fp:
+            json.dump({
+                "x_column_name": x_column_name,
+                "y_column_name": y_column_name,
+                "min_id": min_id,
+                "max_id": max_id,
+                "number_of_bins": number_of_bins,
+                "binned_data": binned_data
+                
+                }, fp, ensure_ascii=False, indent=2)
+
+        return {
+            "Success":     True,
+            "file_name":   file_name,
+            "file_path":   str(file_path),
+            "binned_data": binned_data,
+        }
+
     except Exception as e:
         return {"Success": False, "Error": str(e)}
 
