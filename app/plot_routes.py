@@ -13,6 +13,7 @@ from pathlib import Path
 import hashlib
 from postgres_wrangling import query
 import traceback
+import time
 
 # from data_management.data_integration import generate_1d_histogram_data
 
@@ -38,11 +39,15 @@ def get_1d_histogram():
 
         return {"Success": True, "binned_data": binned_data}
     except Exception as e:
+
         return {"Success": False, "Error": str(e)}
 
 
 EXPORT_DIR = Path("histogram_exports")          # change if you prefer another location
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)   # create once, no-op later
+
+REPORT_DIR = Path("report")   # ../report
+REPORT_DIR.mkdir(parents=True, exist_ok=True)                 # create once
 
 def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
     """
@@ -54,6 +59,53 @@ def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
     h = hashlib.new(algo)
     h.update(canonical.encode("utf-8"))
     return h.hexdigest()
+
+# @app.get("/api/plots/2-d-histogram-data")
+# def get_2d_histogram():
+#     x_column_name = request.args.get("x_column")
+#     y_column_name = request.args.get("y_column")
+#     min_id         = int(request.args.get("min_id", 0))
+#     max_id         = int(request.args.get("max_id", 200))
+#     # max_id = 1_000_000
+#     number_of_bins = int(request.args.get("bins", 10))
+#     try:
+#         start_time = time.time()
+#         binned_data = generate_2d_histogram_data(
+#             x_column_name, y_column_name,
+#             number_of_bins, number_of_bins,
+#             min_id, max_id,
+#         )
+#         print("_______MAHATHIR_________", time.time() - start_time)
+
+#             # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
+#             # print(dataframe.head(5))
+
+#         # ── Compute deterministic file name ──────────────────────────────────
+#         digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
+#         file_name  = f"{digest[:16]}.json"            # shorten if you like
+#         file_path  = EXPORT_DIR / file_name
+
+#         # ── Write only if it doesn't exist already ───────────────────────────
+#         with file_path.open("w", encoding="utf-8") as fp:
+#             json.dump({
+#                 "x_column_name": x_column_name,
+#                 "y_column_name": y_column_name,
+#                 "min_id": min_id,
+#                 "max_id": max_id,
+#                 "number_of_bins": number_of_bins,
+#                 "binned_data": binned_data
+                
+#                 }, fp, ensure_ascii=False, indent=2)
+
+#         return {
+#             "Success":     True,
+#             "file_name":   file_name,
+#             "file_path":   str(file_path),
+#             "binned_data": binned_data,
+#         }
+
+#     except Exception as e:
+#         return {"Success": False, "Error": str(e)}
 
 @app.get("/api/plots/2-d-histogram-data")
 def get_2d_histogram():
@@ -81,42 +133,20 @@ def get_2d_histogram():
     max_id         = int(request.args.get("max_id", 200))
     number_of_bins = int(request.args.get("bins", 10))
 
+    table_name= request.args.get("table", None)
+    # table_name = request.args.get("selected_sample", None).split('/')[-1].replace('.csv', '')
+
+
     try:
-        result = query.generate_2d_histogram_data(
+        binned_data = query.generate_2d_histogram_data(
             x_column=x_column_name,
             y_column=y_column_name,
             bins=number_of_bins,
             min_id=min_id,
-            max_id=max_id
+            max_id=max_id,
+            table_name=table_name,
+            whole_table=True
         )
-        with open("histogram_exports/blah.json", "w") as fp:
-            json.dump({
-                "x_column_name": x_column_name,
-                "y_column_name": y_column_name,
-                "min_id": min_id,
-                "max_id": max_id,
-                "number_of_bins": number_of_bins,
-                "binned_data": result
-                
-                }, fp, ensure_ascii=False, indent=2)
-        return {
-            "Success":     True,
-            "binned_data": result,
-        }
-    except Exception as e:
-        print(traceback.print_exc())
-        return {"Success": False, "Error": str(e)}
-
-    try:
-        binned_data = generate_2d_histogram_data(
-            x_column_name, y_column_name,
-            number_of_bins, number_of_bins,
-            min_id, max_id,
-        )
-
-            # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
-            # print(dataframe.head(5))
-
         # ── Compute deterministic file name ──────────────────────────────────
         digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
         file_name  = f"{digest[:16]}.json"            # shorten if you like
@@ -125,6 +155,7 @@ def get_2d_histogram():
         # ── Write only if it doesn't exist already ───────────────────────────
         with file_path.open("w", encoding="utf-8") as fp:
             json.dump({
+                "table_name": table_name,
                 "x_column_name": x_column_name,
                 "y_column_name": y_column_name,
                 "min_id": min_id,
@@ -133,16 +164,15 @@ def get_2d_histogram():
                 "binned_data": binned_data
                 
                 }, fp, ensure_ascii=False, indent=2)
-
         return {
             "Success":     True,
-            "file_name":   file_name,
-            "file_path":   str(file_path),
             "binned_data": binned_data,
         }
-
     except Exception as e:
+        report_path = REPORT_DIR / f"{uuid.uuid4().hex}.txt"   # random hash
+        report_path.write_text(traceback.format_exc(), encoding="utf-8")
         return {"Success": False, "Error": str(e)}
+
 
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():

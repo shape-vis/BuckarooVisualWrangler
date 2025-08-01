@@ -34,6 +34,11 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
 
     console.log("2d histData from the server", histData)
 
+    // console.log("current selection: ", selectionControlPanel.currentSelection)
+
+    // console.log("current table: ", localStorage.getItem("table"))
+
+
     let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
 
     let numHistDataX = histData.scaleX.numeric;

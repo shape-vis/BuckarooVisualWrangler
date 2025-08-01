@@ -5,14 +5,14 @@
 import numpy as np
 import pandas as pd
 from flask import request, render_template
-
+import time
 from app import app
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
     init_session_data_state, fetch_detected_and_undetected_current_dataset_from_db
 from app import data_state_manager
 from app.set_id_column import set_id_column
-
+import json
 
 @app.post("/api/upload")
 def upload_csv():
@@ -28,8 +28,12 @@ def upload_csv():
 
     # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
+    start_time = time.time()
     detected_data = run_detectors(dataframe)
+    time_to_detect = time.time() - start_time
+
     cleaned_table_name = clean_table_name(csv_file.filename)
+    json.dump({'db': cleaned_table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{cleaned_table_name}.json", "w"))
 
     try:
         #insert the undetected dataframe

@@ -127,7 +127,6 @@
 
         <!--Arquero will be imported into the aq global object -->
         <script src="https://cdn.jsdelivr.net/npm/arquero@latest"></script>
-
         <script>
             function loadDataset(filename) {
                 const minId = document.getElementById("min-id").value;
@@ -136,7 +135,13 @@
 
                 localStorage.setItem("userUploaded","no");
                 localStorage.setItem("selectedSample",filename);
-              window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
+
+                var segments = filename.split('/');
+                var table = segments.pop();       
+                table = table.replace('.csv', '');
+                localStorage.setItem("table", table)
+
+                window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
             }
 
             async function fileUpload() {

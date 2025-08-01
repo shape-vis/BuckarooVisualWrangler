@@ -11,11 +11,11 @@ _NUMERIC_TYPES = {
 }
 
 # ───────── helpers ───────────────────────────────────────────────────────────
-def _is_numeric(conn, col: str) -> bool:
-    sql = """
+def _is_numeric(conn, col: str, table_name: str) -> bool:
+    sql = f"""
         SELECT data_type
         FROM information_schema.columns
-        WHERE table_name = 'stackoverflow_db_uncleaned'
+        WHERE table_name = '{table_name}'
           AND column_name = :col
     """
     dtype = conn.execute(text(sql), {"col": col}).scalar_one()
@@ -38,34 +38,34 @@ def generate_2d_histogram_data(
     bins: int,
     min_id: int,
     max_id: int,
+    table_name: str,
+    whole_table: bool = False,          # NEW ── set True to ignore id range
 ) -> Dict[str, Any]:
     """
     Build a dense 2-D histogram for the requested slice and compute
-    five quality metrics per bin:
-
-      items       – total rows in bin
-      anomaly     – z-score > 2 (numeric cols)
-      missing     – '', 'null', 'undefined'
-      incomplete  – low-frequency categorical values (<10)
-      mismatch    – cell type ≠ column majority type
+    five quality metrics per bin …   (docstring left exactly as before)
     """
     numeric_regex = r'^-?\d+(?:\.\d+)?$'   # used for type-mismatch detection
 
+    # ─────────── helpers added for the whole-table mode ───────────
+    range_where  = '' if whole_table else 'WHERE "index" BETWEEN :lo AND :hi'
+    kw_filter    = 'WHERE' if whole_table else 'AND'      # NEW ←────────────
+    range_params = {} if whole_table else {"lo": min_id, "hi": max_id}
+
     with engine.connect() as conn:
         # 1 ‧ column types
-        x_is_num, y_is_num = _is_numeric(conn, x_column), _is_numeric(conn, y_column)
+        x_is_num = _is_numeric(conn, x_column, table_name=table_name)
+        y_is_num = _is_numeric(conn, y_column, table_name=table_name)
 
         # 2 ‧ numeric bounds (for width_bucket)
         bounds_sql = f"""
             SELECT
                 {'MIN("' + x_column + '")::numeric, MAX("' + x_column + '")::numeric' if x_is_num else 'NULL, NULL'},
                 {'MIN("' + y_column + '")::numeric, MAX("' + y_column + '")::numeric' if y_is_num else 'NULL, NULL'}
-            FROM stackoverflow_db_uncleaned
-            WHERE "index" BETWEEN :lo AND :hi
+            FROM {table_name}
+            {range_where}
         """
-        xmin, xmax, ymin, ymax = conn.execute(
-            text(bounds_sql), {"lo": min_id, "hi": max_id}
-        ).fetchone()
+        xmin, xmax, ymin, ymax = conn.execute(text(bounds_sql), range_params).fetchone()
 
         # 3 ‧ stats for anomaly detection (z-score > 2)
         mean_x = std_x = mean_y = std_y = None
@@ -74,20 +74,20 @@ def generate_2d_histogram_data(
                 text(f"""
                     SELECT AVG("{x_column}")::numeric,
                            STDDEV_SAMP("{x_column}")::numeric
-                    FROM stackoverflow_db_uncleaned
-                    WHERE "index" BETWEEN :lo AND :hi
+                    FROM {table_name}
+                    {range_where}
                 """),
-                {"lo": min_id, "hi": max_id},
+                range_params,
             ).fetchone() or (0, 0)
         if y_is_num:
             mean_y, std_y = conn.execute(
                 text(f"""
                     SELECT AVG("{y_column}")::numeric,
                            STDDEV_SAMP("{y_column}")::numeric
-                    FROM stackoverflow_db_uncleaned
-                    WHERE "index" BETWEEN :lo AND :hi
+                    FROM {table_name}
+                    {range_where}
                 """),
-                {"lo": min_id, "hi": max_id},
+                range_params,
             ).fetchone() or (0, 0)
 
         # 4 ‧ pre-build expressions so the f-string contains **no back-slashes**
@@ -123,26 +123,25 @@ def generate_2d_histogram_data(
         )
 
         # 5 ‧ CTEs for complete x/y bin sets
-        x_vals_cte = (
-            "SELECT generate_series(0, :bins - 1) AS x_bin"
-            if x_is_num else
-            f"""
+        if x_is_num:
+            x_vals_cte = "SELECT generate_series(0, :bins - 1) AS x_bin"
+        else:
+            x_vals_cte = f"""
               SELECT DISTINCT "{x_column}"::text AS x_bin
-              FROM stackoverflow_db_uncleaned
-              WHERE "index" BETWEEN :lo AND :hi
-                AND "{x_column}" IS NOT NULL
+              FROM {table_name}
+              {range_where}
+                {kw_filter} "{x_column}" IS NOT NULL
             """
-        )
-        y_vals_cte = (
-            "SELECT generate_series(0, :bins - 1) AS y_bin"
-            if y_is_num else
-            f"""
+
+        if y_is_num:
+            y_vals_cte = "SELECT generate_series(0, :bins - 1) AS y_bin"
+        else:
+            y_vals_cte = f"""
               SELECT DISTINCT "{y_column}"::text AS y_bin
-              FROM stackoverflow_db_uncleaned
-              WHERE "index" BETWEEN :lo AND :hi
-                AND "{y_column}" IS NOT NULL
+              FROM {table_name}
+              {range_where}
+                {kw_filter} "{y_column}" IS NOT NULL
             """
-        )
 
         # 6 ‧ expressions that map raw values → bin indices
         x_sel = (
@@ -165,9 +164,9 @@ def generate_2d_histogram_data(
                 {missing_expr}                                        AS missing,
                 ({incomplete_x_expr} OR {incomplete_y_expr})         AS incomplete,
                 ({mismatch_x_expr}  OR {mismatch_y_expr})            AS mismatch
-            FROM stackoverflow_db_uncleaned
-            WHERE "index" BETWEEN :lo AND :hi
-              AND "{x_column}" IS NOT NULL
+            FROM {table_name}
+            {range_where}
+              {kw_filter} "{x_column}" IS NOT NULL
               AND "{y_column}" IS NOT NULL
         ),
         counts AS (
@@ -203,9 +202,8 @@ def generate_2d_histogram_data(
         ORDER BY 1, 2;
         """
 
+        #  ── parameters ───────────────────────────────────────────
         params = {
-            "lo":     min_id,
-            "hi":     max_id,
             "bins":   bins,
             "xmin":   xmin if xmin is not None else 0,
             "xmax":   xmax if xmax is not None else 1,
@@ -216,7 +214,9 @@ def generate_2d_histogram_data(
             "mean_y": mean_y,
             "std_y":  std_y,
             "num_re": numeric_regex,
+            **range_params                   # empty when whole_table=True
         }
+
         rows = conn.execute(text(slice_sql), params).fetchall()
 
         # 8 ‧ build scales
@@ -262,3 +262,109 @@ def generate_2d_histogram_data(
             )
 
     return {"histograms": histograms, "scaleX": scaleX, "scaleY": scaleY}
+
+
+from sqlalchemy import text
+
+def copy_without_flagged_rows(current_selection: dict,
+                              cols: list[str],
+                              table: str,
+                              new_table_name: str,
+                              ) -> int:
+    """
+    Build a *new* table that contains every row from `table` **except** those
+    that (a) fall inside the single 2-D bin described in `current_selection`
+    and (b) are flagged by any quality check
+    (anomaly | missing | incomplete | mismatch).
+
+    Parameters
+    ----------
+    current_selection : dict   – the object returned by the histogram endpoint
+    cols              : list   – [x_col, y_col]  (x = numeric, y = categorical)
+    table             : str    – source table name
+    new_table_name    : str    – destination table to create
+    engine            :        – SQLAlchemy engine
+
+    Returns
+    -------
+    int – number of rows copied into the new table
+    """
+    sel   = current_selection["data"][0]
+    x_bin = sel["xBin"]
+    y_val = sel["yBin"]
+
+    # numeric x-axis boundaries (lo ≤ value < hi)
+    x_bounds = current_selection["scaleX"]["numeric"][x_bin]
+    x_lo, x_hi = x_bounds["x0"], x_bounds["x1"]
+
+    numeric_re = r'^-?\d+(?:\.\d+)?$'          # used for “mismatch”
+
+    sql = f"""
+    /* -------- recreate destination table -------- */
+    DROP TABLE IF EXISTS {new_table_name};
+
+    CREATE TABLE {new_table_name} AS
+    WITH
+        stats AS (                              -- mean / std for anomaly
+            SELECT
+                AVG("{cols[0]}")::numeric        AS mean_x,
+                STDDEV_SAMP("{cols[0]}")::numeric AS std_x
+            FROM {table}
+        ),
+        to_keep AS (                            -- rows that *survive*
+            SELECT t.*
+            FROM   {table} t, stats
+            WHERE NOT (                          -- invert deletion logic
+                /* ❶ bin filter  */
+                "{cols[0]}" >= :x_lo
+            AND "{cols[0]}" <  :x_hi
+            AND "{cols[1]}"  = :y_val
+
+                /* ❷ any quality flag */
+            AND (
+                    /* anomaly */
+                    ABS( ( "{cols[0]}"::numeric - stats.mean_x )
+                         / NULLIF(stats.std_x, 0) ) > 2
+
+                OR  /* missing */
+                    "{cols[0]}" IS NULL
+                OR  "{cols[1]}" IS NULL
+                OR  "{cols[0]}"::text IN ('', 'null', 'undefined')
+                OR  "{cols[1]}"::text IN ('', 'null', 'undefined')
+
+                OR  /* incomplete (low-freq category) */
+                    ( SELECT COUNT(*)
+                      FROM   {table}
+                      WHERE  "{cols[1]}" = :y_val ) < 10
+
+                OR  /* mismatch (type) */
+                    "{cols[1]}"::text ~ :num_re
+                )
+            )
+        )
+    SELECT * FROM to_keep;
+    """
+
+    with engine.begin() as conn:
+        # create the table
+        conn.execute(
+            text(sql),
+            {"x_lo": x_lo, "x_hi": x_hi, "y_val": y_val, "num_re": numeric_re},
+        )
+        # count rows copied
+        n_rows = conn.execute(
+            text(f"SELECT COUNT(*) FROM {new_table_name}")
+        ).scalar_one()
+
+    return n_rows
+
+def new_table_name(old_name:str):
+    split_substring = "_version_"
+    parts = old_name.split(split_substring)
+    new_version = None
+    if len(parts) == 1:
+        new_version = 1
+    else:
+        new_version = int(parts[-1]) + 1
+    
+    return parts[0] + split_substring + str(new_version)

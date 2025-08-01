@@ -2,13 +2,14 @@
 #This file handles all endpoints surrounding wranglers
 
 from flask import request
-
+import json
 from app import app
 from app.service_helpers import run_detectors, update_data_state
 from wranglers.impute_average import impute_average_on_ids
 from wranglers.remove_data import remove_data
 from app import data_state_manager
-
+from pprint import pprint
+from postgres_wrangling import query
 """
 All these endpoints expected the following input data:
     1. points to wrangle
@@ -16,34 +17,68 @@ All these endpoints expected the following input data:
     3. selection range of points to return to the view
 """
 
-@app.get("/api/wrangle/remove")
+# @app.get("/api/wrangle/remove")
+# def wrangle_remove():
+#     """
+#     Should handle when a user sends a request to remove specific data
+#     get table from db into df -> delete id's from it -> store as a wrangled table in df
+#     :return: result of the wrangle on the data
+#     """
+#     # filename = request.args.get("filename")
+#     point_range_to_return = request.args.get("range")
+#     points_to_remove = (request.args.get("points"))
+#     points_to_remove_array = [points_to_remove]
+#     preview = request.args.get("preview")
+#     graph_type = request.args.get("graph_type")
+
+#     try:
+#         current_state = data_state_manager.get_current_state()
+#         current_df = current_state["df"]
+#         wrangled_df = remove_data(current_df, points_to_remove_array)
+#         new_error_df = run_detectors(wrangled_df)
+#         new_state = {"df": wrangled_df, "error_df": new_error_df}
+#         data_state_manager.push_right_table_stack(new_state)
+#         if preview == "yes":
+#             data_state_manager.pop_right_table_stack()
+#             return {"success": True, "new-state": None}
+#         else:
+#             return {"success": True, "new-state": wrangled_df}
+#     except Exception as e:
+#         return {"success": False, "error": str(e)}
+    
+@app.post("/api/wrangle/remove")
 def wrangle_remove():
     """
-    Should handle when a user sends a request to remove specific data
-    get table from db into df -> delete id's from it -> store as a wrangled table in df
-    :return: result of the wrangle on the data
-    """
-    # filename = request.args.get("filename")
-    point_range_to_return = request.args.get("range")
-    points_to_remove = (request.args.get("points"))
-    points_to_remove_array = [points_to_remove]
-    preview = request.args.get("preview")
-    graph_type = request.args.get("graph_type")
+    Remove selected rows from *table* and save the wrangled version.
 
+    Expects JSON body:
+        {
+            "currentSelection": {...},
+            "viewParameters":  {...},
+            "table": "tablename"
+        }
+    """
     try:
-        current_state = data_state_manager.get_current_state()
-        current_df = current_state["df"]
-        wrangled_df = remove_data(current_df, points_to_remove_array)
-        new_error_df = run_detectors(wrangled_df)
-        new_state = {"df": wrangled_df, "error_df": new_error_df}
-        data_state_manager.push_right_table_stack(new_state)
-        if preview == "yes":
-            data_state_manager.pop_right_table_stack()
-            return {"success": True, "new-state": None}
-        else:
-            return {"success": True, "new-state": wrangled_df}
+        body             = request.get_json(force=True)  # or omit force=True if you prefer 415 on bad content-type
+        currentSelection = body["currentSelection"]
+        cols   = body["cols"]
+        table            = body["table"]
+
+        print("current selection:")
+        pprint(currentSelection)
+        print("cols:")
+        pprint(cols)
+        print("table:", table)
+
+        new_table_name = query.new_table_name(table)
+
+        deletedRowCount = query.copy_without_flagged_rows(current_selection=currentSelection, cols=cols, table=table, new_table_name=new_table_name)
+
+        return {"success": True, "deletedRows": deletedRowCount, "new_table_name": new_table_name}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        # Log e for debugging
+        
+        return {"success": False, "error": str(e)}, 400
 
 
 @app.get("/api/wrangle/impute")
