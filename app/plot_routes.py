@@ -66,17 +66,14 @@ def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
 #     y_column_name = request.args.get("y_column")
 #     min_id         = int(request.args.get("min_id", 0))
 #     max_id         = int(request.args.get("max_id", 200))
-#     # max_id = 1_000_000
+#     max_id = 1_000_000
 #     number_of_bins = int(request.args.get("bins", 10))
 #     try:
-#         start_time = time.time()
 #         binned_data = generate_2d_histogram_data(
 #             x_column_name, y_column_name,
 #             number_of_bins, number_of_bins,
 #             min_id, max_id,
 #         )
-#         print("_______MAHATHIR_________", time.time() - start_time)
-
 #             # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
 #             # print(dataframe.head(5))
 

@@ -53,7 +53,7 @@ class MatrixView {
 
         {
             const { total, ...legend } = this.errorTypes;
-            selectionControlPanel.drawControls(this.svg, 900, 25);
+            // selectionControlPanel.drawControls(this.svg, 900, 25);
             drawLegend(this.svg, legend, this.errorColors, 900, 180);
         }
 

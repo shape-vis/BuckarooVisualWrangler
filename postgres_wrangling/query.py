@@ -31,7 +31,6 @@ def _numeric_scale(lo: float, hi: float, bins: int, axis: str) -> List[Dict[str,
     return [{k0: lo + i * step, k1: lo + (i + 1) * step} for i in range(bins)]
 
 
-# ───────── main entry-point ──────────────────────────────────────────────────
 def generate_2d_histogram_data(
     x_column: str,
     y_column: str,
@@ -39,17 +38,23 @@ def generate_2d_histogram_data(
     min_id: int,
     max_id: int,
     table_name: str,
-    whole_table: bool = False,          # NEW ── set True to ignore id range
+    whole_table: bool = False,          # True → ignore id range
 ) -> Dict[str, Any]:
     """
     Build a dense 2-D histogram for the requested slice and compute
-    five quality metrics per bin …   (docstring left exactly as before)
+    five quality metrics per bin (items, anomaly, missing, incomplete,
+    mismatch).  Unlike the earlier version this one:
+      • treats SQL NULLs as “missing”,
+      • maps NULLs into a dedicated “-1” (numeric) / “__NULL__” (categorical)
+        pseudo-bin so they are counted,
+      • no longer drops rows whose x or y value is NULL.
     """
-    numeric_regex = r'^-?\d+(?:\.\d+)?$'   # used for type-mismatch detection
+    numeric_regex = r'^-?\d+(?:\.\d+)?$'          # for type-mismatch detection
+    NULL_NUM_BIN  = 0                             # 🔄 numeric NULLs now go to bin 0
+    NULL_CAT_BIN  = '__NULL__'                    # sentinel for categorical NULL
 
-    # ─────────── helpers added for the whole-table mode ───────────
+    # ────────── helpers for id-range slicing ──────────
     range_where  = '' if whole_table else 'WHERE "index" BETWEEN :lo AND :hi'
-    kw_filter    = 'WHERE' if whole_table else 'AND'      # NEW ←────────────
     range_params = {} if whole_table else {"lo": min_id, "hi": max_id}
 
     with engine.connect() as conn:
@@ -67,7 +72,7 @@ def generate_2d_histogram_data(
         """
         xmin, xmax, ymin, ymax = conn.execute(text(bounds_sql), range_params).fetchone()
 
-        # 3 ‧ stats for anomaly detection (z-score > 2)
+        # 3 ‧ stats for anomaly detection (|z| > 2)
         mean_x = std_x = mean_y = std_y = None
         if x_is_num:
             mean_x, std_x = conn.execute(
@@ -90,15 +95,13 @@ def generate_2d_histogram_data(
                 range_params,
             ).fetchone() or (0, 0)
 
-        # 4 ‧ pre-build expressions so the f-string contains **no back-slashes**
+        # 4 ‧ flag expressions
         anomaly_x_expr = (
-            f"ABS((CAST(\"{x_column}\" AS numeric) - :mean_x) "
-            f"/ NULLIF(:std_x,0)) > 2"
+            f"ABS((CAST(\"{x_column}\" AS numeric) - :mean_x) / NULLIF(:std_x,0)) > 2"
             if x_is_num else "FALSE"
         )
         anomaly_y_expr = (
-            f"ABS((CAST(\"{y_column}\" AS numeric) - :mean_y) "
-            f"/ NULLIF(:std_y,0)) > 2"
+            f"ABS((CAST(\"{y_column}\" AS numeric) - :mean_y) / NULLIF(:std_y,0)) > 2"
             if y_is_num else "FALSE"
         )
         mismatch_x_expr = (
@@ -111,63 +114,58 @@ def generate_2d_histogram_data(
         )
         incomplete_x_expr = (
             "FALSE" if x_is_num
-            else f"COUNT(*) OVER (PARTITION BY \"{x_column}\"::text) < 10"
+            else f"COUNT(*) OVER (PARTITION BY COALESCE(\"{x_column}\"::text,'{NULL_CAT_BIN}')) < 10"
         )
         incomplete_y_expr = (
             "FALSE" if y_is_num
-            else f"COUNT(*) OVER (PARTITION BY \"{y_column}\"::text) < 10"
+            else f"COUNT(*) OVER (PARTITION BY COALESCE(\"{y_column}\"::text,'{NULL_CAT_BIN}')) < 10"
         )
         missing_expr = (
-            f"(\"{x_column}\"::text IN ('', 'null', 'undefined') "
+            f"(\"{x_column}\" IS NULL OR \"{y_column}\" IS NULL "
+            f"OR \"{x_column}\"::text IN ('', 'null', 'undefined') "
             f"OR \"{y_column}\"::text IN ('', 'null', 'undefined'))"
         )
 
-        # 5 ‧ CTEs for complete x/y bin sets
+        # 5 ‧ full x / y bin sets (include sentinel for NULL)
         if x_is_num:
-            x_vals_cte = "SELECT generate_series(0, :bins - 1) AS x_bin"
+            x_vals_cte = "SELECT generate_series(:null_num_bin, :bins - 1) AS x_bin"
         else:
             x_vals_cte = f"""
-              SELECT DISTINCT "{x_column}"::text AS x_bin
+              SELECT DISTINCT COALESCE("{x_column}"::text, '{NULL_CAT_BIN}') AS x_bin
               FROM {table_name}
               {range_where}
-                {kw_filter} "{x_column}" IS NOT NULL
             """
-
         if y_is_num:
-            y_vals_cte = "SELECT generate_series(0, :bins - 1) AS y_bin"
+            y_vals_cte = "SELECT generate_series(:null_num_bin, :bins - 1) AS y_bin"
         else:
             y_vals_cte = f"""
-              SELECT DISTINCT "{y_column}"::text AS y_bin
+              SELECT DISTINCT COALESCE("{y_column}"::text, '{NULL_CAT_BIN}') AS y_bin
               FROM {table_name}
               {range_where}
-                {kw_filter} "{y_column}" IS NOT NULL
             """
 
-        # 6 ‧ expressions that map raw values → bin indices
+        # 6 ‧ raw→bin mapping (coalesce NULL→sentinel)
         x_sel = (
-            f"width_bucket(\"{x_column}\", :xmin, :xmax, :bins) - 1"
-            if x_is_num else f"\"{x_column}\"::text"
+            f"COALESCE(width_bucket(\"{x_column}\", :xmin, :xmax, :bins) - 1, :null_num_bin)"
+            if x_is_num else f"COALESCE(\"{x_column}\"::text, '{NULL_CAT_BIN}')"
         )
         y_sel = (
-            f"width_bucket(\"{y_column}\", :ymin, :ymax, :bins) - 1"
-            if y_is_num else f"\"{y_column}\"::text"
+            f"COALESCE(width_bucket(\"{y_column}\", :ymin, :ymax, :bins) - 1, :null_num_bin)"
+            if y_is_num else f"COALESCE(\"{y_column}\"::text, '{NULL_CAT_BIN}')"
         )
 
-        # 7 ‧ main query – slice + flags + aggregation
+        # 7 ‧ main aggregation
         slice_sql = f"""
         WITH slice AS (
             SELECT
                 {x_sel} AS x_bin,
                 {y_sel} AS y_bin,
-                /* ───────── flags ───────── */
                 ({anomaly_x_expr} OR {anomaly_y_expr})               AS anomaly,
                 {missing_expr}                                        AS missing,
                 ({incomplete_x_expr} OR {incomplete_y_expr})         AS incomplete,
                 ({mismatch_x_expr}  OR {mismatch_y_expr})            AS mismatch
             FROM {table_name}
             {range_where}
-              {kw_filter} "{x_column}" IS NOT NULL
-              AND "{y_column}" IS NOT NULL
         ),
         counts AS (
             SELECT
@@ -180,12 +178,8 @@ def generate_2d_histogram_data(
             FROM slice
             GROUP BY 1, 2
         ),
-        x_vals AS (
-            {x_vals_cte}
-        ),
-        y_vals AS (
-            {y_vals_cte}
-        )
+        x_vals AS ({x_vals_cte}),
+        y_vals AS ({y_vals_cte})
         SELECT
             x_vals.x_bin,
             y_vals.y_bin,
@@ -202,24 +196,25 @@ def generate_2d_histogram_data(
         ORDER BY 1, 2;
         """
 
-        #  ── parameters ───────────────────────────────────────────
+        # 8 ‧ parameters
         params = {
-            "bins":   bins,
-            "xmin":   xmin if xmin is not None else 0,
-            "xmax":   xmax if xmax is not None else 1,
-            "ymin":   ymin if ymin is not None else 0,
-            "ymax":   ymax if ymax is not None else 1,
-            "mean_x": mean_x,
-            "std_x":  std_x,
-            "mean_y": mean_y,
-            "std_y":  std_y,
-            "num_re": numeric_regex,
-            **range_params                   # empty when whole_table=True
+            "bins":         bins,
+            "xmin":         xmin if xmin is not None else 0,
+            "xmax":         xmax if xmax is not None else 1,
+            "ymin":         ymin if ymin is not None else 0,
+            "ymax":         ymax if ymax is not None else 1,
+            "mean_x":       mean_x,
+            "std_x":        std_x,
+            "mean_y":       mean_y,
+            "std_y":        std_y,
+            "num_re":       numeric_regex,
+            "null_num_bin": NULL_NUM_BIN,
+            **range_params,
         }
 
         rows = conn.execute(text(slice_sql), params).fetchall()
 
-        # 8 ‧ build scales
+        # 9 ‧ build axis scales (sentinel bin intentionally omitted)
         scaleX = {"numeric": [], "categorical": []}
         scaleY = {"numeric": [], "categorical": []}
 
@@ -230,7 +225,6 @@ def generate_2d_histogram_data(
             scaleX["categorical"] = [
                 r[0] for r in conn.execute(text(x_vals_cte), params)
             ]
-
         if y_is_num:
             scaleY["numeric"] = _numeric_scale(float(params["ymin"]),
                                                float(params["ymax"]), bins, "y")
@@ -239,18 +233,14 @@ def generate_2d_histogram_data(
                 r[0] for r in conn.execute(text(y_vals_cte), params)
             ]
 
-        # 9 ‧ pack result – every x–y pair present
+        # 10 ‧ pack result
         histograms = []
         for r in rows:
-            # always include total items
             count = {"items": int(r.items)}
-
-            # add optional metrics only when > 0
             for key in ("anomaly", "missing", "incomplete", "mismatch"):
                 val = getattr(r, key)
-                if val:                          # truthy means non-zero
+                if val:
                     count[key] = int(val)
-
             histograms.append(
                 {
                     "count": count,
@@ -262,7 +252,6 @@ def generate_2d_histogram_data(
             )
 
     return {"histograms": histograms, "scaleX": scaleX, "scaleY": scaleY}
-
 
 from sqlalchemy import text
 
