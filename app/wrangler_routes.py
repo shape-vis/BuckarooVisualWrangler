@@ -81,44 +81,73 @@ def wrangle_remove():
         return {"success": False, "error": str(e)}, 400
 
 
-@app.get("/api/wrangle/impute")
+# @app.get("/api/wrangle/impute")
+# def wrangle_impute():
+#     """
+#     Should handle when a user sends a request to impute specific data
+#     :return: result of the wrangle on the data
+#     """
+#     filename = request.args.get("filename")
+#     point_range_to_return = request.args.get("range")
+#     points_to_remove = (request.args.get("points"))
+#     points_to_remove_array = [points_to_remove]
+#     preview = request.args.get("preview")
+#     axis = request.args.get("axis")
+#     # these can be used later to set the different ranges the user wants to get data from
+#     # min_id = request.args.get()point_range_to_return["min"]
+#     # max_id = point_range_to_return["max"]
+
+#     if not filename:
+#         return {"success": False, "error": "Filename required"}
+
+#     # guery to get the selected range of points to return to the view
+
+#     try:
+#         current_state = data_state_manager.get_current_state()
+#         current_df = current_state["df"]
+#         # remove the points from the df
+#         wrangled_df = impute_average_on_ids(axis,current_df, points_to_remove_array)
+#         # run the detectors on the new df
+#         new_error_df = run_detectors(wrangled_df)
+
+#         if preview == "no":
+#             # update the table state of the app
+#             update_data_state(wrangled_df, new_error_df)
+#             # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
+#             new_state = data_state_manager.get_current_state()
+#             new_df = new_state["df"].to_dict("records")
+#             new_error_df = new_state["error_df"].to_dict("records")
+#             return {"success": True, "new-state": new_df}
+#         else:
+#             return {"success": True, "new-state": wrangled_df.to_dict("records")}
+#     except Exception as e:
+#         return {"success": False, "error": str(e)}
+
+@app.post("/api/wrangle/impute")
 def wrangle_impute():
     """
     Should handle when a user sends a request to impute specific data
     :return: result of the wrangle on the data
     """
-    filename = request.args.get("filename")
-    point_range_to_return = request.args.get("range")
-    points_to_remove = (request.args.get("points"))
-    points_to_remove_array = [points_to_remove]
-    preview = request.args.get("preview")
-    axis = request.args.get("axis")
-    # these can be used later to set the different ranges the user wants to get data from
-    # min_id = request.args.get()point_range_to_return["min"]
-    # max_id = point_range_to_return["max"]
+    body             = request.get_json(force=True)  # or omit force=True if you prefer 415 on bad content-type
+    currentSelection = body["currentSelection"]
+    cols   = body["cols"]
+    table            = body["table"]
 
-    if not filename:
-        return {"success": False, "error": "Filename required"}
+    print("current selection:")
+    pprint(currentSelection)
+    print("cols:")
+    pprint(cols)
+    print("table:", table)
+
+    new_table_name = query.new_table_name(table)
 
     # guery to get the selected range of points to return to the view
 
-    try:
-        current_state = data_state_manager.get_current_state()
-        current_df = current_state["df"]
-        # remove the points from the df
-        wrangled_df = impute_average_on_ids(axis,current_df, points_to_remove_array)
-        # run the detectors on the new df
-        new_error_df = run_detectors(wrangled_df)
+    row_count = query.copy_and_impute_bin(current_selection=currentSelection, cols=cols, table=table, new_table_name=new_table_name)
+    json.dump({"row_count": row_count}, open("imputed_data_count/impute.json", "w"))
 
-        if preview == "no":
-            # update the table state of the app
-            update_data_state(wrangled_df, new_error_df)
-            # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
-            new_state = data_state_manager.get_current_state()
-            new_df = new_state["df"].to_dict("records")
-            new_error_df = new_state["error_df"].to_dict("records")
-            return {"success": True, "new-state": new_df}
-        else:
-            return {"success": True, "new-state": wrangled_df.to_dict("records")}
+    try:
+        return {"success": True, "new_table_name": new_table_name, "affected_row_count": row_count}
     except Exception as e:
         return {"success": False, "error": str(e)}

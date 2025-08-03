@@ -380,6 +380,36 @@ async function attachButtonEventListeners(controller){
     });
 
     d3.select("#impute-average-x").on("click", async () => {
+        console.log("current selection: ", selectionControlPanel.currentSelection)
+
+        console.log("current table: ", localStorage.getItem("table"))
+
+        try{
+            const payload = {
+            currentSelection: selectionControlPanel.currentSelection,
+            cols:  [selectionControlPanel.viewParameters[4], selectionControlPanel.viewParameters[5]],
+            table:           localStorage.getItem("table"),
+            };
+
+            const response = await fetch("/api/wrangle/impute", {
+            method : "POST",
+            headers: { "Content-Type": "application/json" },
+            body   : JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+            console.log(data['new_table_name'])
+            localStorage.setItem("table", data['new_table_name'])
+            window.location.reload()
+        }
+        catch (error){
+            console.error(error.message)
+        }
+
+
+
+        return
+
         document.getElementById("preview-remove").style.display = "none";
         document.getElementById("preview-impute-average-x").style.display = "none";
         document.getElementById("preview-impute-average-y").style.display = "none";

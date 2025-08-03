@@ -2,7 +2,7 @@
 # 2-D histogram with data-quality metrics
 # ─────────────────────────────────────────────────────────────────────────────
 from typing import Dict, Any, List
-from sqlalchemy import text
+from sqlalchemy import text, Engine
 from app import engine      # your existing SQLAlchemy engine
 
 _NUMERIC_TYPES = {
@@ -357,3 +357,150 @@ def new_table_name(old_name:str):
         new_version = int(parts[-1]) + 1
     
     return parts[0] + split_substring + str(new_version)
+
+from typing import Dict, Any, List, Tuple
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+
+# sentinel constants used by your histogram code
+NULL_NUM_BIN  = 0
+NULL_CAT_BIN  = "__NULL__"
+
+
+def _missing_pred(col: str) -> str:
+    """Boolean SQL expression that is TRUE when *col* is ‘missing’."""
+    return (
+        f"(\"{col}\" IS NULL "
+        f"OR \"{col}\"::text IN ('', 'null', 'undefined'))"
+    )
+
+
+def _bin_predicate(
+    *,
+    bin_val: Any,
+    bin_type: str,
+    scale: Dict[str, Any],
+    col: str,
+    params: Dict[str, Any],
+    pfx: str,
+) -> str:
+    """
+    Return a SQL WHERE-clause fragment that matches rows which fell into
+    *bin_val* for column *col*.  Adds any bound parameters to *params*.
+    """
+    if bin_type == "numeric":
+        if bin_val == NULL_NUM_BIN:                # NULL bucket
+            return _missing_pred(col)
+        edge = scale["numeric"][bin_val]           # {'x0', 'x1'}
+        lo, hi   = edge["x0"], edge["x1"]
+        lo_key   = f"{pfx}lo"
+        hi_key   = f"{pfx}hi"
+        params[lo_key], params[hi_key] = lo, hi
+        last_bin = bin_val == len(scale["numeric"]) - 1
+        return (
+            f"\"{col}\" BETWEEN :{lo_key} AND :{hi_key}"
+            if last_bin
+            else f"\"{col}\" >= :{lo_key} AND \"{col}\" < :{hi_key}"
+        )
+    else:  # categorical
+        if bin_val == NULL_CAT_BIN:
+            return _missing_pred(col)
+        key = f"{pfx}_cat"
+        params[key] = bin_val
+        return f"\"{col}\" = :{key}"
+
+
+def copy_and_impute_bin(
+    current_selection: Dict[str, Any],
+    cols: List[str],
+    table: str,
+    new_table_name: str,
+) -> Tuple[int, int]:
+    """
+    Duplicate *table* into *new_table_name* and impute **only** the rows lying
+    in the single histogram bar described by *current_selection*.
+
+    Returns (rows_examined, cells_imputed).
+    """
+    if len(cols) != 2:
+        raise ValueError("cols must be exactly [x_column, y_column]")
+
+    x_col, y_col   = cols
+    sel            = current_selection["data"][0]
+    params: Dict[str, Any] = {}
+
+    # ------------ WHERE predicate that defines the selected bin ------------
+    where_parts = [
+        _bin_predicate(
+            bin_val   = sel["xBin"],
+            bin_type  = sel["xType"],
+            scale     = current_selection["scaleX"],
+            col       = x_col,
+            params    = params,
+            pfx       = "x",
+        ),
+        _bin_predicate(
+            bin_val   = sel["yBin"],
+            bin_type  = sel["yType"],
+            scale     = current_selection["scaleY"],
+            col       = y_col,
+            params    = params,
+            pfx       = "y",
+        ),
+    ]
+    bin_where_sql = " AND ".join(where_parts)
+
+    with engine.begin() as conn:
+
+        # 1 ─ make a plain copy of the table
+        conn.execute(text(f"DROP TABLE IF EXISTS {new_table_name}"))
+        conn.execute(text(f"CREATE TABLE {new_table_name} AS SELECT * FROM {table}"))
+
+        # 2 ─ how many rows does that bin actually hold?
+        rows_examined = conn.execute(
+            text(f"SELECT COUNT(*) FROM {new_table_name} WHERE {bin_where_sql}"),
+            params,
+        ).scalar()
+
+        if rows_examined == 0:
+            print("⚠️  No rows fell into the chosen bin – nothing to impute.")
+            return 0, 0
+
+        # 3 ─ mode (most-common non-missing value) for each target column
+        modes: Dict[str, Any] = {}
+        for col in cols:
+            mode_val = conn.execute(
+                text(
+                    f"""
+                    SELECT "{col}"
+                    FROM   {table}
+                    WHERE  NOT {_missing_pred(col)}
+                    GROUP  BY "{col}"
+                    ORDER  BY COUNT(*) DESC
+                    LIMIT  1
+                    """
+                )
+            ).scalar()
+
+            # If the whole column is missing, pick the first non-NULL value
+            if mode_val is None:
+                mode_val = conn.execute(
+                    text(f'SELECT "{col}" FROM {table} WHERE "{col}" IS NOT NULL LIMIT 1')
+                ).scalar()
+            modes[col] = mode_val
+
+        # 4 ─ impute column-by-column
+        cells_imputed = 0
+        for col in cols:
+            upd_sql = text(
+                f"""
+                UPDATE {new_table_name}
+                SET    "{col}" = :mode_val
+                WHERE  {bin_where_sql}
+                  AND  {_missing_pred(col)}
+                """
+            )
+            rc = conn.execute(upd_sql, dict(params, mode_val=modes[col])).rowcount
+            cells_imputed += rc
+
+    return rows_examined, cells_imputed
