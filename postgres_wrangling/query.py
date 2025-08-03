@@ -410,6 +410,101 @@ def _bin_predicate(
         return f"\"{col}\" = :{key}"
 
 
+# def copy_and_impute_bin(
+#     current_selection: Dict[str, Any],
+#     cols: List[str],
+#     table: str,
+#     new_table_name: str,
+# ) -> Tuple[int, int]:
+#     """
+#     Duplicate *table* into *new_table_name* and impute **only** the rows lying
+#     in the single histogram bar described by *current_selection*.
+
+#     Returns (rows_examined, cells_imputed).
+#     """
+#     if len(cols) != 2:
+#         raise ValueError("cols must be exactly [x_column, y_column]")
+
+#     x_col, y_col   = cols
+#     sel            = current_selection["data"][0]
+#     params: Dict[str, Any] = {}
+
+#     # ------------ WHERE predicate that defines the selected bin ------------
+#     where_parts = [
+#         _bin_predicate(
+#             bin_val   = sel["xBin"],
+#             bin_type  = sel["xType"],
+#             scale     = current_selection["scaleX"],
+#             col       = x_col,
+#             params    = params,
+#             pfx       = "x",
+#         ),
+#         _bin_predicate(
+#             bin_val   = sel["yBin"],
+#             bin_type  = sel["yType"],
+#             scale     = current_selection["scaleY"],
+#             col       = y_col,
+#             params    = params,
+#             pfx       = "y",
+#         ),
+#     ]
+#     bin_where_sql = " AND ".join(where_parts)
+
+#     with engine.begin() as conn:
+
+#         # 1 ─ make a plain copy of the table
+#         conn.execute(text(f"DROP TABLE IF EXISTS {new_table_name}"))
+#         conn.execute(text(f"CREATE TABLE {new_table_name} AS SELECT * FROM {table}"))
+
+#         # 2 ─ how many rows does that bin actually hold?
+#         rows_examined = conn.execute(
+#             text(f"SELECT COUNT(*) FROM {new_table_name} WHERE {bin_where_sql}"),
+#             params,
+#         ).scalar()
+
+#         if rows_examined == 0:
+#             print("⚠️  No rows fell into the chosen bin – nothing to impute.")
+#             return 0, 0
+
+#         # 3 ─ mode (most-common non-missing value) for each target column
+#         modes: Dict[str, Any] = {}
+#         for col in cols:
+#             mode_val = conn.execute(
+#                 text(
+#                     f"""
+#                     SELECT "{col}"
+#                     FROM   {table}
+#                     WHERE  NOT {_missing_pred(col)}
+#                     GROUP  BY "{col}"
+#                     ORDER  BY COUNT(*) DESC
+#                     LIMIT  1
+#                     """
+#                 )
+#             ).scalar()
+
+#             # If the whole column is missing, pick the first non-NULL value
+#             if mode_val is None:
+#                 mode_val = conn.execute(
+#                     text(f'SELECT "{col}" FROM {table} WHERE "{col}" IS NOT NULL LIMIT 1')
+#                 ).scalar()
+#             modes[col] = mode_val
+
+#         # 4 ─ impute column-by-column
+#         cells_imputed = 0
+#         for col in cols:
+#             upd_sql = text(
+#                 f"""
+#                 UPDATE {new_table_name}
+#                 SET    "{col}" = :mode_val
+#                 WHERE  {bin_where_sql}
+#                   AND  {_missing_pred(col)}
+#                 """
+#             )
+#             rc = conn.execute(upd_sql, dict(params, mode_val=modes[col])).rowcount
+#             cells_imputed += rc
+
+#     return rows_examined, cells_imputed
+
 def copy_and_impute_bin(
     current_selection: Dict[str, Any],
     cols: List[str],
@@ -417,8 +512,11 @@ def copy_and_impute_bin(
     new_table_name: str,
 ) -> Tuple[int, int]:
     """
-    Duplicate *table* into *new_table_name* and impute **only** the rows lying
-    in the single histogram bar described by *current_selection*.
+    Duplicate *table* into *new_table_name* and, **only** for rows that fall
+    into the selected 2-D histogram bin, impute missing values:
+
+        • numeric columns  →  mean (AVG)
+        • categorical      →  mode (most-common non-NULL)
 
     Returns (rows_examined, cells_imputed).
     """
@@ -452,55 +550,70 @@ def copy_and_impute_bin(
 
     with engine.begin() as conn:
 
-        # 1 ─ make a plain copy of the table
-        conn.execute(text(f"DROP TABLE IF EXISTS {new_table_name}"))
-        conn.execute(text(f"CREATE TABLE {new_table_name} AS SELECT * FROM {table}"))
+        # 1 ─ plain copy of the table
+        conn.execute(text(f'DROP TABLE IF EXISTS "{new_table_name}"'))
+        conn.execute(text(f'CREATE TABLE "{new_table_name}" AS SELECT * FROM "{table}"'))
 
-        # 2 ─ how many rows does that bin actually hold?
+        # 2 ─ how many rows does that bin hold?
         rows_examined = conn.execute(
-            text(f"SELECT COUNT(*) FROM {new_table_name} WHERE {bin_where_sql}"),
+            text(f'SELECT COUNT(*) FROM "{new_table_name}" WHERE {bin_where_sql}'),
             params,
-        ).scalar()
+        ).scalar_one()
 
         if rows_examined == 0:
             print("⚠️  No rows fell into the chosen bin – nothing to impute.")
             return 0, 0
 
-        # 3 ─ mode (most-common non-missing value) for each target column
-        modes: Dict[str, Any] = {}
+        # 3 ─ choose a fill-value for each column
+        modes_or_means: Dict[str, Any] = {}
         for col in cols:
-            mode_val = conn.execute(
-                text(
-                    f"""
-                    SELECT "{col}"
-                    FROM   {table}
-                    WHERE  NOT {_missing_pred(col)}
-                    GROUP  BY "{col}"
-                    ORDER  BY COUNT(*) DESC
-                    LIMIT  1
-                    """
-                )
-            ).scalar()
-
-            # If the whole column is missing, pick the first non-NULL value
-            if mode_val is None:
-                mode_val = conn.execute(
-                    text(f'SELECT "{col}" FROM {table} WHERE "{col}" IS NOT NULL LIMIT 1')
+            is_numeric = _is_numeric(conn, col, table)   # helper already exists
+            if is_numeric:
+                # Mean of non-missing cells
+                val = conn.execute(
+                    text(
+                        f'''
+                        SELECT AVG("{col}")::numeric
+                        FROM   "{table}"
+                        WHERE  NOT {_missing_pred(col)}
+                        '''
+                    )
                 ).scalar()
-            modes[col] = mode_val
+            else:
+                # Mode (most common) of non-missing cells
+                val = conn.execute(
+                    text(
+                        f'''
+                        SELECT "{col}"
+                        FROM   "{table}"
+                        WHERE  NOT {_missing_pred(col)}
+                        GROUP  BY "{col}"
+                        ORDER  BY COUNT(*) DESC
+                        LIMIT  1
+                        '''
+                    )
+                ).scalar()
+
+            # Fallback if the whole column is NULL
+            if val is None:
+                val = conn.execute(
+                    text(f'SELECT "{col}" FROM "{table}" WHERE "{col}" IS NOT NULL LIMIT 1')
+                ).scalar()
+
+            modes_or_means[col] = val
 
         # 4 ─ impute column-by-column
         cells_imputed = 0
         for col in cols:
             upd_sql = text(
-                f"""
-                UPDATE {new_table_name}
-                SET    "{col}" = :mode_val
+                f'''
+                UPDATE "{new_table_name}"
+                SET    "{col}" = :fill_val
                 WHERE  {bin_where_sql}
                   AND  {_missing_pred(col)}
-                """
+                '''
             )
-            rc = conn.execute(upd_sql, dict(params, mode_val=modes[col])).rowcount
+            rc = conn.execute(upd_sql, dict(params, fill_val=modes_or_means[col])).rowcount
             cells_imputed += rc
 
     return rows_examined, cells_imputed
