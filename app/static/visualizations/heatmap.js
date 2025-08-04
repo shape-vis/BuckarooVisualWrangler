@@ -1,4 +1,4 @@
-import {queryHistogram2d} from "../js/serverCalls.js";
+import {queryHistogram2d, queryHistogram2dDB} from "../js/serverCalls.js";
 
 
 /**
@@ -29,6 +29,12 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
     // let maxId = 400
     let binsToCreate = 10
     try {
+        if(model.getUsingDb()){
+            let response = await queryHistogram2dDB(xCol,yCol,model.originalFilename,
+                model.getSampleIDRangeMin(),model.getSampleIDRangeMax(),binsToCreate)
+            histData = response["binned_data"]
+        }
+
         let response = await queryHistogram2d(xCol, yCol, model.getSampleIDRangeMin(), model.getSampleIDRangeMax(), binsToCreate)
         histData = response["binned_data"]
 

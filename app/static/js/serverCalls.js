@@ -111,6 +111,30 @@ export async function queryHistogram1dDB(columnName,tableName,minId,maxID,bins) 
 }
 
 /**
+ * Get the data for the 1d histogram in the view
+ * @returns {Promise<void>}
+ */
+export async function queryHistogram2dDB(columnX,columnY,tableName,minId,maxID,bins) {
+    console.log("1d histogram fetch");
+    const params = new URLSearchParams({
+        column_x:columnX,
+        column_y:columnY,
+        tablename:tableName,
+        min_id: minId,
+        max_id: maxID,
+        x_bins: bins,
+        y_bins: bins});
+    const url = `/api/plots/1-d-histogram-data-db?${params}`
+    try{
+        const response = await fetch(url, {method: "GET"});
+        return await response.json();
+    }
+    catch (error){
+        console.error(error.message)
+    }
+}
+
+/**
  * Get the data for the 2d histogram in the view
  * @param xColumn
  * @param yColumn
