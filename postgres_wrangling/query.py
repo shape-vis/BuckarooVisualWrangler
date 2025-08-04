@@ -617,3 +617,258 @@ def copy_and_impute_bin(
             cells_imputed += rc
 
     return rows_examined, cells_imputed
+import pandas as pd
+from typing import Dict, Any, List, Tuple
+
+def copy_and_impute_bin_df(
+    current_selection: Dict[str, Any],
+    cols: List[str],
+    df: pd.DataFrame,
+) -> List[int]:
+    """
+    Locate rows inside the histogram bin given by *current_selection*
+    that still hold a NULL / NaN / “null” / “undefined” in any column
+    listed in *cols*.
+
+    Parameters
+    ----------
+    current_selection : Dict[str, Any]
+        Same structure produced by your front-end (see example above).
+    cols : List[str]   – must be [x_column, y_column].
+    df   : pd.DataFrame
+
+    Returns
+    -------
+    List[int]          – index labels (as int) of rows that need imputation.
+    """
+    if len(cols) != 2:
+        raise ValueError("cols must be exactly [x_column, y_column]")
+
+    x_col, y_col = cols
+    sel          = current_selection["data"][0]    # only one bin is sent
+    sentinels    = {"null", "undefined"}
+
+    # ── build a boolean mask for rows that fall into the selected bin ──
+    def _axis_mask(col: str, axis: str) -> pd.Series:
+        """Mask of rows that fall into the selected x or y bin."""
+        if sel[f"{axis}Type"] == "categorical":
+            # exact category match (case-insensitive, treat NA as no-match)
+            return (
+                df[col]
+                .astype(str)
+                .str.lower()
+                .eq(str(sel[f"{axis}Bin"]).lower())
+                & df[col].notna()
+            )
+        else:  # numeric
+            bins   = current_selection[f"scale{axis.upper()}"]["numeric"]
+            idx    = sel[f"{axis}Bin"]
+            lo, hi = bins[idx][f"{axis}0"], bins[idx][f"{axis}1"]
+
+            s = pd.to_numeric(df[col], errors="coerce")  # NaNs → no-match
+            # last bin is inclusive on the right edge
+            if idx == len(bins) - 1:
+                return (s >= lo) & (s <= hi)
+            return (s >= lo) & (s < hi)
+
+    in_x_bin = _axis_mask(x_col, "x")
+    in_y_bin = _axis_mask(y_col, "y")
+    in_bin   = in_x_bin | in_y_bin
+
+    if not in_bin.any():
+        return []                                     # nothing to impute
+
+    # ── detect missing values only inside the selected bin ─────────────
+    sub_df    = df.loc[in_bin, cols]
+    str_vals  = sub_df.apply(lambda s: s.astype(str).str.lower())
+    miss_mask = sub_df.isna() | str_vals.isin(sentinels)
+
+    return sub_df.index[miss_mask.any(axis=1)].astype(int).tolist()
+
+import pandas as pd
+from typing import Sequence, List, Set, Any
+from pandas.api.types import is_numeric_dtype
+
+
+def impute_at_indices_copy(
+    df: pd.DataFrame,
+    cols: Sequence[str],
+    row_indices: Sequence[int] | List[int],
+    *,
+    sentinel: Set[str] | None = None,
+) -> pd.DataFrame:
+    """
+    Return a **new** dataframe where the cells in `cols` and `row_indices`
+    are imputed as follows:
+        • numeric column  → mean of its non-missing values
+        • non-numeric     → mode (most frequent value)
+
+    “Missing” = NaN / NaT **or** any value in *sentinel*
+               (default {"null", "undefined"}, case-insensitive).
+
+    Parameters
+    ----------
+    df          : pd.DataFrame
+    cols        : iterable[str]   – target columns
+    row_indices : iterable[int]   – index labels of rows to patch
+    sentinel    : set[str] | None – extra strings marking missingness
+
+    Returns
+    -------
+    pd.DataFrame
+        A deep copy of *df* with the requested imputations applied.
+    """
+    sentinel = {s.lower() for s in (sentinel or {"null", "undefined"})}
+    idx_set  = set(row_indices)
+
+    # work on a deep copy so the caller’s df is untouched
+    out = df.copy(deep=True)
+
+    for col in cols:
+        col_series = out[col]
+
+        # derive statistic (mean or mode) from *non-missing* values
+        clean_col = (
+            col_series
+            .mask(col_series.astype(str).str.lower().isin(sentinel))
+            .dropna()
+        )
+        if clean_col.empty:      # cannot impute if everything is missing
+            continue
+
+        fill_value: Any
+        if is_numeric_dtype(col_series):
+            fill_value = clean_col.astype(float).mean()
+        else:
+            fill_value = clean_col.mode(dropna=True).iloc[0]
+
+        # mask for cells to replace: (row in idx_set) & (cell is missing)
+        target_mask = (
+            out.index.to_series().isin(idx_set) &
+            (
+                col_series.isna() |
+                col_series.astype(str).str.lower().isin(sentinel)
+            )
+        )
+
+        out.loc[target_mask, col] = fill_value
+
+    return out
+
+
+import numpy as np
+
+import numpy as np
+import pandas as pd
+from typing import Dict, Any, List, Tuple
+
+import numpy as np
+import pandas as pd
+from typing import Any, Dict, List, Tuple
+
+
+def remove_anomalous_rows(
+    current_selection: Dict[str, Any],
+    cols: List[str],                 # [x_column, y_column]
+    df: pd.DataFrame,    *,
+    z_threshold: float = 2.0,
+    min_numeric_values: int = 10,
+    skip_cols: List[str] | None = None,
+) -> Tuple[pd.DataFrame, pd.Index]:
+    """
+    Remove every row that is (a) inside the selected 2-D histogram bin and
+    (b) contains at least one numeric-column outlier
+        |value − mean| > z_threshold · std.
+
+    Parameters
+    ----------
+    current_selection : front-end structure shown in the question.
+    cols : [x_column, y_column] – must correspond to the two plotted axes.
+    df : original DataFrame.
+    z_threshold, min_numeric_values, skip_cols : see original docstring.
+
+    Returns
+    -------
+    cleaned_df : copy of *df* with the offending rows removed.
+    dropped_rows : index labels of the discarded rows.
+    """
+    if len(cols) != 2:
+        raise ValueError("cols must be exactly [x_column, y_column]")
+    if skip_cols is None:
+        skip_cols = []
+
+    x_col, y_col = cols
+    sel          = current_selection["data"][0]
+
+    # ─────────────────── 1. mask: rows located in the selected bin ──────────────────
+    def _mask_for_axis(
+        axis_col: str,
+        axis_scale: Dict[str, Any],
+        bin_val: Any,
+        bin_type: str,
+    ) -> pd.Series:
+        """Boolean mask for *axis_col* matching the chosen bin."""
+        if bin_type == "numeric":
+            # bin_val is an *index* into scale["numeric"]
+            try:
+                lo, hi = (
+                    axis_scale["numeric"][bin_val]["x0"],
+                    axis_scale["numeric"][bin_val]["x1"],
+                )
+            except (IndexError, KeyError, TypeError):
+                raise ValueError(f"Cannot locate numeric bin {bin_val} "
+                                 f"for column {axis_col!r}")
+            # Convert column to numeric (silently making non-numerics NaN)
+            col_num = pd.to_numeric(df[axis_col], errors="coerce")
+            # Left-inclusive, right-exclusive except for the last bin
+            if bin_val == len(axis_scale["numeric"]) - 1:
+                return (col_num >= lo) & (col_num <= hi)
+            return (col_num >= lo) & (col_num < hi)
+
+        elif bin_type == "categorical":
+            # bin_val is the category name itself
+            return df[axis_col].astype(str) == str(bin_val)
+
+        else:
+            raise ValueError(f"Unknown bin type {bin_type!r} "
+                             f"for column {axis_col!r}")
+
+    mask_x = _mask_for_axis(
+        axis_col=x_col,
+        axis_scale=current_selection["scaleX"],
+        bin_val=sel["xBin"],
+        bin_type=sel["xType"],
+    )
+    mask_y = _mask_for_axis(
+        axis_col=y_col,
+        axis_scale=current_selection["scaleY"],
+        bin_val=sel["yBin"],
+        bin_type=sel["yType"],
+    )
+
+    rows_in_bin = mask_x & mask_y
+
+    # ─────────────────── 2. mask: rows containing numeric outliers ──────────────────
+    row_is_anomalous = pd.Series(False, index=df.index)
+
+    for col in df.columns:
+        if col in skip_cols:
+            continue
+
+        numeric_col = pd.to_numeric(df[col], errors="coerce")
+        if numeric_col.notna().sum() < min_numeric_values:
+            continue
+
+        mean, std = numeric_col.mean(), numeric_col.std()
+        if std == 0 or np.isnan(std):
+            continue  # uniform column → no anomalies
+
+        z_mask = (np.abs(numeric_col - mean) > z_threshold * std)
+        row_is_anomalous |= z_mask.fillna(False)
+
+    # ─────────────────── 3. drop rows that satisfy BOTH masks ───────────────────────
+    to_drop     = row_is_anomalous & rows_in_bin
+    dropped_idx = to_drop[to_drop].index
+    cleaned_df  = df.loc[~to_drop].copy()
+
+    return cleaned_df, dropped_idx

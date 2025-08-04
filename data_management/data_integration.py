@@ -19,6 +19,10 @@ def generate_2d_histogram_data(x_column, y_column, x_bins, y_bins, min_id, max_i
     """Generate 2D histogram data"""
     return generate_histogram_data([x_column, y_column], [int(x_bins),int(y_bins)], min_id, max_id)
 
+def generate_2d_histogram_data_modified(df, error_df, x_column, y_column, x_bins, y_bins, min_id, max_id):
+    """Generate 2D histogram data"""
+    return generate_histogram_data_modified(df, error_df, [x_column, y_column], [int(x_bins),int(y_bins)], min_id, max_id)
+
 #Data access functions
 def get_filtered_dataframes(min_id, max_id):
     """Get current dataframes filtered by ID range"""
@@ -114,6 +118,51 @@ def create_scale_info(scale_data, column_type):
     else:
         ranges = [{"x0": int(interval.left), "x1": int(interval.right)} for interval in scale_data]
         return {"numeric": ranges, "categorical": []}
+    
+def generate_histogram_data_modified(main_df, error_df, column_names, numbers_of_bins, min_id, max_id):
+    """Generate histogram data for 1D or 2D histograms"""
+    if len(column_names) > 2:
+        raise ValueError("Maximum 2 dimensions supported for now")
+    print("generating histogram data")
+    # Get filtered data ( get the window of min/max data from the datatable)
+    print("got filtered df")
+    # Process each column to get bin assignments and scale data
+    all_bin_assignments = []
+    all_scale_data = []
+    all_column_types = []
+
+    for column_name, number_of_bins in zip(column_names, numbers_of_bins):
+        bin_assignments, scale_data, column_type = get_column_bin_assignments(
+            main_df, column_name, number_of_bins
+        )
+        all_bin_assignments.append(bin_assignments)
+        all_scale_data.append(scale_data)
+        all_column_types.append(column_type)
+        print("Added column to bin assignments and scale data:", column_name)
+
+    print("bin assignments, and scale data compiled")
+    # Create mappings and count items/errors
+    row_to_bin_mapping = create_row_to_bin_mapping(main_df, column_names, all_bin_assignments)
+    relevant_errors = get_relevant_errors(error_df, column_names)
+
+    items_per_bin = count_items_per_bin(row_to_bin_mapping)
+    errors_per_bin = count_errors_per_bin(relevant_errors, row_to_bin_mapping)
+
+    # Build histogram entries
+    histogram_entries = build_histogram_entries(
+        items_per_bin, errors_per_bin, all_scale_data, all_column_types
+    )
+
+    # Build response
+    response = {"histograms": histogram_entries}
+
+    if len(column_names) == 1:
+        response["scaleX"] = create_scale_info(all_scale_data[0], all_column_types[0])
+    elif len(column_names) == 2:
+        response["scaleX"] = create_scale_info(all_scale_data[0], all_column_types[0])
+        response["scaleY"] = create_scale_info(all_scale_data[1], all_column_types[1])
+
+    return response
 
 def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
     """Generate histogram data for 1D or 2D histograms"""

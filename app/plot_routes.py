@@ -4,7 +4,7 @@
 from flask import request
 from pprint import pprint
 import os, json, uuid
-from app import app, engine
+from app import app, engine, service_helpers
 from app.service_helpers import group_by_attribute
 from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
@@ -14,7 +14,8 @@ import hashlib
 from postgres_wrangling import query
 import traceback
 import time
-
+from app import data_state_manager
+from postgres_wrangling import dataframe_store
 # from data_management.data_integration import generate_1d_histogram_data
 
 
@@ -60,49 +61,57 @@ def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
     h.update(canonical.encode("utf-8"))
     return h.hexdigest()
 
-# @app.get("/api/plots/2-d-histogram-data")
-# def get_2d_histogram():
-#     x_column_name = request.args.get("x_column")
-#     y_column_name = request.args.get("y_column")
-#     min_id         = int(request.args.get("min_id", 0))
-#     max_id         = int(request.args.get("max_id", 200))
-#     max_id = 1_000_000
-#     number_of_bins = int(request.args.get("bins", 10))
-#     try:
-#         binned_data = generate_2d_histogram_data(
-#             x_column_name, y_column_name,
-#             number_of_bins, number_of_bins,
-#             min_id, max_id,
-#         )
-#             # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
-#             # print(dataframe.head(5))
+@app.get("/api/plots/2-d-histogram-data/pandas")
+def get_2d_histogram_pandas():
+    x_column_name = request.args.get("x_column")
+    y_column_name = request.args.get("y_column")
+    min_id         = int(request.args.get("min_id", 0))
+    max_id         = int(request.args.get("max_id", 200))
+    max_id = 1_000_000
+    number_of_bins = int(request.args.get("bins", 10))
+    data_state_manager.get_current_state()["error_df"].to_csv('imputed_data_count/error_df.csv')
+    try:
+        if dataframe_store.get_dataframe() is None:
+            dataframe_store.set_dataframe(data_state_manager.get_current_state()["df"])
+        
+        df = dataframe_store.get_dataframe()
+        error_df = service_helpers.run_detectors(df)
 
-#         # ── Compute deterministic file name ──────────────────────────────────
-#         digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
-#         file_name  = f"{digest[:16]}.json"            # shorten if you like
-#         file_path  = EXPORT_DIR / file_name
+        binned_data = generate_2d_histogram_data_modified(
+            df, error_df,
+            x_column_name, y_column_name,
+            number_of_bins, number_of_bins,
+            min_id, max_id,
+        )
+            # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
+            # print(dataframe.head(5))
 
-#         # ── Write only if it doesn't exist already ───────────────────────────
-#         with file_path.open("w", encoding="utf-8") as fp:
-#             json.dump({
-#                 "x_column_name": x_column_name,
-#                 "y_column_name": y_column_name,
-#                 "min_id": min_id,
-#                 "max_id": max_id,
-#                 "number_of_bins": number_of_bins,
-#                 "binned_data": binned_data
+        # ── Compute deterministic file name ──────────────────────────────────
+        digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
+        file_name  = f"{digest[:16]}.json"            # shorten if you like
+        file_path  = EXPORT_DIR / file_name
+
+        # ── Write only if it doesn't exist already ───────────────────────────
+        with file_path.open("w", encoding="utf-8") as fp:
+            json.dump({
+                "x_column_name": x_column_name,
+                "y_column_name": y_column_name,
+                "min_id": min_id,
+                "max_id": max_id,
+                "number_of_bins": number_of_bins,
+                "binned_data": binned_data
                 
-#                 }, fp, ensure_ascii=False, indent=2)
+                }, fp, ensure_ascii=False, indent=2)
 
-#         return {
-#             "Success":     True,
-#             "file_name":   file_name,
-#             "file_path":   str(file_path),
-#             "binned_data": binned_data,
-#         }
+        return {
+            "Success":     True,
+            "file_name":   file_name,
+            "file_path":   str(file_path),
+            "binned_data": binned_data,
+        }
 
-#     except Exception as e:
-#         return {"Success": False, "Error": str(e)}
+    except Exception as e:
+        return {"Success": False, "Error": str(e)}
 
 @app.get("/api/plots/2-d-histogram-data")
 def get_2d_histogram():
