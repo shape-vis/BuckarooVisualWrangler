@@ -307,7 +307,7 @@ async function attachButtonEventListeners(controller){
             // selected_sample: localStorage.getItem("selectedSample") // keep / drop as needed
             };
 
-            const response = await fetch("/api/wrangle/remove/pandas", {
+            const response = await fetch("/api/wrangle/remove", {
             method : "POST",
             headers: { "Content-Type": "application/json" },
             body   : JSON.stringify(payload),
@@ -316,7 +316,7 @@ async function attachButtonEventListeners(controller){
             const data = await response.json();
             console.log(data['new_table_name'])
             localStorage.setItem("table", data['new_table_name'])
-            // window.location.reload()
+            window.location.reload()
         }
         catch (error){
             console.error(error.message)
@@ -391,7 +391,7 @@ async function attachButtonEventListeners(controller){
             table:           localStorage.getItem("table"),
             };
 
-            const response = await fetch("/api/wrangle/impute/pandas", {
+            const response = await fetch("/api/wrangle/impute", {
             method : "POST",
             headers: { "Content-Type": "application/json" },
             body   : JSON.stringify(payload),

@@ -5,12 +5,56 @@ from typing import Dict, Any, List
 from sqlalchemy import text, Engine
 from app import engine      # your existing SQLAlchemy engine
 
+# _NUMERIC_TYPES = {
+#     "smallint", "integer", "bigint",
+#     "decimal", "numeric", "real", "double precision",
+#     "smallserial", "serial", "bigserial", "money"
+# }
+
+# def _is_numeric(conn, col: str, table_name: str) -> bool:
+#     """
+#     Return True if *col* in *table_name* is a numeric SQL type.
+#     Works with quoted / mixed-case identifiers and with schema-qualified
+#     table names (e.g.  public.myTable  or  "MySchema"."MyTable").
+#     """
+
+#     # ── split optional schema ─────────────────────────────────────────────
+#     if "." in table_name:
+#         schema, tbl = table_name.split(".", 1)
+#         schema = schema.strip('"')           # remove quotes if present
+#         tbl    = tbl.strip('"')
+#     else:
+#         schema, tbl = None, table_name.strip('"')
+
+#     # Postgres folds unquoted identifiers to lower-case, so do the same.
+#     col_lc  = col.strip('"').lower()
+#     tbl_lc  = tbl.lower()
+
+#     sql = text("""
+#         SELECT data_type
+#         FROM information_schema.columns
+#         WHERE table_name   = :tbl
+#           AND column_name  = :col
+#           AND (:schema IS NULL OR table_schema = :schema)
+#         LIMIT 1
+#     """)
+
+#     dtype = conn.execute(
+#         sql, {"tbl": tbl_lc, "col": col_lc, "schema": schema}
+#     ).scalar_one_or_none()
+
+#     if dtype is None:
+#         raise ValueError(
+#             f"Column {col!r} not found in table {table_name!r}. "
+#             "Double-check spelling / quoting."
+#         )
+
+#     return dtype.lower() in _NUMERIC_TYPES
+
 _NUMERIC_TYPES = {
     "smallint", "integer", "bigint",
     "decimal", "numeric", "real", "double precision"
 }
-
-# ───────── helpers ───────────────────────────────────────────────────────────
 def _is_numeric(conn, col: str, table_name: str) -> bool:
     sql = f"""
         SELECT data_type
@@ -20,7 +64,6 @@ def _is_numeric(conn, col: str, table_name: str) -> bool:
     """
     dtype = conn.execute(text(sql), {"col": col}).scalar_one()
     return dtype in _NUMERIC_TYPES
-
 
 def _numeric_scale(lo: float, hi: float, bins: int, axis: str) -> List[Dict[str, float]]:
     """Evenly-spaced numeric bin-boundaries."""
@@ -409,102 +452,6 @@ def _bin_predicate(
         params[key] = bin_val
         return f"\"{col}\" = :{key}"
 
-
-# def copy_and_impute_bin(
-#     current_selection: Dict[str, Any],
-#     cols: List[str],
-#     table: str,
-#     new_table_name: str,
-# ) -> Tuple[int, int]:
-#     """
-#     Duplicate *table* into *new_table_name* and impute **only** the rows lying
-#     in the single histogram bar described by *current_selection*.
-
-#     Returns (rows_examined, cells_imputed).
-#     """
-#     if len(cols) != 2:
-#         raise ValueError("cols must be exactly [x_column, y_column]")
-
-#     x_col, y_col   = cols
-#     sel            = current_selection["data"][0]
-#     params: Dict[str, Any] = {}
-
-#     # ------------ WHERE predicate that defines the selected bin ------------
-#     where_parts = [
-#         _bin_predicate(
-#             bin_val   = sel["xBin"],
-#             bin_type  = sel["xType"],
-#             scale     = current_selection["scaleX"],
-#             col       = x_col,
-#             params    = params,
-#             pfx       = "x",
-#         ),
-#         _bin_predicate(
-#             bin_val   = sel["yBin"],
-#             bin_type  = sel["yType"],
-#             scale     = current_selection["scaleY"],
-#             col       = y_col,
-#             params    = params,
-#             pfx       = "y",
-#         ),
-#     ]
-#     bin_where_sql = " AND ".join(where_parts)
-
-#     with engine.begin() as conn:
-
-#         # 1 ─ make a plain copy of the table
-#         conn.execute(text(f"DROP TABLE IF EXISTS {new_table_name}"))
-#         conn.execute(text(f"CREATE TABLE {new_table_name} AS SELECT * FROM {table}"))
-
-#         # 2 ─ how many rows does that bin actually hold?
-#         rows_examined = conn.execute(
-#             text(f"SELECT COUNT(*) FROM {new_table_name} WHERE {bin_where_sql}"),
-#             params,
-#         ).scalar()
-
-#         if rows_examined == 0:
-#             print("⚠️  No rows fell into the chosen bin – nothing to impute.")
-#             return 0, 0
-
-#         # 3 ─ mode (most-common non-missing value) for each target column
-#         modes: Dict[str, Any] = {}
-#         for col in cols:
-#             mode_val = conn.execute(
-#                 text(
-#                     f"""
-#                     SELECT "{col}"
-#                     FROM   {table}
-#                     WHERE  NOT {_missing_pred(col)}
-#                     GROUP  BY "{col}"
-#                     ORDER  BY COUNT(*) DESC
-#                     LIMIT  1
-#                     """
-#                 )
-#             ).scalar()
-
-#             # If the whole column is missing, pick the first non-NULL value
-#             if mode_val is None:
-#                 mode_val = conn.execute(
-#                     text(f'SELECT "{col}" FROM {table} WHERE "{col}" IS NOT NULL LIMIT 1')
-#                 ).scalar()
-#             modes[col] = mode_val
-
-#         # 4 ─ impute column-by-column
-#         cells_imputed = 0
-#         for col in cols:
-#             upd_sql = text(
-#                 f"""
-#                 UPDATE {new_table_name}
-#                 SET    "{col}" = :mode_val
-#                 WHERE  {bin_where_sql}
-#                   AND  {_missing_pred(col)}
-#                 """
-#             )
-#             rc = conn.execute(upd_sql, dict(params, mode_val=modes[col])).rowcount
-#             cells_imputed += rc
-
-#     return rows_examined, cells_imputed
-
 def copy_and_impute_bin(
     current_selection: Dict[str, Any],
     cols: List[str],
@@ -871,4 +818,145 @@ def remove_anomalous_rows(
     dropped_idx = to_drop[to_drop].index
     cleaned_df  = df.loc[~to_drop].copy()
 
-    return cleaned_df, dropped_idx
+    return cleaned_df
+
+import numpy as np
+import pandas as pd
+from typing import Any, Dict, List, Tuple
+
+def remove_problematic_rows(
+    current_selection: Dict[str, Any],
+    cols: List[str],                 # [x_column, y_column]
+    df: pd.DataFrame,    *,
+    z_threshold: float = 2.0,
+    min_numeric_values: int = 10,
+    skip_cols: List[str] | None = None,
+    rare_category_threshold: int = 3,          # < 3 instances ⇒ “incomplete”
+) -> Tuple[pd.DataFrame, pd.Index]:
+    """
+    Drop every row that
+      • lies inside the selected 2-D histogram bin  *and*
+      • has at least one of the following cell-level issues
+          – numeric outlier (|value-µ| > z_threshold·σ)
+          – missing value   (NaN / NULL / ‘null’ / ‘undefined’ / empty string)
+          – data-type mismatch (value’s type differs from the column majority)
+          – incomplete category (categorical value appears < rare_category_threshold times)
+
+    Parameters
+    ----------
+    current_selection, cols, df : same meaning as before.
+    z_threshold, min_numeric_values, skip_cols : identical to the old function.
+    rare_category_threshold : “rarity” cut-off for categorical values.
+
+    Returns
+    -------
+    cleaned_df : `df` copy with the bad rows removed.
+    dropped_rows : index labels of the discarded rows.
+    """
+    # ── 0. basic checks ────────────────────────────────────────────────────
+    if len(cols) != 2:
+        raise ValueError("cols must be exactly [x_column, y_column]")
+    if skip_cols is None:
+        skip_cols = []
+
+    x_col, y_col = cols
+    sel          = current_selection["data"][0]
+
+    # ── 1. rows lying in the selected histogram bin ───────────────────────
+    def _mask_for_axis(axis_col, axis_scale, bin_val, bin_type):
+        if bin_type == "numeric":
+            lo, hi = axis_scale["numeric"][bin_val]["x0"], axis_scale["numeric"][bin_val]["x1"]
+            col_num = pd.to_numeric(df[axis_col], errors="coerce")
+            # final bin is right-inclusive
+            return (col_num >= lo) & ((col_num <= hi) if bin_val == len(axis_scale["numeric"])-1 else (col_num < hi))
+        elif bin_type == "categorical":
+            return df[axis_col].astype(str) == str(bin_val)
+        raise ValueError(f"Unknown bin type {bin_type!r} for {axis_col!r}")
+
+    rows_in_bin = (
+        _mask_for_axis(x_col, current_selection["scaleX"], sel["xBin"], sel["xType"])
+        & _mask_for_axis(y_col, current_selection["scaleY"], sel["yBin"], sel["yType"])
+    )
+
+    # ── 2-a. numeric outliers ─────────────────────────────────────────────
+    row_anomaly = pd.Series(False, index=df.index)
+    for col in df.columns.drop(skip_cols):
+        numeric = pd.to_numeric(df[col], errors="coerce")
+        if numeric.notna().sum() < min_numeric_values:
+            continue
+        std = numeric.std()
+        if std == 0 or np.isnan(std):
+            continue
+        row_anomaly |= (np.abs(numeric - numeric.mean()) > z_threshold * std).fillna(False)
+
+    # ── 2-b. missing values (NULL / ‘null’ / ‘undefined’ / '') ────────────
+    sentinel = {"null", "undefined", ""}
+    str_df   = df.astype(str).apply(lambda s: s.str.lower())        # <- every column is now lowercase str
+    row_missing = (df.isna() | str_df.isin(sentinel)).any(axis=1)
+
+    # ── 2-c. data-type mismatches (majority numeric vs. non-numeric) ──────
+    row_mismatch = pd.Series(False, index=df.index)
+    for col in df.columns.drop(skip_cols):
+        num_mask   = pd.to_numeric(df[col], errors="coerce").notna()
+        majority_is_numeric = num_mask.sum() > (~num_mask).sum()
+        row_mismatch |= (~num_mask) if majority_is_numeric else num_mask
+
+    # ── 2-d. incomplete / rare categories in object columns ───────────────
+    row_incomplete = pd.Series(False, index=df.index)
+    for col in df.select_dtypes(include=["object", "category"]).columns.drop(skip_cols):
+        rare_vals = df[col].value_counts(dropna=False).loc[lambda s: s < rare_category_threshold].index
+        if len(rare_vals):
+            row_incomplete |= df[col].isin(rare_vals)
+
+    # ── 3. union of all problems, restricted to rows_in_bin ───────────────
+    row_has_issue = row_anomaly | row_missing | row_mismatch | row_incomplete
+    to_drop       = rows_in_bin & row_has_issue
+
+    cleaned_df  = df.loc[~to_drop].copy()
+    dropped_idx = to_drop[to_drop].index
+
+    return cleaned_df
+
+from sqlalchemy import MetaData, Table, Index
+from sqlalchemy.exc import NoSuchTableError
+
+def build_composite_index(table_name: str, column1: str, column2: str) -> str:
+    """
+    Create a basic (non-unique) composite index on *column1* and *column2*
+    of *table_name* using the global SQLAlchemy ``engine``.
+
+    Parameters
+    ----------
+    table_name : str
+        Name of the target table (optionally schema-qualified, e.g. "public.mytable").
+    column1 : str
+        The first column in the index (put the column you filter on most often first).
+    column2 : str
+        The second column in the index.
+
+    Returns
+    -------
+    str
+        The name of the index that was created (or already existed).
+
+    Raises
+    ------
+    ValueError
+        If the table or either column does not exist.
+    """
+    metadata = MetaData()
+    try:
+        table = Table(table_name, metadata, autoload_with=engine)
+    except NoSuchTableError as err:
+        raise ValueError(f"Table '{table_name}' not found") from err
+
+    missing = [col for col in (column1, column2) if col not in table.c]
+    if missing:
+        raise ValueError(f"Column(s) {', '.join(missing)} not found in '{table_name}'")
+
+    index_name = f"idx_{table_name.replace('.', '_')}_{column1}_{column2}"
+    idx = Index(index_name, table.c[column1], table.c[column2])
+
+    # checkfirst=True → CREATE INDEX IF NOT EXISTS
+    idx.create(bind=engine, checkfirst=True)
+    return idx.name

@@ -3,7 +3,7 @@
 ## Overview
 Buckaroo Visual Wrangler is a data visualization tool that enables users to visually detect errors in their data and apply data wranglers to clean the dataset. Users can choose from 3 provided datasets:
 - StackOverflow survey (stackoverflow_db_uncleaned.csv)
-- Chicago crimes (Crimes_-_One_year_prior_to_present_20250421.csv)
+- Chicago crimes (crimes___one_year_prior_to_present_20250421.csv)
 - Student loan complaints (complaints-2025-04-21_17_31.csv)
 
 or upload their own. The user can also provide their own error detector and data wrangler functions to apply to the data. The user may explore their data using various visualization styles, such as heatmaps, scatterplots, or histograms. The user may select data by clicking on the plots and applying various wrangling techniques. After performing the desired wrangling actions, the user may export a python script of those actions to run on the dataset outside of the tool.

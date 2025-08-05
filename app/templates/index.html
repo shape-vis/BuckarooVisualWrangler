@@ -81,7 +81,7 @@
 <!--                        Start by selecting a dataset or uploading your own:-->
 <!--                        <br><br>-->
 <!--                        <div class="dataset-button" onclick="loadDataset('/static/data/stackoverflow_db_uncleaned.csv')">StackOverflow Survey</div>-->
-<!--                        <div class="dataset-button" onclick="loadDataset('/static/data/Crimes_-_One_year_prior_to_present_20250421.csv')"> Chicago Crime</div>-->
+<!--                        <div class="dataset-button" onclick="loadDataset('/static/data/crimes___one_year_prior_to_present_20250421.csv')"> Chicago Crime</div>-->
 <!--                        <div class="dataset-button" onclick="loadDataset('/static/data/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>-->
 <!--                        <div class="file-upload" style="text-align: center; margin-left: auto; margin-right:auto; margin-top: 20px; font-size: 20px; color: darkslategrey;">-->
 <!--                            <label for="fileInput">Select a File:</label>-->
@@ -166,7 +166,11 @@
                         /** Add a way to tell the user that the csv was uploaded successfully*/
                         localStorage.setItem("userUploaded", "yes");
                         localStorage.setItem("selectedSample", uploadedFile['name'])
-                        console.log(uploadedFile);
+                        var filename = uploadedFile['name']
+                        var segments = filename.split('/');
+                        var table = segments.pop();       
+                        table = table.replace('.csv', '');
+                        localStorage.setItem("table", table)
                         window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
                     }
                 } catch (error) {
@@ -205,8 +209,9 @@
                         Start by selecting a dataset or uploading your own:
                         <br><br>
                         <div class="dataset-button" onclick="loadDataset('/static/data/stackoverflow_db_uncleaned.csv')">StackOverflow Survey</div>
-                        <div class="dataset-button" onclick="loadDataset('/static/data/Crimes_-_One_year_prior_to_present_20250421.csv')"> Chicago Crime</div>
+                        <div class="dataset-button" onclick="loadDataset('/static/data/crimes___one_year_prior_to_present_20250421.csv')"> Chicago Crime</div>
                         <div class="dataset-button" onclick="loadDataset('/static/data/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>
+                        <div class="dataset-button" onclick="loadDataset('/static/data/adult.csv')"> Adult</div>
                         <div class="file-upload" style="text-align: center; margin-left: auto; margin-right:auto; margin-top: 20px; font-size: 20px; color: darkslategrey;">
                             <label for="fileInput">Select a File:</label>
                             <input type="file" id="fileInput" accept=".csv" oninput="fileUpload()"/>

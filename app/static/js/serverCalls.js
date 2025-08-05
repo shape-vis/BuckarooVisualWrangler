@@ -130,7 +130,7 @@ async function queryHistogram2d(xColumn,yColumn,minId,maxId,binCount) {
         table: localStorage.getItem("table")
         // selected_sample: localStorage.getItem("selectedSample")
     });
-    const url = `/api/plots/2-d-histogram-data/pandas?${params}`
+    const url = `/api/plots/2-d-histogram-data?${params}`
     try{
         const response = await fetch(url, {method: "GET"});
         return await response.json();

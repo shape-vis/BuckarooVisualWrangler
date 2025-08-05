@@ -68,7 +68,9 @@ def wrangle_remove_pandas():
 
         current_df = dataframe_store.get_dataframe()
         print("current_df.shape: ", current_df.shape)
-        wrangled_df, dropped_rows = query.remove_anomalous_rows(currentSelection, cols, current_df)
+        # wrangled_df = query.remove_anomalous_rows(currentSelection, cols, current_df)
+        wrangled_df = query.remove_problematic_rows(currentSelection, cols, current_df)
+
         # wrangled_df, dropped_rows = query.remove_anomalous_rows(current_df)
         print("wrangled_df.shape: ", wrangled_df.shape)
         dataframe_store.set_dataframe(wrangled_df)
@@ -138,51 +140,41 @@ def wrangle_impute_pandas():
             cols=cols,
             df=current_df
         )
-        print(f"points to remove: {points_to_remove_array}")
         # remove the points from the df
         wrangled_df = query.impute_at_indices_copy(df=current_df, cols=cols, row_indices=points_to_remove_array)
 
         dataframe_store.set_dataframe(wrangled_df)
-        # run the detectors on the new df
-        new_error_df = run_detectors(wrangled_df)
-
-        # update the table state of the app
-        update_data_state(wrangled_df, new_error_df)
-        # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
-        new_state = data_state_manager.get_current_state()
-        new_df = new_state["df"].to_dict("records")
-        new_error_df = new_state["error_df"].to_dict("records")
 
         return {"success": True, "new_table_name": query.new_table_name(table)}
     except Exception as e:
         print(traceback.format_exc())
         return {"success": False, "error": str(e)}
 
-# @app.get("/api/wrangle/impute")
-# def wrangle_impute():
-#     """
-#     Should handle when a user sends a request to impute specific data
-#     :return: result of the wrangle on the data
-#     """
-#     body             = request.get_json(force=True)  # or omit force=True if you prefer 415 on bad content-type
-#     currentSelection = body["currentSelection"]
-#     cols   = body["cols"]
-#     table            = body["table"]
+@app.post("/api/wrangle/impute")
+def wrangle_impute():
+    """
+    Should handle when a user sends a request to impute specific data
+    :return: result of the wrangle on the data
+    """
+    body             = request.get_json(force=True)  # or omit force=True if you prefer 415 on bad content-type
+    currentSelection = body["currentSelection"]
+    cols   = body["cols"]
+    table            = body["table"]
 
-#     print("current selection:")
-#     pprint(currentSelection)
-#     print("cols:")
-#     pprint(cols)
-#     print("table:", table)
+    print("current selection:")
+    pprint(currentSelection)
+    print("cols:")
+    pprint(cols)
+    print("table:", table)
 
-#     new_table_name = query.new_table_name(table)
+    new_table_name = query.new_table_name(table)
 
-#     # guery to get the selected range of points to return to the view
+    # guery to get the selected range of points to return to the view
 
-#     row_count = query.copy_and_impute_bin(current_selection=currentSelection, cols=cols, table=table, new_table_name=new_table_name)
-#     json.dump({"row_count": row_count}, open("imputed_data_count/impute.json", "w"))
+    row_count = query.copy_and_impute_bin(current_selection=currentSelection, cols=cols, table=table, new_table_name=new_table_name)
+    json.dump({"row_count": row_count}, open("imputed_data_count/impute.json", "w"))
 
-#     try:
-#         return {"success": True, "new_table_name": new_table_name, "affected_row_count": row_count}
-#     except Exception as e:
-#         return {"success": False, "error": str(e)}
+    try:
+        return {"success": True, "new_table_name": new_table_name, "affected_row_count": row_count}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

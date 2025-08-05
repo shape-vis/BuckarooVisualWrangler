@@ -1,7 +1,7 @@
 import pandas as pd
 def incomplete(data_frame):
     """
-    Flags cells which have a low occurrence (< 3)
+    Flags cells which have a low occurrence (< 10)
     :return:
     """
     error_map = {}

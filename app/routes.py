@@ -39,7 +39,7 @@ def upload_csv():
         #insert the undetected dataframe
         rows_inserted = table_with_id_added.to_sql(cleaned_table_name, engine, if_exists='replace')
         detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='replace')
-        return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted}
+        return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted, "clean_table_name": cleaned_table_name}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -52,7 +52,6 @@ def get_sample():
     filename = request.args.get("filename")
     data_size = request.args.get("datasize")
     cleaned_table_name = clean_table_name(filename)
-
 
     if not filename:
         return {"success": False, "error": "Filename required"}

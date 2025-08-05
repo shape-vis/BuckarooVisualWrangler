@@ -17,7 +17,7 @@ import time
 from app import data_state_manager
 from postgres_wrangling import dataframe_store
 # from data_management.data_integration import generate_1d_histogram_data
-
+from app.service_helpers import get_whole_table_query
 
 @app.get("/api/plots/1-d-histogram-data")
 def get_1d_histogram():
@@ -63,16 +63,18 @@ def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
 
 @app.get("/api/plots/2-d-histogram-data/pandas")
 def get_2d_histogram_pandas():
-    x_column_name = request.args.get("x_column")
-    y_column_name = request.args.get("y_column")
-    min_id         = int(request.args.get("min_id", 0))
-    max_id         = int(request.args.get("max_id", 200))
-    max_id = 1_000_000
-    number_of_bins = int(request.args.get("bins", 10))
-    data_state_manager.get_current_state()["error_df"].to_csv('imputed_data_count/error_df.csv')
     try:
+        x_column_name = request.args.get("x_column")
+        y_column_name = request.args.get("y_column")
+        min_id         = int(request.args.get("min_id", 0))
+        max_id         = int(request.args.get("max_id", 200))
+        max_id = 1_000_000
+        number_of_bins = int(request.args.get("bins", 10))
+        table_name= request.args.get("table", None)
         if dataframe_store.get_dataframe() is None:
-            dataframe_store.set_dataframe(data_state_manager.get_current_state()["df"])
+            # dataframe_store.set_dataframe(data_state_manager.get_current_state()["df"])
+            
+            dataframe_store.set_dataframe(pd.read_sql_query(get_whole_table_query(table_name,False), engine).replace(np.nan, None))
         
         df = dataframe_store.get_dataframe()
         error_df = service_helpers.run_detectors(df)
@@ -111,6 +113,7 @@ def get_2d_histogram_pandas():
         }
 
     except Exception as e:
+        print(traceback.format_exc())
         return {"Success": False, "Error": str(e)}
 
 @app.get("/api/plots/2-d-histogram-data")

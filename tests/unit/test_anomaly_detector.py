@@ -47,7 +47,7 @@ class TestAnomalyTests(unittest.TestCase):
         self.assertDictEqual(expected_error_map, detected_df)
 
     def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv')
+        test_dataframe = pd.read_csv('../../provided_datasets/crimes___one_year_prior_to_present_20250421.csv')
         detected_df = anomaly(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
             " IUCR": {
