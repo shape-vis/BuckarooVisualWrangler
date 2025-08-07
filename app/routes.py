@@ -14,37 +14,22 @@ from app import data_state_manager
 from app.set_id_column import set_id_column
 
 
-#this endpoint is just for reference of how to use a cursor object if not using pandas
-#We tell Flask what endpoint to accept data in using a decorator (@)
-@app.post("/api/room")
-def create_room():
-    #We expect the client to send us JSON data, 
-    # which we retrieve from the incoming request using request.get_json().
-    data = request.get_json()
-    name = data["name"]
-    with connection:
-        # We connect to the database and use a cursor to interact with it. 
-        # Here we use context managers so we don't have to remember to close the connection manually.
-        with connection.cursor() as cursor:
-            # We create the table (since it only runs IF NOT EXISTS), and insert the record.
-            cursor.execute(CREATE_ROOMS_TABLE)
-            cursor.execute(INSERT_ROOM_RETURN_ID, (name,))
-            #We get the result of running our query, which should be the inserted row id.
-            room_id = cursor.fetchone()[0]
-    # We return a Python dictionary, which Flask conveniently converts to JSON.
-    # The return status code is 201, which means "Created". 
-    # It's a way for our API to tell the client succinctly the status of the request.        
-    return {"id": room_id, "message": f"Room {name} created."}, 201
+@app.post("/api/upload")
+def upload_csv():
+    """
+    Handles when a user uploads a csv to the app, creates a new table with it in the database
+    :return: whether it was completed successfully
+    """
+    #get the file path from the DataFrame object sent by the user's upload in the view
+    csv_file = request.files['file']
 
-
-def load_csv(csv_file, table_name):
     #parse the file into a csv using pandas
     dataframe = pd.read_csv(csv_file)
 
     # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
     detected_data = run_detectors(dataframe)
-    cleaned_table_name = clean_table_name(table_name)
+    cleaned_table_name = clean_table_name(csv_file.filename)
 
     try:
         #insert the undetected dataframe
@@ -53,33 +38,6 @@ def load_csv(csv_file, table_name):
         return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted}
     except Exception as e:
         return {"success": False, "error": str(e)}
-    
-
-@app.post("/api/upload")
-def upload_csv():
-    """
-    Handles when a user uploads a csv to the app, creates a new table with it in the database
-    :return: whether it was completed successfully
-    """
-    csv_file = request.files.get('file')
-    # print(request.files['file'])
-    #get the file path from the DataFrame object sent by the user's upload in the view
-    return load_csv(csv_file, csv_file.filename)
-
-@app.get("/api/sample-dataset")
-def get_sample_dataset():
-    """
-    Returns a sample dataset for the front-end to use.
-    """
-    if request.args.get("ds") == "stackoverflow":
-        return load_csv("datasets/stackoverflow_db_uncleaned.csv", "stackoverflow")
-    elif request.args.get("ds") == "chicago_crime":
-        return load_csv("datasets/Crimes_-_One_year_prior_to_present_20250421.csv", "chicago_crime")
-    elif request.args.get("ds") == "student_loan_complaints":
-        return load_csv("datasets/complaints-2025-04-21_17_31.csv", "student_loan_complaints")
-    else:
-        return {"success": False, "error": "Dataset not found"}
-
 
 @app.get("/api/get-sample")
 def get_sample():
