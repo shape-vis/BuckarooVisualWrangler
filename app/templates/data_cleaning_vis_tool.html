@@ -20,7 +20,7 @@
 
   <body>
     <div id="header">
-      <h1>Buckaroo Visual Wrangler 🤠</h1>
+      <h1><a href="/" style="color: white; text-decoration: none;">Buckaroo Visual Wrangler 🤠</a></h1>
       <div id="header-buttons">
         <button id="export-script">
           Export Cleaning Script
@@ -88,40 +88,8 @@
 
         <div class="toolbox-wrapper">
           <div id="toolbox">
-            <form id="radio-buttons-form">
-              <h3>Data Repair Toolkit</h3>
-              <p>Explore options below for selecting and repairing data.</p>
-              <h4>Select an option:</h4>
-              <label>
-                <input type="radio" name="options" value="allData" checked />
-                View all data
-              </label>
-              <label>
-                <input type="radio" name="options" value="selectData" />
-                Select data
-              </label>
-            </form>
-            <div class="undo-redo-container">
-              <button id="undo" disabled>Undo Last Repair</button>
-              <button id="redo" disabled>Redo Last Repair</button> -->
-              <button id="clear-selection">Clear Selection</button> -->
-            </div>
-
-            <button id="zoom-data" disabled>Zoom Selected Data</button>
-            <button id="repair-data" disabled>Repair Selected Data</button>
-            <button id="remove-selected-data">Remove Selected Data</button>
-            <div id="preview-remove"></div>
-            <button id="impute-average-x">
-              Impute selected data with average for X
-            </button>
-            <div id="preview-impute-average-x"></div>
-            <button id="impute-average-y">
-              Impute selected data with average for Y
-            </button>
-            <div id="preview-impute-average-y"></div>
-            <button id="user-function">
-              Apply user specified repair
-            </button> -->
+              <h3 style="margin-left: auto; margin-right: auto;">Data Repair Options</h3>
+          
             <div id="preview-area"></div>
           </div>
         </div>

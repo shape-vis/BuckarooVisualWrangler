@@ -14,23 +14,45 @@
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles.css')}}" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
 
-        <script src="https://d3js.org/d3.v7.min.js"></script>
-
-        <!--Arquero will be imported into the aq global object -->
-        <script src="https://cdn.jsdelivr.net/npm/arquero@latest"></script>
-
         <script>
-            function loadDataset(filename) {
-                localStorage.setItem("userUploaded","no");
-                localStorage.setItem("selectedSample",filename);
-              window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
-            }
+            // function loadDataset(filename) {
+            //     localStorage.setItem("userUploaded","no");
+            //     localStorage.setItem("selectedSample",filename);
+            //     window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
+            // }
+
+            async function loadDataset(dataset) {
+                // const uploadedFile = document.getElementById("fileInput").files[0];
+                // const fileToSend = new FormData();
+                // console.log("starting upload", uploadedFile);
+                // fileToSend.append("file",uploadedFile);
+                // document.getElementById('spinnerModal').style.display = 'block';
+                const url = "/api/sample-dataset?ds=" + encodeURIComponent(dataset);
+                try {
+                    const response = await fetch(url, {
+                        method: "GET",
+                        // body: fileToSend
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Response status: ${response.status}`);
+                    }
+                    if (response.statusText === "OK") {
+                        /** Add a way to tell the user that the csv was uploaded successfully*/
+                        localStorage.setItem("userUploaded", "yes");
+                        localStorage.setItem("selectedSample", dataset)
+                        window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
+                    }
+                } catch (error) {
+                    console.error(error.message);
+                }
+            }            
 
             async function fileUpload() {
                 const uploadedFile = document.getElementById("fileInput").files[0];
                 const fileToSend = new FormData();
+                console.log("starting upload", uploadedFile);
                 fileToSend.append("file",uploadedFile);
-                console.log("starting upload");
+                document.getElementById('spinnerModal').style.display = 'block';
                 const url = "/api/upload"
                 try {
                     const response = await fetch(url, {
@@ -44,51 +66,41 @@
                         /** Add a way to tell the user that the csv was uploaded successfully*/
                         localStorage.setItem("userUploaded", "yes");
                         localStorage.setItem("selectedSample", uploadedFile['name'])
-                        console.log(uploadedFile);
                         window.location.href = "{{ url_for('data_cleaning_vis_tool') }}";
                     }
                 } catch (error) {
                     console.error(error.message);
-                    /** Also should add something which tells the user on the UI that the error occurred */
                 }
-                // localStorage.setItem("userUpload",file.name)
             }
         </script>
 
     </head>
 
     <body>
+
+        <div id="spinnerModal" class="modal">
+            <div class="modal-content">
+                <div class="loader"></div>
+                <p>Uploading, please wait...</p>
+            </div>
+        </div>    
+
         <div id="header">
             <h1>Buckaroo Visual Wrangler 🤠</h1>
         </div>
 
-        <div class="matrix-and-toolbox">
-            <div id="tab1" class="tab-content">
-            <div id="matrix-vis-practice"></div>
-            </div>
-            <div id="tab2" class="tab-content active">
-                <div id="matrix-vis-stackoverflow"></div>
-                <div id="placeholder-message" style="text-align: center; margin-top: 200px; margin-left: 750px; font-size: 40px; color: darkslategrey;">
-                    <div>Welcome to Buckaroo!</div>
-                    <div style="font-size: 24px; margin-top: 10px; color: gray;">
-                        Start by selecting a dataset or uploading your own:
-                        <br><br>
-                        <div class="dataset-button" onclick="loadDataset('/static/data/stackoverflow_db_uncleaned.csv')">StackOverflow Survey</div>
-                        <div class="dataset-button" onclick="loadDataset('/static/data/Crimes_-_One_year_prior_to_present_20250421.csv')"> Chicago Crime</div>
-                        <div class="dataset-button" onclick="loadDataset('/static/data/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>
-                        <div class="file-upload" style="text-align: center; margin-left: auto; margin-right:auto; margin-top: 20px; font-size: 20px; color: darkslategrey;">
-                            <label for="fileInput">Select a File:</label>
-                            <input type="file" id="fileInput" accept=".csv" oninput="fileUpload()"/>
-                        </div>
-                    </div>
-                </div>
+        <div id="placeholder-message" style="text-align: center; margin-top: 200px; font-size: 40px; color: darkslategrey;">
+            <div>Welcome to Buckaroo!</div>
+            <div style="font-size: 24px; margin-top: 10px; color: gray;">
+                Start by selecting a dataset or uploading your own:
+                <br><br>
+                <div class="dataset-button" onclick="loadDataset('/static/datasets/stackoverflow_db_uncleaned.csv')">StackOverflow Survey</div>
+                <div class="dataset-button" onclick="loadDataset('/static/datasets/Crimes_-_One_year_prior_to_present_20250421.csv')"> Chicago Crime</div>
+                <div class="dataset-button" onclick="loadDataset('/static/datasets/complaints-2025-04-21_17_31.csv')"> Student Loan Complaints</div>
+                <div class="dataset-button" onclick="document.getElementById('fileInput').click();">Upload Your Own File</div>
+                <input type="file" id="fileInput" accept=".csv" oninput="fileUpload()" style="display: none;"/>
             </div>
         </div>
+
     </body>
-
-<!--    <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>-->
-<!--    <script src="{{ url_for('static', filename='js/scatterplotMatrixView.js') }}"></script>-->
-<!--    <script src="{{ url_for('static', filename='js/controller.js') }}"></script>-->
-<!--    <script type="module" src="{{ url_for('static', filename='js/dataSelection.js') }}"></script>-->
-
 </html>
