@@ -1,0 +1,122 @@
+let activeDataset = "stackoverflow";
+let stackoverflowController;
+let cacheController;
+
+import {getSampleData, uploadFileToDB,getErrorData} from './serverCalls.js';
+import setIDColumn from "./tableFunction.js";
+
+
+const userUploaded = localStorage.getItem("userUploaded");
+const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
+const minID = parseInt(localStorage.getItem("minIDVal"));
+const maxID = parseInt(localStorage.getItem("maxIDVal"));
+const useDB = localStorage.getItem("useDatabase") === "true";
+
+// User selected one of the 3 available datasets
+if (userUploaded === "no"){
+    console.log("This is the pre-selected dataset by the user",selectedSample)
+    await userChoseProvidedDataset(selectedSample,minID,maxID,useDB);
+}
+// User elected to upload their own dataset
+if(userUploaded === "yes"){
+    await userUploadedDataset(selectedSample,minID,maxID,useDB);
+}
+
+async function userChoseProvidedDataset(selectedSample,minID,maxID,useDB) {
+
+    let justTheFilename = selectedSample.substring(13, selectedSample.length);
+    let dataSize = maxID;
+    const inputData = await getSampleData(justTheFilename,dataSize);
+    const errorData = await getErrorData(justTheFilename,dataSize)
+    // Convert JSON to Arquero table directly
+    const table = setIDColumn(aq.from(inputData));
+    prepForControllerInit(false, table, selectedSample,errorData,minID,maxID,useDB);
+}
+
+async function userUploadedDataset(fileName,minID,maxID,useDB) {
+    /**
+     * On-browser functionality - old, but working
+     */
+    await fetch("/data_cleaning_vis_tool")
+        .then(response => response.text())
+        .then(async html => {
+            document.body.innerHTML = html;
+            console.log(html);
+            let dataSize = maxID;
+            const inputData = await getSampleData(fileName,dataSize);
+            const errorData = await getErrorData(fileName,dataSize)
+            if (!inputData) return;
+
+            const table = setIDColumn(aq.from(inputData));
+            prepForControllerInit(true, table, fileName,errorData,minID,maxID,useDB);
+
+
+        })
+        .catch(error => {
+            console.error('Error fetching HTML:', error);
+        });
+    // });
+}
+
+function prepForControllerInit(userUploadedFile, table, fileName,errorData,minID,maxID,useDB){
+    d3.select("#matrix-vis-stackoverflow").html("");
+    stackoverflowController = new ScatterplotController(table, "#matrix-vis");
+    stackoverflowController.model.setSampleIDRangeMin(minID);
+    stackoverflowController.model.setSampleIDRangeMax(maxID);
+    stackoverflowController.model.setUsingDB(useDB);
+    stackoverflowController.model.originalFilename = fileName.split('/').pop();
+
+    if(userUploadedFile) {
+        stackoverflowController.model.originalFilename = fileName;
+    }
+    attachButtonEventListeners(stackoverflowController);
+    exportPythonScriptListener(stackoverflowController);
+    initWranglersDetectors(stackoverflowController,errorData);
+}
+
+/**
+ * Loads the detectors and wranglers into the controller
+ * @param controller
+ * @param errorData
+ */
+function initWranglersDetectors(controller,errorData){
+    (async () => {
+        try {
+            const detectorResponse = await fetch('/static/detectors/detectors.json');
+            const detectors = await detectorResponse.json();
+
+            const wranglerResponse = await fetch('/static/wranglers/wranglers.json');
+            const wranglers = await wranglerResponse.json();
+
+            await controller.init(detectors, wranglers,errorData);
+                } catch (err) {
+                    console.error("Failed to init controller:", err);
+                }
+        })();
+}
+
+/**
+ * Exports into a python script
+ * @param controller
+ */
+function exportPythonScriptListener(controller){
+    // Export python script listener
+        const exportBtn = document.getElementById("export-script");
+        if(exportBtn) {
+            exportBtn.addEventListener('click', handleExport);
+        }
+        else console.error('Export button not found');
+    }
+
+function handleExport(controller){
+    const {scriptContent, filename} = controller.model.exportPythonScript();
+            const blob = new Blob([scriptContent], {type: "text/x-python"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+}
+
+
