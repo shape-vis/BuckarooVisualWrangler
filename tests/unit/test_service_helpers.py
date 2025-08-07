@@ -8,7 +8,7 @@ from sqlalchemy.testing import assert_raises
 
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
     get_range_of_ids_query, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
-    group_by_attribute, get_error_dist, add_normal_row_to_error_dist
+    group_by_attribute, get_error_dist
 from wranglers.remove_data import remove_data
 
 
@@ -139,10 +139,6 @@ class General(TestCase):
 
     def test_get_error_dis(self):
         stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
-        error_dist = get_error_dist(run_detectors(stackoverflow_df))
-        assert_equal(1,1)
-
-    def test_get_full_dist(self):
-        stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
-        full_dist = add_normal_row_to_error_dist(get_error_dist(run_detectors(stackoverflow_df)),stackoverflow_df)
+        error_table = run_detectors(stackoverflow_df)
+        error_dist = get_error_dist(error_table,stackoverflow_df)
         assert_equal(1,1)

@@ -82,7 +82,7 @@ class MatrixView {
                                         .attr("transform", `translate(${this.leftMargin + (j+1) * this.xPadding + j * this.size}, ${this.topMargin + i * (this.size + this.yPadding)})`);
 
                 if (i === j) {      // On the diagonal, so this should be a bar plot.
-                    visualizations['barchart'].module.draw(this.model, this, canvas, givenData, xCol );
+                    visualizations['barchart'].module.draw(this.model, this, canvas, givenData, xCol, false);
                 } 
                 else if (i < j) {   // Upper diagonal, so this should be a scatterplot.
                     visualizations['scatterplot'].module.draw(this.model, this, canvas, givenData, xCol, yCol );

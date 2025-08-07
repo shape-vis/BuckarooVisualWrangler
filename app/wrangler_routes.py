@@ -23,36 +23,23 @@ def wrangle_remove():
     get table from db into df -> delete id's from it -> store as a wrangled table in df
     :return: result of the wrangle on the data
     """
-    filename = request.args.get("filename")
+    # filename = request.args.get("filename")
     point_range_to_return = request.args.get("range")
     points_to_remove = (request.args.get("points"))
     points_to_remove_array = [points_to_remove]
     preview = request.args.get("preview")
-    #these can be used later to set the different ranges the user wants to get data from
-    # min_id = request.args.get()point_range_to_return["min"]
-    # max_id = point_range_to_return["max"]
-
-    if not filename:
-        return {"success": False, "error": "Filename required"}
-
-    #guery to get the selected range of points to return to the view
+    graph_type = request.args.get("graph_type")
 
     try:
         current_state = data_state_manager.get_current_state()
         current_df = current_state["df"]
-        #remove the points from the df
         wrangled_df = remove_data(current_df, points_to_remove_array)
-        #run the detectors on the new df
         new_error_df = run_detectors(wrangled_df)
-
-        if preview == "no":
-            #update the table state of the app
-            update_data_state(wrangled_df, new_error_df)
-            #the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
-            new_state = data_state_manager.get_current_state()
-            new_df = new_state["df"].to_dict("records")
-            new_error_df = new_state["error_df"].to_dict("records")
-            return {"success": True, "new-state": new_df}
+        new_state = {"df": wrangled_df, "error_df": new_error_df}
+        data_state_manager.push_right_table_stack(new_state)
+        if preview == "yes":
+            data_state_manager.pop_right_table_stack()
+            return {"success": True, "new-state": None}
         else:
             return {"success": True, "new-state": wrangled_df}
     except Exception as e:

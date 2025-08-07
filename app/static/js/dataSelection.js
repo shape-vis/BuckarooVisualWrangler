@@ -8,30 +8,32 @@ import setIDColumn from "./tableFunction.js";
 
 const userUploaded = localStorage.getItem("userUploaded");
 const selectedSample = localStorage.getItem("selectedSample");  // Dataset chosen by user
+const minID = parseInt(localStorage.getItem("minIDVal"));
+const maxID = parseInt(localStorage.getItem("maxIDVal"));
+const useDB = localStorage.getItem("useDatabase") === "true";
 
 // User selected one of the 3 available datasets
 if (userUploaded === "no"){
     console.log("This is the pre-selected dataset by the user",selectedSample)
-    await userChoseProvidedDataset(selectedSample);
+    await userChoseProvidedDataset(selectedSample,minID,maxID,useDB);
 }
 // User elected to upload their own dataset
 if(userUploaded === "yes"){
-    await userUploadedDataset(selectedSample);
+    await userUploadedDataset(selectedSample,minID,maxID,useDB);
 }
 
-async function userChoseProvidedDataset(selectedSample) {
+async function userChoseProvidedDataset(selectedSample,minID,maxID,useDB) {
 
     let justTheFilename = selectedSample.substring(13, selectedSample.length);
-    let dataSize = 400;
+    let dataSize = maxID;
     const inputData = await getSampleData(justTheFilename,dataSize);
     const errorData = await getErrorData(justTheFilename,dataSize)
-    console.log("error data from the db", errorData)
     // Convert JSON to Arquero table directly
     const table = setIDColumn(aq.from(inputData));
-    prepForControllerInit(false, table, selectedSample,errorData);
+    prepForControllerInit(false, table, selectedSample,errorData,minID,maxID,useDB);
 }
 
-async function userUploadedDataset(fileName) {
+async function userUploadedDataset(fileName,minID,maxID,useDB) {
     /**
      * On-browser functionality - old, but working
      */
@@ -40,15 +42,13 @@ async function userUploadedDataset(fileName) {
         .then(async html => {
             document.body.innerHTML = html;
             console.log(html);
-            let dataSize = 400;
+            let dataSize = maxID;
             const inputData = await getSampleData(fileName,dataSize);
             const errorData = await getErrorData(fileName,dataSize)
-            console.log("table data from db:", inputData);
-            console.log("error data from db:", errorData)
             if (!inputData) return;
 
             const table = setIDColumn(aq.from(inputData));
-            prepForControllerInit(true, table, fileName,errorData);
+            prepForControllerInit(true, table, fileName,errorData,minID,maxID,useDB);
 
 
         })
@@ -58,9 +58,13 @@ async function userUploadedDataset(fileName) {
     // });
 }
 
-function prepForControllerInit(userUploadedFile, table, fileName,errorData){
+function prepForControllerInit(userUploadedFile, table, fileName,errorData,minID,maxID,useDB){
     d3.select("#matrix-vis-stackoverflow").html("");
     stackoverflowController = new ScatterplotController(table, "#matrix-vis");
+    stackoverflowController.model.setSampleIDRangeMin(minID);
+    stackoverflowController.model.setSampleIDRangeMax(maxID);
+    stackoverflowController.model.setUsingDB(useDB);
+    stackoverflowController.model.originalFilename = fileName.split('/').pop();
 
     if(userUploadedFile) {
         stackoverflowController.model.originalFilename = fileName;

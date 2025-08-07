@@ -27,6 +27,7 @@ def get_filtered_dataframes(min_id, max_id):
     error_df = current_state["error_df"]
     return slice_data_by_min_max_ranges(min_id, max_id, main_df, error_df)
 
+
 def get_relevant_errors(error_df, column_names):
     """Get errors that relate to the specified columns"""
     return error_df[error_df['column_id'].isin(column_names)]
@@ -114,55 +115,11 @@ def create_scale_info(scale_data, column_type):
         ranges = [{"x0": int(interval.left), "x1": int(interval.right)} for interval in scale_data]
         return {"numeric": ranges, "categorical": []}
 
-#histogram building
-# def build_histogram_entries(items_per_bin, errors_per_bin, all_scale_data, all_column_types):
-#     """Build all histogram entries for the response"""
-#     import itertools
-#
-#     # Calculate dimensions and generate all possible bin combinations
-#     bins_per_dimension = [len(scale_data) for scale_data in all_scale_data]
-#     all_bin_coordinates = itertools.product(*[range(num_bins) for num_bins in bins_per_dimension])
-#
-#     histogram_entries = []
-#
-#     for bin_coordinates in all_bin_coordinates:
-#         # Get counts for this bin
-#         item_count = items_per_bin.get(bin_coordinates, 0)
-#         error_types_in_bin = errors_per_bin.get(bin_coordinates, {})
-#
-#         # Format count information
-#         count_info = format_error_counts(error_types_in_bin, item_count)
-#
-#         # Create histogram entry
-#         entry = {"count": count_info}
-#
-#         # Add dimension-specific information
-#         if len(all_column_types) == 1:
-#             entry.update({
-#                 "xBin": bin_coordinates[0],
-#                 "xType": all_column_types[0]
-#             })
-#         elif len(all_column_types) == 2:
-#             entry.update({
-#                 "xBin": bin_coordinates[0],
-#                 "yBin": bin_coordinates[1],
-#                 "xType": all_column_types[0],
-#                 "yType": all_column_types[1]
-#             })
-#
-#         histogram_entries.append(entry)
-#
-#     return histogram_entries
-
-
 def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
     """Generate histogram data for 1D or 2D histograms"""
-    if len(column_names) != len(numbers_of_bins):
-        raise ValueError("Column names and bin counts must have same length")
-
     if len(column_names) > 2:
         raise ValueError("Maximum 2 dimensions supported for now")
-
+    print("generating histogram data")
     # Get filtered data ( get the window of min/max data from the datatable)
     main_df, error_df = get_filtered_dataframes(min_id, max_id)
     print("got filtered df")
@@ -178,6 +135,7 @@ def generate_histogram_data(column_names, numbers_of_bins, min_id, max_id):
         all_bin_assignments.append(bin_assignments)
         all_scale_data.append(scale_data)
         all_column_types.append(column_type)
+        print("Added column to bin assignments and scale data:", column_name)
 
     print("bin assignments, and scale data compiled")
     # Create mappings and count items/errors

@@ -173,7 +173,7 @@ class SelectionControlPanel {
             const view = {svg: svg, size: plotSize, errorColors: this.errorColors};
 
             if( this.selectViewType === "barchart" ){
-                visualizations['barchart'].module.draw(this.viewParameters[0], view, canvas, ...this.viewParameters.slice(3));
+                visualizations['barchart'].module.draw(this.viewParameters[0], view, canvas, ...this.viewParameters.slice(3),true);
             } 
             else if (this.selectViewType === "scatterplot") {  
                 visualizations['scatterplot'].module.draw(this.viewParameters[0], view, canvas, ...this.viewParameters.slice(3));

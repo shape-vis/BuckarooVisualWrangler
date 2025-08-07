@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 
 from app.plot_routes import *
+from data_management.data_state import DataState
+
+
 class TestDataIntegration(unittest.TestCase):
 
     def setUp(self):
@@ -981,6 +984,9 @@ class TestDataIntegrationIntegration(unittest.TestCase):
             self.assertIn(entry['xBin'], ['USA', 'Canada'])
             self.assertIn(entry['yBin'], ['Male', 'Female'])
 
-
+    def test_crimes(self):
+        df = pd.read_csv('../../provided_datasets/Crimes_-_One_year_prior_to_present_20250421.csv').head(400)
+        res = generate_1d_histogram_data('IUCR',10,0,400)
+        self.assertEqual(400, 400)
 if __name__ == '__main__':
     unittest.main()

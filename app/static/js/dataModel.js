@@ -14,9 +14,34 @@ class DataModel {
     this.fullFilteredData = this.data;              // Same as this.filtered data, except this holds all the columns, not just the 1-3 selected attributes
     this.columnErrorMap = {};                       // Mapping of every error in the dataset with its corresponding column and row ID
     this.originalFilename = null;                   // File name of the input data to be used in the exported python script
-
+    this.usingDB = false;
+    this.idRangeMin = 0;
+    this.idRangeMax = 400;
   }
 
+  setUsingDB(isUsingFlag){
+    this.usingDB = isUsingFlag;
+  }
+
+  getUsingDb(){
+    return this.usingDB
+  }
+
+  setSampleIDRangeMin(val){
+    this.idRangeMin = val;
+  }
+
+  setSampleIDRangeMax(val){
+    this.idRangeMax = val;
+  }
+
+  getSampleIDRangeMin(){
+    return this.idRangeMin;
+  }
+
+  getSampleIDRangeMax(){
+    return this.idRangeMax;
+  }
   /**
    * Update the selected groups from the box and whisker plot.
    * @param {*} groups The selected groups to view.
