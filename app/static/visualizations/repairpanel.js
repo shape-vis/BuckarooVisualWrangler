@@ -70,7 +70,7 @@ class SelectionControlPanel {
             .attr("font-weight", "bold")
             .attr("font-size", "14px")
             .attr("text-anchor", "middle")
-            .text("Repair Options");    
+            .text("Repair Panel");    
 
         let repairSelection = repairGroup.append("g")
             .attr("transform", "translate(30, 30)")
@@ -139,6 +139,10 @@ class SelectionControlPanel {
 
 
         console.log("Plotting repair panel");
+        const toolboxObject = document.getElementsByClassName("toolbox-wrapper")[0];
+        toolboxObject.style.display = "flex"; // Show the toolbox if it was hidden
+        
+        
         const preview_area = d3.select("#preview-area")
 
         preview_area.selectAll("*").remove(); // Clear previous content
