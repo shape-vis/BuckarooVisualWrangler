@@ -109,7 +109,7 @@ class AttributeSummaryView {
 
         const groupByButtonText = document.createElement("span");
         groupByButtonText.textContent = "GroupBy";
-        groupByButtonText.style.fontSize = "12px";
+        groupByButtonText.style.fontSize = "10px";
         groupByButtonText.classList.add( "rotatedButtonText" );
         if( this.groupByAttribute === attr ) groupByButtonText.classList.add( "rotatedButtonTextSelected" );
         
@@ -141,7 +141,7 @@ class AttributeSummaryView {
 
         const selButtonText = document.createElement("span");
         selButtonText.textContent = ( this.selectedAttributes.includes(attr) ) ? "Selected" : "Select";
-        selButtonText.style.fontSize = "12px";
+        selButtonText.style.fontSize = "10px";
         selButtonText.classList.add("rotatedButtonText");
         if( this.selectedAttributes.includes(attr) ) selButtonText.classList.add("rotatedButtonTextSelected");
 
@@ -252,7 +252,7 @@ class AttributeSummaryView {
             li.style.display = "flex";
             li.style.flexDirection = "row";
             li.style.gap = "4px";
-            li.style.marginBottom = "16px";
+            li.style.marginBottom = "8px";
 
             li.appendChild(this.createSelectButton(attr, controller));
             li.appendChild(this.createGroupByButton(attr, controller));
@@ -273,14 +273,19 @@ class AttributeSummaryView {
             topRow.style.alignItems = "center";
             topRow.style.gap = "6px";
 
-            const label = document.createElement("span");
-            label.textContent = attr;
-            label.style.fontSize = "16px";
-            label.style.fontWeight = "1000";
-            label.style.marginRight = "10px";
-            topRow.appendChild(label);
 
             const errorTypes = columnErrors[attr] || {};
+
+            // console.log("errorTypes", Object.keys(errorTypes).length, errorTypes);
+
+            const label = document.createElement("span");
+            label.textContent = truncateText(attr.toLowerCase(), 18 - Object.keys(errorTypes).length * 3.5 );
+            label.style.fontSize = "16px";
+            label.style.fontWeight = "1000";
+            label.style.marginRight = "5px";
+            label.title = attr;
+            topRow.appendChild(label);
+
 
             Object.entries(errorTypes).forEach(([type, pct]) => {
                 const box = document.createElement("span");
@@ -289,16 +294,35 @@ class AttributeSummaryView {
                 box.style.backgroundColor = this.errorColors(type);
 
 
-                const percentText = document.createElement("span");
-                percentText.textContent = `${Math.round(pct * 100)}%`;
-                percentText.style.fontSize = "10px";
-                percentText.style.fontWeight = "bold";
-                percentText.style.color = "black";
-                percentText.style.position = "absolute";
-                percentText.style.top = "0";
-                percentText.style.right = "0";
-                percentText.style.transform = "translate(75%, 15%)";
-                box.appendChild(percentText);
+                // const percentText = document.createElement("span");
+                box.textContent = `${Math.round(pct * 100)}%`;
+                box.style.fontSize = "10px";
+                box.style.fontWeight = "bold";
+                box.style.color = "black";
+                box.style.paddingTop = "2px";
+                box.style.paddingLeft = "2px";
+                box.style.paddingRight = "2px";
+                // percentText.style.position = "absolute";
+                // percentText.style.top = "0";
+                // percentText.style.right = "0";
+                // percentText.style.transform = "translate(75%, 15%)";
+                // box.appendChild(percentText);                
+                // const box = document.createElement("span");
+                // box.title = `${type}: ${(pct * 100).toFixed(1)}% of entries`;
+                // box.classList.add("error-scent");
+                // box.style.backgroundColor = this.errorColors(type);
+
+
+                // const percentText = document.createElement("span");
+                // percentText.textContent = `${Math.round(pct * 100)}%`;
+                // percentText.style.fontSize = "10px";
+                // percentText.style.fontWeight = "bold";
+                // percentText.style.color = "black";
+                // percentText.style.position = "absolute";
+                // percentText.style.top = "0";
+                // percentText.style.right = "0";
+                // percentText.style.transform = "translate(75%, 15%)";
+                // box.appendChild(percentText);
 
                 topRow.appendChild(box);
             });
@@ -312,12 +336,12 @@ class AttributeSummaryView {
 
             let statsHTML = "";
             if ("numeric" in attrDist) {
-                statsHTML += `<div>Numeric Mean: ${attrDist.numeric.mean.toFixed(2)}</div>
-                              <div>Numeric Range: ${attrDist.numeric.min} - ${attrDist.numeric.max}</div>`;
+                statsHTML += `<div>Num. Mean: ${attrDist.numeric.mean.toFixed(2)}</div>
+                              <div>Num. Range: ${attrDist.numeric.min} - ${attrDist.numeric.max}</div>`;
             }
             if ("categorical" in attrDist) {
-                statsHTML += `<div>Category Mode: ${truncateText(attrDist.categorical.mode, 50)}</div>
-                              <div>Category Count: ${attrDist.categorical.categories}</div>`;
+                statsHTML += `<div>Cat. Mode: <span title="${attrDist.categorical.mode}">${truncateText(attrDist.categorical.mode, 13)}</span></div>
+                              <div>Cat. Count: ${attrDist.categorical.categories}</div>`;
             }
             stats.innerHTML = statsHTML;
 
@@ -327,30 +351,30 @@ class AttributeSummaryView {
             const errorSum = errorEntries.reduce((sum, [_, pct]) => sum + pct, 0);
             const cleanPct = Math.max(0, 1 - errorSum);
 
-            const barContainer = document.createElement("div");
-            barContainer.classList.add("error-bar-container");
+            // const barContainer = document.createElement("div");
+            // barContainer.classList.add("error-bar-container");
 
-            errorEntries.forEach(([type, pct]) => {
-                const segment = document.createElement("div");
-                segment.classList.add("bar-segment");
-                segment.style.width = `${pct * 100}%`;
-                segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
+            // errorEntries.forEach(([type, pct]) => {
+            //     const segment = document.createElement("div");
+            //     segment.classList.add("bar-segment");
+            //     segment.style.width = `${pct * 100}%`;
+            //     segment.title = `${type}: ${(pct * 100).toFixed(1)}%`;
 
-                segment.style.backgroundColor = this.errorColors(type);
+            //     segment.style.backgroundColor = this.errorColors(type);
 
-                barContainer.appendChild(segment);
-            });
+            //     barContainer.appendChild(segment);
+            // });
 
-            if (cleanPct > 0) {
-                const cleanSegment = document.createElement("div");
-                cleanSegment.classList.add("bar-segment");
-                cleanSegment.style.backgroundColor = "steelblue";
-                cleanSegment.style.width = `${cleanPct * 100}%`;
-                cleanSegment.title = `Clean: ${(cleanPct * 100).toFixed(1)}%`;
-                barContainer.appendChild(cleanSegment);
-            }
+            // if (cleanPct > 0) {
+            //     const cleanSegment = document.createElement("div");
+            //     cleanSegment.classList.add("bar-segment");
+            //     cleanSegment.style.backgroundColor = "steelblue";
+            //     cleanSegment.style.width = `${cleanPct * 100}%`;
+            //     cleanSegment.title = `Clean: ${(cleanPct * 100).toFixed(1)}%`;
+            //     barContainer.appendChild(cleanSegment);
+            // }
 
-            div.appendChild(barContainer);
+            // div.appendChild(barContainer);
 
             ul.appendChild(li);
         });

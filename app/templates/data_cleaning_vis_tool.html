@@ -20,7 +20,7 @@
 
   <body>
     <div id="header">
-      <h1><a href="/" style="color: white; text-decoration: none;">Buckaroo Visual Wrangler 🤠</a></h1>
+      <h1><a href="/" style="color: white; text-decoration: none;">Buckaroo Visual Wrangler <img src="{{ url_for('static',filename='images/favicon/favicon-96x96.png')}}" style="vertical-align: middle;" height="40" alt="Buckaroo Logo"></a></h1>
       <div id="header-buttons">
         <button id="export-script">
           Export Cleaning Script
@@ -38,78 +38,42 @@
           <div id="attribute-sorting"></div>
           <ul id="attribute-summary-list"></ul>
         </div>
-
-        <div class="dropdown-container">
-          <h3 style="align-self: center; text-align: center; width: 100%; margin-top: 5px; margin-bottom: 5px;">Dataset Configuration</h3>
-
-          <div id="predicate-dropdown-container">
-            <label for="predicate-dropdown">Add a Predicate to a Column:</label>
-            <select id="predicate-dropdown">
-              <option value="">None</option>
-            </select>
-
-            <div id="condition-container"></div>
-          </div>
-        </div>
-        <!-- <div id="legend">
-          <h3>Visual Encoding Options</h3>
-          <div class="legend-radio-buttons">
-            <input
-              type="radio"
-              name="legend-toggle"
-              id="view-errors"
-              value="errors"
-              checked
-            />
-            <label for="view-errors">View Errors</label>
-
-            <input
-              type="radio"
-              name="legend-toggle"
-              id="view-groups"
-              value="groups"
-            />
-            <label for="view-groups">View Groups</label>
-          </div>
-          <div id="legend-content"></div>
-        </div> -->
-
-
       </div>
 
-      <div class="matrix-and-toolbox">
-        <div id="tab2" class="tab-content active">
-          <div id="matrix-vis"><svg id="main-svg" width="1100" height="900"></svg></div>
-              <div id="dirty-rows-container">
-      <h3>Top 10 Rows with Most Errors</h3>
-      <div id="dirty-rows-table-wrapper"></div>
-    </div>
-        </div>
-
-        <div class="toolbox-wrapper">
+      <div class="main-view">
+        <div class="svg-and-toolbox">
+          <svg id="main-svg"></svg>
           <div id="toolbox">
-              <h3 style="margin-left: auto; margin-right: auto;">Data Repair Options</h3>
-          
-            <div id="preview-area"></div>
+            <h3 style="margin-left: auto; margin-right: auto;">Data Repair Panel</h3>
+            <div id="preview-area" class="toolbox-preview-area">
+              <div class="repair-tools">
+                <div id="repairButton" class="regButton" style="width:130px;">⚒️ Repair Selection</div>
+                <div id="zoomButton" class="regButton" style="width:130px; margin-left: 25px; margin-right: 25px;">🔍 Zoom Selection</div>
+                <div id="undoButton" class="regButton" style="width:75px;">↩️ Undo</div>
+                <div id="redoButton" class="regButton" style="width:75px;">🔄 Redo</div>
+            </div>
           </div>
         </div>
       </div>
-
+      <div id="table-div">
+        <h3>Top 10 Rows with Most Errors</h3>
+        <div id="table-container"></div>
+      </div>
       <div id="tooltip" class="tooltip"></div>
-      <div id="selectionOptions" class="selectionOptions">Zoom In<br>Preview Repairs</div>
     </div>
+    
   </body>
+
   <script src="{{ url_for('static', filename='js/dataModel.js') }}"></script>
   <script src="{{ url_for('static', filename='js/scatterplotMatrixView.js') }}"></script>
   <script src="{{ url_for('static', filename='js/controller.js') }}"></script>
   <script type="module" src="{{url_for('static', filename='js/serverCalls.js') }}"></script>
-  <script type = "module" src="{{url_for('static', filename='js/tableFunction.js') }}"></script>
+  <script type="module" src="{{url_for('static', filename='js/tableFunction.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='js/dataSelection.js') }}"></script>
-  <script type='module' src="{{ url_for('static', filename='visualizations/barchart.js') }}"></script>
-  <script type='module' src="{{ url_for('static', filename='visualizations/heatmap.js') }}"></script>
-  <script type='module' src="{{ url_for('static', filename='visualizations/scatterplot.js') }}'></script>
+  <script type="module" src="{{ url_for('static', filename='visualizations/barchart.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='visualizations/heatmap.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='visualizations/scatterplot.js') }}"></script>
 
-<!--  <script src="js/query.js"></script>-->
   <script src="{{ url_for('static', filename='js/vis_common.js') }}"></script>
   <script src="{{ url_for('static', filename='visualizations/legendview.js')}}"></script>
   <script src="{{ url_for('static', filename='visualizations/matrixview.js')}}"></script>

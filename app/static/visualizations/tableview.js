@@ -69,7 +69,7 @@ class TableView{
           .sort((a, b) => b.__errorCount__ - a.__errorCount__)
           .slice(0, 10);
       
-        const wrapper = document.getElementById("dirty-rows-table-wrapper");
+        const wrapper = document.getElementById("table-container");
         wrapper.innerHTML = "";
       
         if (topRows.length === 0) {
@@ -78,7 +78,7 @@ class TableView{
         }
       
         const table = document.createElement("table");
-        table.id = "dirty-rows-table";
+        table.id = "table";
         table.style.borderCollapse = "collapse";
         table.style.width = "100%";
       

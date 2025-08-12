@@ -24,17 +24,17 @@ export async function draw(model, view, canvas, givenData, xCol,previewFlag) {
 
         console.log("1d histData from the server", histData)
 
-        let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
+        let backgroundBox = createBackgroundBox(canvas, view.plotSize, view.plotSize);
 
 
         let numHistDataX = histData.scaleX.numeric;
         let catHistDataX = histData.scaleX.categorical;
 
-        const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)], catHistDataX.length === 0 ? null : catHistDataX.map(d => d));
+        const xScale = createHybridScales(view.plotSize, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)], catHistDataX.length === 0 ? null : catHistDataX.map(d => d));
 
         const yScale = d3.scaleLinear()
             .domain([0, d3.max(histData.histograms, d => d.count.items)]).nice()
-            .range([view.size, 0]);
+            .range([view.plotSize, 0]);
 
 
         // view.errorColors['none'] = "steelblue";

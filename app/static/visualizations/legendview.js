@@ -3,7 +3,7 @@
 function drawLegend(svg, legendItems, legendColormap, x, y ){
 
     const legendHeight = 15 * Object.keys(legendItems).length + 30;
-    const legendWidth = 195;
+    const legendWidth = 175;
 
     const legendGroup = svg.append("g")
         .attr("class", "svg-legend")

@@ -40,7 +40,7 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
 
     console.log("2d histData from the server", histData)
 
-    let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
+    let backgroundBox = createBackgroundBox(canvas, view.plotSize, view.plotSize);
 
     let numHistDataX = histData.scaleX.numeric;
     const numDomainX = numHistDataX.length === 0 ? null : [d3.min(numHistDataX, (d) => d.x0), d3.max(numHistDataX, (d) => d.x1)];
@@ -52,8 +52,8 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
     let catHistDataY = histData.scaleY.categorical;
     const catDomainY = catHistDataY.length === 0 ? null : catHistDataY.map(d => d);
 
-    const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numDomainX, catDomainX, "horizontal");
-    const yScale = createHybridScales(view.size, numHistDataY, catHistDataY, numDomainY, catDomainY, "vertical");
+    const xScale = createHybridScales(view.plotSize, numHistDataX, catHistDataX, numDomainX, catDomainX, "horizontal");
+    const yScale = createHybridScales(view.plotSize, numHistDataY, catHistDataY, numDomainY, catDomainY, "vertical");
 
     xScale.draw(canvas);
     yScale.draw(canvas);

@@ -35,13 +35,13 @@ function createTooltip( target_objects, html_function, left_click_handler = (d)=
 }
 
 function showSectionOptions(x,y) {
-    const sectionOptions = d3.select("#selectionOptions");
+    const sectionOptions = d3.select("#previewPanel");
     sectionOptions.style("display", "block")
         .style("left", `${x}px`)
         .style("top", `${y}px`);
 }
 function hideSectionOptions() {
-    d3.select("#selectionOptions").style("display", "none");
+    d3.select("#previewPanel").style("display", "none");
 }
 
 

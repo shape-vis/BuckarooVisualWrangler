@@ -44,10 +44,10 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
         let numHistDataY = sampleData.scaleY.numeric;
         let catHistDataY = sampleData.scaleY.categorical;
 
-        let backgroundBox = createBackgroundBox(canvas, view.size, view.size);
+        let backgroundBox = createBackgroundBox(canvas, view.plotSize, view.plotSize);
 
-        const xScale = createHybridScales(view.size, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : numHistDataX, catHistDataX.length === 0 ? null : catHistDataX.map(d => d), "horizontal");
-        const yScale = createHybridScales(view.size, numHistDataY, catHistDataY, numHistDataY.length === 0 ? null : numHistDataY, catHistDataY.length === 0 ? null : catHistDataY.map(d => d), "vertical");
+        const xScale = createHybridScales(view.plotSize, numHistDataX, catHistDataX, numHistDataX.length === 0 ? null : numHistDataX, catHistDataX.length === 0 ? null : catHistDataX.map(d => d), "horizontal");
+        const yScale = createHybridScales(view.plotSize, numHistDataY, catHistDataY, numHistDataY.length === 0 ? null : numHistDataY, catHistDataY.length === 0 ? null : catHistDataY.map(d => d), "vertical");
 
         xScale.draw(canvas);
         yScale.draw(canvas);

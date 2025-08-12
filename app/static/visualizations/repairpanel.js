@@ -28,6 +28,19 @@ class SelectionControlPanel {
                                 .domain(Object.keys(this.errorTypes))
                                 .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);     
         // this.errorColors = null
+
+        document.getElementById("repairButton").addEventListener("click", () => {
+            this.plotRepairPanel();
+        });
+        document.getElementById("zoomButton").addEventListener("click", () => {
+            console.log("Zoom Selection clicked");
+        });
+        document.getElementById("undoButton").addEventListener("click", () => {
+            console.log("Undo Selection clicked");
+        });
+        document.getElementById("redoButton").addEventListener("click", () => {
+            console.log("Redo Selection clicked");
+        });
     }
 
 
@@ -50,102 +63,22 @@ class SelectionControlPanel {
         // document.getElementById("repair-data").disabled = false;
     }
 
-    drawControls(svg, x, y ){
-
-        const repairGroup = svg.append("g")
-            .attr("class", "svg-legend")
-            .attr("transform", `translate(${x},${y})`);
-
-        repairGroup.append("rect")
-            .attr("width", 195)
-            .attr("height", 145)
-            .attr("stroke", "black")
-            .attr("rx", 5)
-            .attr("ry", 5)
-            .attr("fill", "none")
-
-        repairGroup.append("text")
-            .attr("x", 5 + 195 / 2)
-            .attr("y", 20)
-            .attr("font-weight", "bold")
-            .attr("font-size", "14px")
-            .attr("text-anchor", "middle")
-            .text("Repair Panel");    
-
-        let repairSelection = repairGroup.append("g")
-            .attr("transform", "translate(30, 30)")
-            .on("click", function() {
-                console.log("Repair Selection clicked");
-                selectionControlPanel.plotRepairPanel();
-            });
-
-        repairSelection.append("rect")
-            .attr("class", "svgButton")
-
-        repairSelection.append("text")
-            .attr("x", 70)
-            .attr("y", 14)
-            .attr("class", "svgButtonText")
-            .text("⚒️ Repair Selection");
-
-        let zoomGroup = repairGroup.append("g")
-            .attr("transform", "translate(30, 70)")
-            .on("click", function() {
-                console.log("Zoom Selection clicked");
-            });
-
-        zoomGroup.append("rect")
-            .attr("class", "svgButton");
-
-        zoomGroup.append("text")
-            .attr("x", 70)
-            .attr("y", 14)
-            .attr("class", "svgButtonText")
-            .text("🔍 Zoom Selection");
-
-        let undoGroup = repairGroup.append("g")
-            .attr("transform", "translate(10, 110)");
-
-        undoGroup.append("rect")
-            .attr("class", "svgButton")
-            .style("width", "80px")
-
-        undoGroup.append("text")
-            .attr("x", 40)
-            .attr("y", 14)
-            .attr("class", "svgButtonText")
-            .text("↩️ Undo");
-            
-        let redoGroup = repairGroup.append("g")
-            .attr("transform", "translate(105, 110)");   
-        redoGroup.append("rect")
-            .attr("class", "svgButton")
-            .style("width", "80px")
-
-        redoGroup.append("text")
-            .attr("x", 40)
-            .attr("y", 14)
-            .attr("class", "svgButtonText")
-            .text("🔁 Redo");
-    }
-
-
 
 
 
     plotRepairPanel() {
 
-        const size = 260;
+        const size = 200;
 
 
         console.log("Plotting repair panel");
-        const toolboxObject = document.getElementsByClassName("toolbox-wrapper")[0];
-        toolboxObject.style.display = "flex"; // Show the toolbox if it was hidden
+        // const toolboxObject = document.getElementsByClassName("toolbox-wrapper")[0];
+        // toolboxObject.style.display = "flex"; // Show the toolbox if it was hidden
         
         
         const preview_area = d3.select("#preview-area")
 
-        preview_area.selectAll("*").remove(); // Clear previous content
+        preview_area.selectAll(".repair-method").remove(); // Clear previous content
 
         const repair_methods = [
             { name: "Remove Data"  },
@@ -156,13 +89,13 @@ class SelectionControlPanel {
         // Create a new SVG element for the repair panel
 
         repair_methods.forEach(method => {
-            preview_area
-                .append("div")
-                .attr("class", "repair-method")
-                .html(`<strong>${method.name}</strong> [ Apply ]`);
+            const div = preview_area
+                            .append("div")
+                            .attr("class", "repair-method")
+                            .html(`<strong>${method.name}</strong> [ Apply ]<br>`);
 
             const plotSize = Math.min(size - this.leftMargin - this.rightMargin, size - this.topMargin - this.bottomMargin);
-            const svg = preview_area
+            const svg = div
                             .append("svg")
                             .attr("width", size)
                             .attr("height", size);
@@ -170,7 +103,7 @@ class SelectionControlPanel {
             const canvas = svg.append("g")
                                 .attr("transform", `translate(${this.leftMargin}, ${this.topMargin})`);
 
-            const view = {svg: svg, size: plotSize, errorColors: this.errorColors};
+            const view = {svg: svg, plotSize: plotSize, errorColors: this.errorColors};
 
             if( this.selectViewType === "barchart" ){
                 visualizations['barchart'].module.draw(this.viewParameters[0], view, canvas, ...this.viewParameters.slice(3),true);

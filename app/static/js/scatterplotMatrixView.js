@@ -80,16 +80,16 @@ class ScatterplotMatrixView{
      * @param {*} controller 
      */
     populateDropdownFromTable(table, controller) {
-
-        console.log("Populating dropdown from table:", table, controller);
-        // const dropdownMenu = document.getElementById("dropdown-menu");
-        // const dropdownButton = document.getElementById("dropdown-button");
-        // const groupDropdown = document.getElementById("group-dropdown");
-        const predicateDropdown = document.getElementById("predicate-dropdown");
+        
+        // console.log("Populating dropdown from table:", table, controller);
+        // // const dropdownMenu = document.getElementById("dropdown-menu");
+        // // const dropdownButton = document.getElementById("dropdown-button");
+        // // const groupDropdown = document.getElementById("group-dropdown");
+        // const predicateDropdown = document.getElementById("predicate-dropdown");
     
-        // dropdownMenu.innerHTML = "";
-        // groupDropdown.innerHTML = '<option value="">None</option>';
-        predicateDropdown.innerHTML = '<option value="">None</option>'; 
+        // // dropdownMenu.innerHTML = "";
+        // // groupDropdown.innerHTML = '<option value="">None</option>';
+        // predicateDropdown.innerHTML = '<option value="">None</option>'; 
 
         // let selectedAttributes = new Set();
     
@@ -107,18 +107,18 @@ class ScatterplotMatrixView{
         /*****************************/
 
         
-        attributes.forEach((attr, index) => {
+        // attributes.forEach((attr, index) => {
 
-            let predicateOption = document.createElement("option");
-            predicateOption.value = attr;
-            predicateOption.textContent = attr;
-            predicateDropdown.appendChild(predicateOption);
-        });
+        //     let predicateOption = document.createElement("option");
+        //     predicateOption.value = attr;
+        //     predicateOption.textContent = attr;
+        //     predicateDropdown.appendChild(predicateOption);
+        // });
 
 
-        predicateDropdown.addEventListener("change", () => {
-            this.handlePredicateChange(table, controller);
-        });
+        // predicateDropdown.addEventListener("change", () => {
+        //     this.handlePredicateChange(table, controller);
+        // });
 
     }
 
