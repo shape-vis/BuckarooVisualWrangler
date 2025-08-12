@@ -1,0 +1,1289 @@
+{
+  "table_name": "stackoverflow_db_uncleaned",
+  "x_column_name": "Gender",
+  "y_column_name": "DevType",
+  "min_id": 0,
+  "max_id": 20000,
+  "number_of_bins": 10,
+  "binned_data": {
+    "histograms": [
+      {
+        "count": {
+          "items": 12
+        },
+        "xBin": "Female",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1
+        },
+        "xBin": "Female",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3
+        },
+        "xBin": "Female",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1
+        },
+        "xBin": "Female",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Female",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 4
+        },
+        "xBin": "Female",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3
+        },
+        "xBin": "Female",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3
+        },
+        "xBin": "Female",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 2,
+          "incomplete": 2
+        },
+        "xBin": "Female",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Female;Male",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 233
+        },
+        "xBin": "Male",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 2,
+          "incomplete": 2
+        },
+        "xBin": "Male",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 9
+        },
+        "xBin": "Male",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 10
+        },
+        "xBin": "Male",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 6,
+          "incomplete": 6
+        },
+        "xBin": "Male",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 10
+        },
+        "xBin": "Male",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 8,
+          "incomplete": 8
+        },
+        "xBin": "Male",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 8,
+          "incomplete": 8
+        },
+        "xBin": "Male",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Male",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 7,
+          "incomplete": 7
+        },
+        "xBin": "Male",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3,
+          "incomplete": 3
+        },
+        "xBin": "Male",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 20
+        },
+        "xBin": "Male",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 23
+        },
+        "xBin": "Male",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 16
+        },
+        "xBin": "Male",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Male",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 5,
+          "incomplete": 5
+        },
+        "xBin": "Male",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 2,
+          "incomplete": 2
+        },
+        "xBin": "Transgender",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Back-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "C-suite executive (CEO, CTO, etc.)",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Data or business analyst",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Data scientist or machine learning specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Database administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Designer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Desktop or enterprise applications developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "DevOps specialist",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Educator or academic researcher",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Embedded applications or devices developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Engineering manager",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Front-end developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Full-stack developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Mobile developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "QA or test developer",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Student",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "System administrator",
+        "xType": "categorical",
+        "yType": "categorical"
+      }
+    ],
+    "scaleX": {
+      "numeric": [],
+      "categorical": [
+        "Non-binary, genderqueer, or gender non-conforming",
+        "Female;Male",
+        "Transgender",
+        "UNKNOWN",
+        "Male",
+        "Female",
+        "Male;Non-binary, genderqueer, or gender non-conforming",
+        "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming"
+      ]
+    },
+    "scaleY": {
+      "numeric": [],
+      "categorical": [
+        "Data or business analyst",
+        "Database administrator",
+        "Full-stack developer",
+        "Mobile developer",
+        "QA or test developer",
+        "Designer",
+        "Data scientist or machine learning specialist",
+        "Front-end developer",
+        "Student",
+        "C-suite executive (CEO, CTO, etc.)",
+        "System administrator",
+        "Engineering manager",
+        "Embedded applications or devices developer",
+        "DevOps specialist",
+        "Educator or academic researcher",
+        "Desktop or enterprise applications developer",
+        "Back-end developer"
+      ]
+    }
+  }
+}

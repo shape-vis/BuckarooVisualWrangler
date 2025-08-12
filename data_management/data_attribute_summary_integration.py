@@ -29,7 +29,6 @@ def build_attribute_distributions(main_df):
         print("getting the distribution for:",col)
         distributions[col] = get_attribute_stats(main_df, col)
         print("finished getting the distribution for:", col)
-    # print("got the distribution")
     return distributions
 
 def get_categorical_stats(df, column):

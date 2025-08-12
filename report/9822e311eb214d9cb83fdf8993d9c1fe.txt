@@ -1,0 +1,23 @@
+Traceback (most recent call last):
+  File "/Users/nickbaret/WebstormProjects/BuckarooVisualWrangler/app/plot_routes.py", line 150, in get_2d_histogram
+    binned_data = query.generate_2d_histogram_data(
+        x_column=x_column_name,
+    ...<5 lines>...
+        whole_table=True
+    )
+  File "/Users/nickbaret/WebstormProjects/BuckarooVisualWrangler/postgres_wrangling/query.py", line 105, in generate_2d_histogram_data
+    x_is_num = _is_numeric(conn, x_column, table_name=table_name)
+  File "/Users/nickbaret/WebstormProjects/BuckarooVisualWrangler/postgres_wrangling/query.py", line 65, in _is_numeric
+    dtype = conn.execute(text(sql), {"col": col}).scalar_one()
+  File "/Users/nickbaret/WebstormProjects/BuckarooVisualWrangler/.venv/lib/python3.13/site-packages/sqlalchemy/engine/result.py", line 1469, in scalar_one
+    return self._only_one_row(
+           ~~~~~~~~~~~~~~~~~~^
+        raise_for_second_row=True, raise_for_none=True, scalar=True
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/nickbaret/WebstormProjects/BuckarooVisualWrangler/.venv/lib/python3.13/site-packages/sqlalchemy/engine/result.py", line 760, in _only_one_row
+    raise exc.NoResultFound(
+        "No row was found when one was required"
+    )
+sqlalchemy.exc.NoResultFound: No row was found when one was required

@@ -1,0 +1,702 @@
+{
+  "table_name": "stackoverflow_db_uncleaned",
+  "x_column_name": "Gender",
+  "y_column_name": "Age",
+  "min_id": 0,
+  "max_id": 400,
+  "number_of_bins": 10,
+  "binned_data": {
+    "histograms": [
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 7
+        },
+        "xBin": "Female",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 14
+        },
+        "xBin": "Female",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 9
+        },
+        "xBin": "Female",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Female;Male",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1,
+          "mismatch": 1
+        },
+        "xBin": "Male",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Male",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 77
+        },
+        "xBin": "Male",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1,
+          "mismatch": 1
+        },
+        "xBin": "Male",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 205
+        },
+        "xBin": "Male",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 60
+        },
+        "xBin": "Male",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 13
+        },
+        "xBin": "Male",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3,
+          "incomplete": 3
+        },
+        "xBin": "Male",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Male",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Male;Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Non-binary, genderqueer, or gender non-conforming",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Transgender",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "Transgender",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "Transgender",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "0",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "0 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "18 - 24 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "21.5",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "25 - 34 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "35 - 44 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "45 - 54 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "55 - 64 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "UNKNOWN",
+        "yBin": "Under 18 years old",
+        "xType": "categorical",
+        "yType": "categorical"
+      }
+    ],
+    "scaleX": {
+      "numeric": [],
+      "categorical": [
+        "Non-binary, genderqueer, or gender non-conforming",
+        "UNKNOWN",
+        "Female",
+        "Male;Non-binary, genderqueer, or gender non-conforming",
+        "Male",
+        "Female;Male;Transgender;Non-binary, genderqueer, or gender non-conforming",
+        "Transgender",
+        "Female;Male"
+      ]
+    },
+    "scaleY": {
+      "numeric": [],
+      "categorical": [
+        "25 - 34 years old",
+        "45 - 54 years old",
+        "0 years old",
+        "55 - 64 years old",
+        "Under 18 years old",
+        "0",
+        "21.5",
+        "18 - 24 years old",
+        "35 - 44 years old"
+      ]
+    }
+  }
+}

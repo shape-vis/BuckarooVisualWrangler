@@ -1,0 +1,641 @@
+{
+  "table_name": "stackoverflow_db_uncleaned",
+  "x_column_name": "Continent",
+  "y_column_name": "ConvertedSalary",
+  "min_id": 0,
+  "max_id": 1000,
+  "number_of_bins": 10,
+  "binned_data": {
+    "histograms": [
+      {
+        "count": {
+          "items": 4800
+        },
+        "xBin": "AS",
+        "yBin": 0,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 75
+        },
+        "xBin": "AS",
+        "yBin": 1,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 12,
+          "anomaly": 2
+        },
+        "xBin": "AS",
+        "yBin": 2,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 7,
+          "anomaly": 7
+        },
+        "xBin": "AS",
+        "yBin": 3,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 4,
+          "anomaly": 4
+        },
+        "xBin": "AS",
+        "yBin": 4,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 10,
+          "anomaly": 10
+        },
+        "xBin": "AS",
+        "yBin": 5,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": "AS",
+        "yBin": 6,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": "AS",
+        "yBin": 7,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "AS",
+        "yBin": 8,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "AS",
+        "yBin": 9,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 14904
+        },
+        "xBin": "EU",
+        "yBin": 0,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 217
+        },
+        "xBin": "EU",
+        "yBin": 1,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 285,
+          "anomaly": 98
+        },
+        "xBin": "EU",
+        "yBin": 2,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 216,
+          "anomaly": 216
+        },
+        "xBin": "EU",
+        "yBin": 3,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 129,
+          "anomaly": 129
+        },
+        "xBin": "EU",
+        "yBin": 4,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 165,
+          "anomaly": 165
+        },
+        "xBin": "EU",
+        "yBin": 5,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": "EU",
+        "yBin": 6,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "EU",
+        "yBin": 7,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "EU",
+        "yBin": 8,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": "EU",
+        "yBin": 9,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 13882
+        },
+        "xBin": "North America",
+        "yBin": 0,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 450
+        },
+        "xBin": "North America",
+        "yBin": 1,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 47,
+          "anomaly": 10
+        },
+        "xBin": "North America",
+        "yBin": 2,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 59,
+          "anomaly": 59
+        },
+        "xBin": "North America",
+        "yBin": 3,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 47,
+          "anomaly": 47
+        },
+        "xBin": "North America",
+        "yBin": 4,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 97,
+          "anomaly": 97
+        },
+        "xBin": "North America",
+        "yBin": 5,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 43,
+          "anomaly": 43
+        },
+        "xBin": "North America",
+        "yBin": 6,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 40,
+          "anomaly": 40
+        },
+        "xBin": "North America",
+        "yBin": 7,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 12,
+          "anomaly": 12
+        },
+        "xBin": "North America",
+        "yBin": 8,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 25,
+          "anomaly": 25
+        },
+        "xBin": "North America",
+        "yBin": 9,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1108
+        },
+        "xBin": "OC",
+        "yBin": 0,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 6
+        },
+        "xBin": "OC",
+        "yBin": 1,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 9,
+          "anomaly": 2
+        },
+        "xBin": "OC",
+        "yBin": 2,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 8,
+          "anomaly": 8
+        },
+        "xBin": "OC",
+        "yBin": 3,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 12,
+          "anomaly": 12
+        },
+        "xBin": "OC",
+        "yBin": 4,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 37,
+          "anomaly": 37
+        },
+        "xBin": "OC",
+        "yBin": 5,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "OC",
+        "yBin": 6,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "OC",
+        "yBin": 7,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "OC",
+        "yBin": 8,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "OC",
+        "yBin": 9,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1102
+        },
+        "xBin": "SA",
+        "yBin": 0,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 9
+        },
+        "xBin": "SA",
+        "yBin": 1,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 4,
+          "anomaly": 1
+        },
+        "xBin": "SA",
+        "yBin": 2,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": "SA",
+        "yBin": 3,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 8,
+          "anomaly": 8
+        },
+        "xBin": "SA",
+        "yBin": 4,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 27,
+          "anomaly": 27
+        },
+        "xBin": "SA",
+        "yBin": 5,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "SA",
+        "yBin": 6,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "SA",
+        "yBin": 7,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "SA",
+        "yBin": 8,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "SA",
+        "yBin": 9,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 8,
+          "missing": 8,
+          "incomplete": 8
+        },
+        "xBin": "__NULL__",
+        "yBin": 0,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 1,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 2,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 3,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1,
+          "missing": 1,
+          "incomplete": 1
+        },
+        "xBin": "__NULL__",
+        "yBin": 4,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 5,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 6,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 7,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 8,
+        "xType": "categorical",
+        "yType": "numeric"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": "__NULL__",
+        "yBin": 9,
+        "xType": "categorical",
+        "yType": "numeric"
+      }
+    ],
+    "scaleX": {
+      "numeric": [],
+      "categorical": [
+        "SA",
+        "AS",
+        "North America",
+        "__NULL__",
+        "OC",
+        "EU"
+      ]
+    },
+    "scaleY": {
+      "numeric": [
+        {
+          "y0": 0.0,
+          "y1": 200000.0
+        },
+        {
+          "y0": 200000.0,
+          "y1": 400000.0
+        },
+        {
+          "y0": 400000.0,
+          "y1": 600000.0
+        },
+        {
+          "y0": 600000.0,
+          "y1": 800000.0
+        },
+        {
+          "y0": 800000.0,
+          "y1": 1000000.0
+        },
+        {
+          "y0": 1000000.0,
+          "y1": 1200000.0
+        },
+        {
+          "y0": 1200000.0,
+          "y1": 1400000.0
+        },
+        {
+          "y0": 1400000.0,
+          "y1": 1600000.0
+        },
+        {
+          "y0": 1600000.0,
+          "y1": 1800000.0
+        },
+        {
+          "y0": 1800000.0,
+          "y1": 2000000.0
+        }
+      ],
+      "categorical": []
+    }
+  }
+}

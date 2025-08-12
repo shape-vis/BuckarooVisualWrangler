@@ -51,7 +51,8 @@ else:
         }
         f.write(json.dumps(db_info, indent=4))
 
-connection = psycopg2.connect(host=host, port=port, user=user, password=password)
+# connection = psycopg2.connect(host=host, port=port, user=user, password=password)
+connection = psycopg2.connect(host=host, port=port, user=user, password=password, database=db_name)
 data_state_manager = DataState()
 
 #engine to use pandas with the db

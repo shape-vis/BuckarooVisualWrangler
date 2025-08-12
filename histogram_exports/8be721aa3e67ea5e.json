@@ -1,0 +1,897 @@
+{
+  "table_name": "stackoverflow_db_uncleaned",
+  "x_column_name": "ConvertedSalary",
+  "y_column_name": "Age",
+  "min_id": 0,
+  "max_id": 400,
+  "number_of_bins": 10,
+  "binned_data": {
+    "histograms": [
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1,
+          "mismatch": 1
+        },
+        "xBin": 0,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": 0,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 82,
+          "missing": 1
+        },
+        "xBin": 0,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "missing": 1,
+          "incomplete": 1,
+          "mismatch": 1
+        },
+        "xBin": 0,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 212,
+          "missing": 3
+        },
+        "xBin": 0,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 62,
+          "missing": 1
+        },
+        "xBin": 0,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 16
+        },
+        "xBin": 0,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3,
+          "incomplete": 3
+        },
+        "xBin": 0,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "incomplete": 1
+        },
+        "xBin": 0,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 2
+        },
+        "xBin": 1,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3
+        },
+        "xBin": 1,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 1,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1
+        },
+        "xBin": 2,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 2,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": 3,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1
+        },
+        "xBin": 3,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 3,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 2,
+          "anomaly": 2
+        },
+        "xBin": 4,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 4,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 5,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 5,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 1,
+          "anomaly": 1
+        },
+        "xBin": 5,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 5,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 2,
+          "anomaly": 2
+        },
+        "xBin": 5,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 3,
+          "anomaly": 3
+        },
+        "xBin": 5,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 5,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 5,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 5,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 6,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 7,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 8,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "0",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "0 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "18 - 24 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "21.5",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "25 - 34 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "35 - 44 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "45 - 54 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "55 - 64 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      },
+      {
+        "count": {
+          "items": 0
+        },
+        "xBin": 9,
+        "yBin": "Under 18 years old",
+        "xType": "numeric",
+        "yType": "categorical"
+      }
+    ],
+    "scaleX": {
+      "numeric": [
+        {
+          "x0": 0.0,
+          "x1": 200000.0
+        },
+        {
+          "x0": 200000.0,
+          "x1": 400000.0
+        },
+        {
+          "x0": 400000.0,
+          "x1": 600000.0
+        },
+        {
+          "x0": 600000.0,
+          "x1": 800000.0
+        },
+        {
+          "x0": 800000.0,
+          "x1": 1000000.0
+        },
+        {
+          "x0": 1000000.0,
+          "x1": 1200000.0
+        },
+        {
+          "x0": 1200000.0,
+          "x1": 1400000.0
+        },
+        {
+          "x0": 1400000.0,
+          "x1": 1600000.0
+        },
+        {
+          "x0": 1600000.0,
+          "x1": 1800000.0
+        },
+        {
+          "x0": 1800000.0,
+          "x1": 2000000.0
+        }
+      ],
+      "categorical": []
+    },
+    "scaleY": {
+      "numeric": [],
+      "categorical": [
+        "25 - 34 years old",
+        "45 - 54 years old",
+        "0 years old",
+        "55 - 64 years old",
+        "Under 18 years old",
+        "0",
+        "21.5",
+        "18 - 24 years old",
+        "35 - 44 years old"
+      ]
+    }
+  }
+}
