@@ -1,7 +1,6 @@
 #Buckaroo Project - June 1, 2025
 #This file allows the app to use packages for maintainability
-
-
+import logging
 #make it able to read the variables from the .env file
 import os
 import psycopg2
@@ -10,11 +9,14 @@ from flask import Flask
 from sqlalchemy import create_engine
 import json
 
+from app.db_functions import initialize_database_functions
 from data_management.data_state import DataState
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 # from data_management.data_integration import *
 
-
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 # Function to create the database if it does not exist
 # This function checks if the database exists and creates it if it does not
 def create_database_if_not_exists(conn, db_name):
@@ -86,6 +88,17 @@ data_state_manager = DataState()
 
 #engine to use pandas with the db
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
+
+# Initialize database functions on startup
+try:
+    logger.info("Starting database function initialization...")
+    initialize_database_functions(engine)
+    logger.info("Database function initialization completed successfully!")
+except Exception as e:
+    logger.error(f"Failed to initialize database functions: {str(e)}")
+    # You can choose to exit or continue without the functions
+    # For critical functions, you might want to:
+    # raise SystemExit("Cannot start application without required database functions")
 
 from app import routes
 from app import wrangler_routes
