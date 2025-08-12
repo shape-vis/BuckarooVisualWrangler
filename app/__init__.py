@@ -77,7 +77,7 @@ app = Flask(__name__)
 
 host, port, user, password, db_name = load_database_info()
 
-connection = psycopg2.connect(host=host, port=port, user=user, password=password)
+connection = psycopg2.connect(host=host, port=port, user=user, password=password, database=db_name)
 
 # Create the database if it does not exist
 create_database_if_not_exists(connection, db_name)
