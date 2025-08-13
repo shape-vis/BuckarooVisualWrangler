@@ -101,3 +101,4 @@ Below are some To Dos as discussed with the Professors as well as things I think
 ## Large Future Features to Start With
 - Connect dataframe wrangle routes to the UI so wrangling on the front end can be done on the dataframes in the server
 - Finish the chart of features found in the Dev Doc
+- There is a large bug when you try to use other datasets besides StackOverflow, this would be a big first bug to fix
