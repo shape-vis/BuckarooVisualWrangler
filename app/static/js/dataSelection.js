@@ -82,6 +82,8 @@ function prepForControllerInit(userUploadedFile, table, fileName,errorData,minID
 function initWranglersDetectors(controller,errorData){
     (async () => {
         try {
+            /* These are not getting used currently, they are from the old view-only branch, and haven't been deleted
+            * yet (also the wranglers) */
             const detectorResponse = await fetch('/static/detectors/detectors.json');
             const detectors = await detectorResponse.json();
 

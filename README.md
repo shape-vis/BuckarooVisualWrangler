@@ -9,73 +9,64 @@ Buckaroo Visual Wrangler is a data visualization tool that enables users to visu
 or upload their own. The user can also provide their own error detector and data wrangler functions to apply to the data. The user may explore their data using various visualization styles, such as heatmaps, scatterplots, or histograms. The user may select data by clicking on the plots and applying various wrangling techniques. After performing the desired wrangling actions, the user may export a python script of those actions to run on the dataset outside of the tool.
 
 ## How to run the code (how to start)
-In Terminal, cd to the BuckarooVisualWrangler directory. Run this line: python -m http.server. The tool is now running locally on your machine, so open a browser and go to http://localhost:8000. The browser will first take you to the home page (index.html) and will prompt you to click on a dataset option or upload your own. Once you select an option, you will be redirected to the main page (data_cleaning_vis_tool.html) where all the widgets will pop up and a 3x3 matrix plotting the data. Now you can take several actions, such as:
-- Select different attributes/columns to plot from the "Select Attributes 3/3" dropdown button
-- Select an attribute to group by 
-- Add a predicate to a column
-- Explore the attribute summaries and re-order them by a different error type
-- Explore the top 10 most dirty rows of data in the table
-- Enable "Select data" and experiment clicking on various bars and bins in the plots
-- Transform selected data by making a selection and exploring the preview plots to see what happens when a wrangling action is performed
-- Export a python script of the actions you took
 
-## How to start as an app with frontend,server,db
 ### Background info
-- Use this setup the environment after cloning the repo
 - requirements.txt lays out the project dependencies for flask (server) to talk with the db (postgresql)
-### Setup venv
-- Setup a venv python environment in the top-level dir
-1. Install pyenv, install python
-    `pyenv exec python3 -m venv .venv`
-    
-2. Start the venv:
-    `source .venv/bin/activate`
-    
-3. Install the requirements:
-    `pip install -r requirements.txt`
-    
 
-### To run flask server
--This runs the flask server in dev mode
-    `flask run`
+### Run the app (after cloning the repo)
 
-### download postgresql
-- This is assuming you are using a Mac, and that you have HomeBrew installed, install this from home directory on your system (we are running the db locally during scaling dev)
+1. chmod +x run.sh
+2. ./run.sh
+3. Answer the setup questions which will configure your db connection to the app - this assumes you have
+    already installed postgresql on your machine. If you have not see: https://www.postgresql.org/, and then run this script again.
+4. Open the url output in the console to use the app in browser 
 
-    `brew install postgresql`   
+## UG Student Dev Tip:
+    If you are using an IDE, like Pycharm, use the debugger mode in the IDE to debug the view. To debug the server, 
+    we recommend using Insomnia, https://insomnia.rest/, and writing endpoint tests to verify functionality of endpoints.
+    Alternatively, you can also debug the view by using dev tools in a browser of your liking.
 
+## Organization of the view code (MVC)
+The view is organized according to a Model-View-Controller Design.
+The overall structure consists of a main server in Flask, https://flask.palletsprojects.com/en/stable/,
+which talks to the view and the database via endpoints. If you are a developer, see the developer videos. If you would
+like access to see them e-mail Nick Baret, at nickbaret5@gmail.com
 
+### Model (view)
+The dataModel.js class contains functionality for maintaining the dataset in the view. Any preprocessing, filtering, or data transformations _CAN_ be called in this class, _BUT_ the state of the project is currently migrating as much
+of this as possible to operate in the server/on the postgresql DB directly, see the status table in the Dev Doc of what features have been migrated already. The model _CAN_ also run the error detectors and wranglers, but these are not being used anymore, (they are run in the server) and should soon be deleted from the repo.
+The exported script is built in this class, but needs work to integrate correctly with the full-stack version of the app.
 
-## Organization of code (MVC)
-The code is organized according to a Model-View-Controller Design.
+The exportPythonScript function will need to be updated as well, since it selects only the first 200 rows (hardcoded).
 
-### Model
-The dataModel.js class contains all functionality for maintaining the dataset. Any preprocessing, filtering, or data transformations are called in this class. The other classes query the model for the current dataset. The model also runs the error detectors and wranglers, as well as tracks the actions the user takes on the dataset. The exported script is built in this class.
-
-### View
-The scatterplotMatrixView.js class contains all plotting functionality. It contains 4 methods for plotting the 4 types of plots: plotMatrix (plots histograms), drawHeatMap, drawScatterplot, and switchToLineChart. The view also draws other UI elements, such as the attribute summaries, dirty data table, and dataset configuration menus. The view also renders the preview plots in the Data Repair Toolkit. The view consists of a lot of repeated plotting code due to the data being both numeric and categorical. Within each plotting method, four cases are handled: 
-- both x & y are numeric 
-- x is categorical & y is numeric 
-- x is numeric & y is categorical
-- both x & y are categorical. 
-
-Additionally, within each case, there are two conditions:
-- the data is grouped by a group by attribute
-- the data is not grouped
-
-As a result, the view code contains a lot of repetition to handle all these cases individually.
+### View (view)
+The `scatterplotMatrixView.js` class governs the view. It interfaces with almost all files in `/js` 
+as well as initiates the drawing and rendering of the plots and panels in `/visualizations`.
 
 ### Controller
 The controller contains functions to handle all user interaction with the UI, such as data selection, clicking buttons, and selecting attributes. After each user action, the controller will apply the action and then call the view to re-render with the new data or information. The controller is the first object created and contains references to both the view and model.
 
-### Script
-The script handles the user dataset selection or file upload. Once it gets the dataset, it adds an ID column in the first index, which is used throughout the code to identify rows in selection, wrangling, etc. If an ID column already exists, it uses that. **Importantly, the script selects only the first 200 rows from the uploaded dataset.** This was a design choice in implementation to speed up the rendering time. If this is changed, the exportPythonScript function will need to be updated as well, since it selects only the first 200 rows.
+### DataSelection.js
+This handles the user dataset selection whether they choose to use a pre-selected dataset or file upload. 
 
 ### Detectors
-detectors.json contains error detector objects. Each object contains an ID, Name, and File path to a .js file that contains a function that will detect the error. All .js error decectors can be found in the detectors file. These error detectors are run after initialization of the controller in the script and build an error map that assigns an error type (if it exists) to each row in the dataset. This modularity of the detectors allows a user to add their own detectors to the project.
+detectors.json contains the old error detector objects. Now the detectors run at the beginning of app startup in the server
+right after the user selects a dataset. These error detectors are run after initialization of the controller in the script and build an error map that assigns an error type (if it exists) to each row in the dataset. 
+This modularity of the detectors allows a user to add their own detectors to the project.
+
+The old detectors (javascript implementation), and the json file objects corresponding to them  
+each contain an ID, Name, and File path to a .js file that contains a function that will detect the error. 
+All old .js error detectors can be found in the detectors file. 
+
 
 ### Wranglers
-wranglers.json contains data wranlger objects. Each object contains an ID, Name, and File path to a .js file that contains a function that will run the wrangler to handle the dirty data. all .js wranglers can be found in the wranglers file. These wranglers are loaded in with the detectors and are called when the user selects data and clicks a button to repair the data (i.e. remove data, impute an average for a data value). Again, modularity allows a user to add their own wrangling functions to the project.
+wranglers.json contains the old data wrangler objects. 
+Each object contains an ID, Name, and File path to a .js file that contains a function that will run the wrangler to handle the dirty data. all .js wranglers can be found in the wranglers file. 
+These wranglers are loaded in with the detectors and are called when the user selects data and clicks a button to repair the data (i.e. remove data, impute an average for a data value). 
+Again, modularity allows a user to add their own wrangling functions to the project.
+
+Now these are also in the server, and can operate on the dataframe implementation, but not the database as of yet. In the 
+buckaroo-sql branch, there is a hacky implementation of the project which runs detectors and wranglers on the DB directly.
 
 ### Index
 index.html is the home page where the user is prompted to select or upload a dataset.
@@ -86,11 +77,19 @@ data_cleaning_vis_tool.html contains all the elements shown in the browser after
 ### styles.css
 styles.css contains all styling for the html.
 
+## Organization of the server
+The server is organized into a few different groups of file types:
+1. Route Files - these are the endpoints which handle user interactions with the UI, there is a file for dataframe endpoints, DB endpoints, wrangler endpoints, and generic endpoints
+2. Service Helpers - backend logic needed to deliver on endpoint services throughout the app
+3. Detectors dir - this is the group of detectors that currently run on the dataset upon app startup
+4. Wranglers dir - this is the group of implemented wranglers which operate on the dataframe, which can be connected to the view for DF wrangling
+5. Tests - this is the current test suite for the app
+6. Data Management - contains files which format dataframe data into JSON formats the view can consume, and also has a state manager to support undo,redo, and to keep track of the data state during wrangles
+
+
 ## Future Work
 List of small tasks to start with: 
 - Make dirty rows table infinitely scrollable (right now it just shows the top 10 rows, but want it to scroll to show the next 10 top rows and so on)
-- There's a large gap between the top of the dirty rows table and the bottom of the matrix. It shows up on my laptop, but goes away when projecting on a screen. I wanted to get around to finding a consistent spacing for these containers. The styling for the dirty rows table is in styles.css (#dirty-rows-container)
-- Add the error type to the tooltip on hover. If there is no error type, don't say anything, or say "Clean"/"No errors." Right now, tooltips just show the column names and count.
 - When switching between the 3 different chart types on a cell, the axis labels are redrawn every time, so the labels get darker and darker each time you switch the chart type. This should be a simple fix to remove any additions of labels to the plot when switching between chart views.
 
 Below are some To Dos as discussed with the Professors as well as things I think will make Buckaroo better:
@@ -98,12 +97,7 @@ Below are some To Dos as discussed with the Professors as well as things I think
 - Selection of points on the scatterplot is not fully implemented. Future work should attach brushing to the scatterplots to allow users to select a region of points to wrangle. There is already a handleBrush method in the controller to build off of.
 - Make dirty row table headers clickable to sort by. So if a user clicks on "Age" for example, the table will show the top 10 rows with an error in the Age column.
 - Python script is currently hard-coded to convert Javascript/Arquero data transformations into Python. Need to make this dynamic so it can include Python logic when new wranglers are added.
-- Eventually, we want to move the visualization logic into modules, just like the detectors and wranglers. This way the user can utilize visualizations that best work with their dataset.
 
-## Troubleshooting
-Sometimes I would get errors that would popup inconsistently and don't exist in the code. Whenever this happens, I would just do a hard refresh (cdm-shift-R on Mac) and the error would resolve. I'm sure if you look into it more, there is a more permanent fix, but I would just always do a hard refresh and it would resolve. If the plotting matrix isn't showing up, open the console in dev tools and see if there's an error. Almost always, this is resolved by a hard refresh. Some examples of these random errors are:
-- net::ERR_CONTENT_LENGTH_MISMATCH 200 (OK)
-- Unexpected end of input (I'm not sure why this pops up because I would check and could never find missing curly braces, parantheses, etc.)
-- Invalid or unexpected token
-
-You can also try clearing the cache in your browser and this seemed to keep the errors away for longer.
+## Large Future Features to Start With
+- Connect dataframe wrangle routes to the UI so wrangling on the front end can be done on the dataframes in the server
+- Finish the chart of features found in the Dev Doc

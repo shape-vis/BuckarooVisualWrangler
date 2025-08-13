@@ -89,16 +89,17 @@ data_state_manager = DataState()
 #engine to use pandas with the db
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
-# Initialize database functions on startup
-try:
-    logger.info("Starting database function initialization...")
-    initialize_database_functions(engine)
-    logger.info("Database function initialization completed successfully!")
-except Exception as e:
-    logger.error(f"Failed to initialize database functions: {str(e)}")
-    # You can choose to exit or continue without the functions
-    # For critical functions, you might want to:
-    # raise SystemExit("Cannot start application without required database functions")
+# # Initialize database functions on startup
+if not os.environ.get('WERKZEUG_RUN_MAIN'):
+    try:
+        logger.info("Starting database function initialization...")
+        initialize_database_functions(engine)
+        logger.info("Database function initialization completed successfully!")
+    except Exception as e:
+        logger.error(f"Failed to initialize database functions: {str(e)}")
+        # You can choose to exit or continue without the functions
+        # For critical functions, you might want to:
+        raise SystemExit("Cannot start application without required database functions")
 
 from app import routes
 from app import wrangler_routes
