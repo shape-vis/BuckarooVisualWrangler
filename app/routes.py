@@ -48,15 +48,18 @@ def get_sample():
     filename = request.args.get("filename")
     data_size = request.args.get("datasize")
     cleaned_table_name = clean_table_name(filename)
-
+    print("datazize from the fetch:",data_size)
 
     if not filename:
         return {"success": False, "error": "Filename required"}
     QUERY = get_whole_table_query(cleaned_table_name,False) + " LIMIT "+ data_size
+    print("datasize", data_size)
     try:
+        print("in the get sample try")
         fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name,engine)
         # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
         sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
+        print("sample_dataframe_as_dictionary query:", QUERY)
         # print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
         return sample_dataframe_as_dictionary
     except Exception as e:

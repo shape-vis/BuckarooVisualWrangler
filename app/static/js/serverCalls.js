@@ -89,7 +89,7 @@ async function queryHistogram1d(columnName,minId,maxId,binCount) {
 }
 
 /**
- * Get the data for the 1d histogram in the view
+ * Get the data for the 1d histogram in the view from the DB
  * @returns {Promise<void>}
  */
 export async function queryHistogram1dDB(columnName,tableName,minId,maxID,bins) {
@@ -111,7 +111,7 @@ export async function queryHistogram1dDB(columnName,tableName,minId,maxID,bins) 
 }
 
 /**
- * Get the data for the 1d histogram in the view
+ * Get the data for the 2d histogram in the view from the DB
  * @returns {Promise<void>}
  */
 export async function queryHistogram2dDB(columnX,columnY,tableName,minId,maxID,bins) {
@@ -182,21 +182,6 @@ export async function querySample2d(xColumn, yColumn, minId, maxId, errorSamples
 }
 
 export async function queryAttributeSummaries(minId, maxId) {
-    const params = new URLSearchParams({
-        min_id:minId,
-        max_id:maxId,});
-
-    const url = `/api/plots/summaries?${params}`
-    try{
-        const response = await fetch(url, {method: "GET"});
-        return await response.json();
-    }
-    catch (error){
-        console.error(error.message)
-    }
-}
-
-export async function wrangleRemove(xCol,minId, maxId) {
     const params = new URLSearchParams({
         min_id:minId,
         max_id:maxId,});

@@ -25,8 +25,8 @@ export async function draw(model, view, canvas, givenData, xCol, yCol) {
 
     // let minIdToSelect = 0;
     // let maxIdToSelect = 400;
-    let errorSampleCount = 300;
-    let totalSampleCount = 1000;
+    let errorSampleCount = 100;
+    let totalSampleCount = 400;
 
     let sampleData;
     try {

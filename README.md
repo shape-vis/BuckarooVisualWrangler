@@ -29,8 +29,7 @@ or upload their own. The user can also provide their own error detector and data
 ## Organization of the view code (MVC)
 The view is organized according to a Model-View-Controller Design.
 The overall structure consists of a main server in Flask, https://flask.palletsprojects.com/en/stable/,
-which talks to the view and the database via endpoints. If you are a developer, see the developer videos. If you would
-like access to see them e-mail Nick Baret, at nickbaret5@gmail.com
+which talks to the view and the database via endpoints. If you are a developer, see the developer videos, and the Dev Doc.
 
 ### Model (view)
 The dataModel.js class contains functionality for maintaining the dataset in the view. Any preprocessing, filtering, or data transformations _CAN_ be called in this class, _BUT_ the state of the project is currently migrating as much
