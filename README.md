@@ -105,12 +105,3 @@ Below are some To Dos as discussed with the Professors as well as things I think
 ## Large Future Features to Start With
 - Connect dataframe wrangle routes to the UI so wrangling on the front end can be done on the dataframes in the server
 - Finish the chart of features found in the Dev Doc
-
-#### Bugs
-1. When using the crimes dataset, LAT, LONG give the server and app as a whole a lot of issues as columns to run on.
-2. Also when using the crimes dataset, and the complaints dataset, as soon as you select >30 as the max ID, the UI has a hard time rendering all the distinct values clearly
-3. Crimes dataset-should FBI CD be treated as numeric or categorical? This is another question which the implementation
-    is unclear on, right now it's flagging almost the whole column as mismatch.
-
-
-
