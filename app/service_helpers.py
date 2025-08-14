@@ -274,4 +274,7 @@ def create_bins_for_a_numeric_column(column,bin_count):
     :param bin_count: the number of bins to create
     :return: bins for the column as a pandas object
     """
-    return pd.cut(column, bins=bin_count)
+    column_numeric = pd.to_numeric(column, errors='coerce')
+    return pd.cut(column_numeric, bins=bin_count)
+
+    # return pd.cut(column, bins=bin_count)

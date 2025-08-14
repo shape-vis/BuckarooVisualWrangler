@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 
 from app.plot_routes import *
+from app.service_helpers import run_detectors
+from app.set_id_column import set_id_column
 from data_management.data_state import DataState
 
 
@@ -348,6 +350,13 @@ class TestDataIntegration(unittest.TestCase):
         self.assertEqual(result["xType"], 'categorical')
         self.assertEqual(result["yBin"], 'Male')
         self.assertEqual(result["yType"], 'categorical')
+
+    def test_zip_code(self):
+        test_dataframe = set_id_column(pd.read_csv('../../provided_datasets/complaints-2025-04-21_17_31.csv').head(10))
+        error_df = run_detectors(test_dataframe.head(10))
+        column_names = ["ZIP code"]
+        generate_histogram_data(column_names,[5],0,20,test_dataframe,error_df)
+
 
     def test_create_single_histogram_entry_complete(self):
         """Test creating a complete single histogram entry."""

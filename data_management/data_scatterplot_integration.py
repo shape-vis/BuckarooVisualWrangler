@@ -107,6 +107,8 @@ def get_scale_info_for_scatterplot(dataframe, column_name, column_type):
     else:
         # For numeric, return the range
         non_null_values = dataframe[column_name].dropna()
+        non_null_values = pd.to_numeric(non_null_values, errors='coerce')
+
         if len(non_null_values) == 0:
             return {"numeric": [0, 1], "categorical": []}
 
