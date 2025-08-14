@@ -48,19 +48,13 @@ def get_sample():
     filename = request.args.get("filename")
     data_size = request.args.get("datasize")
     cleaned_table_name = clean_table_name(filename)
-    print("datazize from the fetch:",data_size)
-
     if not filename:
         return {"success": False, "error": "Filename required"}
     QUERY = get_whole_table_query(cleaned_table_name,False) + " LIMIT "+ data_size
     print("datasize", data_size)
     try:
-        print("in the get sample try")
         fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name,engine)
-        # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
         sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
-        print("sample_dataframe_as_dictionary query:", QUERY)
-        # print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
         return sample_dataframe_as_dictionary
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -69,7 +63,7 @@ def get_sample():
 @app.get("/api/get-errors")
 def get_errors():
     """
-    Constructs a postgresql query to get the error table corresponding to the current file from the database
+    Constructs and executes a postgresql query to get the error table corresponding to the current file from the database
     :return: a dictionary of the error table
     """
     filename = request.args.get("filename")
@@ -88,8 +82,16 @@ def get_errors():
 
 @app.get("/")
 def home():
+    """ 
+    Renders the home page of the application
+    :return: the rendered index.html template
+    """
     return render_template('index.html')
 
 @app.get('/data_cleaning_vis_tool')
 def data_cleaning_vis_tool():
+    """
+    Renders the data cleaning visualization tool page
+    :return: the rendered data_cleaning_vis_tool.html template
+    """
     return render_template('data_cleaning_vis_tool.html')

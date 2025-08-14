@@ -9,27 +9,18 @@ from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
 from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
 
-
-# from data_management.data_integration import generate_1d_histogram_data
-
-
 @app.get("/api/plots/1-d-histogram-data")
 def get_1d_histogram():
     """
-    Endpoint to return data to be used to construct the 1d histogram in the view, this endpoint expects the following parameters:
-        1. tablename to pull data from
-        2. column name to aggregate data for
-        3. desired id min and max values of the table to return to the view
-    :return: the data as a csv
+    Endpoint to return data to be used to construct the 1d histogram in the view
+    :return: the data as JSON in the format the view needs
     """
-    # tablename = request.args.get("tablename")
     column_name = request.args.get("column")
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     number_of_bins = request.args.get("bins", default=10)
 
     try:
-        print("in the try")
         binned_data = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
         return {"Success": True, "binned_data": binned_data}
     except Exception as e:
@@ -39,8 +30,8 @@ def get_1d_histogram():
 @app.get("/api/plots/2-d-histogram-data")
 def get_2d_histogram():
     """
-    Endpoint to return data to be used to construct the 1d histogram in the view - user will pass in parameters for the axis that is filled in
-    :return: the data as a csv
+    Endpoint to return data to be used to construct the 2d histogram in the view
+    :return: the data as JSON in the format the view needs
     """
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
@@ -57,6 +48,10 @@ def get_2d_histogram():
 
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():
+    """
+    Endpoint to return data to be used to construct the scatter plot in the view
+    :return: the data as JSON in the format the view needs
+    """
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
     min_id = request.args.get("min_id", default=0)
@@ -95,32 +90,28 @@ def get_group_by():
 def undo():
     """
     Undoes the previous action performed on the data
-    :return: Nothing right now - can be changed according to what the view needs
+    :return: the current df - can be changed according to what the view needs
     """
     try:
         data_state_manager.undo()
         # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
-        print(data_state_manager.get_current_state())
         current_df = data_state_manager.get_current_state()["df"].to_dict("records")
-        # print(current_df)
         return {"success": True, "df": current_df}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-#need range for 1d,2d, and scatterplot implement
+
 @app.get("/api/plots/redo")
 def redo():
     """
     Redoes the previous action performed on the data
-    :return: Nothing right now - can be changed according to what the view needs
+    :return: the current undetected df - can be changed according to what the view needs
     """
     try:
         data_state_manager.redo()
         # the current state dictionary made up of {"df":wrangled_df,"error_df":new_error_df}
-        print(data_state_manager.get_current_state())
         current_df = data_state_manager.get_current_state()["df"].to_dict("records")
-        # print(current_df)
         return {"success": True, "df": current_df}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -129,14 +120,13 @@ def redo():
 @app.get("/api/plots/summaries")
 def attribute_summaries():
     """
-    Populates the error attribute summaries
-    :return:
+    Populates the error attribute summaries and returns them for the view to ingest
+    :return: json of the attribute summaries
     """
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     try:
         #get the current error table
-        print("in the get summaries")
         table_attribute_summaries = generate_complete_json(int(min_id), int(max_id))
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:

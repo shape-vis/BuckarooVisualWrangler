@@ -16,11 +16,8 @@ from data_management.data_scatterplot_integration import generate_scatterplot_sa
 @app.get("/api/plots/1-d-histogram-data-db")
 def get_1d_histogram_db():
     """
-    Endpoint to return data to be used to construct the 1d histogram in the view, this endpoint expects the following parameters:
-        1. tablename to pull data from
-        2. column name to aggregate data for
-        3. desired id min and max values of the table to return to the view
-    :return: the data as a csv
+    Endpoint to return data to be used to construct the 1d histogram in the view
+    :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
     tablename = request.args.get("tablename")
     cleaned_name = clean_table_name(tablename)
@@ -31,7 +28,6 @@ def get_1d_histogram_db():
     query = f"SELECT generate_one_d_histogram_with_errors('{cleaned_name}', 'errors{cleaned_name}', '{column_name}', {number_of_bins}, {min_id}, {max_id});"
 
     try:
-        print("in the try")
         binned_data = pd.read_sql_query(query, engine).to_dict()
         histogram = binned_data["generate_one_d_histogram_with_errors"][0]
         return {"Success": True, "binned_data": histogram}
@@ -41,11 +37,8 @@ def get_1d_histogram_db():
 @app.get("/api/plots/2-d-histogram-data-db")
 def get_2d_histogram_db():
     """
-    Endpoint to return data to be used to construct the 1d histogram in the view, this endpoint expects the following parameters:
-        1. tablename to pull data from
-        2. column name to aggregate data for
-        3. desired id min and max values of the table to return to the view
-    :return: the data as a csv
+    Endpoint to return data to be used to construct the 2d histogram in the view
+    :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
     tablename = request.args.get("tablename")
     cleaned_name = clean_table_name(tablename)
@@ -58,7 +51,6 @@ def get_2d_histogram_db():
     query = f"SELECT generate_two_d_histogram_with_errors('{cleaned_name}', 'errors{cleaned_name}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
 
     try:
-        print("in the try")
         binned_data = pd.read_sql_query(query, engine).to_dict()
         histogram = binned_data["generate_two_d_histogram_with_errors"][0]
         return {"Success": True, "binned_data": histogram}

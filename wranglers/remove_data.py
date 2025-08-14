@@ -14,5 +14,4 @@ def remove_data(df,ids):
         ids[i] = int(ids[i])
     indices_to_drop = wrangled_df[wrangled_df['ID'].isin(ids)].index
     wrangled_df.drop(indices_to_drop, inplace=True)
-    print(wrangled_df)
     return wrangled_df

@@ -9,21 +9,12 @@ from wranglers.impute_average import impute_average_on_ids
 from wranglers.remove_data import remove_data
 from app import data_state_manager
 
-"""
-All these endpoints expected the following input data:
-    1. points to wrangle
-    2. the filename
-    3. selection range of points to return to the view
-"""
-
 @app.get("/api/wrangle/remove")
 def wrangle_remove():
     """
     Should handle when a user sends a request to remove specific data
-    get table from db into df -> delete id's from it -> store as a wrangled table in df
     :return: result of the wrangle on the data
     """
-    # filename = request.args.get("filename")
     point_range_to_return = request.args.get("range")
     points_to_remove = (request.args.get("points"))
     points_to_remove_array = [points_to_remove]
@@ -58,14 +49,10 @@ def wrangle_impute():
     points_to_remove_array = [points_to_remove]
     preview = request.args.get("preview")
     axis = request.args.get("axis")
-    # these can be used later to set the different ranges the user wants to get data from
-    # min_id = request.args.get()point_range_to_return["min"]
-    # max_id = point_range_to_return["max"]
+
 
     if not filename:
         return {"success": False, "error": "Filename required"}
-
-    # guery to get the selected range of points to return to the view
 
     try:
         current_state = data_state_manager.get_current_state()

@@ -1,6 +1,6 @@
 /**
- * Sends the user uploaded file to the endpoint in the server to add it to the DB - un-finished
- * @param {} fileToSend
+ * Sends the user uploaded file to the endpoint in the server to add it to the DB
+ * @param {} fileToSend the file the user is sending
  */
 async function uploadFileToDB(fileToSend){
     console.log("starting upload");
@@ -14,18 +14,18 @@ async function uploadFileToDB(fileToSend){
                 throw new Error(`Response status: ${response.status}`);
             }
             if(response.statusText === "OK"){
-                /** Add a way to tell the user that the csv was uploaded successfully*/
                 return true
             }
         } catch (error) {
                 console.error(error.message);
-                /** Also should add something which tells the user on the UI that the error occurred */
             }
 }
 
 /**
- * Get the 200 line sample rows from the full datatable stored in the database
+ * Get a window of data from the full datatable stored in the database
  * @returns {Promise<void>}
+ * @param {string} filename the name of the file the user wants to get data from
+ * @param {string} dataSize the max ID to construct the window of data from
  */
 async function getSampleData(filename,dataSize) {
     console.log("starting sample fetch from db");
@@ -46,7 +46,9 @@ async function getSampleData(filename,dataSize) {
 }
 
 /**
- * Get the data size sample rows from the full datatable stored in the database
+ * Get a window of data from the full error datatable stored in the database
+ * @param {string} filename the name of the file the user wants to get data from
+ * @param {string} dataSize the max ID to construct the window of data from
  * @returns {Promise<void>}
  */
 async function getErrorData(filename,dataSize) {
@@ -68,7 +70,7 @@ async function getErrorData(filename,dataSize) {
 }
 
 /**
- * Get the data for the 1d histogram in the view
+ * Get the data for the 1d histogram in the view - pandas version
  * @returns {Promise<void>}
  */
 async function queryHistogram1d(columnName,minId,maxId,binCount) {
@@ -112,7 +114,13 @@ export async function queryHistogram1dDB(columnName,tableName,minId,maxID,bins) 
 
 /**
  * Get the data for the 2d histogram in the view from the DB
- * @returns {Promise<void>}
+ * @param columnX
+ * @param columnY
+ * @param tableName
+ * @param minId
+ * @param maxID
+ * @param bins
+ * @returns {Promise<any>}
  */
 export async function queryHistogram2dDB(columnX,columnY,tableName,minId,maxID,bins) {
     console.log("1d histogram fetch");
@@ -161,6 +169,16 @@ async function queryHistogram2d(xColumn,yColumn,minId,maxId,binCount) {
     }
 }
 
+/**
+ * Get the scatterplot data from the pandas for the view
+ * @param xColumn
+ * @param yColumn
+ * @param minId
+ * @param maxId
+ * @param errorSamples
+ * @param totalSamples
+ * @returns {Promise<any>}
+ */
 export async function querySample2d(xColumn, yColumn, minId, maxId, errorSamples, totalSamples) {
     console.log("2d sample fetch");
     const params = new URLSearchParams({
@@ -181,6 +199,12 @@ export async function querySample2d(xColumn, yColumn, minId, maxId, errorSamples
     }
 }
 
+/**
+ * Retrives the attribute summaries from the pandas implementation in the server
+ * @param minId
+ * @param maxId
+ * @returns {Promise<any>}
+ */
 export async function queryAttributeSummaries(minId, maxId) {
     const params = new URLSearchParams({
         min_id:minId,

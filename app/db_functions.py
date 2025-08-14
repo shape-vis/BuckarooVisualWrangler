@@ -5,8 +5,7 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-# Dictionary to store all the database functions
-# Dictionary to store all your database functions
+# Dictionary to store all the user's database functions
 DB_FUNCTIONS = {
     "generate_one_d_histogram_with_errors": """
     CREATE OR REPLACE FUNCTION generate_one_d_histogram_with_errors(

@@ -1,3 +1,8 @@
+/**
+ * The objective of this script is to manage the flow and initialization of the view and the interactions it has with the server and the database
+ *
+ */
+
 let activeDataset = "stackoverflow";
 let stackoverflowController;
 let cacheController;
@@ -22,6 +27,14 @@ if(userUploaded === "yes"){
     await userUploadedDataset(selectedSample,minID,maxID,useDB);
 }
 
+/**
+ * Handler for when the user chose one of the provided datasets on the index.html page
+ * @param selectedSample the name of the file they selected
+ * @param minID the smallest ID to select from the csv - these are more the min/max windows of the dataset to select
+ * @param maxID the largest ID to select from the csv
+ * @param useDB flag which determines whether the routes should be used that operate on the database or on dataframes
+ * @returns {Promise<void>}
+ */
 async function userChoseProvidedDataset(selectedSample,minID,maxID,useDB) {
 
     let justTheFilename = selectedSample.substring(13, selectedSample.length);
@@ -33,6 +46,14 @@ async function userChoseProvidedDataset(selectedSample,minID,maxID,useDB) {
     prepForControllerInit(false, table, selectedSample,errorData,minID,maxID,useDB);
 }
 
+/**
+ * Handler for when the user uploadd a dataset on the index.html page
+ * @param fileName the name of the file they uploaded
+ * @param minID the smallest ID to select from the csv - these are more the min/max windows of the dataset to select
+ * @param maxID the largest ID to select from the csv
+ * @param useDB flag which determines whether the routes should be used that operate on the database or on dataframes
+ * @returns {Promise<void>}
+ */
 async function userUploadedDataset(fileName,minID,maxID,useDB) {
     /**
      * On-browser functionality - old, but working
@@ -58,6 +79,16 @@ async function userUploadedDataset(fileName,minID,maxID,useDB) {
     // });
 }
 
+/**
+ * Takes all the user input from the index.html page and initializes the model that will be used in the controller object
+ * @param userUploadedFile flag because the original file name needs to be set differently if it was uploaded
+ * @param table the snippet of the dataset that will be used in the view
+ * @param fileName name of the file the user uploaded or selected
+ * @param errorData the dataset of the errors found from running the detectors on the dataset
+ * @param minID min range window to render
+ * @param maxID max range window to render
+ * @param useDB whether to use db routes in the server
+ */
 function prepForControllerInit(userUploadedFile, table, fileName,errorData,minID,maxID,useDB){
     d3.select("#matrix-vis-stackoverflow").html("");
     stackoverflowController = new ScatterplotController(table, "#matrix-vis");
@@ -110,6 +141,10 @@ function exportPythonScriptListener(controller){
         else console.error('Export button not found');
     }
 
+/**
+ * exports the actions taken - this is not really set up for this branch, but can be adapted to work with it probably
+ * @param controller
+ */
 function handleExport(controller){
     const {scriptContent, filename} = controller.model.exportPythonScript();
             const blob = new Blob([scriptContent], {type: "text/x-python"});
