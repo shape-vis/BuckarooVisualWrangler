@@ -47,10 +47,10 @@ The exportPythonScript function will need to be updated as well, since it select
 The `scatterplotMatrixView.js` class governs the view. It interfaces with almost all files in `/js` 
 as well as initiates the drawing and rendering of the plots and panels in `/visualizations`.
 
-### Controller
+### Controller (view)
 The controller contains functions to handle all user interaction with the UI, such as data selection, clicking buttons, and selecting attributes. After each user action, the controller will apply the action and then call the view to re-render with the new data or information. The controller is the first object created and contains references to both the view and model.
 
-### DataSelection.js
+### DataSelection.js (view)
 This handles the user dataset selection whether they choose to use a pre-selected dataset or file upload. 
 
 ### Detectors
