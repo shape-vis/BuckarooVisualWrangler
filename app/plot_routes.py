@@ -269,11 +269,18 @@ def attribute_summaries():
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     tablename = request.args.get("tablename")
+
+    if not tablename:
+        return {"success": False, "error": "No tablename provided"}
+
     try:
         #get the current error table
         table_attribute_summaries = generate_complete_json(int(min_id), int(max_id), tablename)
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
+        print(f"Error generating summaries for table '{tablename}': {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
 
 

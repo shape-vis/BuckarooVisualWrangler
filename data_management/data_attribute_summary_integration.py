@@ -127,7 +127,8 @@ def get_numeric_stats(df, column):
     :return: dictionary containing statistics for the numeric column
     """
     df = df[pd.to_numeric(df[column], errors='coerce').notna()]
-    df[column] = df[column].astype('int64')
+    # Convert to numeric (handles both int and float)
+    df[column] = pd.to_numeric(df[column], errors='coerce')
     return {
         "numeric": {
             "mean": df[column].mean().item(),
