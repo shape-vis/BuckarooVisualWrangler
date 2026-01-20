@@ -26,7 +26,7 @@ def update_errors_table(table_name: str) -> None:
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
         detected_errors_df = run_detectors(df)
-        errors_table_name = f"errors{table_name}"
+        errors_table_name = f"errors_{table_name}"
         detected_errors_df.to_sql(errors_table_name, engine, if_exists='replace', index=False)
         print(f"✓ Updated errors table: {errors_table_name}")
     except Exception as e:

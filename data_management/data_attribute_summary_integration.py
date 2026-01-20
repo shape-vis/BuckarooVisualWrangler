@@ -18,7 +18,7 @@ def get_default_attributes_from_rankings(tablename, engine):
 
     try:
         cleaned_tablename = clean_table_name(tablename)
-        rankings_table = f"rankings{cleaned_tablename}"
+        rankings_table = f"rankings_{cleaned_tablename}"
 
         # Try exact match first
         try:
@@ -27,10 +27,10 @@ def get_default_attributes_from_rankings(tablename, engine):
             return result['attribute'].tolist()
         except Exception:
             # Fallback: search for similar table names (handles version suffixes)
-            # Create pattern: if looking for "rankingsstackoverflow_db_uncleaned_version_5"
-            # also match "rankingsstackoverflow_db_uncleaned"
+            # Create pattern: if looking for "rankings_stackoverflow_db_uncleaned_version_5"
+            # also match "rankings_stackoverflow_db_uncleaned"
             base_pattern = cleaned_tablename.split('_version')[0] if '_version' in cleaned_tablename else cleaned_tablename
-            pattern = f"rankings{base_pattern}%"
+            pattern = f"rankings_{base_pattern}%"
 
             matching_tables = pd.read_sql_query(
                 "SELECT tablename FROM pg_tables WHERE tablename LIKE %s ORDER BY tablename DESC LIMIT 1",

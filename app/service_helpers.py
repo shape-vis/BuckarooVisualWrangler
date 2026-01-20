@@ -86,7 +86,7 @@ def get_whole_table_query(table_name, get_errors):
     """
     name = clean_table_name(table_name)
     if get_errors:
-        query = f"SELECT * FROM errors{name}"
+        query = f"SELECT * FROM errors_{name}"
         return query
     query = f"SELECT * FROM {name}"
     return query
@@ -102,7 +102,7 @@ def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
     """
     name = clean_table_name(table_name)
     if get_errors:
-        query = f"SELECT * FROM errors{name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
+        query = f"SELECT * FROM errors_{name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
         return query
     query = f"SELECT * FROM {name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
     return query

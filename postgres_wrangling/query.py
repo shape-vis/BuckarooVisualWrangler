@@ -30,7 +30,7 @@ def _is_numeric(conn, col: str, table_name: str) -> bool:
 
 def _get_errors_table(table: str) -> str:
     """Get errors table name for given table."""
-    return f"errors{table}"
+    return f"errors_{table}"
 
 
 def _get_row_count(conn, table: str) -> int:

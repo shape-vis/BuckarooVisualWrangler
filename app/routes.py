@@ -38,11 +38,11 @@ def upload_csv():
     try:
         #insert the undetected dataframe
         rows_inserted = table_with_id_added.to_sql(cleaned_table_name, engine, if_exists='replace')
-        detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='replace')
+        detected_rows_inserted = detected_data.to_sql("errors_"+cleaned_table_name, engine, if_exists='replace')
 
         # Calculate and store attribute rankings
         rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings"+cleaned_table_name, engine, if_exists='replace', index=False)
+        rankings.to_sql("rankings_"+cleaned_table_name, engine, if_exists='replace', index=False)
 
         return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted, "clean_table_name": cleaned_table_name, "new_table_name": cleaned_table_name}
     except Exception as e:

@@ -54,7 +54,7 @@ def get_1d_histogram():
         if USE_PANDAS_FOR_HISTOGRAMS:
             histogram = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
         else:
-            query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors{table}', '{column}', {bin_count}, {min_id}, {max_id});"
+            query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors_{table}', '{column}', {bin_count}, {min_id}, {max_id});"
             result = pd.read_sql_query(query, engine).to_dict()
             histogram = result["generate_one_d_histogram_with_errors"][0]
 
@@ -92,7 +92,7 @@ def get_2d_histogram():
                 )
 
         else:
-            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
+            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors_{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
             binned_data = pd.read_sql_query(query_str, engine).to_dict()
             histogram = binned_data["generate_two_d_histogram_with_errors"][0]
 
@@ -196,7 +196,7 @@ def get_scatterplot_data():
         if USE_PANDAS_FOR_SCATTERPLOT:
             scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
         else:
-            query = f"SELECT generate_scatterplot_with_errors('{table}', 'errors{table}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
+            query = f"SELECT generate_scatterplot_with_errors('{table}', 'errors_{table}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
             result = pd.read_sql_query(query, engine).to_dict()
             scatterplot_data = result["generate_scatterplot_with_errors"][0]
 
@@ -297,7 +297,7 @@ def get_1d_histogram_db_deprecated():
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     bin_count = request.args.get("bins", default=10)
-    query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors{table}', '{column}', {bin_count}, {min_id}, {max_id});"
+    query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors_{table}', '{column}', {bin_count}, {min_id}, {max_id});"
 
     try:
         binned_data = pd.read_sql_query(query, engine).to_dict()
@@ -352,7 +352,7 @@ def get_2d_histogram_db_deprecated():
     max_id = request.args.get("max_id", default=200)
     x_bins = request.args.get("x_bins", default=10)
     y_bins = request.args.get("y_bins", default=10)
-    query = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
+    query = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors_{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
 
     try:
         binned_data = pd.read_sql_query(query, engine).to_dict()
