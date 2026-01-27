@@ -1,0 +1,31 @@
+
+
+.upload-box {
+  width: 400px;
+  height: 180px;
+  border: 2px dashed #999;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  font-family: sans-serif;
+  color: #555;
+  transition: border-color 0.2s, background-color 0.2s;
+  margin-left: auto; 
+  margin-right:auto; 
+  margin-top: 20px;
+  background-color:#d3d3d3;
+  cursor: "pointer";
+}
+
+.upload-box span {
+  color: #007bff;
+}
+
+.upload-box.dragover {
+  border-color: #007bff;
+  background-color: #f0f8ff;
+}
+

@@ -1,0 +1,161 @@
+.panel {
+  position: relative;
+  display: flex;
+  /* height: 300px; */
+  /* height: calc(100vh - 55px); */
+  /* width: 320px; */
+  /* border: 1px solid #ddd;
+  border-radius: 8px; */
+  /* overflow: hidden; */
+  transition: width 0.3s ease;
+  background: #fff;
+}
+
+/* Expanded */
+.panel.open {
+  /* width: 360px; */
+    width: fit-content;
+}
+
+/* Collapsed (left) */
+.panel.closed {
+  width: 48px;
+}
+
+/* Content */
+.panel-content {
+  flex: 1;
+  padding: 5px;
+  white-space: nowrap;
+}
+
+.panel.closed .panel-content {
+  opacity: 1;
+  pointer-events: none;
+}
+
+/* Toggle button */
+.panel-toggle {
+  position: absolute;
+  right: 4px;
+  top: 5px;
+  height: 36px;
+  width: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+/* Right-collapsing variant */
+.panel.collapse-right {
+  flex-direction: row-reverse;
+}
+
+/* Move toggle button to the left for right-collapsing panels */
+.panel.collapse-right .panel-toggle {
+  left: 4px;
+  right: auto;
+}
+
+.panel-collapse-text {
+  writing-mode: vertical-rl;   /* vertical, top → bottom */
+  text-orientation: mixed;
+  transform: rotate(180deg);   /* makes it read bottom → top */
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  height: 100%;
+  padding: 8px 6px;
+
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+
+  background: #f3f4f6;
+  color: #374151;
+  border-left: 1px solid #e5e7eb;
+
+  user-select: none;
+}
+
+/* Collapsed: collapse-down (height-based) */
+.panel.collapse-down {
+  /* normal (expanded) layout for collapse-down - full width */
+  width: 100%;
+  flex-direction: column;
+}
+
+/* When collapse-down variant is closed, reduce height instead of width */
+.panel.collapse-down.closed {
+  height: 48px;
+  width: 100%;
+  overflow: visible; /* allow toggle button to sit nicely */
+}
+
+/* panel-content adjustments for vertical shrink */
+.panel.collapse-down .panel-content {
+  /* padding: 8px; */
+  transition: transform 0.3s ease;
+}
+
+/* Hidden state for closed panels (both width and height variants) */
+.panel.closed .panel-content {
+  /* opacity: 0; */
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+/* Toggle button positioning for collapse-down */
+.panel.collapse-down .panel-toggle {
+  position: absolute;
+  /* place toggle centered horizontally when collapsed-down */
+  /* left: 50%; */
+  /* transform: translateX(-50%); */
+  /* bottom: 6px; */ /*place near bottom edge of the collapsed bar */
+  top: auto;
+  height: 36px;
+  width: 36px;
+  z-index: 10;
+}
+
+/* When collapse-down is open, put toggle at top-right (similar to default) */
+.panel.collapse-down.open .panel-toggle {
+  left: auto;
+  right: 8px;
+  top: 8px;
+  bottom: auto;
+  transform: none;
+}
+
+/* When collapse-down is open, put toggle at top-right (similar to default) */
+.panel.collapse-down.open .panel-toggle {
+  left: auto;
+  right: 8px;
+  top: 8px;
+  bottom: auto;
+  transform: none;
+}
+
+/* Add a horizontal collapse-text for collapse-down variant (small center handle) */
+.panel.collapse-down .panel-collapse-text {
+  writing-mode: horizontal-tb;
+  transform: none;
+  height: auto;
+  padding: 4px 8px;
+  border-left: none;
+  border-top: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  color: #374151;
+  font-weight: 600;
+}
+
+/* Small responsive tweak so closed panels don't accidentally overflow */
+.panel.closed, .panel.collapse-down.closed {
+  overflow: hidden;
+}
+
+

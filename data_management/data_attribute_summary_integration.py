@@ -5,6 +5,7 @@ import pandas as pd
 
 from app.service_helpers import get_error_dist, is_categorical
 from data_management.data_integration import get_filtered_dataframes
+from app import engine
 
 
 def get_default_attributes_from_rankings(tablename, engine):
@@ -14,11 +15,8 @@ def get_default_attributes_from_rankings(tablename, engine):
     :param engine: SQLAlchemy engine
     :return: List of top 3 attribute names
     """
-    from app.service_helpers import clean_table_name
-
     try:
-        cleaned_tablename = clean_table_name(tablename)
-        rankings_table = f"rankings{cleaned_tablename}"
+        rankings_table = f"{tablename}_rankings"
 
         # Try exact match first
         try:
@@ -29,8 +27,8 @@ def get_default_attributes_from_rankings(tablename, engine):
             # Fallback: search for similar table names (handles version suffixes)
             # Create pattern: if looking for "rankingsstackoverflow_db_uncleaned_version_5"
             # also match "rankingsstackoverflow_db_uncleaned"
-            base_pattern = cleaned_tablename.split('_version')[0] if '_version' in cleaned_tablename else cleaned_tablename
-            pattern = f"rankings{base_pattern}%"
+            base_pattern = tablename.split('_version')[0] if '_version' in tablename else tablename
+            pattern = f"{base_pattern}%_rankings"
 
             matching_tables = pd.read_sql_query(
                 "SELECT tablename FROM pg_tables WHERE tablename LIKE %s ORDER BY tablename DESC LIMIT 1",
@@ -65,10 +63,19 @@ def generate_complete_json(min_id, max_id, tablename=None):
     :param tablename: name of the table (optional, for fetching default attributes)
     :return: JSON representation of the data state
     """
-    from app import engine
 
-    main_df, error_df = get_filtered_dataframes(min_id, max_id)
-    error_list = get_error_dist(error_df, main_df).to_dict('records')
+    # main_df, error_df = get_filtered_dataframes(min_id, max_id)
+    # error_list = get_error_dist(error_df, main_df).to_dict('records')
+    print(f"Generating JSON for IDs between {min_id} and {max_id} (Table: {tablename})")
+
+    # use sql to get the data from the table into a data frame
+    if tablename:
+        query = f"SELECT * FROM \"{tablename}\" WHERE index >= {min_id} AND index <= {max_id}"
+        main_df = pd.read_sql_query(query, engine)
+        query = f"SELECT * FROM \"{tablename}_errors\" WHERE index >= {min_id} AND index <= {max_id}"
+        error_df = pd.read_sql_query(query, engine)
+        error_list = get_error_dist(error_df, main_df).to_dict('records')
+    
 
     default_attributes = []
     if tablename:

@@ -1,6 +1,8 @@
 #Buckaroo Project - June 1, 2025
 #This file helps deliver on endpoint services
 
+import random
+import string
 import re
 
 import pandas as pd
@@ -13,7 +15,7 @@ from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 
 
-def clean_table_name(csv_name):
+def generate_table_name(csv_name):
     """
     Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
     - Remove file extension (.csv), replace spaces/special chars with underscores, ensure it starts with a letter (SQL requirement)
@@ -24,9 +26,10 @@ def clean_table_name(csv_name):
         csv_name = csv_name[0:len(csv_name)-4]
 
     clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name)
-    if not clean_name[0].isalpha():
-        clean_name = 'table' + clean_name
-    return clean_name.lower()
+    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=10)
+)
+    return "data_" + clean_name.lower() + "_" + random_string
+
 
 def init_session_data_state(df,error_df,data_state_manager):
     """
@@ -84,11 +87,10 @@ def get_whole_table_query(table_name, get_errors):
     :param get_errors: boolean to determine if the query is for the error table or the undetected table
     :return: the query string to fetch the whole table
     """
-    name = clean_table_name(table_name)
     if get_errors:
-        query = f"SELECT * FROM errors{name}"
+        query = f"SELECT * FROM {table_name}_errors"
         return query
-    query = f"SELECT * FROM {name}"
+    query = f"SELECT * FROM {table_name}"
     return query
 
 def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
@@ -100,11 +102,10 @@ def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
     :param get_errors: boolean to determine if the query is for the error table or the undetected table
     :return: the query string to fetch the range of IDs
     """
-    name = clean_table_name(table_name)
     if get_errors:
-        query = f"SELECT * FROM errors{name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
+        query = f"SELECT * FROM {table_name}_errors WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
         return query
-    query = f"SELECT * FROM {name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
+    query = f"SELECT * FROM {table_name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
     return query
 
 def get_values_for_df_melt(df):

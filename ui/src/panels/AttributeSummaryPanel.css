@@ -1,0 +1,131 @@
+
+#attribute-summary-root {
+      height: 100%;           /* fill viewport */
+      display: flex;
+      flex-direction: column; /* vertical stacking */    
+      width: 260px;
+}
+
+#attribute-sorting {
+    border: 2px solid #ccc;
+    border-radius: 5px;
+    padding: 8px;
+    width: 250px;
+}
+
+.attribute-sorting-item {
+    display: flex;
+    align-items: center;
+    margin: 2px 0;
+    margin-top: 5px;
+    font-size: 14px;
+    /* max-width: 250px; */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    cursor: pointer;
+}
+
+.attribute-sorting-item-color {
+    width: 15px;
+    height: 15px;
+    margin-right: 5px;
+    border: 1px solid black;
+    flex-shrink: 0;
+}
+
+.attribute-sorting-item-color-selected {
+    width: 11px;
+    height: 11px;
+    margin-right: 5px;
+    border: 3px solid red;
+    flex-shrink: 0;
+}
+
+.attribute-sorting-title {
+    font-weight: bold;
+    margin-bottom: 2px;
+    text-align: center;
+    border-bottom: solid 1px black;
+    width: 100%;
+}
+
+
+.attribute-list {
+    margin-top: 4px;
+    padding: 0.5rem;
+    background-color: #f5f5f5;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    /* max-height: 425px; */
+    overflow-y: auto;
+    width: 250px;
+    /* height: calc(100vh - 100px); */
+}
+
+.attribute-list h4 {
+    margin-top: 0;
+    font-size: 1rem;
+}
+
+.attribute-list ul {
+    padding-left: 0;
+    margin: 0;
+    list-style-type: disc;
+}
+
+.attribute-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+    font-size: 16px;
+    font-weight: 500;
+    margin-right: 10px;
+}
+
+
+.column-stats {
+    font-size: 12px;
+    color: #555;
+    margin-left: 4px;
+    line-height: 1.2em;
+    flex-direction: column;
+    display: flex;
+}
+
+.attribute-summary-list{
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.popupMenuWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.popupMenu {
+  position: absolute;
+  top: 21px;
+  left: 24px;
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  border: 1px solid #ddd;
+  /* box-shadow: 0 2px 8px rgba(0,0,0,0.15); */
+  border-radius: 4px;
+  /* margin-top: 4px; */
+  z-index: 1000;
+}
+/*
+.popupMenu > div {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.popupMenu > div:hover {
+  background-color: #f5f5f5;
+} */

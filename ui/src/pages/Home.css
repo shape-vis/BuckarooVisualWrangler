@@ -1,0 +1,30 @@
+
+.dataset-button {
+    background-color: #0074d9; 
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 15px 25px;
+    margin: 10px 5px;
+    border: none;
+    border-radius: 10px;
+    text-align: center;
+    cursor: pointer;
+    width: 150px;
+  }
+  
+.dataset-button:hover {
+    background-color: #005bab; 
+}
+
+.error-box {
+    color: red; 
+    margin-top: 10px; 
+    background-color: #ffe6e6; 
+    padding: 10px; 
+    border-radius: 5px; 
+    font-style: italic;
+    width: fit-content;
+    margin: 10px auto;
+    font-size: 18px;
+}

@@ -22,7 +22,7 @@ from app.service_helpers import get_whole_table_query
 from flask import request
 
 from app import app, engine
-from app.service_helpers import clean_table_name
+# from app.service_helpers import generate_table_name
 
 # Toggle between pandas (in-memory) and PostgreSQL (database) histogram generation
 # False = Use PostgreSQL stored procedures with database tables (recommended)
@@ -34,27 +34,47 @@ USE_PANDAS_FOR_HISTOGRAMS = False
 # True  = Use pandas with data_state_manager (legacy, for testing)
 USE_PANDAS_FOR_SCATTERPLOT = False
 
+import math
+
+def replace_nan(obj):
+    if isinstance(obj, dict):
+        return {k: replace_nan(v) for k, v in obj.items()}
+
+    elif isinstance(obj, list):
+        return [replace_nan(v) for v in obj]
+
+    elif isinstance(obj, tuple):
+        return tuple(replace_nan(v) for v in obj)
+
+    elif isinstance(obj, float) and math.isnan(obj):
+        return "NaN"
+
+    else:
+        return obj
+    
+
 @app.get("/api/plots/1-d-histogram")
 def get_1d_histogram():
     """
     Endpoint to return data to be used to construct the 1d histogram in the view
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
-    table = clean_table_name(request.args.get("tablename"))
+    table = request.args.get("tablename")
     column = request.args.get("column")
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     bin_count = request.args.get("bins", default=10)
-    column_name = request.args.get("column")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
-    number_of_bins = request.args.get("bins", default=10)
+    # column_name = request.args.get("column")
+    # min_id = request.args.get("min_id", default=0)
+    # max_id = request.args.get("max_id", default=200)
+    # number_of_bins = request.args.get("bins", default=10)
 
     try:
         if USE_PANDAS_FOR_HISTOGRAMS:
-            histogram = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
+            histogram = generate_1d_histogram_data(column, int(bin_count), min_id, max_id)
         else:
-            query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors{table}', '{column}', {bin_count}, {min_id}, {max_id});"
+            query = f"SELECT generate_one_d_histogram_with_errors('{table}', '{table}_errors', '{column}', {bin_count}, {min_id}, {max_id});"
+            print(f"Executing query: {query}")
             result = pd.read_sql_query(query, engine).to_dict()
             histogram = result["generate_one_d_histogram_with_errors"][0]
 
@@ -72,7 +92,7 @@ def get_2d_histogram():
     Endpoint to return data to be used to construct the 2d histogram in the view
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
-    table = clean_table_name(request.args.get("tablename"))
+    table = request.args.get("tablename")
     column_x = request.args.get("column_x")
     column_y = request.args.get("column_y")
     min_id = request.args.get("min_id", default=0)
@@ -92,7 +112,8 @@ def get_2d_histogram():
                 )
 
         else:
-            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
+            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', '{table}_errors', '{column_x}','{column_y}', {x_bins}, {y_bins}, {min_id}, {max_id});"
+            print(f"Executing query: {query_str}")
             binned_data = pd.read_sql_query(query_str, engine).to_dict()
             histogram = binned_data["generate_two_d_histogram_with_errors"][0]
 
@@ -102,6 +123,40 @@ def get_2d_histogram():
         return {"Success": False, "Error": str(e)}
 
 
+
+@app.get("/api/plots/top-error-rows")
+def get_top_error_rows():
+    """
+    Endpoint to return data to be used to construct the table of errors in the view
+    :return: the data from the database in JSON format specific to what the view needs to ingest it
+    """
+    table = request.args.get("tablename")
+    num_rows = request.args.get("num_rows", default=10)
+
+    try:
+        top_errors_query = f"SELECT * FROM \"{table}_errors\" WHERE row_id IN (  SELECT row_id   FROM \"{table}_errors\"   GROUP BY row_id   ORDER BY COUNT(*) DESC   LIMIT {num_rows} ) ORDER BY row_id;"
+        top_errors_result = pd.read_sql_query(top_errors_query, engine)
+
+        print(f"### Top errors query: {top_errors_query}")
+        print(f"### Top errors result: {top_errors_result}")
+
+        # top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"{table}_errors\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"index\" = t.row_id;"
+        top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"{table}_errors\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"ID\" = t.row_id;"
+        top_data_result = pd.read_sql_query(top_data_query, engine)
+
+        print(f"### Top data query: {top_data_query}")
+        print(f"### Top data result: ")
+        print(top_data_result)
+
+        # # TODO: Implement logic to get top error rows based on error counts
+        # query = f"SELECT * FROM \"{table}\" LIMIT {num_rows};"
+        # print(f"Executing query: {query}")
+        # result = pd.read_sql_query(query, engine).to_dict()
+
+        return {"Success": True, "table": replace_nan(top_data_result.to_dict()), "errors": top_errors_result.to_dict()}
+
+    except Exception as e:
+        return {"Success": False, "Error": str(e)}
 
 
 
@@ -184,7 +239,7 @@ def get_2d_histogram_pandas():
 
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():
-    table = clean_table_name(request.args.get("tablename"))
+    table = request.args.get("tablename")
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
     min_id = request.args.get("min_id", default=0)
@@ -196,7 +251,7 @@ def get_scatterplot_data():
         if USE_PANDAS_FOR_SCATTERPLOT:
             scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
         else:
-            query = f"SELECT generate_scatterplot_with_errors('{table}', 'errors{table}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
+            query = f"SELECT generate_scatterplot_with_errors('{table}', '{table}_errors', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
             result = pd.read_sql_query(query, engine).to_dict()
             scatterplot_data = result["generate_scatterplot_with_errors"][0]
 
@@ -271,6 +326,7 @@ def attribute_summaries():
     tablename = request.args.get("tablename")
     try:
         #get the current error table
+        print(f"Generating attribute summaries for table {tablename} with id range {min_id} to {max_id}")
         table_attribute_summaries = generate_complete_json(int(min_id), int(max_id), tablename)
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
@@ -292,7 +348,7 @@ def get_1d_histogram_db_deprecated():
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
     print("DEPRECATED use of /api/plots/1-d-histogram-data-db")
-    table = clean_table_name(request.args.get("tablename"))
+    table = request.args.get("tablename")
     column = request.args.get("column")
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
@@ -345,7 +401,7 @@ def get_2d_histogram_db_deprecated():
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
     print("DEPRECATED use of /api/plots/2-d-histogram-data-db")
-    table = clean_table_name(request.args.get("tablename"))
+    table = request.args.get("tablename")
     column_x = request.args.get("column_x")
     column_y = request.args.get("column_y")
     min_id = request.args.get("min_id", default=0)

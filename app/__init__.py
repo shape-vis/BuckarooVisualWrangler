@@ -72,7 +72,10 @@ def load_database_info():
 #load the .env file and read the different variables in there and them in the environment variables for this proccess
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__,
+            static_folder="../ui/dist",
+            static_url_path="/")
+
 #sets the URL to the DB url specified for the local postgresql db on my local machine specified in .env
 
 host, port, user, password, db_name = load_database_info()
