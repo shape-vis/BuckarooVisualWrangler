@@ -254,7 +254,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
         </div>
       </div>
 
-      <FilterModal visible={filterVisible} attribute={filterAttribute} onClose={() => setFilterVisible(false)} onApply={() => setFilterVisible(false)} />
+      <FilterModal visible={filterVisible} attribute={filterAttribute} onClose={() => setFilterVisible(false)} onApply={() => setFilterVisible(false)} table_name={table_name} errorColors={errorColors} />
 
       <div className="attribute-list">
         <ul className="attribute-summary-list">

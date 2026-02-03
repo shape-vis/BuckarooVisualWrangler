@@ -1,6 +1,7 @@
 import React, {useEffect, useRef} from "react";
 import * as d3 from "d3";
 import { queryHistogram1d } from "../utils/serverCalls.jsx";
+import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 
 /**
  * Props
@@ -25,6 +26,7 @@ export default function HistogramBarChart({
 }) {
 
   const drawingRef = useRef(null);
+  const clearSelectionRef = useRef(() => {});
 
   const [histogramData, setHistogramData] = React.useState(null);
 
@@ -112,6 +114,9 @@ export default function HistogramBarChart({
         let selected = [];
         const barColor = d => (selected.includes(d) ? "gold" : colorScale(d.name));
 
+        const brushGroup = canvas.append("g")
+          .attr("class", "histogram-brush");
+
         // Draw bars
         const bars = canvas.append("g")
           .selectAll("rect")
@@ -128,6 +133,49 @@ export default function HistogramBarChart({
 
         // console.log("[HistogramBarChart] Bars created:", bars.size());
 
+        const brush = d3.brushX()
+          .extent([[0, 0], [size, size]])
+          .on("brush end", (event) => {
+            if (!event.selection) {
+              selected = [];
+              bars.attr("fill", barColor);
+              return;
+            }
+
+            const [x0, x1] = event.selection;
+            const brushedItems = myData.filter(d => {
+              if (d.type === "numeric") {
+                const bin = numHistDataX[d.bin];
+                if (!bin) return false;
+                const start = xScale.apply(bin.x0, "numeric");
+                const end = xScale.apply(bin.x1, "numeric");
+                return end >= x0 && start <= x1;
+              }
+
+              const start = xScale.apply(d.bin, "categorical");
+              const end = start + xScale.categoricalBandwidth();
+              return end >= x0 && start <= x1;
+            });
+
+            if (event.sourceEvent && event.sourceEvent.shiftKey) {
+              brushedItems.forEach(d => {
+                if (!selected.includes(d)) selected.push(d);
+              });
+            } else {
+              selected = brushedItems;
+            }
+
+            bars.attr("fill", barColor);
+          });
+
+        brushGroup.call(brush);
+        brushGroup.lower();
+
+        clearSelectionRef.current = () => {
+          selected = [];
+          bars.attr("fill", barColor);
+          brushGroup.call(brush.move, null);
+        };
 
 
         // Draw xScale if it has a draw method (from original helper) otherwise skip
@@ -184,9 +232,7 @@ export default function HistogramBarChart({
 
 
   function clearSelection() {
-    console.log("Clicked on heatmap background", event);    
-    selected = [];
-    tiles.attr("fill", tileFill);
+    clearSelectionRef.current();
   }
 
 
