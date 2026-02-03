@@ -64,7 +64,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
 
             if (i === j) {
               // diagonal: bar chart
-              return (<HistogramBarChart cellID={cellID} xPos={xPos} yPos={yPos} size={plotSize} table_name={table_name} attrX={xCol} errorColors={errorColors} />);
+              return (<HistogramBarChart cellID={cellID} pos={{x: xPos, y: yPos}} size={{w: plotSize, h: plotSize}} table_name={table_name} attrX={xCol} errorColors={errorColors} />);
             } else if (i < j) {
               // upper: scatterplot
               return (<ScatterPlot cellID={cellID} xPos={xPos} yPos={yPos} size={plotSize} table_name={table_name} attrX={xCol} attrY={yCol} errorColors={errorColors} />);

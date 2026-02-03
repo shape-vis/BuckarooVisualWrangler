@@ -57,13 +57,13 @@ async function getErrorData(filename,dataSize) {
     }
 }
 
-async function queryHistogram1d(tableName,columnName,minId,maxId,binCount) {
+async function queryHistogram1d(tableName,columnName,binCount) {
     console.log("1d histogram fetch");
     const params = new URLSearchParams({
         column:columnName,
         tablename:tableName,
-        min_id:minId,
-        max_id:maxId,
+        min_id: 0,
+        max_id: 10000,
         bins:binCount});
     const url = `/api/plots/1-d-histogram?${params}`
     try{
@@ -75,14 +75,14 @@ async function queryHistogram1d(tableName,columnName,minId,maxId,binCount) {
     }
 }
 
-async function queryHistogram2d(tableName,columnX,columnY,minId,maxID,bins) {
+async function queryHistogram2d(tableName,columnX,columnY,bins) {
     console.log("2d histogram fetch");
     const params = new URLSearchParams({
         column_x:columnX,
         column_y:columnY,
         tablename:tableName,
-        min_id: minId,
-        max_id: maxID,
+        min_id: 0,
+        max_id: 10000,
         x_bins: bins,
         y_bins: bins});
     const url = `/api/plots/2-d-histogram?${params}`
@@ -95,14 +95,14 @@ async function queryHistogram2d(tableName,columnX,columnY,minId,maxID,bins) {
     }
 }
 
-export async function querySample2d(tableName, xColumn, yColumn, minId, maxId, errorSamples, totalSamples) {
+export async function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples) {
     console.log("2d sample fetch");
     const params = new URLSearchParams({
         x_column:xColumn,
         y_column:yColumn,
         tablename:tableName,
-        min_id:minId,
-        max_id:maxId,
+        min_id: 0,
+        max_id: 10000,
         error_sample_count:errorSamples,
         total_sample_count:totalSamples});
 

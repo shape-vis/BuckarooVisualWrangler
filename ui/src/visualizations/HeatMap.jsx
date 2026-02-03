@@ -35,7 +35,7 @@ export default function Heatmap({
     async function fetchData(){
         try {
 
-          const response = await queryHistogram2d(table_name, attrX, attrY, 0, 10000, 10 );
+          const response = await queryHistogram2d(table_name, attrX, attrY,10 );
           console.log("[HEATMAP] Response:", response);
 
           if (!response || !response.Success) {

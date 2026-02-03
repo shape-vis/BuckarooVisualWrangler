@@ -36,9 +36,8 @@ export default function ScatterPlot({
     async function fetchData(){
         try {
 
-          // const response = await queryHistogram2d(table_name, attrX, attrY, 0, 10000, 10 );
 
-        const response = await querySample2d( table_name, attrX, attrY, 0, 10000, errorSampleCount, totalSampleCount );          
+          const response = await querySample2d( table_name, attrX, attrY, errorSampleCount, totalSampleCount );          
           console.log("[SCATTERPLOT] Response:", response);
 
           if (!response || !response.Success) {
