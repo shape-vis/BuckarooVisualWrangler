@@ -39,8 +39,7 @@ DB_FUNCTIONS = {
                     "ID",
                     %I as value
                 FROM %I
-                WHERE %I IS NOT NULL
-                  AND ($1 IS NULL OR "ID" >= $1)
+                WHERE ($1 IS NULL OR "ID" >= $1)
                   AND ($2 IS NULL OR "ID" <= $2)
             ),
             -- Step 2: Assign bins (keep as text for both numeric and categorical)
@@ -48,25 +47,32 @@ DB_FUNCTIONS = {
                 SELECT
                     d."ID",
                     CASE
+                        WHEN d.value IS NULL THEN 'null'  -- Handle NULL values first
                         WHEN $3 THEN  -- is_numeric
-                            -- Clamp bin number to 0..(bin_count-1) range
-                            LEAST(
-                                GREATEST(
-                                    COALESCE(
-                                        width_bucket(
-                                            d.value::numeric,
-                                            (SELECT MIN(value::numeric) FROM data_rows),
-                                            (SELECT MAX(value::numeric) FROM data_rows),
-                                            $4
-                                        ) - 1,
-                                        0
-                                    ),
-                                    0
-                                ),
-                                $4 - 1
-                            )::text
+                            -- Try to convert to numeric, if fails treat as categorical
+                            CASE
+                                WHEN d.value::text ~ '^\s*-?\d+(\.\d+)?\s*$' THEN
+                                    -- Clamp bin number to 0..(bin_count-1) range
+                                    LEAST(
+                                        GREATEST(
+                                            COALESCE(
+                                                width_bucket(
+                                                    d.value::numeric,
+                                                    (SELECT MIN(value::numeric) FROM data_rows WHERE value::text ~ '^\s*-?\d+(\.\d+)?\s*$'),
+                                                    (SELECT MAX(value::numeric) FROM data_rows WHERE value::text ~ '^\s*-?\d+(\.\d+)?\s*$'),
+                                                    $4
+                                                ) - 1,
+                                                0
+                                            ),
+                                            0
+                                        ),
+                                        $4 - 1
+                                    )::text
+                                ELSE
+                                    d.value::text  -- Non-numeric value in numeric column
+                            END
                         ELSE
-                            d.value::text
+                            COALESCE(d.value::text, 'null')
                     END as bin
                 FROM data_rows d
             ),
@@ -113,13 +119,13 @@ DB_FUNCTIONS = {
             SELECT json_build_object(
                 'histograms',
                 CASE WHEN $3 THEN
-                    -- For numeric: cast bin to integer
+                    -- For numeric: handle mixed bins (numeric and "null") - keep bins as text
                     (SELECT COALESCE(json_agg(
                         json_build_object(
-                            'xBin', bin::integer,
-                            'xType', 'numeric',
+                            'xBin', bin,
+                            'xType', CASE WHEN bin ~ '^\d+$' THEN 'numeric' ELSE 'categorical' END,
                             'count', COALESCE(errors, '{}'::jsonb) || jsonb_build_object('items', total_items)
-                        ) ORDER BY bin::integer
+                        ) ORDER BY CASE WHEN bin ~ '^\d+$' THEN lpad(bin, 10, '0') ELSE bin END
                     ), '[]'::json) FROM histogram_bins)
                 ELSE
                     -- For categorical: keep bin as text
@@ -136,15 +142,20 @@ DB_FUNCTIONS = {
                     'numeric', CASE WHEN $3 THEN
                         (SELECT COALESCE(json_agg(json_build_object('x0', x0, 'x1', x1) ORDER BY bin_num), '[]'::json) FROM numeric_scale_data)
                     ELSE '[]'::json END,
-                    'categorical', CASE WHEN NOT $3 THEN
-                        (SELECT COALESCE(json_agg(bin ORDER BY bin), '[]'::json) FROM histogram_bins)
-                    ELSE '[]'::json END
+                    'categorical', (
+                        -- Always include categorical values (null and non-numeric values in numeric columns)
+                        SELECT COALESCE(
+                            json_agg(DISTINCT bin ORDER BY bin),
+                            '[]'::json
+                        )
+                        FROM histogram_bins
+                        WHERE NOT (bin ~ '^\d+$')  -- Only non-numeric bin labels
+                    )
                 )
             )
         $QUERY$,
             axis_column,              -- %I: column name in data_rows SELECT
             main_table_name,          -- %I: main table name
-            axis_column,              -- %I: WHERE column IS NOT NULL
             error_table_name          -- %I: error table name
         )
         USING min_id, max_id, is_numeric, bin_count, axis_column
@@ -195,9 +206,7 @@ DB_FUNCTIONS = {
                     %I as x_value,
                     %I as y_value
                 FROM %I
-                WHERE %I IS NOT NULL
-                  AND %I IS NOT NULL
-                  AND ($1 IS NULL OR "ID" >= $1)
+                WHERE ($1 IS NULL OR "ID" >= $1)
                   AND ($2 IS NULL OR "ID" <= $2)
             ),
             -- Step 2: Get min/max for numeric columns (for width_bucket)
@@ -206,46 +215,58 @@ DB_FUNCTIONS = {
                     COALESCE(MIN(x_value::numeric), 0) as min_val,
                     COALESCE(MAX(x_value::numeric), 1) as max_val
                 FROM data_rows
-                WHERE $3  -- only compute for numeric
+                WHERE $3 AND x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$'  -- only numeric values
             ),
             y_bounds AS (
                 SELECT
                     COALESCE(MIN(y_value::numeric), 0) as min_val,
                     COALESCE(MAX(y_value::numeric), 1) as max_val
                 FROM data_rows
-                WHERE $4  -- only compute for numeric
+                WHERE $4 AND y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$'  -- only numeric values
             ),
             -- Step 3: Assign bins for both X and Y
             binned_data AS (
                 SELECT
                     d."ID",
                     CASE
-                        WHEN $3 THEN  -- x_is_numeric: clamp to [0, bin_count-1]
-                            LEAST(GREATEST(
-                                width_bucket(
-                                    d.x_value::numeric,
-                                    (SELECT min_val FROM x_bounds),
-                                    (SELECT max_val FROM x_bounds),
-                                    $5
-                                ) - 1,
-                                0
-                            ), $5 - 1)::text
+                        WHEN d.x_value IS NULL THEN 'null'
+                        WHEN $3 THEN  -- x_is_numeric
+                            CASE
+                                WHEN d.x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$' THEN
+                                    LEAST(GREATEST(
+                                        width_bucket(
+                                            d.x_value::numeric,
+                                            (SELECT min_val FROM x_bounds),
+                                            (SELECT max_val FROM x_bounds),
+                                            $5
+                                        ) - 1,
+                                        0
+                                    ), $5 - 1)::text
+                                ELSE
+                                    d.x_value::text  -- Non-numeric value in numeric column
+                            END
                         ELSE
-                            d.x_value::text
+                            COALESCE(d.x_value::text, 'null')
                     END as x_bin,
                     CASE
-                        WHEN $4 THEN  -- y_is_numeric: clamp to [0, bin_count-1]
-                            LEAST(GREATEST(
-                                width_bucket(
-                                    d.y_value::numeric,
-                                    (SELECT min_val FROM y_bounds),
-                                    (SELECT max_val FROM y_bounds),
-                                    $6
-                                ) - 1,
-                                0
-                            ), $6 - 1)::text
+                        WHEN d.y_value IS NULL THEN 'null'
+                        WHEN $4 THEN  -- y_is_numeric
+                            CASE
+                                WHEN d.y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$' THEN
+                                    LEAST(GREATEST(
+                                        width_bucket(
+                                            d.y_value::numeric,
+                                            (SELECT min_val FROM y_bounds),
+                                            (SELECT max_val FROM y_bounds),
+                                            $6
+                                        ) - 1,
+                                        0
+                                    ), $6 - 1)::text
+                                ELSE
+                                    d.y_value::text  -- Non-numeric value in numeric column
+                            END
                         ELSE
-                            d.y_value::text
+                            COALESCE(d.y_value::text, 'null')
                     END as y_bin
                 FROM data_rows d
             ),
@@ -302,37 +323,38 @@ DB_FUNCTIONS = {
                 'histograms',
                 CASE
                     WHEN $3 AND $4 THEN
-                        -- Both numeric
-                        (SELECT COALESCE(json_agg(
-                            json_build_object(
-                                'xBin', x_bin::integer,
-                                'yBin', y_bin::integer,
-                                'xType', 'numeric',
-                                'yType', 'numeric',
-                                'count', COALESCE(errors, '{}'::jsonb) || jsonb_build_object('items', total_items)
-                            ) ORDER BY x_bin::integer, y_bin::integer
-                        ), '[]'::json) FROM histogram_bins)
-                    WHEN $3 AND NOT $4 THEN
-                        -- X numeric, Y categorical
-                        (SELECT COALESCE(json_agg(
-                            json_build_object(
-                                'xBin', x_bin::integer,
-                                'yBin', y_bin,
-                                'xType', 'numeric',
-                                'yType', 'categorical',
-                                'count', COALESCE(errors, '{}'::jsonb) || jsonb_build_object('items', total_items)
-                            ) ORDER BY x_bin::integer, y_bin
-                        ), '[]'::json) FROM histogram_bins)
-                    WHEN NOT $3 AND $4 THEN
-                        -- X categorical, Y numeric
+                        -- Both numeric (but handle mixed bins) - keep bins as text
                         (SELECT COALESCE(json_agg(
                             json_build_object(
                                 'xBin', x_bin,
-                                'yBin', y_bin::integer,
-                                'xType', 'categorical',
-                                'yType', 'numeric',
+                                'yBin', y_bin,
+                                'xType', CASE WHEN x_bin ~ '^\d+$' THEN 'numeric' ELSE 'categorical' END,
+                                'yType', CASE WHEN y_bin ~ '^\d+$' THEN 'numeric' ELSE 'categorical' END,
                                 'count', COALESCE(errors, '{}'::jsonb) || jsonb_build_object('items', total_items)
-                            ) ORDER BY x_bin, y_bin::integer
+                            ) ORDER BY CASE WHEN x_bin ~ '^\d+$' THEN lpad(x_bin, 10, '0') ELSE x_bin END,
+                                      CASE WHEN y_bin ~ '^\d+$' THEN lpad(y_bin, 10, '0') ELSE y_bin END
+                        ), '[]'::json) FROM histogram_bins)
+                    WHEN $3 AND NOT $4 THEN
+                        -- X numeric, Y categorical - keep bins as text
+                        (SELECT COALESCE(json_agg(
+                            json_build_object(
+                                'xBin', x_bin,
+                                'yBin', y_bin,
+                                'xType', CASE WHEN x_bin ~ '^\d+$' THEN 'numeric' ELSE 'categorical' END,
+                                'yType', 'categorical',
+                                'count', COALESCE(errors, '{}'::jsonb) || jsonb_build_object('items', total_items)
+                            ) ORDER BY CASE WHEN x_bin ~ '^\d+$' THEN lpad(x_bin, 10, '0') ELSE x_bin END, y_bin
+                        ), '[]'::json) FROM histogram_bins)
+                    WHEN NOT $3 AND $4 THEN
+                        -- X categorical, Y numeric - keep bins as text
+                        (SELECT COALESCE(json_agg(
+                            json_build_object(
+                                'xBin', x_bin,
+                                'yBin', y_bin,
+                                'xType', 'categorical',
+                                'yType', CASE WHEN y_bin ~ '^\d+$' THEN 'numeric' ELSE 'categorical' END,
+                                'count', COALESCE(errors, '{}'::jsonb) || jsonb_build_object('items', total_items)
+                            ) ORDER BY x_bin, CASE WHEN y_bin ~ '^\d+$' THEN lpad(y_bin, 10, '0') ELSE y_bin END
                         ), '[]'::json) FROM histogram_bins)
                     ELSE
                         -- Both categorical
@@ -350,25 +372,35 @@ DB_FUNCTIONS = {
                     'numeric', CASE WHEN $3 THEN
                         (SELECT COALESCE(json_agg(json_build_object('x0', x0, 'x1', x1) ORDER BY bin_num), '[]'::json) FROM x_numeric_scale_data)
                     ELSE '[]'::json END,
-                    'categorical', CASE WHEN NOT $3 THEN
-                        (SELECT COALESCE(json_agg(DISTINCT x_bin ORDER BY x_bin), '[]'::json) FROM histogram_bins)
-                    ELSE '[]'::json END
+                    'categorical', (
+                        -- Always include categorical values (null and non-numeric values in numeric columns)
+                        SELECT COALESCE(
+                            json_agg(DISTINCT x_bin ORDER BY x_bin),
+                            '[]'::json
+                        )
+                        FROM histogram_bins
+                        WHERE NOT (x_bin ~ '^\d+$')  -- Only non-numeric bin labels
+                    )
                 ),
                 'scaleY', json_build_object(
                     'numeric', CASE WHEN $4 THEN
                         (SELECT COALESCE(json_agg(json_build_object('x0', x0, 'x1', x1) ORDER BY bin_num), '[]'::json) FROM y_numeric_scale_data)
                     ELSE '[]'::json END,
-                    'categorical', CASE WHEN NOT $4 THEN
-                        (SELECT COALESCE(json_agg(DISTINCT y_bin ORDER BY y_bin), '[]'::json) FROM histogram_bins)
-                    ELSE '[]'::json END
+                    'categorical', (
+                        -- Always include categorical values (null and non-numeric values in numeric columns)
+                        SELECT COALESCE(
+                            json_agg(DISTINCT y_bin ORDER BY y_bin),
+                            '[]'::json
+                        )
+                        FROM histogram_bins
+                        WHERE NOT (y_bin ~ '^\d+$')  -- Only non-numeric bin labels
+                    )
                 )
             )
         $QUERY$,
             x_axis_column,              -- %I: x column name
             y_axis_column,              -- %I: y column name
             main_table_name,            -- %I: main table name
-            x_axis_column,              -- %I: WHERE x IS NOT NULL
-            y_axis_column,              -- %I: WHERE y IS NOT NULL
             error_table_name            -- %I: error table name
         )
         USING min_id, max_id, x_is_numeric, y_is_numeric, x_bin_count, y_bin_count, x_axis_column, y_axis_column
@@ -398,8 +430,14 @@ DB_FUNCTIONS = {
         result json;
         x_is_numeric boolean;
         y_is_numeric boolean;
+        x_is_mixed boolean;
+        y_is_mixed boolean;
+        x_has_numeric boolean;
+        x_has_categorical boolean;
+        y_has_numeric boolean;
+        y_has_categorical boolean;
     BEGIN
-        -- Check if columns are numeric
+        -- Check if columns are natively numeric types
         SELECT data_type IN ('integer', 'bigint', 'numeric', 'real', 'double precision', 'smallint')
         INTO x_is_numeric
         FROM information_schema.columns
@@ -409,6 +447,35 @@ DB_FUNCTIONS = {
         INTO y_is_numeric
         FROM information_schema.columns
         WHERE table_name = main_table_name AND column_name = y_axis_column;
+
+        -- For TEXT columns, sample values to detect if they contain numeric strings
+        IF NOT x_is_numeric THEN
+            EXECUTE format($SAMPLE$
+                SELECT
+                    COUNT(*) FILTER (WHERE %I::text ~ '^\s*-?\d+(\.\d+)?\s*$') > 0,
+                    COUNT(*) FILTER (WHERE NOT (%I::text ~ '^\s*-?\d+(\.\d+)?\s*$') AND %I IS NOT NULL) > 0
+                FROM (SELECT %I FROM %I WHERE %I IS NOT NULL LIMIT 1000) sample
+            $SAMPLE$, x_axis_column, x_axis_column, x_axis_column, x_axis_column, main_table_name, x_axis_column)
+            INTO x_has_numeric, x_has_categorical;
+
+            x_is_mixed := x_has_numeric AND x_has_categorical;
+        ELSE
+            x_is_mixed := FALSE;
+        END IF;
+
+        IF NOT y_is_numeric THEN
+            EXECUTE format($SAMPLE$
+                SELECT
+                    COUNT(*) FILTER (WHERE %I::text ~ '^\s*-?\d+(\.\d+)?\s*$') > 0,
+                    COUNT(*) FILTER (WHERE NOT (%I::text ~ '^\s*-?\d+(\.\d+)?\s*$') AND %I IS NOT NULL) > 0
+                FROM (SELECT %I FROM %I WHERE %I IS NOT NULL LIMIT 1000) sample
+            $SAMPLE$, y_axis_column, y_axis_column, y_axis_column, y_axis_column, main_table_name, y_axis_column)
+            INTO y_has_numeric, y_has_categorical;
+
+            y_is_mixed := y_has_numeric AND y_has_categorical;
+        ELSE
+            y_is_mixed := FALSE;
+        END IF;
 
         -- Build scatterplot with intelligent sampling
         EXECUTE format($QUERY$
@@ -480,16 +547,28 @@ DB_FUNCTIONS = {
                     SELECT COALESCE(json_agg(
                         json_build_object(
                             'ID', "ID",
-                            'xType', CASE WHEN $7 THEN 'numeric' ELSE 'categorical' END,
-                            'yType', CASE WHEN $8 THEN 'numeric' ELSE 'categorical' END,
+                            'xType', CASE
+                                WHEN x_value IS NULL THEN 'categorical'
+                                WHEN $7 THEN 'numeric'
+                                WHEN $9 AND (x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$') THEN 'numeric'
+                                ELSE 'categorical'
+                            END,
+                            'yType', CASE
+                                WHEN y_value IS NULL THEN 'categorical'
+                                WHEN $8 THEN 'numeric'
+                                WHEN $10 AND (y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$') THEN 'numeric'
+                                ELSE 'categorical'
+                            END,
                             'x', CASE
                                 WHEN x_value IS NULL THEN to_json('null'::text)
                                 WHEN $7 THEN to_json(x_value::numeric)
+                                WHEN $9 AND (x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$') THEN to_json(x_value::numeric)
                                 ELSE to_json(x_value::text)
                             END,
                             'y', CASE
                                 WHEN y_value IS NULL THEN to_json('null'::text)
                                 WHEN $8 THEN to_json(y_value::numeric)
+                                WHEN $10 AND (y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$') THEN to_json(y_value::numeric)
                                 ELSE to_json(y_value::text)
                             END,
                             'errors', error_list
@@ -498,32 +577,38 @@ DB_FUNCTIONS = {
                     FROM sampled_data
                 ),
                 'scaleX', json_build_object(
-                    'numeric', CASE WHEN $7 THEN
+                    'numeric', CASE WHEN $7 OR $9 THEN
                         json_build_array(
-                            (SELECT COALESCE(min_val, 0) FROM x_bounds),
-                            (SELECT COALESCE(max_val, 1) + 1 FROM x_bounds)
+                            (SELECT COALESCE(MIN(x_value::numeric), 0) FROM sampled_data
+                             WHERE x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$'),
+                            (SELECT COALESCE(MAX(x_value::numeric), 1) + 1 FROM sampled_data
+                             WHERE x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$')
                         )
                     ELSE '[]'::json END,
-                    'categorical', CASE WHEN NOT $7 THEN
-                        (SELECT COALESCE(
-                            json_agg(DISTINCT x_value::text ORDER BY x_value::text),
-                            '[]'::json
-                        ) FROM sampled_data)
-                    ELSE '[]'::json END
+                    'categorical', (
+                        SELECT COALESCE(
+                            json_agg(DISTINCT COALESCE(x_value::text, 'null') ORDER BY COALESCE(x_value::text, 'null')),
+                            '["null"]'::json
+                        ) FROM sampled_data
+                        WHERE NOT (x_value::text ~ '^\s*-?\d+(\.\d+)?\s*$') OR x_value IS NULL
+                    )
                 ),
                 'scaleY', json_build_object(
-                    'numeric', CASE WHEN $8 THEN
+                    'numeric', CASE WHEN $8 OR $10 THEN
                         json_build_array(
-                            (SELECT COALESCE(min_val, 0) FROM y_bounds),
-                            (SELECT COALESCE(max_val, 1) + 1 FROM y_bounds)
+                            (SELECT COALESCE(MIN(y_value::numeric), 0) FROM sampled_data
+                             WHERE y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$'),
+                            (SELECT COALESCE(MAX(y_value::numeric), 1) + 1 FROM sampled_data
+                             WHERE y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$')
                         )
                     ELSE '[]'::json END,
-                    'categorical', CASE WHEN NOT $8 THEN
-                        (SELECT COALESCE(
-                            json_agg(DISTINCT y_value::text ORDER BY y_value::text),
-                            '[]'::json
-                        ) FROM sampled_data)
-                    ELSE '[]'::json END
+                    'categorical', (
+                        SELECT COALESCE(
+                            json_agg(DISTINCT COALESCE(y_value::text, 'null') ORDER BY COALESCE(y_value::text, 'null')),
+                            '["null"]'::json
+                        ) FROM sampled_data
+                        WHERE NOT (y_value::text ~ '^\s*-?\d+(\.\d+)?\s*$') OR y_value IS NULL
+                    )
                 )
             )
         $QUERY$,
@@ -537,7 +622,7 @@ DB_FUNCTIONS = {
             x_axis_column,          -- %I: x column in GROUP BY
             y_axis_column           -- %I: y column in GROUP BY
         )
-        USING x_axis_column, y_axis_column, min_id, max_id, error_sample_size, total_sample_size, x_is_numeric, y_is_numeric
+        USING x_axis_column, y_axis_column, min_id, max_id, error_sample_size, total_sample_size, x_is_numeric, y_is_numeric, x_is_mixed, y_is_mixed
         INTO result;
 
         RETURN result;
