@@ -1,13 +1,12 @@
-import React, {Activity, createContext, useState} from "react";
+import React, {createContext, useState} from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
-import Header from "../elements/Header.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
 import RepairPanel from "../panels/RepairPanel.jsx";
 
 import "./Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
-
+import { BuckarooHeader } from "../elements/Header.jsx";
 export const ViewContext = createContext();
 
 export default function Buckaroo({ onReset, uploadResponse }) {
@@ -24,7 +23,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
     return (
         <>
             <ViewContext.Provider value={{activeView, setActiveView}}>
-            <Header onReset={onReset} />
+                <BuckarooHeader onReset={onReset} />
                 <div className="matrix-and-dropdown-container">
                     <AttributeSummaryPanel table_name={table_name} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} setSortedAttributes={setSortedAttributes} />
 
