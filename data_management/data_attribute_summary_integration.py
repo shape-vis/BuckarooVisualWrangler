@@ -118,6 +118,7 @@ def get_categorical_stats(df, column):
     :return: dictionary containing statistics for the categorical column
     """
     df_cat = df.copy()
+
     df_cat[column] = df_cat[column].fillna('N/A')
     return {
         "categorical": {

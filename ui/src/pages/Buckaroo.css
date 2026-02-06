@@ -9,10 +9,11 @@
 }
 
 .main-view {
-    /* display: flex; */
+     display: flex;
     /* justify-content: space-between; */
     /* align-items: flex-start; */
     width: calc(100vw - 270px);
+    /*width: 100%;*/
     /* max-width: 1300px; */
     /* flex: 1; */
     height: calc(100vh - 52px);              /* full window height */
@@ -20,17 +21,36 @@
   flex-direction: column;     /* vertical layout */
 }
 
+.main-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1;                       /* Let it grow to fill available space */
+    min-width: 0;
+    height: calc(100vh - 52px);
+    /* Remove the width: calc(100vw - 270px); line */
+}
 
+
+/*.svg-and-toolbox {*/
+/*    flex: 1;                    !* take remaining space *!*/
+/*    display: flex;*/
+/*    !* flex-direction: column; *!*/
+/*    align-items: center;*/
+/*    width: 100%;*/
+/*      min-height: 0;   !* important so the child can scroll instead of pushing the parent *!*/
+/*  min-width: 0;    !* same idea for horizontal overflow *!*/
+/*}*/
 .svg-and-toolbox {
     flex: 1;                    /* take remaining space */
     display: flex;
-    /* flex-direction: column; */
-    align-items: center;
+    flex-direction: row;        /* ADD THIS - lay out children horizontally */
+    gap: 10px;                  /* ADD THIS - space between children */
+    align-items: flex-start;    /* CHANGE THIS from center */
     width: 100%;
-      min-height: 0;   /* important so the child can scroll instead of pushing the parent */
-  min-width: 0;    /* same idea for horizontal overflow */
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;             /* ADD THIS - allow scrolling if needed */
 }
-
 
 .tooltip {
     position: absolute;

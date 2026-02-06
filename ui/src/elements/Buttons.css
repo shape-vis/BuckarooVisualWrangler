@@ -54,3 +54,42 @@
     margin: auto;
   text-align: center;
 }
+
+/* Button styling */
+.navButton {
+  cursor: pointer;
+  padding: 10px 20px;
+  margin-bottom: 5px;
+  margin-top: 2px;
+  border-radius: 6px;
+  background-color: #007bff;
+  transition: background-color 0.2s ease;
+  text-align: center;
+}
+
+.navButton:hover {
+  background-color: rgba(0, 123, 255, 0.56);
+}
+
+.navButton--selected {
+  background-color: #c6dcf4;
+}
+
+.navButton--selected .navButtonButtonText {
+  color: white;
+}
+
+.navButtonButtonText {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+.navButtonContainer {
+  display: flex;
+  /*justify-content: left;*/
+  /*align-items: center;*/
+  gap: 12px;
+
+}
+
+

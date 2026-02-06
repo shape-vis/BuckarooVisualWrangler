@@ -1,7 +1,10 @@
+import {NavButton} from "./Buttons.jsx";
+import React, {useContext} from "react";
+import { ViewContext } from "../pages/Buckaroo.jsx";
 
-
-export default function Header( { onReset } ) {
+export default function Header( { onReset} ) {
   onReset = onReset || (() => {});
+  const { setActiveView } = useContext(ViewContext);
 
   return (
     <div id="header">
@@ -14,6 +17,10 @@ export default function Header( { onReset } ) {
           alt="Buckaroo Logo"
         />
       </h1>
+        <div className={"navButtonContainer"}>
+            <NavButton onClick={() => setActiveView('plots')}>Plots</NavButton>
+            <NavButton onClick={() => setActiveView('graph')}>Provenance Graph</NavButton>
+        </div>
     </div>
   );
 }

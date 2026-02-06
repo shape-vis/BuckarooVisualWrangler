@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import * as d3 from "d3";
+// import * as d3 from "d3";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 
 import "./RepairPanel.css";

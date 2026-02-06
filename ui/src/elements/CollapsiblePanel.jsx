@@ -1,26 +1,6 @@
 import { useState } from "react";
 import "./CollapsiblePanel.css";
 
-// export default function CollapsiblePanel({ children, collapsed = null }) {
-//   const [isOpen, setIsOpen] = useState(true);
-
-//   return (
-//     <div className={`panel ${isOpen ? "open" : "closed"}`}>
-//       <div className="panel-content">
-//         {isOpen ? children : collapsed}
-//       </div>
-
-//       <button
-//         className="panel-toggle"
-//         onClick={() => setIsOpen((o) => !o)}
-//         aria-expanded={isOpen}
-//         aria-label={isOpen ? "Collapse panel" : "Expand panel"}
-//       >
-//         {isOpen ? "◀" : "▶"}
-//       </button>
-//     </div>
-//   );
-// }
 
 export default function CollapsiblePanel({
   children,
