@@ -111,3 +111,12 @@ Sometimes I would get errors that would popup inconsistently and don't exist in 
 - Invalid or unexpected token
 
 You can also try clearing the cache in your browser and this seemed to keep the errors away for longer.
+
+## Testing
+
+Run tests with pytest:
+```bash
+pytest                  # All tests
+pytest tests/unit/      # Unit tests
+pytest tests/sql/       # SQL tests (requires PostgreSQL)
+```
