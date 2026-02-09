@@ -191,6 +191,42 @@ def impute_by_ids(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
         return len(ids), result.rowcount
 
 
+def delete_column(table: str, column: str) -> int:
+    """
+    Delete a column from a table in-place.
+
+    Parameters
+    ----------
+    table : str
+        Table name to modify
+    column : str
+        Column name to delete
+
+    Returns
+    -------
+    int
+        Number of columns remaining in table
+    """
+    with engine.begin() as conn:
+        # Drop the column
+        conn.execute(
+            text(f'ALTER TABLE "{table}" DROP COLUMN IF EXISTS "{column}"')
+        )
+
+        # Count remaining columns
+        result = conn.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_name = :table
+            """),
+            {"table": table}
+        )
+        n_cols = result.scalar_one()
+
+    return n_cols
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1D Bin-Based Wrangling (for 1D histogram/barchart repair workflow)
 # ─────────────────────────────────────────────────────────────────────────────

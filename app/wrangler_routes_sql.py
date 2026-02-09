@@ -148,3 +148,34 @@ def wrangle_impute():
         print("ERROR OCCURRED")
         print(traceback.format_exc())
         return {"success": False, "error": str(e)}, 400
+
+
+@app.post("/api/wrangle/delete-column")
+def wrangle_delete_column():
+    """
+    Delete a column from the table in-place.
+
+    Modifies the table directly - no versioning.
+    """
+    try:
+        body = request.get_json(force=True)
+        table = body["table"]
+        column = body["column"]
+
+        print(f"Deleting column '{column}' from table '{table}'")
+
+        # Delete the column
+        remaining_columns = query.delete_column(table=table, column=column)
+
+        # Re-run error detection
+        update_errors_table(table)
+
+        return {
+            "success": True,
+            "remaining_columns": remaining_columns,
+            "deleted_column": column
+        }
+    except Exception as e:
+        print("ERROR OCCURRED")
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)}, 400
