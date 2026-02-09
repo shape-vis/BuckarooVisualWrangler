@@ -2,37 +2,14 @@
 #This file handles all endpoints surrounding plots
 
 from flask import request
-from pprint import pprint
-import os, json, uuid
-from app import app, engine, service_helpers
-from app.service_helpers import group_by_attribute
+import pandas as pd
+import traceback
+
+from app import app, engine, service_helpers, data_state_manager
+from app.service_helpers import group_by_attribute, clean_table_name, get_whole_table_query
 from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
 from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
-from pathlib import Path
-import hashlib
-from postgres_wrangling import query
-import traceback
-import time
-from app import data_state_manager
-from postgres_wrangling import dataframe_store
-# from data_management.data_integration import generate_1d_histogram_data
-from app.service_helpers import get_whole_table_query
-
-from flask import request
-
-from app import app, engine
-from app.service_helpers import clean_table_name
-
-# Toggle between pandas (in-memory) and PostgreSQL (database) histogram generation
-# False = Use PostgreSQL stored procedures with database tables (recommended)
-# True  = Use pandas with data_state_manager (legacy, for testing)
-USE_PANDAS_FOR_HISTOGRAMS = False
-
-# Toggle between pandas (in-memory) and PostgreSQL (database) scatterplot generation
-# False = Use PostgreSQL stored procedures with database tables (recommended)
-# True  = Use pandas with data_state_manager (legacy, for testing)
-USE_PANDAS_FOR_SCATTERPLOT = False
 
 @app.get("/api/plots/1-d-histogram")
 def get_1d_histogram():
@@ -42,29 +19,19 @@ def get_1d_histogram():
     """
     table = clean_table_name(request.args.get("tablename"))
     column = request.args.get("column")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
     bin_count = request.args.get("bins", default=10)
-    column_name = request.args.get("column")
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
-    number_of_bins = request.args.get("bins", default=10)
 
     try:
-        if USE_PANDAS_FOR_HISTOGRAMS:
-            histogram = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
-        else:
-            query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors_{table}', '{column}', {bin_count}, {min_id}, {max_id});"
-            result = pd.read_sql_query(query, engine).to_dict()
-            histogram = result["generate_one_d_histogram_with_errors"][0]
+        query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors_{table}', '{column}', {bin_count}, {min_id}, {max_id});"
+        result = pd.read_sql_query(query, engine).to_dict()
+        histogram = result["generate_one_d_histogram_with_errors"][0]
 
         return {"Success": True, "histogram": histogram}
 
     except Exception as e:
         return {"Success": False, "Error": str(e)}
-
-
-
 
 @app.get("/api/plots/2-d-histogram")
 def get_2d_histogram():
@@ -81,106 +48,14 @@ def get_2d_histogram():
     y_bins = request.args.get("y_bins", default=10)
 
     try:
-        if USE_PANDAS_FOR_HISTOGRAMS:
-
-                histogram = query.generate_2d_histogram_data(
-                                    x_column=column_x, y_column=column_y,
-                                    bins_x=x_bins, bins_y=y_bins,
-                                    min_id=min_id, max_id=max_id,
-                                    table_name=table,
-                                    whole_table=True
-                )
-
-        else:
-            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors_{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
-            binned_data = pd.read_sql_query(query_str, engine).to_dict()
-            histogram = binned_data["generate_two_d_histogram_with_errors"][0]
+        query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors_{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
+        binned_data = pd.read_sql_query(query_str, engine).to_dict()
+        histogram = binned_data["generate_two_d_histogram_with_errors"][0]
 
         return {"Success": True, "histogram": histogram}
 
     except Exception as e:
         return {"Success": False, "Error": str(e)}
-
-
-
-
-
-
-
-
-EXPORT_DIR = Path("histogram_exports")          # change if you prefer another location
-EXPORT_DIR.mkdir(parents=True, exist_ok=True)   # create once, no-op later
-
-REPORT_DIR = Path("report")   # ../report
-REPORT_DIR.mkdir(parents=True, exist_ok=True)                 # create once
-
-def _hash_dict(obj: dict, *, algo: str = "sha256") -> str:
-    """
-    Return a stable hexadecimal digest of a JSON-serialisable object.
-    - Uses a *canonical* JSON encoding (sorted keys, no extra spaces)
-      so logically identical dicts give identical hashes.
-    """
-    canonical = json.dumps(obj, sort_keys=True, separators=(",", ":"))
-    h = hashlib.new(algo)
-    h.update(canonical.encode("utf-8"))
-    return h.hexdigest()
-
-@app.get("/api/plots/2-d-histogram-data/pandas")
-def get_2d_histogram_pandas():
-    try:
-        x_column_name = request.args.get("x_column")
-        y_column_name = request.args.get("y_column")
-        min_id         = int(request.args.get("min_id", 0))
-        max_id         = int(request.args.get("max_id", 200))
-        max_id = 1_000_000
-        number_of_bins = int(request.args.get("bins", 10))
-        table_name= request.args.get("table", None)
-        if dataframe_store.get_dataframe() is None:
-            # dataframe_store.set_dataframe(data_state_manager.get_current_state()["df"])
-            
-            dataframe_store.set_dataframe(pd.read_sql_query(get_whole_table_query(table_name,False), engine).replace(np.nan, None))
-        
-        df = dataframe_store.get_dataframe()
-        error_df = service_helpers.run_detectors(df)
-
-        binned_data = generate_2d_histogram_data_modified(
-            df, error_df,
-            x_column_name, y_column_name,
-            number_of_bins, number_of_bins,
-            min_id, max_id,
-        )
-            # dataframe = pd.read_sql_query("SELECT * FROM stackoverflow_db_uncleaned;", engine)
-            # print(dataframe.head(5))
-
-        # ── Compute deterministic file name ──────────────────────────────────
-        digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
-        file_name  = f"{digest[:16]}.json"            # shorten if you like
-        file_path  = EXPORT_DIR / file_name
-
-        # ── Write only if it doesn't exist already ───────────────────────────
-        with file_path.open("w", encoding="utf-8") as fp:
-            json.dump({
-                "x_column_name": x_column_name,
-                "y_column_name": y_column_name,
-                "min_id": min_id,
-                "max_id": max_id,
-                "number_of_bins": number_of_bins,
-                "binned_data": binned_data
-                
-                }, fp, ensure_ascii=False, indent=2)
-
-        return {
-            "Success":     True,
-            "file_name":   file_name,
-            "file_path":   str(file_path),
-            "binned_data": binned_data,
-        }
-
-    except Exception as e:
-        print(traceback.format_exc())
-        return {"Success": False, "Error": str(e)}
-
-
 
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():
@@ -193,14 +68,12 @@ def get_scatterplot_data():
     total_sample_count = request.args.get("total_sample_count", default=100)
 
     try:
-        if USE_PANDAS_FOR_SCATTERPLOT:
-            scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
-        else:
-            query = f"SELECT generate_scatterplot_with_errors('{table}', 'errors_{table}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
-            result = pd.read_sql_query(query, engine).to_dict()
-            scatterplot_data = result["generate_scatterplot_with_errors"][0]
+        query = f"SELECT generate_scatterplot_with_errors('{table}', 'errors_{table}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
+        result = pd.read_sql_query(query, engine).to_dict()
+        scatterplot_data = result["generate_scatterplot_with_errors"][0]
 
         return {"Success": True, "scatterplot_data": scatterplot_data}
+    
     except Exception as e:
         return {"Success": False, "Error": str(e)}
 
@@ -282,163 +155,3 @@ def attribute_summaries():
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
-
-
-
-
-
-
-
-##############################################################################################################
-# DEPRECATED ENDPOINTS - TO BE REMOVED IN FUTURE RELEASES
-##############################################################################################################
-@app.get("/api/plots/1-d-histogram-data-db")
-def get_1d_histogram_db_deprecated():
-    """
-    Endpoint to return data to be used to construct the 1d histogram in the view
-    :return: the data from the database in JSON format specific to what the view needs to ingest it
-    """
-    print("DEPRECATED use of /api/plots/1-d-histogram-data-db")
-    table = clean_table_name(request.args.get("tablename"))
-    column = request.args.get("column")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
-    bin_count = request.args.get("bins", default=10)
-    query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors_{table}', '{column}', {bin_count}, {min_id}, {max_id});"
-
-    try:
-        binned_data = pd.read_sql_query(query, engine).to_dict()
-        histogram = binned_data["generate_one_d_histogram_with_errors"][0]
-        return {"Success": True, "binned_data": histogram}
-    except Exception as e:
-        return {"Success": False, "Error": str(e)}
-
-
-
-##################################################################################################################
-# DEPRECATED ENDPOINTS - TO BE REMOVED IN FUTURE RELEASES
-##################################################################################################################
-@app.get("/api/plots/1-d-histogram-data")
-def get_1d_histogram_deprecated():
-    """
-    Endpoint to return data to be used to construct the 1d histogram in the view, this endpoint expects the following parameters:
-        1. tablename to pull data from
-        2. column name to aggregate data for
-        3. desired id min and max values of the table to return to the view
-    :return: the data as a csv
-    """
-    print("DEPRECATED use of /api/plots/1-d-histogram-data")
-    # tablename = request.args.get("tablename")
-    column_name = request.args.get("column")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
-    number_of_bins = request.args.get("bins", default=10)
-
-    try:
-        print("in the try")
-        binned_data = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
-
-        return {"Success": True, "binned_data": binned_data}
-    except Exception as e:
-
-        return {"Success": False, "Error": str(e)}
-
-
-
-@app.get("/api/plots/2-d-histogram-data-db")
-def get_2d_histogram_db_deprecated():
-    """
-    Endpoint to return data to be used to construct the 2d histogram in the view
-    :return: the data from the database in JSON format specific to what the view needs to ingest it
-    """
-    print("DEPRECATED use of /api/plots/2-d-histogram-data-db")
-    table = clean_table_name(request.args.get("tablename"))
-    column_x = request.args.get("column_x")
-    column_y = request.args.get("column_y")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
-    x_bins = request.args.get("x_bins", default=10)
-    y_bins = request.args.get("y_bins", default=10)
-    query = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors_{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
-
-    try:
-        binned_data = pd.read_sql_query(query, engine).to_dict()
-        histogram = binned_data["generate_two_d_histogram_with_errors"][0]
-        return {"Success": True, "binned_data": histogram}
-    except Exception as e:
-        return {"Success": False, "Error": str(e)}
-
-
-
-@app.get("/api/plots/2-d-histogram-data")
-def get_2d_histogram_deprecated():
-    """
-    Endpoint to return data to be used to construct the 2-D histogram in the view.
-    Saves the histogram bin counts to disk as JSON, using a content hash
-    so that the same data always re-uses the same file.
-    # Generates a complete 2-D histogram (heat-map) for any two columns in the
-    # `stackoverflow_db_uncleaned` table, using pure SQL:
-    #   • Slices rows by `index` between `min_id` and `max_id`.
-    #   • Detects whether each axis is numeric or categorical.
-    #   • Numeric axes are binned with `width_bucket`; categorical axes keep
-    #     distinct values intact.
-    #   • Builds every possible (x-bin, y-bin) pair with a CROSS JOIN, then
-    #     left-joins the real counts so bins with zero observations are included.
-    #   • Returns a JSON-ready dict containing:
-    #       - "histograms": list of records {"xBin", "yBin", "count", "xType", "yType"}
-    #       - "scaleX" / "scaleY": numeric bin ranges or categorical labels.
-    #   • No Python aggregation is performed—everything is computed inside Postgres,
-    #     making it efficient even for large tables.
-    """
-    print("DEPRECATED use of /api/plots/2-d-histogram-data")
-    x_column_name = request.args.get("x_column")
-    y_column_name = request.args.get("y_column")
-    min_id         = int(request.args.get("min_id", 0))
-    max_id         = int(request.args.get("max_id", 200))
-    number_of_bins = int(request.args.get("bins", 10))
-    # table_name= request.args.get("table", None)
-    # table_name = "stackoverflow_db_uncleaned"
-    table_name = request.args.get("table_name", None).split('/')[-1].replace('.csv', '')
-
-
-    try:
-        # binned_data = generate_2d_histogram_data(x_column_name, y_column_name, number_of_bins, number_of_bins, min_id, max_id)
-        # return {"Success": True, "binned_data": binned_data}
-
-        binned_data = query.generate_2d_histogram_data(
-            x_column=x_column_name,
-            y_column=y_column_name,
-            bins_x=number_of_bins,
-            bins_y=number_of_bins,
-            min_id=min_id,
-            max_id=max_id,
-            table_name=table_name,
-            whole_table=True
-        )
-        # ── Compute deterministic file name ──────────────────────────────────
-        digest     = _hash_dict(binned_data)          # 64-char SHA-256 hex
-        file_name  = f"{digest[:16]}.json"            # shorten if you like
-        file_path  = EXPORT_DIR / file_name
-
-        # ── Write only if it doesn't exist already ───────────────────────────
-        with file_path.open("w", encoding="utf-8") as fp:
-            json.dump({
-                "table_name": table_name,
-                "x_column_name": x_column_name,
-                "y_column_name": y_column_name,
-                "min_id": min_id,
-                "max_id": max_id,
-                "number_of_bins": number_of_bins,
-                "binned_data": binned_data
-                
-                }, fp, ensure_ascii=False, indent=2)
-        return {
-            "Success":     True,
-            "binned_data": binned_data,
-        }
-    except Exception as e:
-        report_path = REPORT_DIR / f"{uuid.uuid4().hex}.txt"   # random hash
-        report_path.write_text(traceback.format_exc(), encoding="utf-8")
-        return {"Success": False, "Error": str(e)}
-
-
