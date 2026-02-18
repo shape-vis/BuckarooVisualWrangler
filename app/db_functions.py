@@ -634,106 +634,174 @@ DB_FUNCTIONS = {
 
     "detect_anomalies": """
     CREATE OR REPLACE FUNCTION detect_anomalies(
-        p_table_name text,
-        p_method text DEFAULT 'zscore',
-        p_threshold numeric DEFAULT 3
-    )
-    RETURNS TABLE (
-        row_id integer,
-        column_name text,
-        error_type text,
-        error_value text
-    )
-    LANGUAGE plpgsql
-    AS $FUNC$
-    DECLARE
-        col RECORD;
-        query_text text;
-        tbl text;
-    BEGIN
-        tbl := quote_ident(p_table_name);
+    p_table_name text,
+    p_method text DEFAULT 'zscore',
+    p_threshold numeric DEFAULT NULL
+        )
+        RETURNS TABLE (
+            row_id integer,
+            column_name text,
+            error_type text,
+            error_value text
+        )
+        LANGUAGE plpgsql
+        AS $FUNC$
+        DECLARE
+            col RECORD;
+            query_text text;
+            tbl text;
+            thresh numeric;
+        BEGIN
+            tbl := quote_ident(p_table_name);
 
-        FOR col IN
-            SELECT c.column_name
-            FROM information_schema.columns c
-            WHERE c.table_name = p_table_name
-            AND c.data_type IN ('integer','bigint','numeric','real','double precision','smallint')
-            AND c.column_name <> 'ID'
-        LOOP
+            FOR col IN
+                SELECT c.column_name
+                FROM information_schema.columns c
+                WHERE c.table_name = p_table_name
+                AND c.data_type IN ('integer','bigint','numeric','real','double precision','smallint')
+                AND c.column_name <> 'ID'
+            LOOP
 
-            IF lower(coalesce(p_method,'zscore')) = 'zscore' THEN
+                IF lower(coalesce(p_method,'zscore')) = 'zscore' THEN
+                    thresh := COALESCE(p_threshold, 3);
 
-                query_text := format($SQL$
-                    WITH stats AS (
+                    query_text := format($SQL$
+                        WITH stats AS (
+                            SELECT
+                                AVG(%1$I)::numeric AS mean_val,
+                                STDDEV_SAMP(%1$I)::numeric AS std_val
+                            FROM %2$s
+                            WHERE %1$I IS NOT NULL
+                        )
                         SELECT
-                            AVG(%1$I)::numeric AS mean_val,
-                            STDDEV_SAMP(%1$I)::numeric AS std_val
-                        FROM %2$s
-                        WHERE %1$I IS NOT NULL
-                    )
-                    SELECT
-                        "ID"::int,
-                        %3$L,
-                        'zscore_anomaly',
-                        %1$I::text
-                    FROM %2$s, stats
-                    WHERE %1$I IS NOT NULL
-                    AND std_val IS NOT NULL
-                    AND std_val > 0
-                    AND ABS((%1$I::numeric - mean_val) / std_val) > %4$s
-                $SQL$,
-                    col.column_name,   
-                    tbl,              
-                    col.column_name,   
-                    p_threshold       
-                );
-
-            ELSE
-                -- Robust MAD-based z-score using 0.6745 scaling
-                query_text := format($SQL$
-                    WITH stats AS (
-                        SELECT
-                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY %1$I::numeric) AS median_val
-                        FROM %2$s
-                        WHERE %1$I IS NOT NULL
-                    ),
-                    deviations AS (
-                        SELECT
-                            ABS(%1$I::numeric - median_val) AS abs_dev
+                            "ID"::int,
+                            %3$L,
+                            'zscore_anomaly',
+                            %1$I::text
                         FROM %2$s, stats
                         WHERE %1$I IS NOT NULL
-                    ),
-                    mad_stats AS (
+                        AND std_val IS NOT NULL
+                        AND std_val > 0
+                        AND ABS((%1$I::numeric - mean_val) / std_val) > %4$s
+                    $SQL$,
+                        col.column_name,
+                        tbl,
+                        col.column_name,
+                        thresh
+                    );
+
+                ELSIF lower(p_method) = 'mad' THEN
+                    thresh := COALESCE(p_threshold, 3);
+
+                    query_text := format($SQL$
+                        WITH stats AS (
+                            SELECT
+                                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY %1$I::numeric) AS median_val
+                            FROM %2$s
+                            WHERE %1$I IS NOT NULL
+                        ),
+                        deviations AS (
+                            SELECT
+                                ABS(%1$I::numeric - median_val) AS abs_dev
+                            FROM %2$s, stats
+                            WHERE %1$I IS NOT NULL
+                        ),
+                        mad_stats AS (
+                            SELECT
+                                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY abs_dev) AS mad_val
+                            FROM deviations
+                        )
                         SELECT
-                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY abs_dev) AS mad_val
-                        FROM deviations
-                    )
-                    SELECT
-                        "ID"::int,
-                        %3$L,
-                        'mad_anomaly',
-                        %1$I::text
-                    FROM %2$s, stats, mad_stats
-                    WHERE %1$I IS NOT NULL
-                    AND mad_val IS NOT NULL
-                    AND mad_val > 0
-                    AND ABS(0.6745 * (%1$I::numeric - median_val) / mad_val) > %4$s
-                $SQL$,
-                    col.column_name,   
-                    tbl,               
-                    col.column_name,   
-                    p_threshold        
-                );
+                            "ID"::int,
+                            %3$L,
+                            'mad_anomaly',
+                            %1$I::text
+                        FROM %2$s, stats, mad_stats
+                        WHERE %1$I IS NOT NULL
+                        AND mad_val IS NOT NULL
+                        AND mad_val > 0
+                        AND ABS(0.6745 * (%1$I::numeric - median_val) / mad_val) > %4$s
+                    $SQL$,
+                        col.column_name,
+                        tbl,
+                        col.column_name,
+                        thresh
+                    );
 
-            END IF;
+                ELSIF lower(p_method) = 'iqr' THEN
+                    thresh := COALESCE(p_threshold, 1.5);
 
-            RETURN QUERY EXECUTE query_text;
+                    query_text := format($SQL$
+                        WITH qs AS (
+                            SELECT
+                                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY %1$I::numeric) AS q1,
+                                PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY %1$I::numeric) AS q3
+                            FROM %2$s
+                            WHERE %1$I IS NOT NULL
+                        ),
+                        bounds AS (
+                            SELECT
+                                q1,
+                                q3,
+                                (q3 - q1) AS iqr,
+                                (q1 - (%3$s * (q3 - q1))) AS lower_bound,
+                                (q3 + (%3$s * (q3 - q1))) AS upper_bound
+                            FROM qs
+                        )
+                        SELECT
+                            "ID"::int,
+                            %4$L,
+                            'iqr_anomaly',
+                            %1$I::text
+                        FROM %2$s, bounds
+                        WHERE %1$I IS NOT NULL
+                        AND iqr IS NOT NULL
+                        AND iqr > 0
+                        AND (%1$I::numeric < lower_bound OR %1$I::numeric > upper_bound)
+                    $SQL$,
+                        col.column_name,
+                        tbl,
+                        thresh,
+                        col.column_name
+                    );
 
-        END LOOP;
+                ELSE
+                    -- fallback: treat unknown method as zscore
+                    thresh := COALESCE(p_threshold, 3);
 
-        RETURN;
-    END;
-    $FUNC$;
+                    query_text := format($SQL$
+                        WITH stats AS (
+                            SELECT
+                                AVG(%1$I)::numeric AS mean_val,
+                                STDDEV_SAMP(%1$I)::numeric AS std_val
+                            FROM %2$s
+                            WHERE %1$I IS NOT NULL
+                        )
+                        SELECT
+                            "ID"::int,
+                            %3$L,
+                            'zscore_anomaly',
+                            %1$I::text
+                        FROM %2$s, stats
+                        WHERE %1$I IS NOT NULL
+                        AND std_val IS NOT NULL
+                        AND std_val > 0
+                        AND ABS((%1$I::numeric - mean_val) / std_val) > %4$s
+                    $SQL$,
+                        col.column_name,
+                        tbl,
+                        col.column_name,
+                        thresh
+                    );
+                END IF;
+
+                RETURN QUERY EXECUTE query_text;
+            END LOOP;
+
+            RETURN;
+        END;
+        $FUNC$;
+
     """
 
 }
