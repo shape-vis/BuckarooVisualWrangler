@@ -16,40 +16,84 @@ import json
 
 @app.post("/api/upload")
 def upload_csv():
-    """
-    Handles when a user uploads a csv to the app, creates a new table with it in the database
-    :return: whether it was completed successfully
-    """
-    #get the file path from the DataFrame object sent by the user's upload in the view
-    csv_file = request.files['file']
+
+    csv_file = request.files["file"]
     anomaly_method = request.form.get("anomaly_method", "zscore")
-    #parse the file into a csv using pandas
     dataframe = pd.read_csv(csv_file)
 
-    # run the detectors on the uploaded file for the starting data state
-    table_with_id_added = set_id_column(dataframe)
-    start_time = time.time()
-    detected_data = run_detectors(dataframe, anomaly_method=anomaly_method)
-    time_to_detect = time.time() - start_time
+    dataframe_with_id = set_id_column(dataframe)
 
     cleaned_table_name = clean_table_name(csv_file.filename)
-    json.dump({'db': cleaned_table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{cleaned_table_name}.json", "w"))
 
     try:
-        #insert the undetected dataframe
-        rows_inserted = table_with_id_added.to_sql(cleaned_table_name, engine, if_exists='replace')
-        detected_rows_inserted = detected_data.to_sql("errors"+cleaned_table_name, engine, if_exists='replace')
+        rows_inserted = dataframe_with_id.to_sql(
+            cleaned_table_name,
+            engine,
+            if_exists="replace",
+            index=False
+        )
 
-        # Calculate and store attribute rankings
+        start_time = time.time()
+        detected_data = run_detectors(cleaned_table_name, anomaly_method=anomaly_method)
+
+        detected_data["raw_error_type"] = detected_data["error_type"]
+
+        # normalize
+        anomaly_mask = detected_data["error_type"].str.contains("anomaly", na=False)
+        detected_data.loc[anomaly_mask, "error_type"] = "anomaly"
+        detected_data.loc[anomaly_mask, "column_id"] = detected_data.loc[anomaly_mask, "column_name"]
+
+        print("=== AFTER DETECTION ===")
+        print("Unique error types (UI):", detected_data["error_type"].unique())
+        print("Unique error types (raw):", detected_data["raw_error_type"].unique())
+
+        if anomaly_method == "mad":
+            print("Total MAD anomalies:",
+                (detected_data["raw_error_type"] == "mad_anomaly").sum())
+
+        if anomaly_method == "zscore":
+            print("Total Z-score anomalies:",
+                (detected_data["raw_error_type"] == "zscore_anomaly").sum())
+
+        time_to_detect = time.time() - start_time
+        detected_rows_inserted = detected_data.to_sql(
+            "errors" + cleaned_table_name,
+            engine,
+            if_exists="replace",
+            index=False
+        )
+
         rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings"+cleaned_table_name, engine, if_exists='replace', index=False)
+        rankings.to_sql(
+            "rankings" + cleaned_table_name,
+            engine,
+            if_exists="replace",
+            index=False
+        )
 
-        return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted, "clean_table_name": cleaned_table_name, "new_table_name": cleaned_table_name}
+        json.dump(
+            {
+                "db": cleaned_table_name,
+                "clean_time": time_to_detect,
+                "dataframe_shape": list(detected_data.shape),
+                "anomaly_method": anomaly_method
+            },
+            open(f"report/{cleaned_table_name}.json", "w")
+        )
+
+        return {
+            "success": True,
+            "rows_for_undetected": rows_inserted,
+            "rows_for_detected": detected_rows_inserted,
+            "clean_table_name": cleaned_table_name,
+            "new_table_name": cleaned_table_name
+        }
+
     except Exception as e:
         print(f"Error in upload: {e}")
         import traceback
         traceback.print_exc()
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e)}, 500
 
 @app.get("/api/get-sample")
 def get_sample():
@@ -89,6 +133,10 @@ def get_errors():
     query = get_whole_table_query(cleaned_table_name,True)
     try:
         full_error_df = pd.read_sql_query(query, engine)
+        print("=== GET-ERRORS ROUTE ===")
+        print("Errors returned to frontend:", len(full_error_df))
+        print("Unique error types sent:", full_error_df["error_type"].unique())
+
         data_sized_error_dictionary = create_error_dict(full_error_df,data_size_int)
         return data_sized_error_dictionary
     except Exception as e:

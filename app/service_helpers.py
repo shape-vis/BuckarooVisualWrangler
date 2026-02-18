@@ -11,6 +11,8 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
+from app import engine
+from sqlalchemy import text
 
 
 def clean_table_name(csv_name):
@@ -101,11 +103,14 @@ def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
     :return: the query string to fetch the range of IDs
     """
     name = clean_table_name(table_name)
+
     if get_errors:
-        query = f"SELECT * FROM errors{name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
+        query = f'SELECT * FROM errors{name} WHERE "ID" BETWEEN {min_id} AND {max_id}'
         return query
-    query = f"SELECT * FROM {name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
+
+    query = f'SELECT * FROM {name} WHERE "ID" BETWEEN {min_id} AND {max_id}'
     return query
+
 
 def get_values_for_df_melt(df):
     """
@@ -140,23 +145,36 @@ def perform_melt(dfs):
 
     return df_combined
 
-def run_detectors(dataframe, anomaly_method="zscore"):
-    """
-    Runs all 4 detectors that are implemented
-    on the server, on the data, and returns a compiled dataframe of the complete errors
-    :param data_frame:the dataframe to run the detectors on
-    :return: a single compiled dataframe of all the errors detected
-    """
-    df_with_id = set_id_column(dataframe)
-    anomaly_df = (
-        pd.DataFrame(anomaly(df_with_id.copy(), method=anomaly_method))
-        .rename_axis("ID", axis="index")
-        .reset_index()
+def run_detectors(table_name: str, anomaly_method: str = "zscore"):
+ 
+    df_with_id = pd.read_sql_query(text(f'SELECT * FROM "{table_name}"'), engine)
+
+
+    sql = text("""
+        SELECT row_id, column_name, error_type
+        FROM detect_anomalies(:table_name, :method)
+    """)
+    anomaly_long = pd.read_sql_query(
+        sql,
+        engine,
+        params={"table_name": table_name, "method": anomaly_method}
     )
+
+    if anomaly_long.empty:
+        anomaly_df = pd.DataFrame({"ID": []})
+    else:
+        anomaly_df = (
+            anomaly_long
+            .rename(columns={"row_id": "ID"})
+            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
+            .reset_index()
+        )
+
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
+
+    frames = [anomaly_df, incomplete_df, missing_value_df, datatype_mismatch_df]
     return perform_melt(frames)
 
 def calculate_attribute_rankings(error_df):
@@ -191,6 +209,7 @@ def get_error_dist(error_df,normal_df):
     res_mask = res_mask.reset_index()
     return res_mask
 
+
 def create_error_dict(df, error_size):
     """
     Creates a dictionary of errors from the error dataframe
@@ -206,6 +225,8 @@ def create_error_dict(df, error_size):
             col = row['column_id']
             row_id = row['row_id']
             error_type = row['error_type']
+            if pd.isna(col) or col is None or str(col).strip() == "":
+                col = "Unknown" 
             if pd.notna(error_type):
                 if col not in result_dict:
                     result_dict[col] = {}

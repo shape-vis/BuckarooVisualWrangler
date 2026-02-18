@@ -68,6 +68,9 @@ def generate_complete_json(min_id, max_id, tablename=None):
     from app import engine
 
     main_df, error_df = get_filtered_dataframes(min_id, max_id)
+    print("ERROR DF:")
+    print(error_df)
+
     error_list = get_error_dist(error_df, main_df).to_dict('records')
 
     default_attributes = []

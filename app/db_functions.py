@@ -631,6 +631,111 @@ DB_FUNCTIONS = {
     """,
     # Add more functions here as needed
     # "another_function_name": """CREATE OR REPLACE FUNCTION...""",
+
+    "detect_anomalies": """
+    CREATE OR REPLACE FUNCTION detect_anomalies(
+        p_table_name text,
+        p_method text DEFAULT 'zscore',
+        p_threshold numeric DEFAULT 3
+    )
+    RETURNS TABLE (
+        row_id integer,
+        column_name text,
+        error_type text,
+        error_value text
+    )
+    LANGUAGE plpgsql
+    AS $FUNC$
+    DECLARE
+        col RECORD;
+        query_text text;
+        tbl text;
+    BEGIN
+        tbl := quote_ident(p_table_name);
+
+        FOR col IN
+            SELECT c.column_name
+            FROM information_schema.columns c
+            WHERE c.table_name = p_table_name
+            AND c.data_type IN ('integer','bigint','numeric','real','double precision','smallint')
+            AND c.column_name <> 'ID'
+        LOOP
+
+            IF lower(coalesce(p_method,'zscore')) = 'zscore' THEN
+
+                query_text := format($SQL$
+                    WITH stats AS (
+                        SELECT
+                            AVG(%1$I)::numeric AS mean_val,
+                            STDDEV_SAMP(%1$I)::numeric AS std_val
+                        FROM %2$s
+                        WHERE %1$I IS NOT NULL
+                    )
+                    SELECT
+                        "ID"::int,
+                        %3$L,
+                        'zscore_anomaly',
+                        %1$I::text
+                    FROM %2$s, stats
+                    WHERE %1$I IS NOT NULL
+                    AND std_val IS NOT NULL
+                    AND std_val > 0
+                    AND ABS((%1$I::numeric - mean_val) / std_val) > %4$s
+                $SQL$,
+                    col.column_name,   
+                    tbl,              
+                    col.column_name,   
+                    p_threshold       
+                );
+
+            ELSE
+                -- Robust MAD-based z-score using 0.6745 scaling
+                query_text := format($SQL$
+                    WITH stats AS (
+                        SELECT
+                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY %1$I::numeric) AS median_val
+                        FROM %2$s
+                        WHERE %1$I IS NOT NULL
+                    ),
+                    deviations AS (
+                        SELECT
+                            ABS(%1$I::numeric - median_val) AS abs_dev
+                        FROM %2$s, stats
+                        WHERE %1$I IS NOT NULL
+                    ),
+                    mad_stats AS (
+                        SELECT
+                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY abs_dev) AS mad_val
+                        FROM deviations
+                    )
+                    SELECT
+                        "ID"::int,
+                        %3$L,
+                        'mad_anomaly',
+                        %1$I::text
+                    FROM %2$s, stats, mad_stats
+                    WHERE %1$I IS NOT NULL
+                    AND mad_val IS NOT NULL
+                    AND mad_val > 0
+                    AND ABS(0.6745 * (%1$I::numeric - median_val) / mad_val) > %4$s
+                $SQL$,
+                    col.column_name,   
+                    tbl,               
+                    col.column_name,   
+                    p_threshold        
+                );
+
+            END IF;
+
+            RETURN QUERY EXECUTE query_text;
+
+        END LOOP;
+
+        RETURN;
+    END;
+    $FUNC$;
+    """
+
 }
 
 
