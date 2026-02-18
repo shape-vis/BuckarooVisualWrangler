@@ -140,15 +140,19 @@ def perform_melt(dfs):
 
     return df_combined
 
-def run_detectors(data_frame):
+def run_detectors(dataframe, anomaly_method="zscore"):
     """
     Runs all 4 detectors that are implemented
     on the server, on the data, and returns a compiled dataframe of the complete errors
     :param data_frame:the dataframe to run the detectors on
     :return: a single compiled dataframe of all the errors detected
     """
-    df_with_id = set_id_column(data_frame)
-    anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
+    df_with_id = set_id_column(dataframe)
+    anomaly_df = (
+        pd.DataFrame(anomaly(df_with_id.copy(), method=anomaly_method))
+        .rename_axis("ID", axis="index")
+        .reset_index()
+    )
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()

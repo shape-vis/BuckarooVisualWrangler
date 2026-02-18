@@ -178,8 +178,13 @@
 
                 const fileToSend = new FormData();
                 console.log("starting upload", uploadedFile);
+
+                const method = localStorage.getItem("anomalyMethod") || "zscore";
+                fileToSend.append("anomaly_method", method);
+
                 fileToSend.append("file",uploadedFile);
                 document.getElementById('spinnerModal').style.display = 'block';
+                
                 const url = "/api/upload"
                 try {
                     const response = await fetch(url, {
@@ -209,6 +214,8 @@
                 localStorage.setItem("maxIDVal",maxVal);
                 const useDb = document.getElementById("use-db").checked;
                 localStorage.setItem("useDatabase", useDb);
+                const method = document.getElementById("anomaly-method").value || "zscore";
+                localStorage.setItem("anomalyMethod", method);
             }
         </script>
 
@@ -248,6 +255,12 @@
 
                             <label for="use-db">Use Database:</label>
                             <input type="checkbox" id="use-db" name="use-db" />
+
+                            <label for="anomaly-method">Anomaly detection method:</label>
+                            <select id="anomaly-method" name="anomaly-method">
+                                <option value="zscore" selected>Z-score (default)</option>
+                                <option value="mad">MAD</option>
+                            </select>
                         </div>
             </div>
         </div>

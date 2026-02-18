@@ -22,14 +22,14 @@ def upload_csv():
     """
     #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
-
+    anomaly_method = request.form.get("anomaly_method", "zscore")
     #parse the file into a csv using pandas
     dataframe = pd.read_csv(csv_file)
 
     # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
     start_time = time.time()
-    detected_data = run_detectors(dataframe)
+    detected_data = run_detectors(dataframe, anomaly_method=anomaly_method)
     time_to_detect = time.time() - start_time
 
     cleaned_table_name = clean_table_name(csv_file.filename)
