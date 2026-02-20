@@ -6,6 +6,7 @@ from pprint import pprint
 import os, json, uuid
 from app import app, engine, service_helpers
 from app.service_helpers import group_by_attribute
+from sqlalchemy import text
 from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
 from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
@@ -34,6 +35,59 @@ USE_PANDAS_FOR_HISTOGRAMS = False
 # True  = Use pandas with data_state_manager (legacy, for testing)
 USE_PANDAS_FOR_SCATTERPLOT = False
 
+
+def _parse_anomaly_methods_query_arg():
+    raw = request.args.get("anomaly_methods")
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    return service_helpers._normalize_anomaly_methods(anomaly_methods=parsed, allow_empty=True)
+
+
+def _create_filtered_error_table(base_table_name: str, selected_anomaly_methods):
+    default_methods = {"zscore", "mad", "iqr"}
+    if selected_anomaly_methods is None or set(selected_anomaly_methods) == default_methods:
+        return f"errors{base_table_name}", None
+
+    filtered_table_name = f"errors_{base_table_name}_filtered_{uuid.uuid4().hex[:10]}"
+    selected_raw_types = service_helpers.anomaly_methods_to_raw_error_types(selected_anomaly_methods)
+
+    if selected_raw_types:
+        placeholders = []
+        params = {}
+        for idx, raw_type in enumerate(selected_raw_types):
+            key = f"raw{idx}"
+            placeholders.append(f":{key}")
+            params[key] = raw_type
+        where_clause = f"error_type <> 'anomaly' OR COALESCE(raw_error_type, '') IN ({', '.join(placeholders)})"
+        create_sql = text(
+            f'CREATE TABLE "{filtered_table_name}" AS '
+            f'SELECT * FROM "errors{base_table_name}" WHERE {where_clause}'
+        )
+    else:
+        params = {}
+        create_sql = text(
+            f'CREATE TABLE "{filtered_table_name}" AS '
+            f'SELECT * FROM "errors{base_table_name}" WHERE error_type <> \'anomaly\''
+        )
+
+    with engine.begin() as conn:
+        conn.execute(create_sql, params)
+
+    return filtered_table_name, filtered_table_name
+
+
+def _drop_filtered_error_table(table_name):
+    if not table_name:
+        return
+    with engine.begin() as conn:
+        conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
+
 @app.get("/api/plots/1-d-histogram")
 def get_1d_histogram():
     """
@@ -49,12 +103,16 @@ def get_1d_histogram():
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     number_of_bins = request.args.get("bins", default=10)
+    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    error_table_name = None
+    cleanup_table_name = None
 
     try:
+        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods)
         if USE_PANDAS_FOR_HISTOGRAMS:
             histogram = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
         else:
-            query = f"SELECT generate_one_d_histogram_with_errors('{table}', 'errors{table}', '{column}', {bin_count}, {min_id}, {max_id});"
+            query = f"SELECT generate_one_d_histogram_with_errors('{table}', '{error_table_name}', '{column}', {bin_count}, {min_id}, {max_id});"
             result = pd.read_sql_query(query, engine).to_dict()
             histogram = result["generate_one_d_histogram_with_errors"][0]
 
@@ -62,6 +120,8 @@ def get_1d_histogram():
 
     except Exception as e:
         return {"Success": False, "Error": str(e)}
+    finally:
+        _drop_filtered_error_table(cleanup_table_name)
 
 
 
@@ -79,8 +139,12 @@ def get_2d_histogram():
     max_id = request.args.get("max_id", default=200)
     x_bins = request.args.get("x_bins", default=10)
     y_bins = request.args.get("y_bins", default=10)
+    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    error_table_name = None
+    cleanup_table_name = None
 
     try:
+        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods)
         if USE_PANDAS_FOR_HISTOGRAMS:
 
                 histogram = query.generate_2d_histogram_data(
@@ -92,7 +156,7 @@ def get_2d_histogram():
                 )
 
         else:
-            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', 'errors{table}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
+            query_str = f"SELECT generate_two_d_histogram_with_errors('{table}', '{error_table_name}', '{column_x}','{column_y}', {x_bins},{y_bins}, {min_id}, {max_id});"
             binned_data = pd.read_sql_query(query_str, engine).to_dict()
             histogram = binned_data["generate_two_d_histogram_with_errors"][0]
 
@@ -100,6 +164,8 @@ def get_2d_histogram():
 
     except Exception as e:
         return {"Success": False, "Error": str(e)}
+    finally:
+        _drop_filtered_error_table(cleanup_table_name)
 
 
 
@@ -191,18 +257,24 @@ def get_scatterplot_data():
     max_id = request.args.get("max_id", default=200)
     error_sample_count = request.args.get("error_sample_count", default=30)
     total_sample_count = request.args.get("total_sample_count", default=100)
+    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    error_table_name = None
+    cleanup_table_name = None
 
     try:
+        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods)
         if USE_PANDAS_FOR_SCATTERPLOT:
             scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
         else:
-            query = f"SELECT generate_scatterplot_with_errors('{table}', 'errors{table}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
+            query = f"SELECT generate_scatterplot_with_errors('{table}', '{error_table_name}', '{x_column_name}', '{y_column_name}', {error_sample_count}, {total_sample_count}, {min_id}, {max_id});"
             result = pd.read_sql_query(query, engine).to_dict()
             scatterplot_data = result["generate_scatterplot_with_errors"][0]
 
         return {"Success": True, "scatterplot_data": scatterplot_data}
     except Exception as e:
         return {"Success": False, "Error": str(e)}
+    finally:
+        _drop_filtered_error_table(cleanup_table_name)
 
 
 @app.get("/api/plots/group-by")
@@ -269,9 +341,15 @@ def attribute_summaries():
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     tablename = request.args.get("tablename")
+    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
     try:
         #get the current error table
-        table_attribute_summaries = generate_complete_json(int(min_id), int(max_id), tablename)
+        table_attribute_summaries = generate_complete_json(
+            int(min_id),
+            int(max_id),
+            tablename,
+            anomaly_methods=selected_anomaly_methods
+        )
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
         return {"success": False, "error": str(e)}

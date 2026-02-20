@@ -9,16 +9,57 @@ import time
 from app import app
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
-    init_session_data_state, fetch_detected_and_undetected_current_dataset_from_db, calculate_attribute_rankings
+    init_session_data_state, fetch_detected_and_undetected_current_dataset_from_db, calculate_attribute_rankings, \
+    _normalize_anomaly_methods, filter_error_dataframe_by_anomaly_methods
 from app import data_state_manager
 from app.set_id_column import set_id_column
 import json
 
+
+def _parse_anomaly_methods_query_arg():
+    raw = request.args.get("anomaly_methods")
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    return _normalize_anomaly_methods(anomaly_methods=parsed, allow_empty=True)
+
 @app.post("/api/upload")
 def upload_csv():
+    """
+    Upload a CSV, persist it as a SQL table, run error detectors, and store error/ranking tables.
+
+    Request form fields:
+    - file: CSV file upload (required)
+    - anomaly_methods: JSON list of anomaly methods (optional; e.g. ["zscore","mad","iqr"])
+    - anomaly_method: single fallback method (optional; defaults to "zscore")
+    """
 
     csv_file = request.files["file"]
+    anomaly_methods_raw = request.form.get("anomaly_methods")
     anomaly_method = request.form.get("anomaly_method", "zscore")
+    selected_anomaly_methods = None
+    if anomaly_methods_raw:
+        try:
+            parsed = json.loads(anomaly_methods_raw)
+            if isinstance(parsed, list):
+                selected_anomaly_methods = parsed
+        except json.JSONDecodeError:
+            selected_anomaly_methods = None
+
+    if selected_anomaly_methods is None:
+        selected_anomaly_methods = [anomaly_method]
+    selected_anomaly_methods = [
+        str(method).strip().lower()
+        for method in selected_anomaly_methods
+        if str(method).strip().lower() in {"zscore", "mad", "iqr"}
+    ] or ["zscore"]
+    anomaly_method = selected_anomaly_methods[0]
+    all_anomaly_methods = ["zscore", "mad", "iqr"]
     dataframe = pd.read_csv(csv_file)
 
     dataframe_with_id = set_id_column(dataframe)
@@ -34,7 +75,11 @@ def upload_csv():
         )
 
         start_time = time.time()
-        detected_data = run_detectors(cleaned_table_name, anomaly_method=anomaly_method)
+        detected_data = run_detectors(
+            cleaned_table_name,
+            anomaly_method=anomaly_method,
+            anomaly_methods=all_anomaly_methods
+        )
 
         detected_data["raw_error_type"] = detected_data["error_type"]
 
@@ -47,13 +92,17 @@ def upload_csv():
         print("Unique error types (UI):", detected_data["error_type"].unique())
         print("Unique error types (raw):", detected_data["raw_error_type"].unique())
 
-        if anomaly_method == "mad":
+        if "mad" in all_anomaly_methods:
             print("Total MAD anomalies:",
-                (detected_data["raw_error_type"] == "mad_anomaly").sum())
+                  (detected_data["raw_error_type"] == "mad_anomaly").sum())
 
-        if anomaly_method == "zscore":
+        if "zscore" in all_anomaly_methods:
             print("Total Z-score anomalies:",
-                (detected_data["raw_error_type"] == "zscore_anomaly").sum())
+                  (detected_data["raw_error_type"] == "zscore_anomaly").sum())
+
+        if "iqr" in all_anomaly_methods:
+            print("Total IQR anomalies:",
+                  (detected_data["raw_error_type"] == "iqr_anomaly").sum())
 
         time_to_detect = time.time() - start_time
         detected_rows_inserted = detected_data.to_sql(
@@ -76,7 +125,9 @@ def upload_csv():
                 "db": cleaned_table_name,
                 "clean_time": time_to_detect,
                 "dataframe_shape": list(detected_data.shape),
-                "anomaly_method": anomaly_method
+                "anomaly_method": anomaly_method,
+                "selected_anomaly_methods": selected_anomaly_methods,
+                "detected_anomaly_methods": all_anomaly_methods
             },
             open(f"report/{cleaned_table_name}.json", "w")
         )
@@ -133,6 +184,9 @@ def get_errors():
     query = get_whole_table_query(cleaned_table_name,True)
     try:
         full_error_df = pd.read_sql_query(query, engine)
+        selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+        if selected_anomaly_methods is not None:
+            full_error_df = filter_error_dataframe_by_anomaly_methods(full_error_df, selected_anomaly_methods)
         print("=== GET-ERRORS ROUTE ===")
         print("Errors returned to frontend:", len(full_error_df))
         print("Unique error types sent:", full_error_df["error_type"].unique())

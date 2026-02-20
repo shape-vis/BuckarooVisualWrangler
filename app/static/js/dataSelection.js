@@ -16,6 +16,7 @@ const selectedSample = localStorage.getItem("selectedSample");  // Dataset chose
 const minID = parseInt(localStorage.getItem("minIDVal"));
 const maxID = parseInt(localStorage.getItem("maxIDVal"));
 const useDB = localStorage.getItem("useDatabase") === "true";
+const allowedAnomalyMethods = ["zscore", "mad", "iqr"];
 
 // User selected one of the 3 available datasets
 if (userUploaded === "no"){
@@ -103,6 +104,85 @@ function prepForControllerInit(userUploadedFile, table, fileName,errorData,minID
     attachButtonEventListeners(stackoverflowController);
     exportPythonScriptListener(stackoverflowController);
     initWranglersDetectors(stackoverflowController,errorData);
+    initAnomalyMethodControls(stackoverflowController);
+}
+
+function getSelectedAnomalyMethodsFromStorage() {
+    try {
+        const raw = localStorage.getItem("anomalyMethods");
+        if (!raw) return ["zscore", "mad", "iqr"];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return ["zscore", "mad", "iqr"];
+        return parsed
+            .map(method => String(method).trim().toLowerCase())
+            .filter(method => allowedAnomalyMethods.includes(method));
+    } catch (error) {
+        return ["zscore", "mad", "iqr"];
+    }
+}
+
+function initAnomalyMethodControls(controller) {
+    const checkboxes = Array.from(document.querySelectorAll(".viz-anom-method"));
+    const allCheckbox = document.getElementById("viz-anom-all");
+    if (checkboxes.length === 0) return;
+
+    const selectedMethods = new Set(getSelectedAnomalyMethodsFromStorage());
+    checkboxes.forEach((checkbox) => {
+        checkbox.checked = selectedMethods.has(checkbox.value);
+    });
+    if (!checkboxes.some((checkbox) => checkbox.checked)) {
+        const zscoreCheckbox = checkboxes.find((checkbox) => checkbox.value === "zscore");
+        if (zscoreCheckbox) {
+            zscoreCheckbox.checked = true;
+        } else {
+            checkboxes[0].checked = true;
+        }
+    }
+    if (allCheckbox) {
+        allCheckbox.checked = checkboxes.every((checkbox) => checkbox.checked);
+    }
+
+    const applyMethodFilter = async () => {
+        let methods = checkboxes
+            .filter((checkbox) => checkbox.checked)
+            .map((checkbox) => checkbox.value);
+        if (methods.length === 0) {
+            const zscoreCheckbox = checkboxes.find((checkbox) => checkbox.value === "zscore");
+            if (zscoreCheckbox) {
+                zscoreCheckbox.checked = true;
+                methods = ["zscore"];
+            } else {
+                checkboxes[0].checked = true;
+                methods = [checkboxes[0].value];
+            }
+        }
+        if (allCheckbox) {
+            allCheckbox.checked = checkboxes.every((checkbox) => checkbox.checked);
+        }
+        localStorage.setItem("anomalyMethods", JSON.stringify(methods));
+
+        const fileName = controller.model.originalFilename;
+        const dataSize = controller.model.getSampleIDRangeMax();
+        const updatedErrorData = await getErrorData(fileName, dataSize, methods);
+        controller.model.columnErrorMap = updatedErrorData || {};
+
+        controller.view.updateDirtyRowsTable(controller.model.getFullFilteredData());
+        await controller.view.updateColumnErrorIndicators(controller.model.getFullData(), controller);
+        controller.render(false, true);
+    };
+
+    checkboxes.forEach((checkbox) => {
+        checkbox.addEventListener("change", applyMethodFilter);
+    });
+
+    if (allCheckbox) {
+        allCheckbox.addEventListener("change", async () => {
+            checkboxes.forEach((checkbox) => {
+                checkbox.checked = allCheckbox.checked;
+            });
+            await applyMethodFilter();
+        });
+    }
 }
 
 /**

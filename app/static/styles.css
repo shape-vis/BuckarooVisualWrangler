@@ -9,6 +9,22 @@
 
 #header-buttons {
     display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.viz-anomaly-method-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.viz-anomaly-method-control label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
 }
 
 .dataset-button {
@@ -286,6 +302,25 @@ p {
 
 .file-upload label {
     display: block;
+}
+
+.anomaly-method-control {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-left: 8px;
+}
+
+.anomaly-methods {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.anomaly-methods label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .tab-button {

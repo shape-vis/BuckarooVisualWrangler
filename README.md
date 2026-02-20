@@ -111,3 +111,16 @@ Sometimes I would get errors that would popup inconsistently and don't exist in 
 - Invalid or unexpected token
 
 You can also try clearing the cache in your browser and this seemed to keep the errors away for longer.
+
+## Auto-Generated Python Docs
+This repo includes Sphinx + AutoAPI configuration under `docs/`.
+
+### Build docs
+1. Install doc dependencies:
+   `pip install -r docs/requirements.txt`
+2. Build:
+   `sphinx-build -b html docs docs/_build/html`
+3. Open:
+   `docs/_build/html/index.html`
+
+The API reference is generated from Python source files and docstrings.

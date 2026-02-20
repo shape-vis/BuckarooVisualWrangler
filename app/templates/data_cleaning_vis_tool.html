@@ -22,6 +22,13 @@
     <div id="header">
       <h1><a href="/" style="color: white; text-decoration: none;">Buckaroo Visual Wrangler <img src="{{ url_for('static',filename='images/favicon/favicon-96x96.png')}}" style="vertical-align: middle;" height="40" alt="Buckaroo Logo"></a></h1>
       <div id="header-buttons">
+        <div id="viz-anomaly-method-control" class="viz-anomaly-method-control">
+          <span>Anomaly methods:</span>
+          <label><input type="checkbox" id="viz-anom-all" value="all"> All</label>
+          <label><input type="checkbox" class="viz-anom-method" value="zscore"> Z-score</label>
+          <label><input type="checkbox" class="viz-anom-method" value="mad"> MAD</label>
+          <label><input type="checkbox" class="viz-anom-method" value="iqr"> IQR</label>
+        </div>
         <button id="export-script">
           Export Cleaning Script
           <i class="fa fa-download"></i>

@@ -3,7 +3,7 @@ Converts the current datastate data into JSON the view can use
 """
 import pandas as pd
 
-from app.service_helpers import get_error_dist, is_categorical
+from app.service_helpers import get_error_dist, is_categorical, filter_error_dataframe_by_anomaly_methods
 from data_management.data_integration import get_filtered_dataframes
 
 
@@ -50,7 +50,7 @@ def get_default_attributes_from_rankings(tablename, engine):
         print(f"Error fetching rankings for table '{tablename}': {e}")
         return []
 
-def generate_complete_json(min_id, max_id, tablename=None):
+def generate_complete_json(min_id, max_id, tablename=None, anomaly_methods=None):
     """
     Generate a complete JSON representation of the current data state
     1. Get the current data state from the data state manager, filtered by min and max ID
@@ -70,6 +70,9 @@ def generate_complete_json(min_id, max_id, tablename=None):
     main_df, error_df = get_filtered_dataframes(min_id, max_id)
     print("ERROR DF:")
     print(error_df)
+
+    if anomaly_methods is not None:
+        error_df = filter_error_dataframe_by_anomaly_methods(error_df, anomaly_methods)
 
     error_list = get_error_dist(error_df, main_df).to_dict('records')
 

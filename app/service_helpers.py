@@ -145,8 +145,71 @@ def perform_melt(dfs):
 
     return df_combined
 
-def run_detectors(table_name: str, anomaly_method: str = "zscore"):
- 
+def _normalize_anomaly_methods(anomaly_methods=None, anomaly_method: str = "zscore", allow_empty: bool = False):
+    """
+    Normalize anomaly method input into a deduplicated, validated list.
+
+    Accepts either a list/string in ``anomaly_methods`` or a single fallback
+    value in ``anomaly_method``.
+    """
+    allowed_methods = {"zscore", "mad", "iqr"}
+
+    if anomaly_methods is None:
+        candidates = [anomaly_method]
+    elif isinstance(anomaly_methods, str):
+        candidates = [anomaly_methods]
+    else:
+        candidates = list(anomaly_methods)
+
+    normalized = []
+    for method in candidates:
+        method_normalized = str(method).strip().lower()
+        if method_normalized in allowed_methods and method_normalized not in normalized:
+            normalized.append(method_normalized)
+
+    if allow_empty:
+        return normalized
+    return normalized or ["zscore"]
+
+
+def anomaly_methods_to_raw_error_types(anomaly_methods):
+    method_to_raw = {
+        "zscore": "zscore_anomaly",
+        "mad": "mad_anomaly",
+        "iqr": "iqr_anomaly",
+    }
+    normalized = _normalize_anomaly_methods(anomaly_methods=anomaly_methods, allow_empty=True)
+    return [method_to_raw[method] for method in normalized if method in method_to_raw]
+
+
+def filter_error_dataframe_by_anomaly_methods(error_df: pd.DataFrame, anomaly_methods):
+    """
+    Filter anomaly rows based on selected methods while keeping all non-anomaly errors.
+    """
+    if error_df.empty:
+        return error_df
+
+    if "error_type" not in error_df.columns or "raw_error_type" not in error_df.columns:
+        return error_df
+
+    selected_raw_types = set(anomaly_methods_to_raw_error_types(anomaly_methods))
+    anomaly_mask = error_df["error_type"].eq("anomaly")
+    if not anomaly_mask.any():
+        return error_df
+
+    keep_mask = (~anomaly_mask) | (error_df["raw_error_type"].isin(selected_raw_types))
+    return error_df[keep_mask].reset_index(drop=True)
+
+
+def run_detectors(table_name: str, anomaly_method: str = "zscore", anomaly_methods=None):
+    """
+    Run all detector categories for a table and return a unified long error dataframe.
+
+    Anomaly detection can run one or many methods; results are unioned across methods
+    and deduplicated by (row_id, column_name).
+    """
+    methods_to_run = _normalize_anomaly_methods(anomaly_methods=anomaly_methods, anomaly_method=anomaly_method)
+
     df_with_id = pd.read_sql_query(text(f'SELECT * FROM "{table_name}"'), engine)
 
 
@@ -154,11 +217,19 @@ def run_detectors(table_name: str, anomaly_method: str = "zscore"):
         SELECT row_id, column_name, error_type
         FROM detect_anomalies(:table_name, :method)
     """)
-    anomaly_long = pd.read_sql_query(
-        sql,
-        engine,
-        params={"table_name": table_name, "method": anomaly_method}
-    )
+    anomaly_frames = []
+    for method in methods_to_run:
+        anomaly_frames.append(
+            pd.read_sql_query(
+                sql,
+                engine,
+                params={"table_name": table_name, "method": method}
+            )
+        )
+
+    anomaly_long = pd.concat(anomaly_frames, ignore_index=True)
+    if not anomaly_long.empty:
+        anomaly_long = anomaly_long.drop_duplicates(subset=["row_id", "column_name"])
 
     if anomaly_long.empty:
         anomaly_df = pd.DataFrame({"ID": []})
