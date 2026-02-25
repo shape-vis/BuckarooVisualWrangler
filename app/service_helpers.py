@@ -7,7 +7,6 @@ import pandas as pd
 
 from app import data_state_manager
 from app.set_id_column import set_id_column
-from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value

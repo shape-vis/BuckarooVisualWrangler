@@ -24,8 +24,14 @@ def update_errors_table(table_name: str) -> None:
     and update the errors table.
     """
     try:
-        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
-        detected_errors_df = run_detectors(df)
+        detected_errors_df = run_detectors(
+            table_name,
+            anomaly_methods=["zscore", "mad", "iqr"]
+        )
+        if "error_type" in detected_errors_df.columns:
+            detected_errors_df["raw_error_type"] = detected_errors_df["error_type"]
+            anomaly_mask = detected_errors_df["error_type"].astype(str).str.contains("anomaly", na=False)
+            detected_errors_df.loc[anomaly_mask, "error_type"] = "anomaly"
         errors_table_name = f"errors{table_name}"
         detected_errors_df.to_sql(errors_table_name, engine, if_exists='replace', index=False)
         print(f"✓ Updated errors table: {errors_table_name}")

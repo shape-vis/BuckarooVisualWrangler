@@ -179,7 +179,7 @@
                 const fileToSend = new FormData();
                 console.log("starting upload", uploadedFile);
 
-                const methods = getSelectedAnomalyMethods();
+                const methods = ["zscore", "mad", "iqr"];
                 fileToSend.append("anomaly_methods", JSON.stringify(methods));
                 fileToSend.append("anomaly_method", methods[0] || "zscore");
 
@@ -208,74 +208,6 @@
                 }
             }
         
-            function initAnomalySelect() {
-                const allCheckbox = document.getElementById("anom-all");
-                const methodCheckboxes = Array.from(document.querySelectorAll(".anom-method"));
-
-                if (!allCheckbox || methodCheckboxes.length === 0) {
-                    return;
-                }
-
-                const syncAllFromMethods = () => {
-                    const allMethodsChecked = methodCheckboxes.every((checkbox) => checkbox.checked);
-                    allCheckbox.checked = allMethodsChecked;
-                };
-
-                const ensureAtLeastOneMethod = () => {
-                    const anyMethodChecked = methodCheckboxes.some((checkbox) => checkbox.checked);
-                    if (!anyMethodChecked) {
-                        const zscoreCheckbox = methodCheckboxes.find((checkbox) => checkbox.value === "zscore");
-                        if (zscoreCheckbox) {
-                            zscoreCheckbox.checked = true;
-                        } else if (methodCheckboxes.length > 0) {
-                            methodCheckboxes[0].checked = true;
-                        }
-                    }
-                };
-
-                allCheckbox.addEventListener("change", function () {
-                    methodCheckboxes.forEach((checkbox) => {
-                        checkbox.checked = allCheckbox.checked;
-                    });
-                    ensureAtLeastOneMethod();
-                    syncAllFromMethods();
-                });
-
-                methodCheckboxes.forEach((checkbox) => {
-                    checkbox.addEventListener("change", () => {
-                        ensureAtLeastOneMethod();
-                        syncAllFromMethods();
-                    });
-                });
-
-                if (allCheckbox.checked) {
-                    methodCheckboxes.forEach((checkbox) => {
-                        checkbox.checked = true;
-                    });
-                } else {
-                    ensureAtLeastOneMethod();
-                    syncAllFromMethods();
-                }
-            }
-
-            window.addEventListener("DOMContentLoaded", initAnomalySelect);
-
-
-            function getSelectedAnomalyMethods() {
-                const allCheckbox = document.getElementById("anom-all");
-                const selectedMethods = Array.from(document.querySelectorAll(".anom-method"))
-                    .filter((checkbox) => checkbox.checked)
-                    .map((checkbox) => checkbox.value);
-
-                if (allCheckbox && allCheckbox.checked) {
-                    return ["zscore", "mad", "iqr"];
-                }
-
-                return selectedMethods;
-            }
-
-
-
         function storeDataRangeValues(minVal, maxVal){
             localStorage.setItem("minIDVal", minVal);
             localStorage.setItem("maxIDVal", maxVal);
@@ -283,8 +215,7 @@
             const useDb = document.getElementById("use-db").checked;
             localStorage.setItem("useDatabase", useDb);
 
-            const methods = getSelectedAnomalyMethods();
-            localStorage.setItem("anomalyMethods", JSON.stringify(methods));
+            localStorage.setItem("anomalyMethods", JSON.stringify(["zscore", "mad", "iqr"]));
         }
 
 
@@ -327,18 +258,6 @@
                             <label for="use-db">Use Database:</label>
                             <input type="checkbox" id="use-db" name="use-db" />
 
-                            <div class="anomaly-method-control">
-                            <label>Anomaly detection method:</label>
-
-                            <div id="anomaly-methods" class="anomaly-methods">
-                            <label><input type="checkbox" id="anom-all" value="all" checked> All (default)</label>
-                            <label><input type="checkbox" class="anom-method" value="zscore"> Z-score</label>
-                            <label><input type="checkbox" class="anom-method" value="mad"> MAD</label>
-                            <label><input type="checkbox" class="anom-method" value="iqr"> IQR</label>
-                            </div>
-                            </div>
-
-                            
                         </div>
             </div>
         </div>

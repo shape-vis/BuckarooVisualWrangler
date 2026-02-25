@@ -12,6 +12,10 @@ This entry starts with anomaly detection improvements; upcoming work will contin
 - Users could not choose `mad` or `iqr`, and could not run multiple anomaly methods together.
 
 ### Changed
+- Removed anomaly method selection UI from the home page (`app/templates/index.html`):
+  - Datasets/uploads now initialize anomaly methods to all methods (`zscore`, `mad`, `iqr`).
+  - Filtering is now done only in the visual tool page.
+
 - Updated anomaly method selection behavior on the home page (`app/templates/index.html`):
   - Replaced old broken select-based logic with checkbox-based logic.
   - `All` now checks/unchecks all anomaly methods (`zscore`, `mad`, `iqr`).
@@ -82,6 +86,12 @@ This entry starts with anomaly detection improvements; upcoming work will contin
   - Files:
     - `app/static/js/dataSelection.js`
     - `app/static/js/serverCalls.js`
+
+- Fixed post-repair error recomputation to use the current detector pipeline:
+  - SQL wrangler repair endpoints now re-run error detection using all anomaly methods (`zscore`, `mad`, `iqr`).
+  - Recomputed errors are normalized to include `raw_error_type` and UI-friendly `error_type = "anomaly"` rows, matching upload behavior.
+  - This keeps anomaly method filtering working correctly after repairs.
+  - File: `app/wrangler_routes_sql.py`
 
 ### Documentation
 - Added automated Python API docs setup using Sphinx + AutoAPI:
