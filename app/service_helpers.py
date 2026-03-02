@@ -8,7 +8,6 @@ import pandas as pd
 from app import data_state_manager
 from app.set_id_column import set_id_column
 from detectors.datatype_mismatch import datatype_mismatch
-from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 from app import engine
 from sqlalchemy import text
@@ -135,8 +134,14 @@ def perform_melt(dfs):
     """
     df_combined = pd.DataFrame()
     for df in dfs:
-        melted_df = pd.melt(df, id_vars='ID', value_vars=get_values_for_df_melt(df))
-        melted_df.rename(columns={'ID': 'row_id','variable':'column_id','value':'error_type'}, inplace=True)
+        melted_df = pd.melt(
+            df,
+            id_vars='ID',
+            value_vars=get_values_for_df_melt(df),
+            var_name='column_id',
+            value_name='error_type'
+        )
+        melted_df.rename(columns={'ID': 'row_id'}, inplace=True)
         df_combined = pd.concat([df_combined,melted_df])
     nan_mask = df_combined['error_type'].isna()
     df_combined = df_combined[~nan_mask]
@@ -181,23 +186,44 @@ def anomaly_methods_to_raw_error_types(anomaly_methods):
     return [method_to_raw[method] for method in normalized if method in method_to_raw]
 
 
-def filter_error_dataframe_by_anomaly_methods(error_df: pd.DataFrame, anomaly_methods):
+def _normalize_rarity_threshold(rarity_threshold, default: float = 0.01) -> float:
+    try:
+        threshold = float(rarity_threshold)
+    except (TypeError, ValueError):
+        threshold = default
+    return max(0.0, min(1.0, threshold))
+
+
+def filter_error_dataframe_by_anomaly_methods(
+    error_df: pd.DataFrame,
+    anomaly_methods,
+    rarity_threshold: float | None = 0.01
+):
     """
     Filter anomaly rows based on selected methods while keeping all non-anomaly errors.
+    Optionally filter rarity rows (error_type='incomplete') by rarity_score threshold.
     """
     if error_df.empty:
         return error_df
 
-    if "error_type" not in error_df.columns or "raw_error_type" not in error_df.columns:
-        return error_df
+    filtered_df = error_df
 
-    selected_raw_types = set(anomaly_methods_to_raw_error_types(anomaly_methods))
-    anomaly_mask = error_df["error_type"].eq("anomaly")
-    if not anomaly_mask.any():
-        return error_df
+    if anomaly_methods is not None and "error_type" in filtered_df.columns and "raw_error_type" in filtered_df.columns:
+        selected_raw_types = set(anomaly_methods_to_raw_error_types(anomaly_methods))
+        anomaly_mask = filtered_df["error_type"].eq("anomaly")
+        if anomaly_mask.any():
+            keep_mask = (~anomaly_mask) | (filtered_df["raw_error_type"].isin(selected_raw_types))
+            filtered_df = filtered_df[keep_mask].reset_index(drop=True)
 
-    keep_mask = (~anomaly_mask) | (error_df["raw_error_type"].isin(selected_raw_types))
-    return error_df[keep_mask].reset_index(drop=True)
+    if rarity_threshold is not None and "error_type" in filtered_df.columns and "rarity_score" in filtered_df.columns:
+        rarity_mask = filtered_df["error_type"].eq("incomplete")
+        if rarity_mask.any():
+            threshold = _normalize_rarity_threshold(rarity_threshold)
+            rarity_scores = pd.to_numeric(filtered_df["rarity_score"], errors="coerce")
+            keep_mask = (~rarity_mask) | (rarity_scores <= threshold)
+            filtered_df = filtered_df[keep_mask].reset_index(drop=True)
+
+    return filtered_df
 
 
 def run_detectors(table_name: str, anomaly_method: str = "zscore", anomaly_methods=None):
@@ -240,12 +266,42 @@ def run_detectors(table_name: str, anomaly_method: str = "zscore", anomaly_metho
             .reset_index()
         )
 
-    incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
+    rarity_sql = text("""
+        SELECT row_id, column_name, error_type, rarity_score
+        FROM detect_rarity(:table_name, :threshold_pct)
+    """)
+    rarity_long = pd.read_sql_query(
+        rarity_sql,
+        engine,
+        params={"table_name": table_name, "threshold_pct": 1.0}
+    )
+
+    if rarity_long.empty:
+        rarity_df = pd.DataFrame({"ID": []})
+        rarity_scores = pd.DataFrame(columns=["row_id", "column_id", "rarity_score"])
+    else:
+        rarity_scores = (
+            rarity_long[["row_id", "column_name", "rarity_score"]]
+            .rename(columns={"column_name": "column_id"})
+            .drop_duplicates(subset=["row_id", "column_id"])
+        )
+        rarity_df = (
+            rarity_long
+            .rename(columns={"row_id": "ID"})
+            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
+            .reset_index()
+        )
+
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
 
-    frames = [anomaly_df, incomplete_df, missing_value_df, datatype_mismatch_df]
-    return perform_melt(frames)
+    frames = [anomaly_df, rarity_df, missing_value_df, datatype_mismatch_df]
+    combined = perform_melt(frames)
+    if not rarity_scores.empty:
+        combined = combined.merge(rarity_scores, on=["row_id", "column_id"], how="left")
+    else:
+        combined["rarity_score"] = pd.NA
+    return combined
 
 def calculate_attribute_rankings(error_df):
     """

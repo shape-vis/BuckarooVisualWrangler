@@ -12,7 +12,7 @@ class AttributeSummaryView {
                             "missing": "Missing Values", 
                             "mismatch": "Data Type Mismatch", 
                             "anomaly": "Average Anomalies (Outliers)", 
-                            "incomplete": "Incomplete Data (< 3 points)", 
+                            "incomplete": "Rarity (Low-Frequency Values)", 
                             "none": "None"};
 
         this.errorColors = d3.scaleOrdinal()
@@ -298,7 +298,14 @@ class AttributeSummaryView {
 
 
                 // const percentText = document.createElement("span");
-                box.textContent = `${Math.round(pct * 100)}%`;
+                const pctDisplay = pct * 100;
+                if (pctDisplay > 0 && pctDisplay < 1) {
+                    box.textContent = "<1%";
+                } else if (pctDisplay < 10) {
+                    box.textContent = `${pctDisplay.toFixed(1)}%`;
+                } else {
+                    box.textContent = `${Math.round(pctDisplay)}%`;
+                }
                 box.style.fontSize = "10px";
                 box.style.fontWeight = "bold";
                 box.style.color = "black";

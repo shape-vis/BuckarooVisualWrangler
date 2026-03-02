@@ -124,6 +124,7 @@ function getSelectedAnomalyMethodsFromStorage() {
 function initAnomalyMethodControls(controller) {
     const checkboxes = Array.from(document.querySelectorAll(".viz-anom-method"));
     const allCheckbox = document.getElementById("viz-anom-all");
+    const rarityThresholdSelect = document.getElementById("viz-rarity-threshold");
     if (checkboxes.length === 0) return;
 
     const selectedMethods = new Set(getSelectedAnomalyMethodsFromStorage());
@@ -140,6 +141,13 @@ function initAnomalyMethodControls(controller) {
     }
     if (allCheckbox) {
         allCheckbox.checked = checkboxes.every((checkbox) => checkbox.checked);
+    }
+    if (rarityThresholdSelect) {
+        const storedThreshold = localStorage.getItem("rarityThreshold") || "0.01";
+        const matchingOption = Array.from(rarityThresholdSelect.options)
+            .find((option) => option.value === storedThreshold);
+        rarityThresholdSelect.value = matchingOption ? storedThreshold : "0.01";
+        localStorage.setItem("rarityThreshold", rarityThresholdSelect.value);
     }
 
     const applyMethodFilter = async () => {
@@ -160,6 +168,9 @@ function initAnomalyMethodControls(controller) {
             allCheckbox.checked = checkboxes.every((checkbox) => checkbox.checked);
         }
         localStorage.setItem("anomalyMethods", JSON.stringify(methods));
+        if (rarityThresholdSelect) {
+            localStorage.setItem("rarityThreshold", rarityThresholdSelect.value || "0.01");
+        }
 
         const fileName = controller.model.originalFilename;
         const dataSize = controller.model.getSampleIDRangeMax();
@@ -180,6 +191,11 @@ function initAnomalyMethodControls(controller) {
             checkboxes.forEach((checkbox) => {
                 checkbox.checked = allCheckbox.checked;
             });
+            await applyMethodFilter();
+        });
+    }
+    if (rarityThresholdSelect) {
+        rarityThresholdSelect.addEventListener("change", async () => {
             await applyMethodFilter();
         });
     }

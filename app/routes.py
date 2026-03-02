@@ -10,7 +10,7 @@ from app import app
 from app import connection, engine
 from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
     init_session_data_state, fetch_detected_and_undetected_current_dataset_from_db, calculate_attribute_rankings, \
-    _normalize_anomaly_methods, filter_error_dataframe_by_anomaly_methods
+    _normalize_anomaly_methods, filter_error_dataframe_by_anomaly_methods, _normalize_rarity_threshold
 from app import data_state_manager
 from app.set_id_column import set_id_column
 import json
@@ -27,6 +27,13 @@ def _parse_anomaly_methods_query_arg():
     if not isinstance(parsed, list):
         return None
     return _normalize_anomaly_methods(anomaly_methods=parsed, allow_empty=True)
+
+
+def _parse_rarity_threshold_query_arg(default: float = 0.01):
+    raw = request.args.get("rarity_threshold")
+    if raw is None:
+        return default
+    return _normalize_rarity_threshold(raw, default=default)
 
 @app.post("/api/upload")
 def upload_csv():
@@ -82,11 +89,15 @@ def upload_csv():
         )
 
         detected_data["raw_error_type"] = detected_data["error_type"]
+        if "column_name" in detected_data.columns:
+            if "column_id" not in detected_data.columns:
+                detected_data["column_id"] = detected_data["column_name"]
+            else:
+                detected_data["column_id"] = detected_data["column_id"].fillna(detected_data["column_name"])
 
         # normalize
         anomaly_mask = detected_data["error_type"].str.contains("anomaly", na=False)
         detected_data.loc[anomaly_mask, "error_type"] = "anomaly"
-        detected_data.loc[anomaly_mask, "column_id"] = detected_data.loc[anomaly_mask, "column_name"]
 
         print("=== AFTER DETECTION ===")
         print("Unique error types (UI):", detected_data["error_type"].unique())
@@ -112,7 +123,12 @@ def upload_csv():
             index=False
         )
 
-        rankings = calculate_attribute_rankings(detected_data)
+        rankings_source = filter_error_dataframe_by_anomaly_methods(
+            detected_data,
+            all_anomaly_methods,
+            rarity_threshold=0.01
+        )
+        rankings = calculate_attribute_rankings(rankings_source)
         rankings.to_sql(
             "rankings" + cleaned_table_name,
             engine,
@@ -185,8 +201,12 @@ def get_errors():
     try:
         full_error_df = pd.read_sql_query(query, engine)
         selected_anomaly_methods = _parse_anomaly_methods_query_arg()
-        if selected_anomaly_methods is not None:
-            full_error_df = filter_error_dataframe_by_anomaly_methods(full_error_df, selected_anomaly_methods)
+        selected_rarity_threshold = _parse_rarity_threshold_query_arg(default=0.01)
+        full_error_df = filter_error_dataframe_by_anomaly_methods(
+            full_error_df,
+            selected_anomaly_methods,
+            rarity_threshold=selected_rarity_threshold
+        )
         print("=== GET-ERRORS ROUTE ===")
         print("Errors returned to frontend:", len(full_error_df))
         print("Unique error types sent:", full_error_df["error_type"].unique())

@@ -30,6 +30,11 @@ def update_errors_table(table_name: str) -> None:
         )
         if "error_type" in detected_errors_df.columns:
             detected_errors_df["raw_error_type"] = detected_errors_df["error_type"]
+            if "column_name" in detected_errors_df.columns:
+                if "column_id" not in detected_errors_df.columns:
+                    detected_errors_df["column_id"] = detected_errors_df["column_name"]
+                else:
+                    detected_errors_df["column_id"] = detected_errors_df["column_id"].fillna(detected_errors_df["column_name"])
             anomaly_mask = detected_errors_df["error_type"].astype(str).str.contains("anomaly", na=False)
             detected_errors_df.loc[anomaly_mask, "error_type"] = "anomaly"
         errors_table_name = f"errors{table_name}"

@@ -93,6 +93,40 @@ This entry starts with anomaly detection improvements; upcoming work will contin
   - This keeps anomaly method filtering working correctly after repairs.
   - File: `app/wrangler_routes_sql.py`
 
+- Migrated incomplete detector behavior to SQL rarity detection:
+  - Added PostgreSQL function `detect_rarity(table_name, threshold_pct)` to flag low-frequency categorical values.
+  - SQL rarity now trims whitespace and ignores blank-string values during rarity counting.
+  - Runtime detector pipeline now uses SQL rarity instead of Python `detectors/incomplete.py` in active routes.
+  - Added `rarity_score` to error rows so UI/API filtering can apply dynamic thresholds.
+  - Default processing computes broad rarity coverage, then UI applies selected threshold filter.
+  - Files:
+    - `app/db_functions.py`
+    - `app/service_helpers.py`
+    - `app/routes.py`
+    - `app/plot_routes.py`
+    - `data_management/data_attribute_summary_integration.py`
+
+- Added visual rarity threshold control:
+  - New `Rarity threshold` selector in visual tool header.
+  - Threshold is passed on API requests for:
+    - error map (`/api/get-errors`)
+    - 1D/2D histograms
+    - scatterplot
+    - attribute summaries
+  - UI labels now describe this detector as `Rarity (Low-Frequency Values)` while keeping internal key `incomplete` for compatibility.
+  - Files:
+    - `app/templates/data_cleaning_vis_tool.html`
+    - `app/static/js/dataSelection.js`
+    - `app/static/js/serverCalls.js`
+    - `app/static/visualizations/attributesummaryview.js`
+    - `app/static/visualizations/matrixview.js`
+    - `app/static/visualizations/repairpanel.js`
+
+- Fixed rarity visibility bug in error reshaping:
+  - `perform_melt` now consistently emits `column_id` for all detector outputs.
+  - This restored per-attribute rendering of rarity errors in summaries/plots/table.
+  - File: `app/service_helpers.py`
+
 ### Documentation
 - Added automated Python API docs setup using Sphinx + AutoAPI:
   - `docs/conf.py`

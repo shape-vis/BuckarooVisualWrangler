@@ -58,10 +58,12 @@ async function getSampleData(filename,dataSize) {
 async function getErrorData(filename,dataSize, anomalyMethods = null) {
     console.log("starting error fetch from db");
     const methodsToSend = Array.isArray(anomalyMethods) ? anomalyMethods : getActiveAnomalyMethods();
+    const rarityThreshold = getActiveRarityThreshold();
     const params = new URLSearchParams({
         filename: filename,
         datasize:dataSize,
-        anomaly_methods: JSON.stringify(methodsToSend)
+        anomaly_methods: JSON.stringify(methodsToSend),
+        rarity_threshold: String(rarityThreshold)
     });
     const url = `/api/get-errors?${params}`
     try{
@@ -85,13 +87,15 @@ async function getErrorData(filename,dataSize, anomalyMethods = null) {
 async function queryHistogram1d(columnName,tableName,minId,maxId,binCount) {
     console.log("1d histogram fetch");
     const methodsToSend = getActiveAnomalyMethods();
+    const rarityThreshold = getActiveRarityThreshold();
     const params = new URLSearchParams({
         column:columnName,
         tablename:tableName,
         min_id:minId,
         max_id:maxId,
         bins:binCount,
-        anomaly_methods: JSON.stringify(methodsToSend)});
+        anomaly_methods: JSON.stringify(methodsToSend),
+        rarity_threshold: String(rarityThreshold)});
     const url = `/api/plots/1-d-histogram?${params}`
     try{
         const response = await fetch(url, {method: "GET"});
@@ -117,6 +121,7 @@ async function queryHistogram1d(columnName,tableName,minId,maxId,binCount) {
 async function queryHistogram2d(columnX,columnY,tableName,minId,maxID,bins) {
     console.log("1d histogram fetch");
     const methodsToSend = getActiveAnomalyMethods();
+    const rarityThreshold = getActiveRarityThreshold();
     const params = new URLSearchParams({
         column_x:columnX,
         column_y:columnY,
@@ -125,7 +130,8 @@ async function queryHistogram2d(columnX,columnY,tableName,minId,maxID,bins) {
         max_id: maxID,
         x_bins: bins,
         y_bins: bins,
-        anomaly_methods: JSON.stringify(methodsToSend)});
+        anomaly_methods: JSON.stringify(methodsToSend),
+        rarity_threshold: String(rarityThreshold)});
     const url = `/api/plots/2-d-histogram?${params}`
     try{
         const response = await fetch(url, {method: "GET"});
@@ -151,6 +157,7 @@ async function queryHistogram2d(columnX,columnY,tableName,minId,maxID,bins) {
 export async function querySample2d(xColumn, yColumn, tableName, minId, maxId, errorSamples, totalSamples) {
     console.log("2d sample fetch");
     const methodsToSend = getActiveAnomalyMethods();
+    const rarityThreshold = getActiveRarityThreshold();
     const params = new URLSearchParams({
         x_column:xColumn,
         y_column:yColumn,
@@ -159,7 +166,8 @@ export async function querySample2d(xColumn, yColumn, tableName, minId, maxId, e
         max_id:maxId,
         error_sample_count:errorSamples,
         total_sample_count:totalSamples,
-        anomaly_methods: JSON.stringify(methodsToSend)});
+        anomaly_methods: JSON.stringify(methodsToSend),
+        rarity_threshold: String(rarityThreshold)});
 
     const url = `/api/plots/scatterplot?${params}`
     try{
@@ -179,11 +187,13 @@ export async function querySample2d(xColumn, yColumn, tableName, minId, maxId, e
  */
 export async function queryAttributeSummaries(minId, maxId) {
     const methodsToSend = getActiveAnomalyMethods();
+    const rarityThreshold = getActiveRarityThreshold();
     const params = new URLSearchParams({
         min_id:minId,
         max_id:maxId,
         tablename: localStorage.getItem("table") || "",
-        anomaly_methods: JSON.stringify(methodsToSend)
+        anomaly_methods: JSON.stringify(methodsToSend),
+        rarity_threshold: String(rarityThreshold)
     });
 
     const url = `/api/plots/summaries?${params}`
@@ -230,5 +240,18 @@ function getActiveAnomalyMethods() {
         return normalized;
     } catch (error) {
         return defaultMethods;
+    }
+}
+
+function getActiveRarityThreshold() {
+    const fallback = 0.01;
+    try {
+        const raw = localStorage.getItem("rarityThreshold");
+        if (!raw) return fallback;
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed)) return fallback;
+        return Math.max(0, Math.min(1, parsed));
+    } catch (error) {
+        return fallback;
     }
 }

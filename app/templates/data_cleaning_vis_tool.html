@@ -28,6 +28,14 @@
           <label><input type="checkbox" class="viz-anom-method" value="zscore"> Z-score</label>
           <label><input type="checkbox" class="viz-anom-method" value="mad"> MAD</label>
           <label><input type="checkbox" class="viz-anom-method" value="iqr"> IQR</label>
+          <label for="viz-rarity-threshold" style="margin-left: 10px;">Rarity threshold:</label>
+          <select id="viz-rarity-threshold" style="height: 24px;">
+            <option value="0.005">0.5%</option>
+            <option value="0.01" selected>1%</option>
+            <option value="0.02">2%</option>
+            <option value="0.05">5%</option>
+            <option value="0.1">10%</option>
+          </select>
         </div>
         <button id="export-script">
           Export Cleaning Script

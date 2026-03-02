@@ -802,6 +802,90 @@ DB_FUNCTIONS = {
         END;
         $FUNC$;
 
+    """,
+    "detect_rarity": """
+    CREATE OR REPLACE FUNCTION detect_rarity(
+        p_table_name text,
+        p_threshold_pct numeric DEFAULT 0.01
+    )
+    RETURNS TABLE (
+        row_id integer,
+        column_name text,
+        error_type text,
+        error_value text,
+        rarity_score numeric
+    )
+    LANGUAGE plpgsql
+    AS $FUNC$
+    DECLARE
+        col RECORD;
+        query_text text;
+        tbl text;
+        threshold_pct numeric;
+    BEGIN
+        tbl := quote_ident(p_table_name);
+        threshold_pct := GREATEST(LEAST(COALESCE(p_threshold_pct, 0.01), 1), 0);
+
+        FOR col IN
+            SELECT c.column_name
+            FROM information_schema.columns c
+            WHERE c.table_name = p_table_name
+              AND c.column_name <> 'ID'
+              AND c.data_type IN ('character varying', 'character', 'text')
+        LOOP
+            query_text := format($SQL$
+                WITH cleaned AS (
+                    SELECT
+                        "ID",
+                        NULLIF(BTRIM(%1$I::text), '') AS normalized_value
+                    FROM %2$s
+                ),
+                value_counts AS (
+                    SELECT
+                        normalized_value,
+                        COUNT(*)::numeric AS value_count
+                    FROM cleaned
+                    WHERE normalized_value IS NOT NULL
+                    GROUP BY normalized_value
+                ),
+                totals AS (
+                    SELECT COALESCE(SUM(value_count), 0)::numeric AS total_count
+                    FROM value_counts
+                ),
+                rare_values AS (
+                    SELECT
+                        vc.normalized_value,
+                        CASE
+                            WHEN t.total_count > 0 THEN vc.value_count / t.total_count
+                            ELSE 0
+                        END AS rarity_score
+                    FROM value_counts vc
+                    CROSS JOIN totals t
+                    WHERE t.total_count > 0
+                      AND (vc.value_count / t.total_count) <= %3$s
+                )
+                SELECT
+                    c."ID"::int AS row_id,
+                    %4$L AS column_name,
+                    'incomplete'::text AS error_type,
+                    c.normalized_value::text AS error_value,
+                    rv.rarity_score::numeric AS rarity_score
+                FROM cleaned c
+                JOIN rare_values rv
+                  ON c.normalized_value = rv.normalized_value
+            $SQL$,
+                col.column_name,
+                tbl,
+                threshold_pct,
+                col.column_name
+            );
+
+            RETURN QUERY EXECUTE query_text;
+        END LOOP;
+
+        RETURN;
+    END;
+    $FUNC$;
     """
 
 }

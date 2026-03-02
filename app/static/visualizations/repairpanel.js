@@ -21,7 +21,7 @@ class SelectionControlPanel {
                             "missing": "Missing Values", 
                             "mismatch": "Data Type Mismatch", 
                             "anomaly": "Average Anomalies (Outliers)", 
-                            "incomplete": "Incomplete Data (< 3 points)", 
+                            "incomplete": "Rarity (Low-Frequency Values)", 
                             "none": "None"};
 
                 this.errorColors = d3.scaleOrdinal()

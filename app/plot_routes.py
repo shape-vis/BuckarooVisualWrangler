@@ -49,32 +49,55 @@ def _parse_anomaly_methods_query_arg():
     return service_helpers._normalize_anomaly_methods(anomaly_methods=parsed, allow_empty=True)
 
 
-def _create_filtered_error_table(base_table_name: str, selected_anomaly_methods):
+def _parse_rarity_threshold_query_arg(default: float = 0.01):
+    raw = request.args.get("rarity_threshold")
+    if raw is None:
+        return default
+    return service_helpers._normalize_rarity_threshold(raw, default=default)
+
+
+def _error_table_has_column(error_table_name: str, column_name: str) -> bool:
+    query = text("""
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = :table_name
+          AND column_name = :column_name
+        LIMIT 1
+    """)
+    with engine.begin() as conn:
+        result = conn.execute(query, {"table_name": error_table_name, "column_name": column_name}).first()
+    return result is not None
+
+
+def _create_filtered_error_table(base_table_name: str, selected_anomaly_methods, rarity_threshold: float = 0.01):
     default_methods = {"zscore", "mad", "iqr"}
-    if selected_anomaly_methods is None or set(selected_anomaly_methods) == default_methods:
+    if (selected_anomaly_methods is None or set(selected_anomaly_methods) == default_methods) and rarity_threshold >= 1.0:
         return f"errors{base_table_name}", None
 
     filtered_table_name = f"errors_{base_table_name}_filtered_{uuid.uuid4().hex[:10]}"
-    selected_raw_types = service_helpers.anomaly_methods_to_raw_error_types(selected_anomaly_methods)
+    where_clauses = []
+    params = {"rarity_threshold": rarity_threshold}
 
-    if selected_raw_types:
-        placeholders = []
-        params = {}
-        for idx, raw_type in enumerate(selected_raw_types):
-            key = f"raw{idx}"
-            placeholders.append(f":{key}")
-            params[key] = raw_type
-        where_clause = f"error_type <> 'anomaly' OR COALESCE(raw_error_type, '') IN ({', '.join(placeholders)})"
-        create_sql = text(
-            f'CREATE TABLE "{filtered_table_name}" AS '
-            f'SELECT * FROM "errors{base_table_name}" WHERE {where_clause}'
-        )
-    else:
-        params = {}
-        create_sql = text(
-            f'CREATE TABLE "{filtered_table_name}" AS '
-            f'SELECT * FROM "errors{base_table_name}" WHERE error_type <> \'anomaly\''
-        )
+    if selected_anomaly_methods is not None:
+        selected_raw_types = service_helpers.anomaly_methods_to_raw_error_types(selected_anomaly_methods)
+        if selected_raw_types:
+            placeholders = []
+            for idx, raw_type in enumerate(selected_raw_types):
+                key = f"raw{idx}"
+                placeholders.append(f":{key}")
+                params[key] = raw_type
+            where_clauses.append(f"(error_type <> 'anomaly' OR COALESCE(raw_error_type, '') IN ({', '.join(placeholders)}))")
+        else:
+            where_clauses.append("error_type <> 'anomaly'")
+
+    if _error_table_has_column(f"errors{base_table_name}", "rarity_score"):
+        where_clauses.append("(error_type <> 'incomplete' OR COALESCE(rarity_score, 1.0) <= :rarity_threshold)")
+
+    where_clause = " AND ".join(where_clauses) if where_clauses else "TRUE"
+    create_sql = text(
+        f'CREATE TABLE "{filtered_table_name}" AS '
+        f'SELECT * FROM "errors{base_table_name}" WHERE {where_clause}'
+    )
 
     with engine.begin() as conn:
         conn.execute(create_sql, params)
@@ -104,11 +127,12 @@ def get_1d_histogram():
     max_id = request.args.get("max_id", default=200)
     number_of_bins = request.args.get("bins", default=10)
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.01)
     error_table_name = None
     cleanup_table_name = None
 
     try:
-        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods)
+        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods, rarity_threshold)
         if USE_PANDAS_FOR_HISTOGRAMS:
             histogram = generate_1d_histogram_data(column_name, int(number_of_bins), min_id, max_id)
         else:
@@ -140,11 +164,12 @@ def get_2d_histogram():
     x_bins = request.args.get("x_bins", default=10)
     y_bins = request.args.get("y_bins", default=10)
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.01)
     error_table_name = None
     cleanup_table_name = None
 
     try:
-        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods)
+        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods, rarity_threshold)
         if USE_PANDAS_FOR_HISTOGRAMS:
 
                 histogram = query.generate_2d_histogram_data(
@@ -258,11 +283,12 @@ def get_scatterplot_data():
     error_sample_count = request.args.get("error_sample_count", default=30)
     total_sample_count = request.args.get("total_sample_count", default=100)
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.01)
     error_table_name = None
     cleanup_table_name = None
 
     try:
-        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods)
+        error_table_name, cleanup_table_name = _create_filtered_error_table(table, selected_anomaly_methods, rarity_threshold)
         if USE_PANDAS_FOR_SCATTERPLOT:
             scatterplot_data = generate_scatterplot_sample_data(x_column_name, y_column_name, int(min_id), int(max_id), int(error_sample_count), int(total_sample_count))
         else:
@@ -342,13 +368,15 @@ def attribute_summaries():
     max_id = request.args.get("max_id", default=200)
     tablename = request.args.get("tablename")
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
+    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.01)
     try:
         #get the current error table
         table_attribute_summaries = generate_complete_json(
             int(min_id),
             int(max_id),
             tablename,
-            anomaly_methods=selected_anomaly_methods
+            anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold
         )
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
