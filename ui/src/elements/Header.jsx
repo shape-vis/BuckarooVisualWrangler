@@ -1,11 +1,12 @@
 import {NavButton} from "./Buttons.jsx";
 import React, {useContext} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
+import "./Header.css"
 
 export default function Header( { onReset} ) {
   onReset = onReset || (() => {});
   return (
-    <div id="header">
+    <div id="header" className="header">
       <h1 onClick={ onReset } style={{cursor: "pointer"}}>
         Buckaroo Visual Wrangler{" "}
         <img

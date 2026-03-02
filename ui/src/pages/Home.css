@@ -12,6 +12,35 @@
     cursor: pointer;
     width: 150px;
   }
+
+/*.fullscreen-bg {*/
+/*    background-image: url('../../public/images/favicon/bg.jpg');*/
+/*    background-size: cover;*/
+/*    height: 100vh;*/
+/*}*/
+.fullscreen-bg {
+    background-image: url('../../public/images/favicon/bg.jpg');
+    background-size: cover;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 0;
+}
+
+.fullscreen-bg > :first-child {
+    align-self: stretch;
+
+}
+
+.ui-nav-box {
+    background-color: rgba(227, 248, 255, 0.85);
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    border-radius: 16px;
+}
   
 .dataset-button:hover {
     background-color: #005bab; 

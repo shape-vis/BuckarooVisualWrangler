@@ -5,8 +5,8 @@ import { useState } from 'react';
 export default function App() {
 
   // Single source of truth for whether the user uploaded
-  const [uploaded, setUploaded] = useState(localStorage.getItem("userUploaded") === "yes"); // "yes" or "no"
-  const [uploadResponse, setUploadResponse] = useState(JSON.parse(localStorage.getItem("uploadResponse"))); // e.g. "my_uploaded_file.csv"
+  const [uploaded, setUploaded] = useState(sessionStorage.getItem("userUploaded") === "yes"); // "yes" or "no"
+  const [uploadResponse, setUploadResponse] = useState(JSON.parse(sessionStorage.getItem("uploadResponse"))); // e.g. "my_uploaded_file.csv"
   // const [uploaded, setUploaded] = useState(false); // "yes" or "no"
   // const [uploadResponse, setUploadResponse] = useState(null); // e.g. "my_uploaded_file.csv"
 
@@ -18,16 +18,16 @@ export default function App() {
       {uploaded ? (
         <Buckaroo onReset={() => { 
           setUploaded(false); 
-          localStorage.setItem("userUploaded", "no"); 
-          localStorage.setItem("uploadResponse", null);}} 
+          sessionStorage.setItem("userUploaded", "no");
+          sessionStorage.setItem("uploadResponse", null);}}
           uploadResponse={uploadResponse} />
       ) : (
         // Home only handles the upload action and calls onSuccess
         <Home onSuccess={(response) => {
           setUploaded(true);
           setUploadResponse(response);
-          localStorage.setItem("userUploaded", "yes");
-          localStorage.setItem("uploadResponse", JSON.stringify(response));
+          sessionStorage.setItem("userUploaded", "yes");
+          sessionStorage.setItem("uploadResponse", JSON.stringify(response));
           console.log("Upload successful, response:", response);
         }} />
       )}
