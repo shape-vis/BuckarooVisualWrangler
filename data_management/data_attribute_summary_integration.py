@@ -8,6 +8,48 @@ from data_management.data_integration import get_filtered_dataframes
 from app import engine
 
 
+# def get_default_attributes_from_rankings(tablename, engine):
+#     """
+#     Fetch top 3 attributes from pre-computed rankings table
+#     :param tablename: Name of the data table (will be cleaned if needed)
+#     :param engine: SQLAlchemy engine
+#     :return: List of top 3 attribute names
+#     """
+#     # from app.service_helpers import clean_table_name
+#
+#     try:
+#         # cleaned_tablename = clean_table_name(tablename)
+#         rankings_table = f"rankings_{tablename}"
+#
+#         # Try exact match first
+#         try:
+#             query = f"SELECT attribute FROM {rankings_table} ORDER BY rank ASC LIMIT 3"
+#             result = pd.read_sql_query(query, engine)
+#             return result['attribute'].tolist()
+#         except Exception:
+#             # Fallback: search for similar table names (handles version suffixes)
+#             # Create pattern: if looking for "rankings_stackoverflow_db_uncleaned_version_5"
+#             # also match "rankings_stackoverflow_db_uncleaned"
+#             base_pattern = cleaned_tablename.split('_version')[0] if '_version' in cleaned_tablename else cleaned_tablename
+#             pattern = f"rankings_{base_pattern}%"
+#
+#             matching_tables = pd.read_sql_query(
+#                 "SELECT tablename FROM pg_tables WHERE tablename LIKE %s ORDER BY tablename DESC LIMIT 1",
+#                 engine,
+#                 params=(pattern,)
+#             )
+#
+#             if not matching_tables.empty:
+#                 found_table = matching_tables.iloc[0]['tablename']
+#                 query = f"SELECT attribute FROM {found_table} ORDER BY rank ASC LIMIT 3"
+#                 result = pd.read_sql_query(query, engine)
+#                 return result['attribute'].tolist()
+#             else:
+#                 return []
+#
+#     except Exception as e:
+#         print(f"Error fetching rankings for table '{tablename}': {e}")
+#         return []
 def get_default_attributes_from_rankings(tablename, engine):
     """
     Fetch top 3 attributes from pre-computed rankings table
@@ -15,11 +57,8 @@ def get_default_attributes_from_rankings(tablename, engine):
     :param engine: SQLAlchemy engine
     :return: List of top 3 attribute names
     """
-    from app.service_helpers import clean_table_name
-
     try:
-        cleaned_tablename = clean_table_name(tablename)
-        rankings_table = f"rankings_{cleaned_tablename}"
+        rankings_table = f"{tablename}_rankings"
 
         # Try exact match first
         try:
@@ -28,10 +67,10 @@ def get_default_attributes_from_rankings(tablename, engine):
             return result['attribute'].tolist()
         except Exception:
             # Fallback: search for similar table names (handles version suffixes)
-            # Create pattern: if looking for "rankings_stackoverflow_db_uncleaned_version_5"
-            # also match "rankings_stackoverflow_db_uncleaned"
-            base_pattern = cleaned_tablename.split('_version')[0] if '_version' in cleaned_tablename else cleaned_tablename
-            pattern = f"rankings_{base_pattern}%"
+            # Create pattern: if looking for "rankingsstackoverflow_db_uncleaned_version_5"
+            # also match "rankingsstackoverflow_db_uncleaned"
+            base_pattern = tablename.split('_version')[0] if '_version' in tablename else tablename
+            pattern = f"{base_pattern}%_rankings"
 
             matching_tables = pd.read_sql_query(
                 "SELECT tablename FROM pg_tables WHERE tablename LIKE %s ORDER BY tablename DESC LIMIT 1",
@@ -76,7 +115,7 @@ def generate_complete_json(min_id, max_id, tablename=None):
     if tablename:
         query = f"SELECT * FROM \"{tablename}\" WHERE index >= {min_id} AND index <= {max_id}"
         main_df = pd.read_sql_query(query, engine)
-        query = f"SELECT * FROM \"{tablename}_errors\" WHERE index >= {min_id} AND index <= {max_id}"
+        query = f"SELECT * FROM \"errors_{tablename}\" WHERE index >= {min_id} AND index <= {max_id}"
         error_df = pd.read_sql_query(query, engine)
         error_list = get_error_dist(error_df, main_df).to_dict('records')
 

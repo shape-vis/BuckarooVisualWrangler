@@ -1,17 +1,23 @@
 #Buckaroo Project - July 2, 2025,
 #This file handles all endpoints surrounding plots
+import hashlib
+import json
+from pathlib import Path
 
 from flask import request
 import pandas as pd
 import traceback
 
 from app import app, engine, service_helpers, data_state_manager
-from app.service_helpers import group_by_attribute, clean_table_name, get_whole_table_query
+from app.service_helpers import group_by_attribute, get_whole_table_query
 from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
 from data_management.data_scatterplot_integration import generate_scatterplot_sample_data
 
 import math
+
+from postgres_wrangling import dataframe_store
+
 
 def replace_nan(obj):
     if isinstance(obj, dict):
@@ -88,14 +94,14 @@ def get_top_error_rows():
     num_rows = request.args.get("num_rows", default=10)
 
     try:
-        top_errors_query = f"SELECT * FROM \"{table}_errors\" WHERE row_id IN (  SELECT row_id   FROM \"{table}_errors\"   GROUP BY row_id   ORDER BY COUNT(*) DESC   LIMIT {num_rows} ) ORDER BY row_id;"
+        top_errors_query = f"SELECT * FROM \"errors_{table}\" WHERE row_id IN (  SELECT row_id   FROM \"errors_{table}\"   GROUP BY row_id   ORDER BY COUNT(*) DESC   LIMIT {num_rows} ) ORDER BY row_id;"
         top_errors_result = pd.read_sql_query(top_errors_query, engine)
 
         print(f"### Top errors query: {top_errors_query}")
         print(f"### Top errors result: {top_errors_result}")
 
         # top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"{table}_errors\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"index\" = t.row_id;"
-        top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"{table}_errors\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"ID\" = t.row_id;"
+        top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"errors_{table}\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"ID\" = t.row_id;"
         top_data_result = pd.read_sql_query(top_data_query, engine)
 
         print(f"### Top data query: {top_data_query}")
