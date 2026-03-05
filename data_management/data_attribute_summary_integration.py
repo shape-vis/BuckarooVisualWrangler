@@ -15,8 +15,11 @@ def get_default_attributes_from_rankings(tablename, engine):
     :param engine: SQLAlchemy engine
     :return: List of top 3 attribute names
     """
+    from app.service_helpers import clean_table_name
+
     try:
-        rankings_table = f"{tablename}_rankings"
+        cleaned_tablename = clean_table_name(tablename)
+        rankings_table = f"rankings_{cleaned_tablename}"
 
         # Try exact match first
         try:
@@ -25,10 +28,10 @@ def get_default_attributes_from_rankings(tablename, engine):
             return result['attribute'].tolist()
         except Exception:
             # Fallback: search for similar table names (handles version suffixes)
-            # Create pattern: if looking for "rankingsstackoverflow_db_uncleaned_version_5"
-            # also match "rankingsstackoverflow_db_uncleaned"
-            base_pattern = tablename.split('_version')[0] if '_version' in tablename else tablename
-            pattern = f"{base_pattern}%_rankings"
+            # Create pattern: if looking for "rankings_stackoverflow_db_uncleaned_version_5"
+            # also match "rankings_stackoverflow_db_uncleaned"
+            base_pattern = cleaned_tablename.split('_version')[0] if '_version' in cleaned_tablename else cleaned_tablename
+            pattern = f"rankings_{base_pattern}%"
 
             matching_tables = pd.read_sql_query(
                 "SELECT tablename FROM pg_tables WHERE tablename LIKE %s ORDER BY tablename DESC LIMIT 1",
@@ -63,6 +66,7 @@ def generate_complete_json(min_id, max_id, tablename=None):
     :param tablename: name of the table (optional, for fetching default attributes)
     :return: JSON representation of the data state
     """
+    from app import engine
 
     # main_df, error_df = get_filtered_dataframes(min_id, max_id)
     # error_list = get_error_dist(error_df, main_df).to_dict('records')
@@ -75,7 +79,7 @@ def generate_complete_json(min_id, max_id, tablename=None):
         query = f"SELECT * FROM \"{tablename}_errors\" WHERE index >= {min_id} AND index <= {max_id}"
         error_df = pd.read_sql_query(query, engine)
         error_list = get_error_dist(error_df, main_df).to_dict('records')
-    
+
 
     default_attributes = []
     if tablename:
@@ -135,7 +139,8 @@ def get_numeric_stats(df, column):
     :return: dictionary containing statistics for the numeric column
     """
     df = df[pd.to_numeric(df[column], errors='coerce').notna()]
-    df[column] = df[column].astype('int64')
+    # Convert to numeric (handles both int and float)
+    df[column] = pd.to_numeric(df[column], errors='coerce')
     return {
         "numeric": {
             "mean": df[column].mean().item(),

@@ -32,11 +32,11 @@ def load_file(csv_file, filename):
     try:
         #insert the undetected dataframe
         rows_inserted = table_with_id_added.to_sql(table_name, engine, if_exists='replace')
-        detected_rows_inserted = detected_data.to_sql(table_name+"_errors", engine, if_exists='replace')
+        detected_rows_inserted = detected_data.to_sql("errors_"+table_name, engine, if_exists='replace')
 
         # Calculate and store attribute rankings
         rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql(table_name+"_rankings", engine, if_exists='replace', index=False)
+        rankings.to_sql("rankings_"+table_name, engine, if_exists='replace', index=False)
 
         return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted, "table_name": table_name}
     except Exception as e:
@@ -44,7 +44,7 @@ def load_file(csv_file, filename):
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
-        
+
 
 @app.post("/api/upload")
 def upload_csv():
@@ -56,7 +56,7 @@ def upload_csv():
     csv_file = request.files['file']
     return load_file(csv_file, csv_file.filename)
 
-    
+
 @app.get("/api/preloaded")
 def preloaded_csv():
     """
@@ -69,7 +69,7 @@ def preloaded_csv():
 
     return load_file("provided_datasets/" + csv_file, csv_file)
 
-        
+
 
 @app.get("/api/get-sample")
 def get_sample():
@@ -82,7 +82,7 @@ def get_sample():
 
     if not table_name:
         return {"success": False, "error": "Table name required"}
-    
+
     QUERY = get_whole_table_query(table_name,False) + " LIMIT "+ data_size
     try:
         fetch_detected_and_undetected_current_dataset_from_db(table_name,engine)

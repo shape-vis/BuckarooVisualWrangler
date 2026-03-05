@@ -30,7 +30,7 @@ def _is_numeric(conn, col: str, table_name: str) -> bool:
 
 def _get_errors_table(table: str) -> str:
     """Get errors table name for given table."""
-    return f"errors{table}"
+    return f"errors_{table}"
 
 
 def _get_row_count(conn, table: str) -> int:
@@ -189,6 +189,42 @@ def impute_by_ids(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
         )
 
         return len(ids), result.rowcount
+
+
+def delete_column(table: str, column: str) -> int:
+    """
+    Delete a column from a table in-place.
+
+    Parameters
+    ----------
+    table : str
+        Table name to modify
+    column : str
+        Column name to delete
+
+    Returns
+    -------
+    int
+        Number of columns remaining in table
+    """
+    with engine.begin() as conn:
+        # Drop the column
+        conn.execute(
+            text(f'ALTER TABLE "{table}" DROP COLUMN IF EXISTS "{column}"')
+        )
+
+        # Count remaining columns
+        result = conn.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_name = :table
+            """),
+            {"table": table}
+        )
+        n_cols = result.scalar_one()
+
+    return n_cols
 
 
 # ─────────────────────────────────────────────────────────────────────────────
