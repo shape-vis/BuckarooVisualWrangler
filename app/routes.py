@@ -17,6 +17,18 @@ import random
 import string
 
 def load_file(csv_file, filename):
+    """
+    This loads the csv from the local path of the repo that the user clicked;
+    set's IDs to each row,
+    puts the whole csv into a Pandas Dataframe,
+    runs the python detectors the dataframe,
+    generates a unique name for the table,
+    and returns a JSON object of all the info.
+
+    :param csv_file: the local csv to use
+    :param filename: the name of the csv_file
+    :return: json object
+    """
     dataframe = pd.read_csv(csv_file)
 
     # run the detectors on the uploaded file for the starting data state
@@ -30,15 +42,22 @@ def load_file(csv_file, filename):
     json.dump({'table': table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{table_name}.json", "w"))
 
     try:
-        #insert the undetected dataframe
-        rows_inserted = table_with_id_added.to_sql(table_name, engine, if_exists='replace')
-        detected_rows_inserted = detected_data.to_sql("errors_"+table_name, engine, if_exists='replace')
+        """
+        pulled from the Pandas Docs for reference because these values returned by .to_sql is not the actual numbers:
+
+        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
+
+        The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
+        connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
+        """
+        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace')
+        detected_rows_affected = detected_data.to_sql("errors_"+table_name, engine, if_exists='replace')
 
         # Calculate and store attribute rankings
         rankings = calculate_attribute_rankings(detected_data)
         rankings.to_sql("rankings_"+table_name, engine, if_exists='replace', index=False)
 
-        return{"success": True, "rows for undetected data": rows_inserted, "rows_for_detected": detected_rows_inserted, "table_name": table_name}
+        return{"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected, "table_name": table_name}
     except Exception as e:
         print(f"Error in upload: {e}")
         import traceback

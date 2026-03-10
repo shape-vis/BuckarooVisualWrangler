@@ -1,6 +1,19 @@
 from execute_sql import fetch_sql
 from filtering_sql import FilteringSQL
 
+"""
+Provides two classes for querying and visualizing data from a PostgreSQL database table,
+with support for data filtering and error annotation overlays on all chart types.
+
+--- ColumnTypes ---
+Inspects a table's schema to classify each column as numeric, categorical, or mixed-type.
+
+--- DBOperations ---
+Wraps all core DB operations for a single primary table. Builds and executes multi-step
+CTE SQL queries that produce JSON payloads for 1D histograms, 2D histograms, and scatterplots,
+each annotated with per-bin/per-point error breakdowns. Also manages row-level data filters.
+"""
+
 class ColumnTypes:
     def __init__(self, main_table_name: str, engine):
         self.numeric_cols = set()

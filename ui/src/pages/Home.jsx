@@ -96,7 +96,7 @@ export default function Home( { onSuccess } ) {
             <div style={{ display: "flex", margin: "auto", justifyContent: "center", gap: 12 }}>
               <div
                 className="dataset-button"
-                onClick={() => loadDataset("stackoverflow_db_uncleaned.csv")}
+                onClick={() => loadDataset("stackoverflow_db_uncleaned_original.csv")}
                 role="button"
                 tabIndex={0}
               >
