@@ -1,5 +1,9 @@
 from sqlalchemy import text
 
+"""
+Thin wrapper around SQLAlchemy for executing and fetching results from a PostgreSQL database.
+"""
+
 def execute_sql(query: str, engine):
     """
     Executes given SQL query to the postgres database.

@@ -1,5 +1,11 @@
 from execute_sql import execute_sql
 
+"""
+Manages a persistent PostgreSQL filtering table that tracks which row IDs satisfy the
+currently active set of filters. This table is then joined against by DBOperations to
+scope all histogram and scatterplot queries to only the matching rows.
+"""
+
 class FilteringSQL:
     def __init__(self, main_table_name, engine):
         self.applied_filters = {}
