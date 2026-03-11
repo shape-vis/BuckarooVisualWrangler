@@ -30,3 +30,4 @@ def fetch_sql(query: str, scalar: bool, engine):
             return result.fetchall()
 
         return None
+

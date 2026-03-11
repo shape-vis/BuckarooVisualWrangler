@@ -10,6 +10,7 @@ from flask import Flask
 from sqlalchemy import create_engine
 import json
 
+from app.db_functions_sql import DBOperations
 from data_management.data_state import DataState
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 # from data_management.data_integration import *
@@ -80,6 +81,10 @@ app = Flask(__name__,
 
 host, port, user, password, db_name = load_database_info()
 
+"""
+we use psycopg2 directly for the initial connection
+ but only for the one-time database creation check at startup
+"""
 connection = psycopg2.connect(host=host, port=port, user=user, password=password)
 
 # Create the database if it does not exist
@@ -87,8 +92,15 @@ create_database_if_not_exists(connection, db_name)
 
 data_state_manager = DataState()
 
-#engine to use pandas with the db
+"""
+ then we use SQLAlchemy (create_engine) for everything else
+ this is the engine that gets passed around to fetch_sql, execute_sql, 
+ pd.read_sql_query, and .to_sql() throughout routes.py, plot_routes.py, and db_operations.py
+"""
+print(f"Connecting to database: {db_name}")
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
+
+db_operations = DBOperations(engine)
 
 # Initialize PostgreSQL stored procedures for histogram generation with errors
 from app.db_functions import initialize_database_functions

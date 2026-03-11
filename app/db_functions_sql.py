@@ -1,6 +1,5 @@
-from execute_sql import fetch_sql
-from filtering_sql import FilteringSQL
-
+from .filtering_sql import FilteringSQL
+from .execute_sql import fetch_sql
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
 with support for data filtering and error annotation overlays on all chart types.
@@ -18,6 +17,7 @@ class ColumnTypes:
     def __init__(self, main_table_name: str, engine):
         self.numeric_cols = set()
         self.categorical_mixed = set()
+        self.pure_categorical = set()
         self.engine = engine
         self.gather_numeric_cols(main_table_name)
         self.gather_mixed_cols(main_table_name)
@@ -28,9 +28,11 @@ class ColumnTypes:
         Distinguishes the numeric columns from the categorical columns.
         :arg: main_table_name: name of the main table.
         """
+
+
         fetch_col_types = f'''SELECT column_name, data_type
                               FROM information_schema.columns
-                              WHERE table_name = "{main_table_name}";'''
+                              WHERE table_name = '{main_table_name}';'''
 
         fetched_rows = fetch_sql(fetch_col_types, False, self.engine)
         if fetched_rows:
@@ -66,28 +68,32 @@ class ColumnTypes:
         # Initialized in the other constructor func gather_numeric_cols. This starts as all categorical columns.
         # Stop early if a mixed type is found, since that makes the entire column of mixed type.
         queries = [
-            f"""
-                SELECT "{col}" AS column_name
+            f"""(
+                SELECT '{col}' AS column_name
                 FROM "{main_table_name}"
                 WHERE "{col}" ~ {numeric_regex}
                 LIMIT 1
-                """
+            )"""
             for col in self.categorical_mixed
         ]
 
         fetch_mixed_types = "\nUNION ALL\n".join(queries)
         mixed_cols = fetch_sql(fetch_mixed_types, False, self.engine)
 
-        self.categorical_mixed = set(row[0] for row in mixed_cols)
+        mixed_col_names = set(row[0] for row in mixed_cols) if mixed_cols else set()
+        self.pure_categorical = self.categorical_mixed - mixed_col_names
+        self.categorical_mixed = mixed_col_names
 
+    def is_categorical_col(self, col_name: str):
+        return col_name in self.pure_categorical
 
     def is_numeric_col(self, col_name: str):
-        """
-        Determines whether the given column from the table used to construct this class is numeric.
-        :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
-        :return: whether the given col_name is numeric.
-        """
-        return col_name in self.numeric_cols
+            """
+            Determines whether the given column from the table used to construct this class is numeric.
+            :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+            :return: whether the given col_name is numeric.
+            """
+            return col_name in self.numeric_cols
 
 
     def is_mixed_col(self, col_name: str):
@@ -101,12 +107,37 @@ class ColumnTypes:
 
 # Wraps up all Core DBOperations into one class using a primary main_table.
 class DBOperations:
-    def __init__(self, main_table_name: str, engine):
+    def __init__(self, engine):
+        """
+        This inits the DBOperations class right after the engine is created so that it can be reloaded
+        later on with a different CSV, also so that other classes can access the engine w/out this class
+        being fully initialized like in the plot routes upload endpoint
+        :param engine: SQLAlchemy engine
+        """
+        self.engine = engine
+        self.main_table_name = None
+        self.error_table_name = None
+        self.col_types = None
+        self.filtering_table = None
+
+    def load_table(self, main_table_name: str):
+        """
+        Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new
+        table
+        :param main_table_name: the name of the table in the database without errors detected (raw data)
+        """
         self.main_table_name = main_table_name
         self.error_table_name = "errors_" + main_table_name
-        self.engine = engine
-        self.col_types = ColumnTypes(main_table_name, engine)
-        self.filtering_table = FilteringSQL(main_table_name, engine)
+        self.col_types = ColumnTypes(main_table_name, self.engine)
+        self.filtering_table = FilteringSQL(main_table_name, self.engine)
+
+    def get_row_count(self, table_name: str) -> int:
+        """
+        Returns the actual row count of a table directly from the database.
+        :arg: table_name: name of the table to count rows from.
+        :return: the number of rows in the table.
+        """
+        return fetch_sql(f'SELECT COUNT(*) FROM "{table_name}"', True, self.engine)
 
 
     def add_data_filters(self, sql_filters) -> dict:

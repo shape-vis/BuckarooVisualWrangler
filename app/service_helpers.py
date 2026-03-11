@@ -1,12 +1,11 @@
-#Buckaroo Project - June 1, 2025
+#Buckaroo Project - started: June 1, 2025
 #This file helps deliver on endpoint services
 
 import random
 import string
 import re
-
+from sqlalchemy import types as sql_types
 import pandas as pd
-
 from app import data_state_manager
 from app.set_id_column import set_id_column
 from detectors.anomaly import anomaly
@@ -296,6 +295,26 @@ def is_categorical(column_a):
         return True
     else:
         return False
+
+def get_sqlalchemy_dtype_map(df):
+    """
+    Builds a dtype map for .to_sql() by inspecting the actual values in each column
+    to find the majority type, so messy/mixed columns get cast correctly in PostgreSQL.
+    :param df: the dataframe to inspect
+    :return: dict mapping column name to SQLAlchemy type
+    """
+    dtype_map = {}
+    for col in df.columns:
+        if is_categorical(df[col]):
+            dtype_map[col] = sql_types.Text()
+        else:
+            # Majority of values are numeric - check if they are all integers
+            numeric_series = pd.to_numeric(df[col], errors='coerce').dropna()
+            if (numeric_series == numeric_series.astype(int)).all():
+                dtype_map[col] = sql_types.BigInteger()
+            else:
+                dtype_map[col] = sql_types.Float()
+    return dtype_map
 
 def create_bins_for_a_numeric_column(column,bin_count):
     """

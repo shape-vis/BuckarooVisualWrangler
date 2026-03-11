@@ -1,4 +1,5 @@
-from execute_sql import execute_sql
+
+from .execute_sql import fetch_sql, execute_sql
 
 """
 Manages a persistent PostgreSQL filtering table that tracks which row IDs satisfy the

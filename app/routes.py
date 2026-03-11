@@ -6,11 +6,9 @@ import numpy as np
 import pandas as pd
 from flask import request, render_template, send_file
 import time
-from app import app
+from app import app, db_operations
 from app import connection, engine
-from app.service_helpers import generate_table_name, get_whole_table_query, run_detectors, create_error_dict, \
-    init_session_data_state, fetch_detected_and_undetected_current_dataset_from_db, calculate_attribute_rankings
-from app import data_state_manager
+from app.service_helpers import *
 from app.set_id_column import set_id_column
 import json
 import random
@@ -39,6 +37,9 @@ def load_file(csv_file, filename):
 
     table_name = generate_table_name(filename)
 
+    # Build dtype map from actual column values before pushing to DB
+    dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
+
     json.dump({'table': table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{table_name}.json", "w"))
 
     try:
@@ -50,10 +51,18 @@ def load_file(csv_file, filename):
         The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
         """
-        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace')
+        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace',dtype=dtype_map)
         detected_rows_affected = detected_data.to_sql("errors_"+table_name, engine, if_exists='replace')
 
-        # Calculate and store attribute rankings
+        """
+        now we fully init the DBOperations object that was first initialized in init.py,
+        get the actual row counts since .to_sql is buggy and not right
+        """
+        db_operations.load_table(table_name)
+        rows_affected = db_operations.get_row_count(table_name)
+        detected_rows_affected = db_operations.get_row_count("errors_" + table_name)
+
+        #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
         rankings = calculate_attribute_rankings(detected_data)
         rankings.to_sql("rankings_"+table_name, engine, if_exists='replace', index=False)
 
