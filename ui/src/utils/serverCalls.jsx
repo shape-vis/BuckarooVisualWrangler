@@ -134,6 +134,40 @@ export async function wranglePreview(table, currentSelection, cols, method) {
         console.error("[wranglePreview]", error.message);
     }
 }
+/**
+ * POST /api/filter/add
+ * Registers a selection as a SQL filter in FilteringSQL.
+ * All plots will re-fetch scoped to matching rows after this.
+ */
+export async function filterAdd(table, selection) {
+    try {
+        const response = await fetch("/api/filter/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table, selection }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[filterAdd]", error.message);
+    }
+}
+
+/**
+ * POST /api/filter/clear
+ * Removes specific filter indices (or all if indices is empty).
+ */
+export async function filterClear(filterIndices = []) {
+    try {
+        const response = await fetch("/api/filter/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filterIndices }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[filterClear]", error.message);
+    }
+}
 
 export {
     uploadFileToDB,
@@ -155,6 +189,8 @@ const serverCalls = {
     wrangleRemove,
     wrangleImpute,
     wranglePreview,
+    filterAdd,
+    filterClear,
 };
 
 export default serverCalls;
@@ -162,3 +198,4 @@ export default serverCalls;
 if (typeof window !== "undefined") {
     window.serverCalls = serverCalls;
 }
+
