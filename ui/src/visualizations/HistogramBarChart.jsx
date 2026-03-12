@@ -30,8 +30,6 @@ export default function HistogramBarChart({
     const [histogramData, setHistogramData] = React.useState(null);
 
     useEffect(() => {
-
-        // Fetch histogram data for the selected table/attribute.
         /**
          * Fetch histogram data for the selected table/attribute.
          * @returns {Promise<void>}
@@ -137,7 +135,17 @@ export default function HistogramBarChart({
             .attr("cursor", "pointer")
             .attr("stroke-width", 2);
 
-        // console.log("[HistogramBarChart] Bars created:", bars.size());
+        // Helper to push current selection to context
+        function pushSelection(currentSelected) {
+            setSelection({
+                table: table_name,
+                viewType: "barchart",
+                cols: [attrX],
+                data: currentSelected,
+                scaleX: histogramData.scaleX,
+                scaleY: null,
+            });
+        }
 
         // Horizontal brush interaction.
         const brush = d3.brushX()
@@ -199,9 +207,6 @@ export default function HistogramBarChart({
                 return `<strong>Bin: </strong>${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
             },
             (d, event) => {
-                // if (selectionControlPanel && typeof selectionControlPanel.clearSelection === "function") {
-                //   selectionControlPanel.clearSelection(canvas);
-                // }
 
                 if (event.shiftKey) {
                     if (selected.includes(d)) selected = selected.filter(item => item !== d);
@@ -209,21 +214,7 @@ export default function HistogramBarChart({
                 } else {
                     selected = [d];
                 }
-
                 bars.attr("fill", barColor);
-
-                // if (selectionControlPanel && typeof selectionControlPanel.setSelection === "function") {
-                //   selectionControlPanel.setSelection(svg, "barchart", [model, view, svg, givenData, xCol], {
-                //     data: selected,
-                //     scaleX: histogramData.scaleX,
-                //     scaleY: histogramData.scaleY,
-                //   }, () => {
-                //     console.log("Selection cleared");
-                //     selected = [];
-                //     bars.attr("fill", barColor);
-                //   });
-                // }
-
             },
             (d) => {
                 console.log("Right click on bar", d);
@@ -239,21 +230,14 @@ export default function HistogramBarChart({
 
     }, [size, histogramData ]);
 
-
-
-    /**
-     * Clear any active brush selection and restore default colors.
-     * @returns {void}
-     */
-    // Clear selection on background click.
-    function clearSelection() {
+    function handleBackgroundClick() {
         clearSelectionRef.current();
     }
 
 
     return (
         <g key={cellID} transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
-            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearSelection}  />
+            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={handleBackgroundClick} />
             <g ref={drawingRef}></g>
         </g>
     );
