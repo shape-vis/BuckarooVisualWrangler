@@ -11,9 +11,7 @@ from sqlalchemy import create_engine
 import json
 
 from app.db_functions_sql import DBOperations
-from data_management.data_state import DataState
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-# from data_management.data_integration import *
 
 
 # Function to create the database if it does not exist
@@ -90,7 +88,7 @@ connection = psycopg2.connect(host=host, port=port, user=user, password=password
 # Create the database if it does not exist
 create_database_if_not_exists(connection, db_name)
 
-data_state_manager = DataState()
+
 
 """
  then we use SQLAlchemy (create_engine) for everything else

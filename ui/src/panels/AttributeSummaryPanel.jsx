@@ -99,16 +99,29 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
         <div style={{display: "flex", alignItems: "center", gap: 6}}>
           <span title={attr} style={{fontSize: 16, fontWeight: 700, marginRight: 6}}>{truncateText(attr.toLowerCase(), Math.max(5, 18 - errorEntries.length * 3))}</span>
 
-          {errorEntries.map(([type, pct]) => (
-            <span
-              key={type}
-              title={`${type}: ${(pct * 100).toFixed(1)}% of entries`}
-              className="error-scent"
-              style={{backgroundColor: errorColors(type)}}
-            >
-              {Math.round(pct * 100)}%
-            </span>
-          ))}
+          {/*{errorEntries.map(([type, pct]) => (*/}
+          {/*  <span*/}
+          {/*    key={type}*/}
+          {/*    title={`${type}: ${(pct * 100).toFixed(1)}% of entries`}*/}
+          {/*    className="error-scent"*/}
+          {/*    style={{backgroundColor: errorColors(type)}}*/}
+          {/*  >*/}
+          {/*    {Math.round(pct * 100)}%*/}
+          {/*  </span>*/}
+          {/*))}*/}
+          {errorEntries.length > 0
+              ? errorEntries.map(([type, pct]) => (
+              <span
+                  key={type}
+                  title={`${type}: ${(pct * 100).toFixed(1)}% of entries`}
+                  className="error-scent"
+                  style={{backgroundColor: errorColors(type)}}
+                >
+                  {Math.round(pct * 100)}%
+              </span>
+            ))
+          : <span className="error-scent" style={{backgroundColor: "steelblue"}}>✓</span>
+        }
         </div>
 
         <div className="column-stats">

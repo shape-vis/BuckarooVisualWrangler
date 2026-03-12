@@ -422,7 +422,7 @@ class DBOperations:
 
         hist_2d_steps = [self.gather_filtered_rows(x_axis_column, y_axis_column),
                          self.generate_2d_hist_bounds(x_bound_table, x_axis_column, x_alias),
-                         self.generate_2d_hist_bounds(x_bound_table, y_axis_column, y_alias),
+                         self.generate_2d_hist_bounds(y_bound_table, y_axis_column, y_alias),
                          self.gather_bins_2d_hist(x_axis_column, y_axis_column, x_bin_count, y_bin_count, x_alias, y_alias, x_bound_table, y_bound_table),
                          self.errors_per_bin_2d_hist(x_axis_column, y_axis_column),
                          self.form_final_2d_hist_bins(),
@@ -509,13 +509,13 @@ class DBOperations:
                 SELECT
                     d."ID",
                     CASE
-                        WHEN d.value IS NULL THEN 'null'  -- Handle NULL values first
+                        WHEN d.x_value IS NULL THEN 'null'
                         ELSE {axis_queries[0]}
                     END as x_bin,
                     CASE
-                        WHEN d.value IS NULL THEN 'null'  -- Handle NULL values first
+                        WHEN d.y_value IS NULL THEN 'null'
                         ELSE {axis_queries[1]}
-                    END as y_bin,
+                    END as y_bin
                 FROM data_rows d
             )'''
 
@@ -735,7 +735,7 @@ class DBOperations:
                 (
                     -- Sample error rows
                     SELECT e.row_id
-                    FROM {self.error_table_name} e
+                    FROM "{self.error_table_name}" e
                     {data_row_filtering_error}
                     WHERE e.column_id IN ('{x_axis_column}', '{y_axis_column}')
                     ORDER BY RANDOM()
@@ -745,11 +745,11 @@ class DBOperations:
                 (
                     -- Sample clean rows to fill quota
                     SELECT "ID" as row_id
-                    FROM {self.main_table_name}
+                    FROM "{self.main_table_name}"
                     {data_row_filtering_main}
                     WHERE "ID" NOT IN (
                           SELECT DISTINCT row_id
-                          FROM {self.error_table_name}
+                          FROM "{self.error_table_name}"
                           WHERE column_id IN ('{x_axis_column}', '{y_axis_column}')
                     )
                     ORDER BY RANDOM()
@@ -771,8 +771,8 @@ class DBOperations:
             sampled_data AS (
                 SELECT
                     m."ID",
-                    m.{x_axis_column} as x_value,
-                    m.{y_axis_column} as y_value,
+                    m."{x_axis_column}" as x_value,
+                    m."{y_axis_column}" as y_value,
                     COALESCE(
                         json_agg(e.error_type) FILTER (WHERE e.error_type IS NOT NULL),
                         '[]'::json
@@ -780,7 +780,7 @@ class DBOperations:
                 FROM all_sampled_ids s
                 JOIN "{self.main_table_name}" m ON s.row_id = m."ID"
                 LEFT JOIN "{self.error_table_name}" e ON s.row_id = e.row_id AND e.column_id IN ('{x_axis_column}', '{y_axis_column}')
-                GROUP BY m."ID", m.{x_axis_column}, m.{y_axis_column}
+                GROUP BY m."ID", m."{x_axis_column}", m."{y_axis_column}"
             )'''
 
 
@@ -882,9 +882,9 @@ class DBOperations:
 
             if self.col_types.is_numeric_col(axis_column):
                 axis_numeric_info = f'''json_build_array(
-                            min_val FROM {bounding_table},
-                            max_val + 1 FROM {bounding_table}
-                        )'''
+                    (SELECT min_val FROM {bounding_table}),
+                    (SELECT max_val + 1 FROM {bounding_table})
+                )'''
             elif self.col_types.is_mixed_col(axis_column):
                 axis_numeric_info = f'''json_build_array(
                             (SELECT COALESCE(MIN({axis_alias}::numeric), 0) FROM sampled_data
