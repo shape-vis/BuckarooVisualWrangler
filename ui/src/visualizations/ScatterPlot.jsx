@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { querySample2d } from "../utils/serverCalls.jsx";
+import {SelectionContext} from "../utils/SelectionContext.jsx";
 
 /**
  * Props expected:

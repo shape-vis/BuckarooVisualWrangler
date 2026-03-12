@@ -2,6 +2,7 @@ import React, {useEffect, useRef} from "react";
 import * as d3 from "d3";
 import { queryHistogram1d } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import {SelectionContext} from "../utils/SelectionContext.jsx";
 
 /**
  * HistogramBarChart renders a stacked histogram with optional brushing/selection.

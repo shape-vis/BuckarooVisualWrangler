@@ -3,6 +3,7 @@ import '@xyflow/react/dist/style.css';
 import {useState, useCallback, Activity} from 'react'
 import { applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
 import {TextUpdaterNode} from "../../../../pgraph-scratch/src/TextUpdaterNode.jsx";
+import {SelectionContext} from "../utils/SelectionContext.jsx";
 
 const nodeTypes = {
     textUpdater: TextUpdaterNode

@@ -3,7 +3,7 @@ import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
 import RepairPanel from "../panels/RepairPanel.jsx";
-
+import {SelectionContext} from "../utils/SelectionContext.jsx";
 import "./Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";

@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 // import * as d3 from "d3";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
-
+import {SelectionContext} from "../utils/SelectionContext.jsx";
 import "./RepairPanel.css";
 
 /**
