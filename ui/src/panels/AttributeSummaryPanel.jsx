@@ -117,7 +117,7 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
                   className="error-scent"
                   style={{backgroundColor: errorColors(type)}}
                 >
-                  {Math.round(pct * 100)}%
+                  {(pct * 100).toFixed(2)}%
               </span>
             ))
           : <span className="error-scent" style={{backgroundColor: "steelblue"}}>✓</span>

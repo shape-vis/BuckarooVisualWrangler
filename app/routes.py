@@ -40,7 +40,7 @@ def load_file(csv_file, filename):
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
 
-    json.dump({'table': table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{table_name}.json", "w"))
+    # json.dump({'table': table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{table_name}.json", "w"))
 
     try:
         """
