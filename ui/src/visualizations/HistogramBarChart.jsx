@@ -15,12 +15,12 @@ export default function HistogramBarChart({
 }) {
     const drawingRef = useRef(null);
     const clearSelectionRef = useRef(() => {});
+    const barsRef = useRef(null);
 
     const [histogramData, setHistogramData] = React.useState(null);
 
     const { selection, filterVersion, addFilter, clearFilters } = useSelection();
 
-    // Re-fetch when filter changes
     // Re-fetch when filter changes
     useEffect(() => {
         async function fetchData() {
@@ -36,6 +36,14 @@ export default function HistogramBarChart({
         }
         fetchData();
     }, [table_name, attrX, filterVersion]);
+
+    // Re-color bars on cross-plot selection change (no re-fetch needed)
+    useEffect(() => {
+        if (!barsRef.current) return;
+        const colorScale = errorColors || (k => "steelblue");
+        const currentSelection = selection;
+        barsRef.current.attr("fill", d => isBarHighlighted(d, currentSelection, attrX) ? "gold" : colorScale(d.name));
+    }, [selection]);
 
     useEffect(() => {
         if (!histogramData) return;
@@ -70,7 +78,7 @@ export default function HistogramBarChart({
         });
 
         let localSelected = [];
-        const barColor = d => (localSelected.includes(d) || isBarHighlighted(d, selection)) ? "gold" : colorScale(d.name);
+        const barColor = d => localSelected.includes(d) ? "gold" : colorScale(d.name);
 
         const brushGroup = canvas.append("g").attr("class", "histogram-brush");
 
@@ -89,6 +97,7 @@ export default function HistogramBarChart({
             .attr("cursor", "pointer")
             .attr("stroke-width", 2);
 
+        barsRef.current = bars;
 
         function pushFilter(currentSelected) {
             addFilter({
@@ -170,34 +179,48 @@ export default function HistogramBarChart({
         );
 
         return () => { canvas.selectAll("*").remove(); };
-    }, [size, histogramData, selection]);
+    }, [size, histogramData]);
 
-    function handleBackgroundClick() {
+    function handleDeselect(e) {
+        e.preventDefault();
         clearSelectionRef.current();
     }
 
     return (
         <g key={cellID} transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
-            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={handleBackgroundClick} />
+            <rect width={size.w} height={size.h} fill="#ffffff00" onContextMenu={handleDeselect} />
             <g ref={drawingRef}></g>
         </g>
     );
 }
 
 // ── cross-plot highlight helpers ─────────────────────────────────────────────
-function isBarHighlighted(barDatum, selection) {
+function isBarHighlighted(barDatum, selection, attrX) {
     if (!selection) return false;
+
     if (selection.viewType === "barchart") {
+        if (selection.cols[0] !== attrX) return false;
         return selection.data.some(sel => sel.bin === barDatum.bin && sel.type === barDatum.type);
     }
+
     if (selection.viewType === "heatmap") {
-        return selection.data.some(sel => sel.xBin === barDatum.bin && sel.xType === barDatum.type);
+        const xCol = selection.cols[0], yCol = selection.cols[1];
+        if (xCol === attrX)
+            return selection.data.some(sel => sel.xBin === barDatum.bin && sel.xType === barDatum.type);
+        if (yCol === attrX)
+            return selection.data.some(sel => sel.yBin === barDatum.bin && sel.yType === barDatum.type);
+        return false;
     }
+
     if (selection.viewType === "scatterplot") {
-        return selection.data.some(point =>
-            _valueInBin(point.x, barDatum.bin, barDatum.type, selection.scaleX)
-        );
+        const xCol = selection.cols[0], yCol = selection.cols[1];
+        if (xCol === attrX)
+            return selection.data.some(point => _valueInBin(point.x, barDatum.bin, barDatum.type, selection.scaleX));
+        if (yCol === attrX)
+            return selection.data.some(point => _valueInBin(point.y, barDatum.bin, barDatum.type, selection.scaleY));
+        return false;
     }
+
     return false;
 }
 

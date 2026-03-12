@@ -23,6 +23,7 @@ export default function ScatterPlot({
 
   const { selection, filterVersion, addFilter, clearFilters } = useSelection();
 
+  const circlesRef = useRef(null);
   const selectedRef = useRef([]);
 
   // Re-fetch when filter changes
@@ -43,6 +44,18 @@ export default function ScatterPlot({
     }
     fetchData();
   }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount, filterVersion]);
+
+  // Re-color circles on cross-plot selection change (no re-fetch needed)
+  useEffect(() => {
+    if (!circlesRef.current || !sampleData) return;
+    const colorScale = errorColors || (() => "steelblue");
+    const currentSelection = selection;
+    circlesRef.current.attr("fill", d => {
+      if (isPointHighlighted(d, currentSelection, attrX, attrY)) return "gold";
+      if (!d.errors || d.errors.length === 0) return colorScale("none");
+      return colorScale(d.errors[0]);
+    });
+  }, [selection]);
 
   useEffect(() => {
     if (!sampleData) return;
@@ -74,7 +87,7 @@ export default function ScatterPlot({
     yScale.draw(canvas);
 
     const circleFill = d => {
-      if (selectedRef.current.includes(d) || isPointHighlighted(d, selection)) return "gold";
+      if (selectedRef.current.includes(d)) return "gold";
       if (!d.errors || d.errors.length === 0) return colorScale("none");
       return colorScale(d.errors[0]);
     };
@@ -99,6 +112,7 @@ export default function ScatterPlot({
       .attr("fill", circleFill)
       .attr("cursor", "pointer");
 
+    circlesRef.current = circles;
 
     // Drag-to-select — lives on dragLayerRef so canvas.selectAll("*").remove() never kills it
     let dragStart = null;
@@ -178,16 +192,24 @@ export default function ScatterPlot({
     );
 
     return () => { canvas.selectAll("*").remove(); };
-  }, [size, sampleData, selection]);
+  }, [size, sampleData]);
 
-  function handleBackgroundClick() {
+  function handleDeselect(e) {
+    e.preventDefault();
     selectedRef.current = [];
+    if (circlesRef.current) {
+      const colorScale = errorColors || (() => "steelblue");
+      circlesRef.current.attr("fill", d => {
+        if (!d.errors || d.errors.length === 0) return colorScale("none");
+        return colorScale(d.errors[0]);
+      });
+    }
     clearFilters();
   }
 
   return (
     <g key={cellID} transform={`translate(${xPos}, ${yPos})`} className="scatter-canvas">
-      <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
+      <rect width={size} height={size} fill="#ffffff00" onContextMenu={handleDeselect} />
       <g ref={dragLayerRef} />
       <g ref={drawingRef}></g>
     </g>
@@ -195,26 +217,52 @@ export default function ScatterPlot({
 }
 
 // ── cross-plot highlight helpers ─────────────────────────────────────────────
-function isPointHighlighted(point, selection) {
+function isPointHighlighted(point, selection, attrX, attrY) {
   if (!selection) return false;
 
   if (selection.viewType === "scatterplot") {
+    if (selection.cols[0] !== attrX || selection.cols[1] !== attrY) return false;
     return selection.data.some(d => d.ID === point.ID);
   }
 
-  if (selection.viewType === "heatmap") {
-    const scaleX = selection.scaleX;
-    const scaleY = selection.scaleY;
-    return selection.data.some(sel => {
-      return _valueInBin(point.x, sel.xBin, sel.xType, scaleX) &&
-             _valueInBin(point.y, sel.yBin, sel.yType, scaleY);
-    });
+  if (selection.viewType === "barchart") {
+    const srcCol = selection.cols[0];
+    if (srcCol === attrX)
+      return selection.data.some(sel => _valueInBin(point.x, sel.bin, sel.type, selection.scaleX));
+    if (srcCol === attrY)
+      return selection.data.some(sel => _valueInBin(point.y, sel.bin, sel.type, selection.scaleX));
+    return false;
   }
 
-  if (selection.viewType === "barchart") {
-    return selection.data.some(sel =>
-      _valueInBin(point.x, sel.bin, sel.type, selection.scaleX)
-    );
+  if (selection.viewType === "heatmap") {
+    const heatXCol = selection.cols[0], heatYCol = selection.cols[1];
+    return selection.data.some(sel => {
+      // For each scatter axis, check if that axis maps to one of the heatmap axes.
+      // If neither heatmap axis matches the scatter axis, that scatter axis is unconstrained (true).
+      // But if NO heatmap axis matches either scatter axis at all, don't highlight anything.
+      const scatterXMatchesHeatX = heatXCol === attrX;
+      const scatterXMatchesHeatY = heatYCol === attrX;
+      const scatterYMatchesHeatX = heatXCol === attrY;
+      const scatterYMatchesHeatY = heatYCol === attrY;
+
+      // If the heatmap shares no columns with this scatterplot, don't highlight
+      if (!scatterXMatchesHeatX && !scatterXMatchesHeatY && !scatterYMatchesHeatX && !scatterYMatchesHeatY)
+        return false;
+
+      const matchX = scatterXMatchesHeatX
+        ? _valueInBin(point.x, sel.xBin, sel.xType, selection.scaleX)
+        : scatterXMatchesHeatY
+          ? _valueInBin(point.x, sel.yBin, sel.yType, selection.scaleY)
+          : true; // scatter X col not in heatmap — unconstrained
+
+      const matchY = scatterYMatchesHeatX
+        ? _valueInBin(point.y, sel.xBin, sel.xType, selection.scaleX)
+        : scatterYMatchesHeatY
+          ? _valueInBin(point.y, sel.yBin, sel.yType, selection.scaleY)
+          : true; // scatter Y col not in heatmap — unconstrained
+
+      return matchX && matchY;
+    });
   }
 
   return false;

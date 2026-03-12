@@ -20,6 +20,7 @@ export default function Heatmap({
 
   const { selection, filterVersion, addFilter, clearFilters } = useSelection();
 
+  const tilesRef = useRef(null);
   const localSelectedRef = useRef([]);
 
   // Re-fetch whenever the filter changes (filterVersion increments on every add/clear)
@@ -36,7 +37,18 @@ export default function Heatmap({
       }
     }
     fetchData();
-  }, [table_name, attrX, attrY, filterVersion]);
+  }, [table_name, attrX, attrY, filterVersion]); // <-- filterVersion triggers re-fetch
+
+  // Re-color tiles when selection changes (cross-plot highlight)
+  useEffect(() => {
+    if (!tilesRef.current) return;
+    // Capture selection in this effect's closure so tileFill reads the fresh value
+    const currentSelection = selection;
+    tilesRef.current.attr("fill", d => {
+      if (isHighlightedWith(d, currentSelection)) return "gold";
+      return defaultFill(d);
+    });
+  }, [selection]);
 
   const colorScale = errorColors || (() => "steelblue");
 
@@ -46,40 +58,83 @@ export default function Heatmap({
     return colorScale(keys[0]);
   }
 
+  // Accepts selection explicitly so it's never stale regardless of closure timing
   function isHighlightedWith(d, sel) {
     if (!sel) return false;
 
-    if (sel.viewType === "heatmap" &&
-        sel.cols?.[0] === attrX &&
-        sel.cols?.[1] === attrY) {
-      return localSelectedRef.current.includes(d);
+    if (sel.viewType === "heatmap") {
+      // Same heatmap (same X and Y cols) — use local selection ref
+      if (sel.cols?.[0] === attrX && sel.cols?.[1] === attrY)
+        return localSelectedRef.current.includes(d);
+
+      // Different heatmap — highlight tiles that share an axis with the selection
+      const selXCol = sel.cols[0], selYCol = sel.cols[1];
+      const heatSharesX = selXCol === attrX || selXCol === attrY;
+      const heatSharesY = selYCol === attrX || selYCol === attrY;
+      if (!heatSharesX && !heatSharesY) return false;
+
+      return sel.data.some(s => {
+        const matchAttrX = selXCol === attrX
+          ? (s.xBin === d.xBin && s.xType === d.xType)
+          : selYCol === attrX
+            ? (s.yBin === d.xBin && s.yType === d.xType)
+            : true;
+        const matchAttrY = selXCol === attrY
+          ? (s.xBin === d.yBin && s.xType === d.yType)
+          : selYCol === attrY
+            ? (s.yBin === d.yBin && s.yType === d.yType)
+            : true;
+        return matchAttrX && matchAttrY;
+      });
     }
 
-    if (sel.viewType === "heatmap") return false;
-
     if (sel.viewType === "barchart") {
-      return sel.data.some(s => s.bin === d.xBin && s.type === d.xType);
+      const srcCol = sel.cols[0];
+      if (srcCol === attrX)
+        return sel.data.some(s => s.bin === d.xBin && s.type === d.xType);
+      if (srcCol === attrY)
+        return sel.data.some(s => s.bin === d.yBin && s.type === d.yType);
+      return false;
     }
 
     if (sel.viewType === "scatterplot" && histogramData) {
-      return sel.data.some(point =>
-        _valueInBin(point.x, d.xBin, d.xType, histogramData.scaleX) &&
-        _valueInBin(point.y, d.yBin, d.yType, histogramData.scaleY)
-      );
+      const scatterXCol = sel.cols[0], scatterYCol = sel.cols[1];
+
+      // If the scatterplot shares no columns with this heatmap, don't highlight
+      const scatterXMatchesHeatX = scatterXCol === attrX;
+      const scatterXMatchesHeatY = scatterXCol === attrY;
+      const scatterYMatchesHeatX = scatterYCol === attrX;
+      const scatterYMatchesHeatY = scatterYCol === attrY;
+      if (!scatterXMatchesHeatX && !scatterXMatchesHeatY && !scatterYMatchesHeatX && !scatterYMatchesHeatY)
+        return false;
+
+      return sel.data.some(point => {
+        // matchX: does this point's relevant value fall in this tile's X bin?
+        const matchX = scatterXMatchesHeatX
+          ? _valueInBin(point.x, d.xBin, d.xType, histogramData.scaleX)
+          : scatterYMatchesHeatX
+            ? _valueInBin(point.y, d.xBin, d.xType, histogramData.scaleX)
+            : true; // no scatter col maps to this heatmap's X — unconstrained
+
+        // matchY: does this point's relevant value fall in this tile's Y bin?
+        const matchY = scatterXMatchesHeatY
+          ? _valueInBin(point.x, d.yBin, d.yType, histogramData.scaleY)
+          : scatterYMatchesHeatY
+            ? _valueInBin(point.y, d.yBin, d.yType, histogramData.scaleY)
+            : true; // no scatter col maps to this heatmap's Y — unconstrained
+
+        return matchX && matchY;
+      });
     }
 
     return false;
   }
 
-  function tileFill(d) {
-    if (isHighlightedWith(d, selection)) return "gold";
+  // Keep tileFill for the draw effect (passes selection at draw time)
+  function tileFill(d, sel) {
+    if (isHighlightedWith(d, sel)) return "gold";
     return defaultFill(d);
   }
-
-  useEffect(() => {
-    // New data arrived (filter changed) — local tile selection is stale, reset it
-    localSelectedRef.current = [];
-  }, [histogramData]);
 
   useEffect(() => {
     if (!histogramData) return;
@@ -118,11 +173,12 @@ export default function Heatmap({
       .attr("width", d => d.xType === "numeric"
         ? xScale.numericalBandwidth(xScale.numHistData[d.xBin].x0, xScale.numHistData[d.xBin].x1)
         : xScale.categoricalBandwidth())
-      .attr("fill", d => tileFill(d))
+      .attr("fill", d => tileFill(d, selection))
       .attr("stroke", "white")
       .attr("cursor", "pointer")
       .attr("stroke-width", 1);
 
+    tilesRef.current = tiles;
 
     createTooltip(
       tiles,
@@ -151,7 +207,7 @@ export default function Heatmap({
         } else {
           localSelectedRef.current = [d];
         }
-        tiles.attr("fill", d => tileFill(d));
+        tiles.attr("fill", d => tileFill(d, selection));
 
         addFilter({
           table: table_name,
@@ -167,16 +223,17 @@ export default function Heatmap({
     );
 
     return () => { drawingGroup.selectAll("*").remove(); };
-  }, [size, histogramData, selection]);
+  }, [size, histogramData]);
 
-  function handleBackgroundClick() {
+  function handleDeselect(e) {
+    e.preventDefault();
     localSelectedRef.current = [];
     clearFilters();
   }
 
   return (
     <g key={cellID} transform={`translate(${xPos}, ${yPos})`} className="heatmap-canvas">
-      <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
+      <rect width={size} height={size} fill="#ffffff00" onContextMenu={handleDeselect} />
       <g ref={drawingRef}></g>
     </g>
   );
