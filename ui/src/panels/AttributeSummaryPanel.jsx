@@ -15,6 +15,16 @@ function truncateText(text, maxLen) {
   return text.slice(0, maxLen - 1) + "…";
 }
 
+// Moved outside component so it's a stable reference and doesn't
+// cause useMemo(errorColors) to recompute on every render
+const ERROR_TYPES = {
+  total: "Total Error %",
+  missing: "Missing Values",
+  mismatch: "Data Type Mismatch",
+  anomaly: "Average Anomalies (Outliers)",
+  incomplete: "Incomplete Data (< 3 points)",
+  none: "None",
+};
 
 function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, errorColors, handleToggleSelect, showFilter }) {
   const columnErrors = summaryData?.columnErrors?.[attr] || {};
@@ -129,22 +139,23 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Error type labels
-  const errorTypes = {
-    total: "Total Error %",
-    missing: "Missing Values",
-    mismatch: "Data Type Mismatch",
-    anomaly: "Average Anomalies (Outliers)",
-    incomplete: "Incomplete Data (< 3 points)",
-    none: "None",
-  };
+  // // Error type labels
+  // const errorTypes = {
+  //   total: "Total Error %",
+  //   missing: "Missing Values",
+  //   mismatch: "Data Type Mismatch",
+  //   anomaly: "Average Anomalies (Outliers)",
+  //   incomplete: "Incomplete Data (< 3 points)",
+  //   none: "None",
+  // };
 
-  // D3 color scale
+ // errorTypes is now ERROR_TYPES (module-level constant),
+  // so this useMemo has a stable dependency and never needlessly recomputes
   const errorColors = useMemo(() => {
     return d3.scaleOrdinal()
-      .domain(Object.keys(errorTypes))
+      .domain(Object.keys(ERROR_TYPES))
       .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
-  }, [errorTypes]);
+  }, []);
 
   // Fetch summary data from server (mirrors populateDropdownFromTable)
   async function fetchSummaryData() {
@@ -178,9 +189,12 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   }, [table_name]);
 
   
-  // Sort helper
+  // sortAttributes is now a pure function — no setSortedAttributes call inside.
+  //  Calling setState during render (even indirectly via useMemo) caused the
+  //  "Cannot update Buckaroo while rendering AttributeSummaryView" error and
+  //  triggered an infinite re-render loop that crashed the app.
   function sortAttributes(attributes = [], columnErrors = {}, currentSortBy = sortBy) {
-    const sortedAttributes = [...attributes].sort((a, b) => {
+    return [...attributes].sort((a, b) => {
       const errorsA = columnErrors[a] || {};
       const errorsB = columnErrors[b] || {};
 
@@ -196,8 +210,6 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
       if (primaryB !== primaryA) return primaryB - primaryA;
       return totalB - totalA;
     });
-    setSortedAttributes(sortedAttributes);
-    return sortedAttributes;
   }
 
   // Derived sorted attributes when summaryData or sortBy changes
@@ -205,6 +217,10 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
     if (!summaryData) return [];
     return sortAttributes(summaryData.attributes || [], summaryData.columnErrors || {}, sortBy);
   }, [summaryData, sortBy]);
+
+  useEffect(() => {
+    setSortedAttributes(sortedAttributes);
+}, [sortedAttributes]);
 
   // Handlers
   function handleToggleSelect(attr) {
@@ -239,7 +255,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
       <div id="attribute-sorting">
         <div className="attribute-sorting-title">Sort Attributes By</div>
         <div style={{display: "flex", gap: 0, marginTop: 8, flexWrap: "wrap"}}>
-          {Object.keys(errorTypes).map(error => {
+          {Object.keys(ERROR_TYPES).map(error => {
             const selected = sortBy === error;
             return (
               <div key={error} className="attribute-sorting-item" onClick={() => handleSortClick(error)} style={{width: "100%", alignItems: "center", cursor: "pointer"}}>
@@ -247,7 +263,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
                   className={selected ? "attribute-sorting-item-color-selected" : "attribute-sorting-item-color"}
                   style={{backgroundColor: errorColors(error), width: 18, height: 18, display: "inline-block", borderRadius: 3}}
                 />
-                <span>{errorTypes[error]}</span>
+                <span>{ERROR_TYPES[error]}</span>
               </div>
             );
           })}

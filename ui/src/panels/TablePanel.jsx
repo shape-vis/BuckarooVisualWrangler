@@ -41,7 +41,8 @@ function TableRow({tableData, rowIndex, columns, errorData}) {
     <tr key={`row${rowIndex}`}>
     {
       columns.map((col) => {
-        const key = col + "_" + tableData["ID"][rowIndex];
+        // const key = col + "_" + tableData["ID"][rowIndex];
+        const key = col + "_" + (tableData?.["ID"]?.[rowIndex] ?? rowIndex);
         const errors = errorData[key] ? errorData[key] : [];
         const cellValue = tableData[col][rowIndex];
 

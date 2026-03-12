@@ -8,7 +8,7 @@ from flask import request
 import pandas as pd
 import traceback
 
-from app import app, engine, service_helpers, data_state_manager
+from app import app, engine, service_helpers, data_state_manager, db_operations
 from app.service_helpers import group_by_attribute, get_whole_table_query
 from data_management.data_attribute_summary_integration import *
 from data_management.data_integration import *
@@ -279,17 +279,18 @@ def attribute_summaries():
     Populates the error attribute summaries
     :return:
     """
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
-    tablename = request.args.get("tablename")
+    # min_id = request.args.get("min_id", default=0)
+    # max_id = request.args.get("max_id", default=200)
+    # tablename = request.args.get("tablename")
 
-    if not tablename:
-        return {"success": False, "error": "No tablename provided"}
+    # if not tablename:
+    #     return {"success": False, "error": "No tablename provided"}
 
     try:
-        #get the current error table
-        print(f"Generating attribute summaries for table {tablename} with id range {min_id} to {max_id}")
-        table_attribute_summaries = generate_complete_json(int(min_id), int(max_id), tablename)
+        tablename = db_operations.main_table_name
+        num_rows = db_operations.get_row_count(tablename)
+        print(f"Generating attribute summaries for table {tablename}")
+        table_attribute_summaries = generate_complete_json(tablename)
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
         print(f"Error generating summaries for table '{tablename}': {e}")
