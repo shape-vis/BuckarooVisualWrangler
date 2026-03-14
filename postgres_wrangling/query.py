@@ -42,7 +42,7 @@ def _missing_pred(col: str) -> str:
     """Boolean SQL expression that is TRUE when column is 'missing'."""
     return (
         f"(\"{col}\" IS NULL "
-        f"OR \"{col}\"::text IN ('', 'null', 'undefined'))"
+        f"OR LOWER(\"{col}\"::text) IN ('', 'null', 'undefined', 'nan', 'none'))"
     )
 
 
@@ -189,6 +189,76 @@ def impute_by_ids(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
         )
 
         return len(ids), result.rowcount
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Preview-specific wrangling (unconditional — used for create-previews only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def remove_rows_by_ids_preview(table: str, ids: List[int]) -> int:
+    """
+    Remove ALL specified rows unconditionally (no errors-table filter).
+    Used for preview tables so the user can see what deletion would look like
+    regardless of whether the rows currently have detected errors.
+
+    Parameters
+    ----------
+    table : str
+        Preview table name to modify
+    ids : List[int]
+        List of row IDs to delete
+
+    Returns
+    -------
+    int
+        Number of rows remaining
+    """
+    if not ids:
+        return 0
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(f'DELETE FROM "{table}" WHERE "ID" = ANY(:ids)'),
+            {"ids": ids}
+        )
+        n_rows = _get_row_count(conn, table)
+
+    return n_rows
+
+
+def impute_by_ids_preview(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
+    """
+    Impute ALL selected rows unconditionally — sets every selected row's
+    column value to mean (numeric) or mode (categorical), regardless of
+    whether the value is currently missing.  Used for preview tables.
+
+    Parameters
+    ----------
+    table : str
+        Preview table name to modify
+    col : str
+        Column to impute
+    ids : List[int]
+        List of row IDs to impute
+
+    Returns
+    -------
+    Tuple[int, int]
+        (rows_examined, cells_updated)
+    """
+    if not ids:
+        return 0, 0
+
+    with engine.begin() as conn:
+        is_numeric = _is_numeric(conn, col, table)
+        fill_val = _compute_imputation_value(conn, table, col, is_numeric)
+
+        result = conn.execute(
+            text(f'UPDATE "{table}" SET "{col}" = :fill_val WHERE "ID" = ANY(:ids)'),
+            {"fill_val": fill_val, "ids": ids}
+        )
+
+    return len(ids), result.rowcount
 
 
 def delete_column(table: str, column: str) -> int:
