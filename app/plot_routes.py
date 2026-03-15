@@ -121,26 +121,6 @@ def get_scatterplot_data():
         return {"Success": False, "Error": str(e)}
 
 
-# @app.get("/api/plots/group-by")
-# def get_group_by():
-#     """
-#     Endpoint to return the data according to the specified column the user wishes to group by a specific attribute - ex. group ages by continent
-#     :return: the data as a csv
-#     """
-#     column_a_name = request.args.get("column_a")
-#     group_by_name = request.args.get("group_by")
-#     df = data_state_manager.get_current_state()["df"]
-#     column_a = df[column_a_name]
-#     group_by = df[group_by_name]
-#     try:
-#         if is_categorical(column_a) and is_categorical(group_by):
-#             new_df = group_by_attribute(df, column_a_name, group_by_name).to_json()
-#             return {"Success": True, "group_by": new_df}
-#         return {"Success": False, "Error": "Both column input to the group_by are not categorical"}
-#     except Exception as e:
-#         return {"Success": False, "Error": str(e)}
-
-
 @app.get("/api/plots/preview-histogram")
 def get_preview_histogram():
     """

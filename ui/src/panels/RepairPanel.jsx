@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { SelectionContext } from "../utils/SelectionContext.jsx";
-import { createPreviews } from "../utils/serverCalls.jsx";
+import { createPreviews, executeWrangle } from "../utils/serverCalls.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "./RepairPanel.css";
 import * as d3 from "d3";
@@ -10,7 +10,7 @@ const ERROR_COLORS = d3.scaleOrdinal()
   .domain(["total", "missing", "mismatch", "anomaly", "incomplete", "none"])
   .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
 
-export default function RepairPanel({ table_name }) {
+export default function RepairPanel({ table_name, onWrangleExecuted }) {
   const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } = useContext(SelectionContext);
 
   const [busy, setBusy] = useState(false);
@@ -54,6 +54,20 @@ export default function RepairPanel({ table_name }) {
         preview_impute_y: result.preview_impute_y,
         cols,
       });
+    }
+  }
+
+  async function handleExecuteWrangle(previewTableName) {
+    setBusy(true);
+    setPreviewError(null);
+    const result = await executeWrangle(table_name, previewTableName);
+    setBusy(false);
+    if (result?.success) {
+      setPreviews(null);
+      clearHighlight();
+      onWrangleExecuted?.();
+    } else {
+      setPreviewError(result?.error || "Execute wrangle failed.");
     }
   }
 
@@ -136,6 +150,7 @@ export default function RepairPanel({ table_name }) {
                 cols={previews.cols}
                 errorColors={ERROR_COLORS}
                 chartType="histogram"
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_delete)}
               />
               <PreviewCard
                 label="Impute Preview"
@@ -143,6 +158,7 @@ export default function RepairPanel({ table_name }) {
                 cols={previews.cols}
                 errorColors={ERROR_COLORS}
                 chartType="histogram"
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_impute)}
               />
             </>
           )}
@@ -154,6 +170,7 @@ export default function RepairPanel({ table_name }) {
                 cols={previews.cols}
                 errorColors={ERROR_COLORS}
                 chartType={previews.type}
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_delete)}
               />
               <PreviewCard
                 label={`Impute "${previews.cols[0]}" Preview`}
@@ -161,6 +178,7 @@ export default function RepairPanel({ table_name }) {
                 cols={previews.cols}
                 errorColors={ERROR_COLORS}
                 chartType={previews.type}
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_impute_x)}
               />
               <PreviewCard
                 label={`Impute "${previews.cols[1]}" Preview`}
@@ -168,6 +186,7 @@ export default function RepairPanel({ table_name }) {
                 cols={previews.cols}
                 errorColors={ERROR_COLORS}
                 chartType={previews.type}
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_impute_y)}
               />
             </>
           )}

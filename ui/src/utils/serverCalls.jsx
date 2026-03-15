@@ -245,6 +245,23 @@ export async function queryPreviewHistogram(params) {
 }
 
 /**
+ * POST /api/wrangle/execute
+ * Promote a preview table to be the main table, deleting all other previews.
+ */
+export async function executeWrangle(table, previewTable) {
+    try {
+        const response = await fetch("/api/wrangle/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table, preview_table: previewTable }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[executeWrangle]", error.message);
+    }
+}
+
+/**
  * GET /api/plots/preview-scatterplot
  * Fetch scatterplot data for a preview table.
  *
@@ -286,6 +303,7 @@ const serverCalls = {
     createPreviews,
     queryPreviewHistogram,
     queryPreviewScatterplot,
+    executeWrangle,
 };
 
 export default serverCalls;

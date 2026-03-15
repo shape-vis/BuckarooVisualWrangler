@@ -16,6 +16,7 @@ export const ViewContext = createContext();
 export default function Buckaroo({ onReset, uploadResponse }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [sortedAttributes, setSortedAttributes] = useState([]);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const table_name = uploadResponse?.table_name || "unknown_table";
     const [activeView, setActiveView] = useState("plots");
@@ -27,7 +28,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                 {/* SelectionProvider wraps everything so both plots and RepairPanel share state */}
                 <SelectionProvider>
                     <BuckarooHeader onReset={onReset} />
-                    <div className="matrix-and-dropdown-container">
+                    <div key={refreshKey} className="matrix-and-dropdown-container">
                         <AttributeSummaryPanel
                             table_name={table_name}
                             selectedAttributes={selectedAttributes}
@@ -44,7 +45,10 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                                             table_name={table_name}
                                             selectedAttributes={selectedAttributes}
                                         />
-                                        <RepairPanel table_name={table_name} />
+                                        <RepairPanel
+                                            table_name={table_name}
+                                            onWrangleExecuted={() => setRefreshKey(k => k + 1)}
+                                        />
                                     </>
                                 )}
                                 {/*Graph View*/}

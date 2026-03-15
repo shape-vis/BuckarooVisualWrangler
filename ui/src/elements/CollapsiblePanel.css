@@ -1,12 +1,7 @@
 .panel {
   position: relative;
   display: flex;
-  /* height: 300px; */
-  /* height: calc(100vh - 55px); */
-  /* width: 320px; */
-  /* border: 1px solid #ddd;
-  border-radius: 8px; */
-  /* overflow: hidden; */
+  height: 100%;               /* stretch to fill parent height */
   transition: width 0.3s ease;
   background: #fff;
 }
@@ -27,6 +22,9 @@
   flex: 1;
   padding: 5px;
   white-space: nowrap;
+  overflow: hidden;           /* allows inner scroll containers to work */
+  display: flex;
+  flex-direction: column;
 }
 
 .panel.closed .panel-content {

@@ -3,7 +3,7 @@
 
 from flask import request
 from app import app
-from app import engine
+from app import engine, db_operations
 from postgres_wrangling import query
 import traceback
 import hashlib
@@ -282,6 +282,60 @@ def create_previews():
 
     except Exception as e:
         print("ERROR in create_previews")
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.post("/api/wrangle/execute")
+def execute_wrangle():
+    """
+    Promote a preview table to become the main table:
+    1. Delete all other preview tables (and their errors_ siblings) for this base table
+    2. Rename the main table to <table>_old
+    3. Rename the selected preview table to <table>
+    4. Delete <table>_old
+    """
+    try:
+        body = request.get_json(force=True)
+        table         = body["table"]          # main table name
+        preview_table = body["preview_table"]  # the preview to promote
+
+        # Generate all possible preview names using the same hashing logic so
+        # long table names (which get truncated + hashed) are matched correctly.
+        all_possible_previews = [
+            _preview_name(table, "_preview_delete"),
+            _preview_name(table, "_preview_impute"),
+            _preview_name(table, "_preview_impute_x"),
+            _preview_name(table, "_preview_impute_y"),
+        ]
+
+        with engine.begin() as conn:
+            # Drop every preview table except the one being promoted
+            for pt in all_possible_previews:
+                if pt != preview_table:
+                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{pt}"'))
+                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{pt}"'))
+
+            # Rename main table → _old
+            old_table = f"{table}_old"
+            conn.execute(sa_text(f'ALTER TABLE "{table}" RENAME TO "{old_table}"'))
+            conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{table}" RENAME TO "errors_{old_table}"'))
+
+            # Promote preview → main table name
+            conn.execute(sa_text(f'ALTER TABLE "{preview_table}" RENAME TO "{table}"'))
+            conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{table}"'))
+
+            # Drop the old table
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{old_table}"'))
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{old_table}"'))
+
+        # Refresh the global db_operations so all subsequent histogram/summary
+        # endpoints pick up the promoted table's fresh data and column metadata.
+        db_operations.load_table(table, f"errors_{table}")
+
+        return {"success": True, "table": table}
+    except Exception as e:
+        print("ERROR in execute_wrangle")
         print(traceback.format_exc())
         return {"success": False, "error": str(e)}, 400
 

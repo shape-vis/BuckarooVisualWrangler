@@ -15,7 +15,7 @@ const RIGHT_M    = 10;
 const SVG_W      = PLOT_SIZE + LEFT_M  + RIGHT_M;
 const SVG_H      = PLOT_SIZE + TOP_M   + BOTTOM_M;
 
-export default function PreviewCard({ label, tableName, cols, errorColors, chartType = "histogram" }) {
+export default function PreviewCard({ label, tableName, cols, errorColors, chartType = "histogram", onExecuteWrangle }) {
   const svgRef      = useRef(null);
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -87,12 +87,22 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
   }, [data, chartType]);
 
   return (
-    <div className="repair-method" style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: 8 }}>
-      <div style={{ fontWeight: "bold", fontSize: 12, marginBottom: 4, textAlign: "center" }}>{label}</div>
-      {loading && <div style={{ fontSize: 11, color: "#888", marginTop: 20 }}>Loading…</div>}
-      {error   && <div style={{ fontSize: 11, color: "red",  marginTop: 20 }}>{error}</div>}
-      {!loading && !error && (
-        <svg ref={svgRef} width={SVG_W} height={SVG_H} />
+    <div className="repair-method" style={{ display: "flex", flexDirection: "row", alignItems: "center", padding: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ fontWeight: "bold", fontSize: 12, marginBottom: 4, textAlign: "center" }}>{label}</div>
+        {loading && <div style={{ fontSize: 11, color: "#888", marginTop: 20 }}>Loading…</div>}
+        {error   && <div style={{ fontSize: 11, color: "red",  marginTop: 20 }}>{error}</div>}
+        {!loading && !error && (
+          <svg ref={svgRef} width={SVG_W} height={SVG_H} />
+        )}
+      </div>
+      {onExecuteWrangle && (
+        <button
+          onClick={onExecuteWrangle}
+          style={{ marginLeft: 10, alignSelf: "center", padding: "6px 10px", cursor: "pointer" }}
+        >
+          Execute Wrangle
+        </button>
       )}
     </div>
   );
