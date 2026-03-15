@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { queryHistogram1d, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
+import { queryHistogram1d, queryHistogram1dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
+import { useRowRange } from "../utils/RowRangeContext.jsx";
 
 /**
  * HistogramBarChart renders a stacked histogram with optional brushing/selection.
@@ -31,11 +32,15 @@ export default function HistogramBarChart({
     const setHighlightedRef = useRef(setHighlightedRowIds);
     useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
 
+    const { useRange, minId, maxId } = useRowRange();
+
     // ── data fetch ─────────────────────────────────────────────────────────
     useEffect(() => {
         async function fetchData() {
             try {
-                const response = await queryHistogram1d(table_name, attrX, 10);
+                const response = useRange
+                    ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId)
+                    : await queryHistogram1d(table_name, attrX, 10);
                 if (!response || !response.Success) {
                     throw new Error(`API failed: ${response?.Error || "Unknown error"}`);
                 }
@@ -45,7 +50,7 @@ export default function HistogramBarChart({
             }
         }
         fetchData();
-    }, [table_name, attrX]);
+    }, [table_name, attrX, useRange, minId, maxId]);
 
     // ── draw chart ──────────────────────────────────────────────────────────
     useEffect(() => {

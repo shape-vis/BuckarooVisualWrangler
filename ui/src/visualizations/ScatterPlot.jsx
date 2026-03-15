@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { querySample2d } from "../utils/serverCalls.jsx";
+import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
+import { useRowRange } from "../utils/RowRangeContext.jsx";
 
 export default function ScatterPlot({
   cellID,
@@ -32,11 +33,15 @@ export default function ScatterPlot({
   const setHighlightedRef = useRef(setHighlightedRowIds);
   useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
 
+  const { useRange, minId, maxId } = useRowRange();
+
   // ── data fetch ────────────────────────────────────────────────────────────
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount);
+        const response = useRange
+          ? await querySample2dRange(table_name, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId)
+          : await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount);
         console.log("[SCATTERPLOT] Response:", response);
 
         if (!response || !response.Success) {
@@ -53,7 +58,7 @@ export default function ScatterPlot({
       }
     }
     fetchData();
-  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount]);
+  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount, useRange, minId, maxId]);
 
   // ── draw chart ────────────────────────────────────────────────────────────
   useEffect(() => {

@@ -1,10 +1,11 @@
 // Buckaroo.jsx
-import React, { createContext, useState } from "react";
+import { createContext, useState } from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
 import RepairPanel from "../panels/RepairPanel.jsx";
 import { SelectionProvider } from "../utils/SelectionContext.jsx";
+import { RowRangeProvider } from "../utils/RowRangeContext.jsx";
 
 import "./Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
@@ -22,6 +23,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
     return (
         <>
             <ViewContext.Provider value={{ activeView, setActiveView }}>
+                <RowRangeProvider>
                 {/* SelectionProvider wraps everything so both plots and RepairPanel share state */}
                 <SelectionProvider>
                     <BuckarooHeader onReset={onReset} />
@@ -59,6 +61,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                         <div id="tooltip" className="tooltip"></div>
                     </div>
                 </SelectionProvider>
+                </RowRangeProvider>
             </ViewContext.Provider>
         </>
     );

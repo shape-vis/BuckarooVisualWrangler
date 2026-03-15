@@ -1,6 +1,7 @@
 import {NavButton} from "./Buttons.jsx";
-import React, {useContext} from "react";
+import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
+import SettingsModal from "./SettingsModal.jsx";
 import "./Header.css"
 
 export default function Header( { onReset} ) {
@@ -23,6 +24,7 @@ export default function Header( { onReset} ) {
 export function BuckarooHeader( { onReset} ) {
     onReset = onReset || (() => {});
     const { setActiveView } = useContext(ViewContext);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     return (
         <div id="header">
@@ -38,7 +40,9 @@ export function BuckarooHeader( { onReset} ) {
             <div className={"navButtonContainer"}>
                 <NavButton onClick={() => setActiveView('plots')}>Plots</NavButton>
                 <NavButton onClick={() => setActiveView('graph')}>Provenance Graph</NavButton>
+                <NavButton onClick={() => setSettingsOpen(true)}>&#9881; Settings</NavButton>
             </div>
+            <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );
 }

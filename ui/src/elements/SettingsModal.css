@@ -1,0 +1,93 @@
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    gap: 16px;
+}
+
+.settings-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+}
+
+.settings-input {
+    width: 120px;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    text-align: right;
+}
+
+.settings-input:focus {
+    outline: none;
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.settings-btn {
+    padding: 7px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.settings-btn--apply {
+    background-color: #4a90d9;
+    color: white;
+}
+
+.settings-btn--apply:hover {
+    background-color: #357abd;
+}
+
+.settings-btn--cancel {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.settings-btn--cancel:hover {
+    background-color: #c8c8c8;
+}
+
+.settings-toggle {
+    display: flex;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.settings-toggle-btn {
+    padding: 6px 16px;
+    border: none;
+    background-color: #f0f0f0;
+    color: #555;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.settings-toggle-btn + .settings-toggle-btn {
+    border-left: 1px solid #ccc;
+}
+
+.settings-toggle-btn--active {
+    background-color: #4a90d9;
+    color: white;
+}
+
+.settings-toggle-btn:hover:not(.settings-toggle-btn--active) {
+    background-color: #e0e0e0;
+}

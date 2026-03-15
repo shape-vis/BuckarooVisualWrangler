@@ -1,9 +1,10 @@
 // Heatmap.jsx
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { queryHistogram2d, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
+import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
+import { useRowRange } from "../utils/RowRangeContext.jsx";
 
 export default function Heatmap({
   cellID,
@@ -29,11 +30,15 @@ export default function Heatmap({
   const setHighlightedRef = useRef(setHighlightedRowIds);
   useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
 
+  const { useRange, minId, maxId } = useRowRange();
+
   // ── data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await queryHistogram2d(table_name, attrX, attrY, 10);
+        const response = useRange
+          ? await queryHistogram2dRange(table_name, attrX, attrY, 10, minId, maxId)
+          : await queryHistogram2d(table_name, attrX, attrY, 10);
         console.log("[HEATMAP] Response:", response);
 
         if (!response || !response.Success) {
@@ -47,7 +52,7 @@ export default function Heatmap({
       }
     }
     fetchData();
-  }, [table_name, attrX, attrY]);
+  }, [table_name, attrX, attrY, useRange, minId, maxId]);
 
   // ── draw chart ──────────────────────────────────────────────────────────
   useEffect(() => {

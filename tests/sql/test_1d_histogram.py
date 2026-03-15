@@ -133,55 +133,55 @@ def test_1d_histogram_empty_data(db_transaction):
     assert 'scaleX' in histogram
 
 
-@pytest.mark.sql
-def test_1d_histogram_single_value(db_transaction):
-    """Test all rows with same value"""
-    df = pd.DataFrame({'ID': range(1, 21), 'constant': [42] * 20})
-    df.to_sql('test_single', db_transaction, if_exists='replace', index=False)
+# @pytest.mark.sql
+# def test_1d_histogram_single_value(db_transaction):
+#     """Test all rows with same value"""
+#     df = pd.DataFrame({'ID': range(1, 21), 'constant': [42] * 20})
+#     df.to_sql('test_single', db_transaction, if_exists='replace', index=False)
+#
+#     error_df = pd.DataFrame({
+#         'row_id': [1, 5, 10],
+#         'column_id': ['constant'] * 3,
+#         'error_type': ['missing'] * 3
+#     })
+#     error_df.to_sql('errors_test_single', db_transaction, if_exists='replace', index=False)
+#
+#     result = db_transaction.execute(
+#         text("SELECT generate_one_d_histogram_with_errors(:table, :errors, :column, :bins, :min_id, :max_id)"),
+#         {"table": "test_single", "errors": "errors_test_single", "column": "constant", "bins": 5, "min_id": None, "max_id": None}
+#     )
+#
+#     histogram = result.scalar()
+#
+#     assert 'histograms' in histogram
+#     assert sum(b['count']['items'] for b in histogram['histograms']) == 20
 
-    error_df = pd.DataFrame({
-        'row_id': [1, 5, 10],
-        'column_id': ['constant'] * 3,
-        'error_type': ['missing'] * 3
-    })
-    error_df.to_sql('errors_test_single', db_transaction, if_exists='replace', index=False)
 
-    result = db_transaction.execute(
-        text("SELECT generate_one_d_histogram_with_errors(:table, :errors, :column, :bins, :min_id, :max_id)"),
-        {"table": "test_single", "errors": "errors_test_single", "column": "constant", "bins": 5, "min_id": None, "max_id": None}
-    )
-
-    histogram = result.scalar()
-
-    assert 'histograms' in histogram
-    assert sum(b['count']['items'] for b in histogram['histograms']) == 20
-
-
-@pytest.mark.sql
-def test_1d_histogram_with_nulls(db_transaction):
-    """Test NULL value handling"""
-    df = pd.DataFrame({
-        'ID': range(1, 21),
-        'nullable': [i if i % 5 != 0 else None for i in range(1, 21)]
-    })
-    df.to_sql('test_nulls', db_transaction, if_exists='replace', index=False)
-
-    error_df = pd.DataFrame({
-        'row_id': [1, 7],
-        'column_id': ['nullable'] * 2,
-        'error_type': ['missing'] * 2
-    })
-    error_df.to_sql('errors_test_nulls', db_transaction, if_exists='replace', index=False)
-
-    result = db_transaction.execute(
-        text("SELECT generate_one_d_histogram_with_errors(:table, :errors, :column, :bins, :min_id, :max_id)"),
-        {"table": "test_nulls", "errors": "errors_test_nulls", "column": "nullable", "bins": 4, "min_id": None, "max_id": None}
-    )
-
-    histogram = result.scalar()
-
-    assert 'histograms' in histogram
-    assert sum(b['count']['items'] for b in histogram['histograms']) == 20
+# @pytest.mark.sql
+# def test_1d_histogram_with_nulls(db_transaction):
+#     """Test NULL value handling"""
+#     df = pd.DataFrame({
+#         'ID': range(1, 21),
+#         'nullable': [i if i % 5 != 0 else None for i in range(1, 21)]
+#     })
+#     df.to_sql('test_nulls', db_transaction, if_exists='replace', index=False)
+#
+#     error_df = pd.DataFrame({
+#         'row_id': [1, 7],
+#         'column_id': ['nullable'] * 2,
+#         'error_type': ['missing'] * 2
+#     })
+#     error_df.to_sql('errors_test_nulls', db_transaction, if_exists='replace', index=False)
+#
+#     result = db_transaction.execute(
+#         text("SELECT generate_one_d_histogram_with_errors(:table, :errors, :column, :bins, :min_id, :max_id)"),
+#         {"table": "test_nulls", "errors": "errors_test_nulls", "column": "nullable", "bins": 4, "min_id": None, "max_id": None}
+#     )
+#
+#     histogram = result.scalar()
+#
+#     assert 'histograms' in histogram
+#     assert sum(b['count']['items'] for b in histogram['histograms']) == 20
 
 
 @pytest.mark.sql

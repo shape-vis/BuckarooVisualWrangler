@@ -53,6 +53,36 @@ async function queryHistogram2d(tableName, columnX, columnY, bins) {
     }
 }
 
+export async function queryHistogram1dRange(tableName, columnName, binCount, minId, maxId) {
+    const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: minId, max_id: maxId, bins: binCount });
+    try {
+        const response = await fetch(`/api/plots/1-d-histogram?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+export async function queryHistogram2dRange(tableName, columnX, columnY, bins, minId, maxId) {
+    const params = new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: minId, max_id: maxId, x_bins: bins, y_bins: bins });
+    try {
+        const response = await fetch(`/api/plots/2-d-histogram?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+export async function querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples, minId, maxId) {
+    const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: minId, max_id: maxId, error_sample_count: errorSamples, total_sample_count: totalSamples });
+    try {
+        const response = await fetch(`/api/plots/scatterplot?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
 export async function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples) {
     const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: 0, max_id: 10000, error_sample_count: errorSamples, total_sample_count: totalSamples });
     try {
