@@ -1,22 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { querySample2d } from "../utils/serverCalls.jsx";
-import {SelectionContext} from "../utils/SelectionContext.jsx";
+import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
+import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import { useSelection } from "../utils/SelectionContext.jsx";
+import { useRowRange } from "../utils/RowRangeContext.jsx";
 
-/**
- * Props expected:
- * - model
- * - view
- * - givenData
- * - xCol
- * - yCol
- * - createHybridScales
- * - createBackgroundBox
- * - createSelectionBox
- * - createTooltip
- * - selectionControlPanel
- * - generatePattern
- */
 export default function ScatterPlot({
   cellID,
   xPos,
@@ -30,163 +18,176 @@ export default function ScatterPlot({
   totalSampleCount = 1000,
 }) {
   const drawingRef = useRef(null);
+  const clearSelectionRef = useRef(() => {});
   const [sampleData, setSampleData] = React.useState(null);
 
+  // Refs to D3 selections / scales so the highlight effect can re-color
+  // without rebuilding the whole chart.
+  const circlesRef = useRef(null);
+  const colorScaleRef = useRef(() => "steelblue");
+
+  const { highlightedRowIds, setHighlightedRowIds, clearHighlight } = useSelection();
+
+  // Keep a stable ref to setHighlightedRowIds so closures inside the draw
+  // effect always call the latest version without stale captures.
+  const setHighlightedRef = useRef(setHighlightedRowIds);
+  useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
+
+  const { useRange, minId, maxId } = useRowRange();
+
+  // ── data fetch ────────────────────────────────────────────────────────────
   useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = useRange
+          ? await querySample2dRange(table_name, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId)
+          : await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount);
+        console.log("[SCATTERPLOT] Response:", response);
 
-    async function fetchData(){
-        try {
-
-
-          const response = await querySample2d( table_name, attrX, attrY, errorSampleCount, totalSampleCount );          
-          console.log("[SCATTERPLOT] Response:", response);
-
-          if (!response || !response.Success) {
-            console.error("[SCATTERPLOT] API call failed:", response);
-            throw new Error(`2D ScatterPlot API failed: ${response?.Error || "Unknown error"}`);
-          }
-
-          const sampleData = response.scatterplot_data
-          if (!sampleData) {
-            console.error("[SCATTERPLOT] No scatter data in response:", response);
-            throw new Error("No scatterplot data returned from server");
-          }
-
-          setSampleData(sampleData);
-
-        } catch (err) {
-          console.error(err?.message || err);
+        if (!response || !response.Success) {
+          console.error("[SCATTERPLOT] API call failed:", response);
+          throw new Error(`2D ScatterPlot API failed: ${response?.Error || "Unknown error"}`);
         }
+
+        const data = response.scatterplot_data;
+        if (!data) throw new Error("No scatterplot data returned from server");
+        setSampleData(data);
+
+      } catch (err) {
+        console.error(err?.message || err);
       }
+    }
+    fetchData();
+  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount, useRange, minId, maxId]);
 
-      fetchData();
-
-  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount]);
-  
-  
-      
+  // ── draw chart ────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!sampleData) return;
 
-        if (!sampleData) return;
-  
-        const canvas = d3.select(drawingRef.current);
-        canvas.selectAll("*").remove();
+    const canvas = d3.select(drawingRef.current);
+    canvas.selectAll("*").remove();
 
-        const colorScale = errorColors || (() => "steelblue");
+    const colorScale = errorColors || (() => "steelblue");
+    colorScaleRef.current = colorScale;
 
-        const numHistDataX = sampleData.scaleX.numeric || [];
-        const catHistDataX = sampleData.scaleX.categorical || [];
-        const numHistDataY = sampleData.scaleY.numeric || [];
-        const catHistDataY = sampleData.scaleY.categorical || [];
+    const numHistDataX = sampleData.scaleX.numeric || [];
+    const catHistDataX = sampleData.scaleX.categorical || [];
+    const numHistDataY = sampleData.scaleY.numeric || [];
+    const catHistDataY = sampleData.scaleY.categorical || [];
 
-        const xScale = createHybridScales(
-              size,
-              numHistDataX,
-              catHistDataX,
-              numHistDataX.length === 0 ? null : numHistDataX,
-              catHistDataX.length === 0 ? null : catHistDataX.map(d => d),
-              "horizontal"
-            );
+    const xScale = createHybridScales(
+      size, numHistDataX, catHistDataX,
+      numHistDataX.length === 0 ? null : numHistDataX,
+      catHistDataX.length === 0 ? null : catHistDataX,
+      "horizontal"
+    );
+    const yScale = createHybridScales(
+      size, numHistDataY, catHistDataY,
+      numHistDataY.length === 0 ? null : numHistDataY,
+      catHistDataY.length === 0 ? null : catHistDataY,
+      "vertical"
+    );
 
-        const yScale = createHybridScales(
-              size,
-              numHistDataY,
-              catHistDataY,
-              numHistDataY.length === 0 ? null : numHistDataY,
-              catHistDataY.length === 0 ? null : catHistDataY.map(d => d),
-              "vertical"
-            );       
+    xScale.draw(canvas);
+    yScale.draw(canvas);
 
-        xScale.draw(canvas);
-        yScale.draw(canvas);            
+    const circleFill = (d, highlightSet) => {
+      if (highlightSet && highlightSet.has(d.ID)) return "gold";
+      if (!d.errors || d.errors.length === 0) return colorScale("none");
+      if (d.errors.length === 1) return colorScale(d.errors[0]);
+      return colorScale(d.errors[0]);
+    };
 
-        // selection box helper
-        // const selectionBox = createSelectionBox ? createSelectionBox(canvas) : null;
+    const circles = canvas.selectAll("circle")
+      .data(sampleData.data || [])
+      .join("circle")
+      .attr("cx", d => xScale ? xScale.apply(d.x, d.xType, true) : 0)
+      .attr("cy", d => yScale ? yScale.apply(d.y, d.yType, true) : 0)
+      .attr("r", 4)
+      .attr("cursor", "pointer")
+      .attr("fill", d => circleFill(d, null));
 
-        let selectedData = [];
+    circlesRef.current = circles;
 
-        const circleFill = d => {
-          if (selectedData.includes(d)) return "gold";
-          if (!d.errors || d.errors.length === 0) return colorScale("none");
-          if (d.errors.length === 1) return colorScale(d.errors[0]);
-          if (typeof generatePattern === "function") return generatePattern(view.svg, colorScale, d.errors);
-          return colorScale(d.errors[0]);
-        };
+    // ── Brush for drag-to-select-multiple-points ───────────────────────────
+    const brushGroup = canvas.append("g").attr("class", "scatter-brush");
 
-        const circles = canvas.selectAll("circle")
-          .data(sampleData.data || [])
-          .join("circle")
-          .attr("cx", d => xScale ? xScale.apply(d.x, d.xType, true) : 0)
-          .attr("cy", d => yScale ? yScale.apply(d.y, d.yType, true) : 0)
-          .attr("r", 4)
-          .attr("fill", circleFill);
+    let lastBrushEnd = 0;
 
-  //       // background drag for selection
-  //       if (backgroundBox && selectionBox) {
-  //         backgroundBox.call(d3.drag()
-  //           .on("start", function (event) {
-  //             if (selectionControlPanel && typeof selectionControlPanel.clearSelection === "function") selectionControlPanel.clearSelection(canvas);
-  //             selectionBox.start(event.x, event.y);
-  //           })
-  //           .on("drag", function (event) {
-  //             selectionBox.update(event.x, event.y);
-  //             selectedData = (sampleData.data || []).filter(d => selectionBox.inRange(xScale.apply(d.x, d.xType), yScale.apply(d.y, d.yType)));
-  //             circles.attr("fill", circleFill);
-  //           })
-  //           .on("end", function (event) {
-  //             selectionBox.end(event.x, event.y);
-  //             if (selectionControlPanel && typeof selectionControlPanel.setSelection === "function") {
-  //               selectionControlPanel.setSelection(canvas, "scatterplot", [model, view, canvas, givenData, xCol, yCol], {
-  //                 data: selectedData,
-  //                 scaleX: sampleData.scaleX,
-  //                 scaleY: sampleData.scaleY,
-  //               }, () => {
-  //                 selectedData = [];
-  //                 circles.attr("fill", circleFill);
-  //               });
-  //             }
-  //           }));
-  //       }
+    const brush = d3.brush()
+      .extent([[0, 0], [size, size]])
+      .on("brush end", (event) => {
+        if (event.type === "end") lastBrushEnd = Date.now();
+        if (!event.selection) {
+          circles.attr("fill", d => circleFill(d, null));
+          return;
+        }
+        const [[x0, y0], [x1, y1]] = event.selection;
+        const brushedIds = [];
+        circles.each(function (d) {
+          const cx = +d3.select(this).attr("cx");
+          const cy = +d3.select(this).attr("cy");
+          const inside = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+          d3.select(this).attr("fill", inside ? "gold" : circleFill(d, null));
+          if (inside) brushedIds.push(d.ID);
+        });
 
-        // tooltip interactions
-          createTooltip(circles,
-            d => {
-              const bin = String(d.x) + " x " + String(d.y);
-              let errorList = "";
-              if (d.errors && d.errors.length >= 1) errorList = "<br><strong>Errors: </strong>" + d.errors[0];
-              if (d.errors && d.errors.length > 1) d.errors.slice(1).forEach(key => { errorList += `, ${key}`; });
-              return `<strong>Data:</strong> ${bin}${errorList}`;
-            },
-            (d, event) => {
-              console.log("Left click on point", d);
-            },
-            (d) => {
-              console.log("Right click on point", d);
-            },
-            (d) => {
-              console.log("Double click on point", d);
-            }
-          );
+        if (event.type === "end" && brushedIds.length > 0) {
+          setHighlightedRef.current([...new Set(brushedIds)], [attrX, attrY], "scatterplot");
+        }
+      });
+
+    brushGroup.call(brush);
+    brushGroup.lower();
+
+    clearSelectionRef.current = () => {
+      circles.attr("fill", d => circleFill(d, null));
+      brushGroup.call(brush.move, null);
+    };
+
+    createTooltip(circles,
+      d => {
+        const bin = String(d.x) + " x " + String(d.y);
+        let errorList = "";
+        if (d.errors && d.errors.length >= 1) errorList = "<br><strong>Errors: </strong>" + d.errors[0];
+        if (d.errors && d.errors.length > 1) d.errors.slice(1).forEach(k => { errorList += `, ${k}`; });
+        return `<strong>Data:</strong> ${bin}${errorList}`;
+      },
+      (d, event) => {
+        // Skip click if a brush drag just ended (prevents overwriting multi-select).
+        if (Date.now() - lastBrushEnd < 300) return;
+        // Left click: set this point's ID as the cross-chart highlight.
+        setHighlightedRef.current([d.ID], [attrX, attrY], "scatterplot");
+      },
+      (d) => { /* right click – unused */ },
+      (d) => { /* double click – unused */ }
+    );
 
     return () => { canvas.selectAll("*").remove(); };
+  }, [size, sampleData]);
 
-  }, [ size, sampleData ]);
+  // ── react to cross-chart highlight changes ────────────────────────────────
+  useEffect(() => {
+    if (!circlesRef.current) return;
+    const rowIdSet = highlightedRowIds ? new Set(highlightedRowIds) : null;
+    const colorScale = colorScaleRef.current;
+    circlesRef.current.attr("fill", d => {
+      if (rowIdSet && rowIdSet.has(d.ID)) return "gold";
+      if (!d.errors || d.errors.length === 0) return colorScale("none");
+      if (d.errors.length === 1) return colorScale(d.errors[0]);
+      return colorScale(d.errors[0]);
+    });
+  }, [highlightedRowIds]);
 
-
-  function clearSelection() {
-    console.log("Clicked on heatmap background", event);    
-    selected = [];
-    tiles.attr("fill", tileFill);
+  function handleBackgroundClick() {
+    clearSelectionRef.current();
+    clearHighlight();
   }
-
-
-
-
 
   return (
     <g key={cellID} transform={`translate(${xPos}, ${yPos})`} className="scatter-canvas">
-        <rect width={size} height={size} fill="#ffffff00" onClick={ clearSelection}  />
-        <g ref={drawingRef}></g>
+      <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
+      <g ref={drawingRef}></g>
     </g>
-    );  
+  );
 }

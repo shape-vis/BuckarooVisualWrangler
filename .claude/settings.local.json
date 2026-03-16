@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r preview /workspace/ui/src --include=*.jsx -l)",
+      "Bash(find /workspace -maxdepth 2 -type d ! -path */.* ! -path */node_modules/* ! -path */__pycache__/*)"
+    ]
+  }
+}

@@ -3,12 +3,32 @@
 
 from flask import request
 from app import app
-from app import engine
+from app import engine, db_operations
 from postgres_wrangling import query
 import traceback
+import hashlib
 import pandas as pd
 from pprint import pprint
 from app.service_helpers import run_detectors
+from sqlalchemy import text as sa_text
+
+
+def _preview_name(base: str, suffix: str) -> str:
+    """
+    Build a preview table name guaranteed to keep both itself and its
+    derived 'errors_<name>' sibling within PostgreSQL's 63-char limit.
+
+    errors_ prefix = 7 chars, so the preview name itself must be ≤ 56 chars.
+    If base+suffix already fits, use it as-is.  Otherwise truncate the base
+    and append an 8-char MD5 hash so the name stays unique.
+    """
+    MAX_LEN = 56  # 63 - len("errors_")
+    candidate = f"{base}{suffix}"
+    if len(candidate) <= MAX_LEN:
+        return candidate
+    h = hashlib.md5(base.encode()).hexdigest()[:8]
+    max_base = MAX_LEN - len(suffix) - 9  # 9 = 1 underscore + 8 hash chars
+    return f"{base[:max_base]}_{h}{suffix}"
 
 """
 Wrangling Endpoints - In-place modification of tables
@@ -27,11 +47,16 @@ def update_errors_table(table_name: str) -> None:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
         detected_errors_df = run_detectors(df)
         errors_table_name = f"errors_{table_name}"
-        detected_errors_df.to_sql(errors_table_name, engine, if_exists='replace', index=False)
+        # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
+        # table names > 63 chars due to PostgreSQL identifier truncation).
+        with engine.begin() as conn:
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
+        detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
         print(f"✓ Updated errors table: {errors_table_name}")
     except Exception as e:
-        print(f"Warning: Could not update errors table for {table_name}: {e}")
+        print(f"ERROR: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()
+        raise
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Wrangling Endpoints (Supports both bin-based and ID-based selections)
@@ -146,6 +171,171 @@ def wrangle_impute():
         }
     except Exception as e:
         print("ERROR OCCURRED")
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.post("/api/wrangle/create-previews")
+def create_previews():
+    """
+    Create preview copies of the main table for the current row selection.
+
+    For 1D (len(cols)==1):
+      - <table>_preview_delete  : selected rows removed
+      - <table>_preview_impute  : selected column imputed for those rows
+
+    For 2D (len(cols)==2):
+      - <table>_preview_delete    : selected rows removed
+      - <table>_preview_impute_x  : cols[0] imputed for those rows
+      - <table>_preview_impute_y  : cols[1] imputed for those rows
+
+    Body JSON:
+      table    – main table name
+      row_ids  – list of integer row IDs to operate on
+      cols     – list of column names involved in the selection (for imputation)
+    """
+    try:
+        body = request.get_json(force=True)
+        table   = body["table"]
+        row_ids = body.get("row_ids", [])
+        cols    = body.get("cols", [])
+
+        if not row_ids:
+            return {"success": False, "error": "No rows selected"}, 400
+
+        errors_src     = f"errors_{table}"
+        preview_delete = _preview_name(table, "_preview_delete")
+        errors_dst_del = f"errors_{preview_delete}"
+
+        if len(cols) == 1:
+            # ── 1D: delete + single impute ───────────────────────────────────
+            preview_impute = _preview_name(table, "_preview_impute")
+            errors_dst_imp = f"errors_{preview_impute}"
+
+            with engine.begin() as conn:
+                # Delete preview
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
+
+                # Impute preview
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{preview_impute}" AS SELECT * FROM "{table}"'))
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp}" AS SELECT * FROM "{errors_src}"'))
+
+            query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
+            query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
+
+            update_errors_table(preview_delete)
+            update_errors_table(preview_impute)
+
+            return {
+                "success": True,
+                "preview_delete": preview_delete,
+                "preview_impute": preview_impute,
+                "dims": 1,
+            }
+
+        else:
+            # ── 2D: delete + impute_x + impute_y ────────────────────────────
+            preview_impute_x = _preview_name(table, "_preview_impute_x")
+            preview_impute_y = _preview_name(table, "_preview_impute_y")
+            errors_dst_imp_x = f"errors_{preview_impute_x}"
+            errors_dst_imp_y = f"errors_{preview_impute_y}"
+
+            with engine.begin() as conn:
+                # Delete preview
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
+
+                # Impute X preview
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_x}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{preview_impute_x}" AS SELECT * FROM "{table}"'))
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_x}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_x}" AS SELECT * FROM "{errors_src}"'))
+
+                # Impute Y preview
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_y}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{preview_impute_y}" AS SELECT * FROM "{table}"'))
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_y}"'))
+                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_y}" AS SELECT * FROM "{errors_src}"'))
+
+            query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
+            query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
+            query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
+
+            update_errors_table(preview_delete)
+            update_errors_table(preview_impute_x)
+            update_errors_table(preview_impute_y)
+
+            return {
+                "success": True,
+                "preview_delete": preview_delete,
+                "preview_impute_x": preview_impute_x,
+                "preview_impute_y": preview_impute_y,
+                "dims": 2,
+            }
+
+    except Exception as e:
+        print("ERROR in create_previews")
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.post("/api/wrangle/execute")
+def execute_wrangle():
+    """
+    Promote a preview table to become the main table:
+    1. Delete all other preview tables (and their errors_ siblings) for this base table
+    2. Rename the main table to <table>_old
+    3. Rename the selected preview table to <table>
+    4. Delete <table>_old
+    """
+    try:
+        body = request.get_json(force=True)
+        table         = body["table"]          # main table name
+        preview_table = body["preview_table"]  # the preview to promote
+
+        # Generate all possible preview names using the same hashing logic so
+        # long table names (which get truncated + hashed) are matched correctly.
+        all_possible_previews = [
+            _preview_name(table, "_preview_delete"),
+            _preview_name(table, "_preview_impute"),
+            _preview_name(table, "_preview_impute_x"),
+            _preview_name(table, "_preview_impute_y"),
+        ]
+
+        with engine.begin() as conn:
+            # Drop every preview table except the one being promoted
+            for pt in all_possible_previews:
+                if pt != preview_table:
+                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{pt}"'))
+                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{pt}"'))
+
+            # Rename main table → _old
+            old_table = f"{table}_old"
+            conn.execute(sa_text(f'ALTER TABLE "{table}" RENAME TO "{old_table}"'))
+            conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{table}" RENAME TO "errors_{old_table}"'))
+
+            # Promote preview → main table name
+            conn.execute(sa_text(f'ALTER TABLE "{preview_table}" RENAME TO "{table}"'))
+            conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{table}"'))
+
+            # Drop the old table
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{old_table}"'))
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{old_table}"'))
+
+        # Refresh the global db_operations so all subsequent histogram/summary
+        # endpoints pick up the promoted table's fresh data and column metadata.
+        db_operations.load_table(table, f"errors_{table}")
+
+        return {"success": True, "table": table}
+    except Exception as e:
+        print("ERROR in execute_wrangle")
         print(traceback.format_exc())
         return {"success": False, "error": str(e)}, 400
 

@@ -1,10 +1,11 @@
 // Buckaroo.jsx
-import React, { createContext, useState } from "react";
+import { createContext, useState } from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
 import RepairPanel from "../panels/RepairPanel.jsx";
 import { SelectionProvider } from "../utils/SelectionContext.jsx";
+import { RowRangeProvider } from "../utils/RowRangeContext.jsx";
 
 import "./Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
@@ -15,6 +16,7 @@ export const ViewContext = createContext();
 export default function Buckaroo({ onReset, uploadResponse }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [sortedAttributes, setSortedAttributes] = useState([]);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const table_name = uploadResponse?.table_name || "unknown_table";
     const [activeView, setActiveView] = useState("plots");
@@ -22,10 +24,11 @@ export default function Buckaroo({ onReset, uploadResponse }) {
     return (
         <>
             <ViewContext.Provider value={{ activeView, setActiveView }}>
+                <RowRangeProvider>
                 {/* SelectionProvider wraps everything so both plots and RepairPanel share state */}
                 <SelectionProvider>
                     <BuckarooHeader onReset={onReset} />
-                    <div className="matrix-and-dropdown-container">
+                    <div key={refreshKey} className="matrix-and-dropdown-container">
                         <AttributeSummaryPanel
                             table_name={table_name}
                             selectedAttributes={selectedAttributes}
@@ -42,7 +45,10 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                                             table_name={table_name}
                                             selectedAttributes={selectedAttributes}
                                         />
-                                        <RepairPanel table_name={table_name} />
+                                        <RepairPanel
+                                            table_name={table_name}
+                                            onWrangleExecuted={() => setRefreshKey(k => k + 1)}
+                                        />
                                     </>
                                 )}
                                 {/*Graph View*/}
@@ -59,6 +65,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                         <div id="tooltip" className="tooltip"></div>
                     </div>
                 </SelectionProvider>
+                </RowRangeProvider>
             </ViewContext.Provider>
         </>
     );

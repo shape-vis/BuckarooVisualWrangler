@@ -1,24 +1,30 @@
 // SelectionContext.jsx
-// Global context that carries whatever the user last clicked in any plot.
-// Consumed by RepairPanel to show previews and fire wrangles.
+// Global context shared by all plots and the RepairPanel.
+//
+// highlightedRowIds  – row IDs currently lit up across all charts (null = nothing)
+// highlightedCols    – the column name(s) involved in the selection (for imputation)
+//                      [colX] for histogram, [colX, colY] for heatmap/scatterplot
 
 import { createContext, useContext, useState, useCallback } from "react";
 
 export const SelectionContext = createContext(null);
 
 /**
- * Shape of selectionMeta:
+ * Shape of selectionMeta (kept for RepairPanel back-compat):
  * {
- *   table:    string          — DB table name
+ *   table:    string
  *   viewType: "heatmap" | "barchart" | "scatterplot"
- *   cols:     string[]        — [xCol] for barchart, [xCol, yCol] for heatmap/scatter
- *   data:     object[]        — raw bin/point objects from the plot (the `selected` array)
- *   scaleX:   object          — histogram scaleX descriptor (for preview re-rendering)
- *   scaleY:   object | null   — histogram scaleY descriptor (null for barchart)
+ *   cols:     string[]
+ *   data:     object[]
+ *   scaleX:   object
+ *   scaleY:   object | null
  * }
  */
 export function SelectionProvider({ children }) {
   const [selection, setSelectionState] = useState(null);
+  const [highlightedRowIds, setHighlightedRowIdsState] = useState(null);
+  const [highlightedCols, setHighlightedColsState] = useState(null);
+  const [selectionSource, setSelectionSourceState] = useState(null);
 
   const setSelection = useCallback((meta) => {
     setSelectionState(meta);
@@ -28,8 +34,31 @@ export function SelectionProvider({ children }) {
     setSelectionState(null);
   }, []);
 
+  /**
+   * Set the cross-chart highlight.
+   * @param {number[]} ids    – row IDs to highlight (pass null/[] to clear)
+   * @param {string[]} cols   – columns involved (for preview / imputation)
+   * @param {string|null} source – "histogram" | "heatmap" | "scatterplot" | null
+   */
+  const setHighlightedRowIds = useCallback((ids, cols, source = null) => {
+    setHighlightedRowIdsState(ids && ids.length > 0 ? ids : null);
+    setHighlightedColsState(cols && cols.length > 0 ? cols : null);
+    setSelectionSourceState(source);
+  }, []);
+
+  const clearHighlight = useCallback(() => {
+    setHighlightedRowIdsState(null);
+    setHighlightedColsState(null);
+    setSelectionSourceState(null);
+  }, []);
+
   return (
-    <SelectionContext.Provider value={{ selection, setSelection, clearSelection }}>
+    <SelectionContext.Provider value={{
+      selection, setSelection, clearSelection,
+      highlightedRowIds, highlightedCols,
+      selectionSource,
+      setHighlightedRowIds, clearHighlight,
+    }}>
       {children}
     </SelectionContext.Provider>
   );

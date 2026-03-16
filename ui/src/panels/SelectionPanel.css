@@ -1,0 +1,17 @@
+.plot-cell-icon {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.plot-cell-wrapper:hover .plot-cell-icon {
+    opacity: 1;
+}
+
+.plot-minimize-icon {
+    opacity: 0.75;
+    transition: opacity 0.15s ease;
+}
+
+.plot-minimize-icon:hover {
+    opacity: 1;
+}

@@ -53,6 +53,36 @@ async function queryHistogram2d(tableName, columnX, columnY, bins) {
     }
 }
 
+export async function queryHistogram1dRange(tableName, columnName, binCount, minId, maxId) {
+    const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: minId, max_id: maxId, bins: binCount });
+    try {
+        const response = await fetch(`/api/plots/1-d-histogram?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+export async function queryHistogram2dRange(tableName, columnX, columnY, bins, minId, maxId) {
+    const params = new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: minId, max_id: maxId, x_bins: bins, y_bins: bins });
+    try {
+        const response = await fetch(`/api/plots/2-d-histogram?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+export async function querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples, minId, maxId) {
+    const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: minId, max_id: maxId, error_sample_count: errorSamples, total_sample_count: totalSamples });
+    try {
+        const response = await fetch(`/api/plots/scatterplot?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
 export async function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples) {
     const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: 0, max_id: 10000, error_sample_count: errorSamples, total_sample_count: totalSamples });
     try {
@@ -135,6 +165,119 @@ export async function wranglePreview(table, currentSelection, cols, method) {
     }
 }
 
+/**
+ * POST /api/plots/rows-in-bin
+ * Get row IDs inside a clicked histogram bin or heatmap tile.
+ *
+ * For 1-D:  { type:"1d", column, bin, bin_count }
+ * For 2-D:  { type:"2d", column_x, column_y, x_bin, y_bin, x_bins, y_bins }
+ */
+export async function queryRowsInBin(params) {
+    try {
+        const response = await fetch("/api/plots/rows-in-bin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[queryRowsInBin]", error.message);
+    }
+}
+
+/**
+ * POST /api/plots/bins-for-rows
+ * Given row IDs, find which bins contain them.
+ *
+ * For 1-D:  { type:"1d", column, row_ids, bin_count }
+ * For 2-D:  { type:"2d", column_x, column_y, row_ids, x_bins, y_bins }
+ */
+export async function queryBinsForRows(params) {
+    try {
+        const response = await fetch("/api/plots/bins-for-rows", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[queryBinsForRows]", error.message);
+    }
+}
+
+/**
+ * POST /api/wrangle/create-previews
+ * Create preview_delete and preview_impute copies of the table,
+ * apply wrangling to each, re-run error detection, and return the
+ * two preview table names.
+ *
+ * { table, row_ids, cols }
+ */
+export async function createPreviews(table, rowIds, cols) {
+    try {
+        const response = await fetch("/api/wrangle/create-previews", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table, row_ids: rowIds, cols }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[createPreviews]", error.message);
+    }
+}
+
+/**
+ * GET /api/plots/preview-histogram
+ * Fetch histogram data for a preview table (preview_delete / preview_impute).
+ *
+ * params shape:
+ *   { type:"1d", tablename, column, bins }
+ *   { type:"2d", tablename, column_x, column_y, x_bins, y_bins }
+ */
+export async function queryPreviewHistogram(params) {
+    try {
+        const qs = new URLSearchParams(params);
+        const response = await fetch(`/api/plots/preview-histogram?${qs}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error("[queryPreviewHistogram]", error.message);
+    }
+}
+
+/**
+ * POST /api/wrangle/execute
+ * Promote a preview table to be the main table, deleting all other previews.
+ */
+export async function executeWrangle(table, previewTable) {
+    try {
+        const response = await fetch("/api/wrangle/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table, preview_table: previewTable }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[executeWrangle]", error.message);
+    }
+}
+
+/**
+ * GET /api/plots/preview-scatterplot
+ * Fetch scatterplot data for a preview table.
+ *
+ * params shape:
+ *   { tablename, x_column, y_column, error_sample_count, total_sample_count }
+ */
+export async function queryPreviewScatterplot(params) {
+    try {
+        const qs = new URLSearchParams(params);
+        const response = await fetch(`/api/plots/preview-scatterplot?${qs}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error("[queryPreviewScatterplot]", error.message);
+    }
+}
+
 export {
     uploadFileToDB,
     getSampleData,
@@ -155,6 +298,12 @@ const serverCalls = {
     wrangleRemove,
     wrangleImpute,
     wranglePreview,
+    queryRowsInBin,
+    queryBinsForRows,
+    createPreviews,
+    queryPreviewHistogram,
+    queryPreviewScatterplot,
+    executeWrangle,
 };
 
 export default serverCalls;
