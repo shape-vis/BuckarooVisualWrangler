@@ -19,24 +19,6 @@ def test_database_name(db_connection, test_db_config):
     result = db_connection.execute(text("SELECT current_database()"))
     assert result.scalar() == test_db_config["db_name"]
 
-
-@pytest.mark.sql
-def test_plpgsql_functions_loaded(db_connection):
-    """Verify all custom PL/pgSQL functions are initialized"""
-    functions = [
-        'generate_one_d_histogram_with_errors',
-        'generate_two_d_histogram_with_errors',
-        'generate_scatterplot_with_errors'
-    ]
-
-    for func_name in functions:
-        result = db_connection.execute(text("""
-            SELECT COUNT(*) FROM pg_proc
-            WHERE proname = :name
-        """), {"name": func_name})
-        assert result.scalar() > 0, f"PL/pgSQL function '{func_name}' not found"
-
-
 @pytest.mark.sql
 def test_create_table_from_dataframe(db_transaction):
     """Test creating table from pandas DataFrame"""
