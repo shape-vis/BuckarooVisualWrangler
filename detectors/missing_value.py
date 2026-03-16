@@ -1,7 +1,4 @@
-from zipfile import error
-
 import pandas as pd
-from numpy.ma.core import indices
 
 
 def missing_value(data_frame):
@@ -13,7 +10,13 @@ def missing_value(data_frame):
     """
     error_map = {}
 
-    mask = data_frame.isna() | (data_frame.astype(str) == 'null') | (data_frame.astype(str) == 'undefined')
+    normalized = data_frame.astype(str).apply(lambda column: column.str.strip().str.lower())
+    mask = (
+        data_frame.isna()
+        | normalized.eq("")
+        | normalized.eq("null")
+        | normalized.eq("undefined")
+    )
     na_locations = mask.stack()
     missing_coords = na_locations[na_locations].index.tolist()
 

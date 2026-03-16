@@ -886,6 +886,141 @@ DB_FUNCTIONS = {
         RETURN;
     END;
     $FUNC$;
+    """,
+    "detect_missing_values": """
+    CREATE OR REPLACE FUNCTION detect_missing_values(
+        p_table_name text
+    )
+    RETURNS TABLE (
+        row_id integer,
+        column_name text,
+        error_type text,
+        error_value text
+    )
+    LANGUAGE plpgsql
+    AS $FUNC$
+    DECLARE
+        col RECORD;
+        query_text text;
+        tbl text;
+    BEGIN
+        tbl := quote_ident(p_table_name);
+
+        FOR col IN
+            SELECT c.column_name
+            FROM information_schema.columns c
+            WHERE c.table_name = p_table_name
+              AND c.column_name <> 'ID'
+        LOOP
+            query_text := format($SQL$
+                SELECT
+                    "ID"::int AS row_id,
+                    %1$L AS column_name,
+                    'missing'::text AS error_type,
+                    %2$I::text AS error_value
+                FROM %3$s
+                WHERE %2$I IS NULL
+                   OR NULLIF(BTRIM(%2$I::text), '') IS NULL
+                   OR LOWER(BTRIM(%2$I::text)) IN ('null', 'undefined')
+            $SQL$,
+                col.column_name,
+                col.column_name,
+                tbl
+            );
+
+            RETURN QUERY EXECUTE query_text;
+        END LOOP;
+
+        RETURN;
+    END;
+    $FUNC$;
+    """,
+    "detect_datatype_mismatch": r"""
+    CREATE OR REPLACE FUNCTION detect_datatype_mismatch(
+        p_table_name text
+    )
+    RETURNS TABLE (
+        row_id integer,
+        column_name text,
+        error_type text,
+        error_value text
+    )
+    LANGUAGE plpgsql
+    AS $FUNC$
+    DECLARE
+        col RECORD;
+        query_text text;
+        tbl text;
+    BEGIN
+        tbl := quote_ident(p_table_name);
+
+        FOR col IN
+            SELECT c.column_name
+            FROM information_schema.columns c
+            WHERE c.table_name = p_table_name
+              AND c.column_name <> 'ID'
+        LOOP
+            query_text := format($SQL$
+                WITH classified AS (
+                    SELECT
+                        "ID"::int AS row_id,
+                        %1$I::text AS error_value,
+                        CASE
+                            WHEN %1$I IS NULL THEN NULL
+                            WHEN NULLIF(BTRIM(%1$I::text), '') IS NULL THEN NULL
+                            WHEN LOWER(BTRIM(%1$I::text)) IN ('null', 'undefined') THEN NULL
+                            WHEN BTRIM(%1$I::text) ~* '^[+-]?(\d+(\.\d+)?|\.\d+)$' THEN 'numeric'
+                            WHEN LOWER(BTRIM(%1$I::text)) ~ '^(true|false|t|f|yes|no|y|n)$' THEN 'boolean'
+                            WHEN BTRIM(%1$I::text) ~ '^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$'
+                              OR BTRIM(%1$I::text) ~ '^\d{1,2}/\d{1,2}/\d{4}$'
+                              OR BTRIM(%1$I::text) ~ '^\d{4}/\d{1,2}/\d{1,2}$'
+                            THEN 'datetime'
+                            ELSE 'text'
+                        END AS value_type
+                    FROM %2$s
+                ),
+                type_counts AS (
+                    SELECT
+                        value_type,
+                        COUNT(*)::int AS type_count,
+                        CASE value_type
+                            WHEN 'numeric' THEN 1
+                            WHEN 'datetime' THEN 2
+                            WHEN 'boolean' THEN 3
+                            WHEN 'text' THEN 4
+                            ELSE 5
+                        END AS type_priority
+                    FROM classified
+                    WHERE value_type IS NOT NULL
+                    GROUP BY value_type
+                ),
+                majority_type AS (
+                    SELECT value_type
+                    FROM type_counts
+                    ORDER BY type_count DESC, type_priority ASC
+                    LIMIT 1
+                )
+                SELECT
+                    c.row_id,
+                    %3$L AS column_name,
+                    'mismatch'::text AS error_type,
+                    c.error_value
+                FROM classified c
+                CROSS JOIN majority_type mt
+                WHERE c.value_type IS NOT NULL
+                  AND c.value_type <> mt.value_type
+            $SQL$,
+                col.column_name,
+                tbl,
+                col.column_name
+            );
+
+            RETURN QUERY EXECUTE query_text;
+        END LOOP;
+
+        RETURN;
+    END;
+    $FUNC$;
     """
 
 }

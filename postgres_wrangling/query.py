@@ -42,7 +42,8 @@ def _missing_pred(col: str) -> str:
     """Boolean SQL expression that is TRUE when column is 'missing'."""
     return (
         f"(\"{col}\" IS NULL "
-        f"OR \"{col}\"::text IN ('', 'null', 'undefined'))"
+        f"OR NULLIF(BTRIM(\"{col}\"::text), '') IS NULL "
+        f"OR LOWER(BTRIM(\"{col}\"::text)) IN ('null', 'undefined'))"
     )
 
 
@@ -356,7 +357,7 @@ def remove_flagged_rows_in_bin(
     current_selection : dict
         The object returned by the histogram endpoint
     cols : list[str]
-        [x_col, y_col] (x = numeric, y = categorical)
+        [x_col, y_col] (supports numeric/categorical for both axes)
     table : str
         Table name to modify in-place
 
@@ -365,16 +366,35 @@ def remove_flagged_rows_in_bin(
     int
         Number of rows remaining in table
     """
-    sel   = current_selection["data"][0]
-    x_bin = sel["xBin"]
-    y_val = sel["yBin"]
+    if len(cols) != 2:
+        raise ValueError("cols must be exactly [x_column, y_column]")
 
-    # Numeric x-axis boundaries (lo ≤ value < hi)
-    x_lo, x_hi = _get_numeric_bin_bounds(current_selection["scaleX"], x_bin)
+    x_col, y_col = cols
+    sel = current_selection["data"][0]
+    params: Dict[str, Any] = {}
+
+    where_parts = [
+        _bin_predicate(
+            bin_val=sel["xBin"],
+            bin_type=sel["xType"],
+            scale=current_selection["scaleX"],
+            col=x_col,
+            params=params,
+            pfx="x",
+        ),
+        _bin_predicate(
+            bin_val=sel["yBin"],
+            bin_type=sel["yType"],
+            scale=current_selection["scaleY"],
+            col=y_col,
+            params=params,
+            pfx="y",
+        ),
+    ]
+    bin_where_sql = " AND ".join(where_parts)
 
     errors_table = _get_errors_table(table)
 
-    # Delete rows that are in the bin AND have errors in the errors table
     sql = f"""
     DELETE FROM "{table}"
     WHERE "ID" IN (
@@ -382,31 +402,16 @@ def remove_flagged_rows_in_bin(
         FROM "{table}" t
         JOIN "{errors_table}" e ON t."ID" = e.row_id
         WHERE
-            /* Bin filter */
-            t."{cols[0]}" >= :x_lo
-            AND t."{cols[0]}" <= :x_hi
-            AND t."{cols[1]}" = :y_val
-
-            /* Has error in either X or Y column */
+            {bin_where_sql}
             AND e.column_id IN (:col_x, :col_y)
     )
     """
 
     with engine.begin() as conn:
-        conn.execute(
-            text(sql),
-            {
-                "x_lo": x_lo,
-                "x_hi": x_hi,
-                "y_val": y_val,
-                "col_x": cols[0],
-                "col_y": cols[1]
-            }
-        )
+        conn.execute(text(sql), dict(params, col_x=x_col, col_y=y_col))
         n_rows = _get_row_count(conn, table)
 
     return n_rows
-
 
 def _bin_predicate(
     *,
@@ -1047,3 +1052,4 @@ def build_composite_index(table_name: str, column1: str, column2: str) -> str:
 
     idx.create(bind=engine, checkfirst=True)
     return idx.name
+

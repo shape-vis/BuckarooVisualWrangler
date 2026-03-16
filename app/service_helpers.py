@@ -7,8 +7,6 @@ import pandas as pd
 
 from app import data_state_manager
 from app.set_id_column import set_id_column
-from detectors.datatype_mismatch import datatype_mismatch
-from detectors.missing_value import missing_value
 from app import engine
 from sqlalchemy import text
 
@@ -235,9 +233,6 @@ def run_detectors(table_name: str, anomaly_method: str = "zscore", anomaly_metho
     """
     methods_to_run = _normalize_anomaly_methods(anomaly_methods=anomaly_methods, anomaly_method=anomaly_method)
 
-    df_with_id = pd.read_sql_query(text(f'SELECT * FROM "{table_name}"'), engine)
-
-
     sql = text("""
         SELECT row_id, column_name, error_type
         FROM detect_anomalies(:table_name, :method)
@@ -292,8 +287,45 @@ def run_detectors(table_name: str, anomaly_method: str = "zscore", anomaly_metho
             .reset_index()
         )
 
-    missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
+    missing_sql = text("""
+        SELECT row_id, column_name, error_type
+        FROM detect_missing_values(:table_name)
+    """)
+    missing_long = pd.read_sql_query(
+        missing_sql,
+        engine,
+        params={"table_name": table_name}
+    )
+
+    if missing_long.empty:
+        missing_value_df = pd.DataFrame({"ID": []})
+    else:
+        missing_value_df = (
+            missing_long
+            .rename(columns={"row_id": "ID"})
+            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
+            .reset_index()
+        )
+
+    mismatch_sql = text("""
+        SELECT row_id, column_name, error_type
+        FROM detect_datatype_mismatch(:table_name)
+    """)
+    mismatch_long = pd.read_sql_query(
+        mismatch_sql,
+        engine,
+        params={"table_name": table_name}
+    )
+
+    if mismatch_long.empty:
+        datatype_mismatch_df = pd.DataFrame({"ID": []})
+    else:
+        datatype_mismatch_df = (
+            mismatch_long
+            .rename(columns={"row_id": "ID"})
+            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
+            .reset_index()
+        )
 
     frames = [anomaly_df, rarity_df, missing_value_df, datatype_mismatch_df]
     combined = perform_melt(frames)

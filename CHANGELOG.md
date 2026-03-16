@@ -127,6 +127,41 @@ This entry starts with anomaly detection improvements; upcoming work will contin
   - This restored per-attribute rendering of rarity errors in summaries/plots/table.
   - File: `app/service_helpers.py`
 
+- Migrated missing-value detection to SQL:
+  - Added PostgreSQL function `detect_missing_values(table_name)` to replace the active Python missing-value path.
+  - Missing values are now normalized more robustly and include:
+    - `NULL`
+    - empty strings
+    - whitespace-only strings
+    - case-insensitive `null`
+    - case-insensitive `undefined`
+  - Runtime detector pipeline now uses the SQL missing detector in active routes and recomputation.
+  - Shared wrangling-side missing predicate was updated to match the same normalization logic so detection and repair stay aligned.
+  - Files:
+    - `app/db_functions.py`
+    - `app/service_helpers.py`
+    - `postgres_wrangling/query.py`
+    - `detectors/missing_value.py`
+
+- Migrated datatype mismatch detection to SQL and expanded semantic type handling:
+  - Added PostgreSQL function `detect_datatype_mismatch(table_name)` to replace the active Python mismatch path.
+  - The SQL detector now classifies non-missing values into:
+    - `numeric`
+    - `boolean`
+    - `datetime`
+    - `text`
+  - Majority type is computed per column, and non-matching rows are emitted as `error_type = "mismatch"`.
+  - Missing-like values are excluded before mismatch classification so they stay owned by the missing-value detector.
+  - Runtime detector pipeline now uses the SQL mismatch detector in upload detection and wrangle recomputation.
+  - Files:
+    - `app/db_functions.py`
+    - `app/service_helpers.py`
+    - `detectors/datatype_mismatch.py`
+
+- Added detector-specific demo data for safer testing:
+  - Kept `provided_datasets/anomaly_test.csv` focused on anomaly, rarity, and missing-value scenarios without introducing mixed-type numeric columns that destabilize summary views.
+  - Added `provided_datasets/datatype_mismatch_test.csv` for boolean/date mismatch demos so mismatch testing does not interfere with the main anomaly demo file.
+
 ### Documentation
 - Added automated Python API docs setup using Sphinx + AutoAPI:
   - `docs/conf.py`
