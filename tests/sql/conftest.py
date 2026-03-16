@@ -5,7 +5,6 @@ import pytest
 import json
 from pathlib import Path
 from sqlalchemy import create_engine, text, exc
-from app.db_functions import DB_FUNCTIONS
 
 
 def _get_db_url(config, db_name=None):
@@ -68,18 +67,6 @@ def test_database(_admin_engine, test_db_config):
 def test_engine(test_database, test_db_config):
     """SQLAlchemy engine for test database"""
     engine = create_engine(_get_db_url(test_db_config))
-
-    # Initialize PL/pgSQL functions
-    with engine.connect() as conn:
-        trans = conn.begin()
-        try:
-            for func_name, func_sql in DB_FUNCTIONS.items():
-                conn.execute(text(func_sql))
-            trans.commit()
-        except exc.SQLAlchemyError as e:
-            trans.rollback()
-            pytest.fail(f"Failed to initialize PL/pgSQL functions: {e}")
-
     yield engine
     engine.dispose()
 

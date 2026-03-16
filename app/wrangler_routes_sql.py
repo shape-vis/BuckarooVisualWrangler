@@ -3,13 +3,13 @@
 
 from flask import request
 from app import app
-from app import engine, db_operations
+from app import engine
 from postgres_wrangling import query
 import traceback
 import hashlib
 import pandas as pd
 from pprint import pprint
-from app.service_helpers import run_detectors
+from app.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview
 from sqlalchemy import text as sa_text
 
 
@@ -60,119 +60,10 @@ def update_errors_table(table_name: str) -> None:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Wrangling Endpoints (Supports both bin-based and ID-based selections)
+# the way it works is, create-previews does all wrangles (delete, impute x/y), 
+# puts the wrangled tables into the DB, then execute promotes the desired wrangle
+# and deletes the previews
 # ─────────────────────────────────────────────────────────────────────────────
-
-@app.post("/api/wrangle/remove")
-def wrangle_remove():
-    """
-    Remove rows in-place. Handles both bin-based (histogram) and ID-based (scatterplot) selections.
-
-    Modifies the table directly - no versioning.
-    """
-    try:
-        body = request.get_json(force=True)
-        currentSelection = body["currentSelection"]
-        cols = body["cols"]
-        table = body["table"]
-
-        print("current selection:")
-        pprint(currentSelection)
-        print("cols:")
-        pprint(cols)
-        print("table:", table)
-
-        # Detect selection type: 1D bin / 2D bin / ID-based
-        first_item = currentSelection["data"][0]
-
-        if "bin" in first_item and "xBin" not in first_item:
-            # 1D histogram (barchart) - uses "bin" not "xBin"
-            remaining_rows = query.remove_flagged_rows_in_1d_bin(
-                current_selection=currentSelection,
-                col=cols[0],  # Only one column for 1D
-                table=table
-            )
-        elif "xBin" in first_item and "yBin" in first_item:
-            # 2D histogram (heatmap)
-            remaining_rows = query.remove_flagged_rows_in_bin(
-                current_selection=currentSelection,
-                cols=cols,
-                table=table
-            )
-        else:
-            # ID-based (scatterplot)
-            ids = [point["ID"] for point in currentSelection["data"]]
-            remaining_rows = query.remove_rows_by_ids(table=table, ids=ids)
-
-        # Re-run error detection
-        update_errors_table(table)
-
-        return {
-            "success": True,
-            "remaining_rows": remaining_rows
-        }
-    except Exception as e:
-        print("ERROR OCCURRED")
-        print(traceback.format_exc())
-        return {"success": False, "error": str(e)}, 400
-
-
-@app.post("/api/wrangle/impute")
-def wrangle_impute():
-    """
-    Impute missing values in-place. Handles both bin-based (histogram) and ID-based (scatterplot) selections.
-
-    Modifies the table directly - no versioning.
-    """
-    try:
-        body = request.get_json(force=True)
-        currentSelection = body["currentSelection"]
-        cols = body["cols"]
-        table = body["table"]
-        col = body.get("col")  # For scatterplot: which specific column to impute
-
-        print("current selection:")
-        pprint(currentSelection)
-        print("cols:")
-        pprint(cols)
-        print("col:", col)
-        print("table:", table)
-
-        # Detect selection type: 1D bin / 2D bin / ID-based
-        first_item = currentSelection["data"][0]
-
-        if "bin" in first_item and "xBin" not in first_item:
-            # 1D histogram (barchart) - uses "bin" not "xBin"
-            rows_examined, cells_imputed = query.impute_1d_bin_in_place(
-                current_selection=currentSelection,
-                col=cols[0],  # Only one column for 1D
-                table=table
-            )
-        elif "xBin" in first_item and "yBin" in first_item:
-            # 2D histogram (heatmap)
-            rows_examined, cells_imputed = query.impute_bin_in_place(
-                current_selection=currentSelection,
-                cols=cols,
-                table=table
-            )
-        else:
-            # ID-based (scatterplot)
-            if not col:
-                return {"success": False, "error": "Column 'col' required for scatterplot imputation"}, 400
-            ids = [point["ID"] for point in currentSelection["data"]]
-            rows_examined, cells_imputed = query.impute_by_ids(table=table, col=col, ids=ids)
-
-        # Re-run error detection
-        update_errors_table(table)
-
-        return {
-            "success": True,
-            "rows_examined": rows_examined,
-            "cells_imputed": cells_imputed
-        }
-    except Exception as e:
-        print("ERROR OCCURRED")
-        print(traceback.format_exc())
-        return {"success": False, "error": str(e)}, 400
 
 
 @app.post("/api/wrangle/create-previews")
@@ -203,82 +94,10 @@ def create_previews():
         if not row_ids:
             return {"success": False, "error": "No rows selected"}, 400
 
-        errors_src     = f"errors_{table}"
-        preview_delete = _preview_name(table, "_preview_delete")
-        errors_dst_del = f"errors_{preview_delete}"
-
         if len(cols) == 1:
-            # ── 1D: delete + single impute ───────────────────────────────────
-            preview_impute = _preview_name(table, "_preview_impute")
-            errors_dst_imp = f"errors_{preview_impute}"
-
-            with engine.begin() as conn:
-                # Delete preview
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
-
-                # Impute preview
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{preview_impute}" AS SELECT * FROM "{table}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp}" AS SELECT * FROM "{errors_src}"'))
-
-            query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-            query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
-
-            update_errors_table(preview_delete)
-            update_errors_table(preview_impute)
-
-            return {
-                "success": True,
-                "preview_delete": preview_delete,
-                "preview_impute": preview_impute,
-                "dims": 1,
-            }
-
+            return create_previews_1d(table, row_ids, cols, _preview_name, update_errors_table)
         else:
-            # ── 2D: delete + impute_x + impute_y ────────────────────────────
-            preview_impute_x = _preview_name(table, "_preview_impute_x")
-            preview_impute_y = _preview_name(table, "_preview_impute_y")
-            errors_dst_imp_x = f"errors_{preview_impute_x}"
-            errors_dst_imp_y = f"errors_{preview_impute_y}"
-
-            with engine.begin() as conn:
-                # Delete preview
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
-
-                # Impute X preview
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_x}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{preview_impute_x}" AS SELECT * FROM "{table}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_x}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_x}" AS SELECT * FROM "{errors_src}"'))
-
-                # Impute Y preview
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_y}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{preview_impute_y}" AS SELECT * FROM "{table}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_y}"'))
-                conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_y}" AS SELECT * FROM "{errors_src}"'))
-
-            query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-            query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
-            query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
-
-            update_errors_table(preview_delete)
-            update_errors_table(preview_impute_x)
-            update_errors_table(preview_impute_y)
-
-            return {
-                "success": True,
-                "preview_delete": preview_delete,
-                "preview_impute_x": preview_impute_x,
-                "preview_impute_y": preview_impute_y,
-                "dims": 2,
-            }
+            return create_previews_2d(table, row_ids, cols, _preview_name, update_errors_table)
 
     except Exception as e:
         print("ERROR in create_previews")
@@ -300,40 +119,7 @@ def execute_wrangle():
         table         = body["table"]          # main table name
         preview_table = body["preview_table"]  # the preview to promote
 
-        # Generate all possible preview names using the same hashing logic so
-        # long table names (which get truncated + hashed) are matched correctly.
-        all_possible_previews = [
-            _preview_name(table, "_preview_delete"),
-            _preview_name(table, "_preview_impute"),
-            _preview_name(table, "_preview_impute_x"),
-            _preview_name(table, "_preview_impute_y"),
-        ]
-
-        with engine.begin() as conn:
-            # Drop every preview table except the one being promoted
-            for pt in all_possible_previews:
-                if pt != preview_table:
-                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{pt}"'))
-                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{pt}"'))
-
-            # Rename main table → _old
-            old_table = f"{table}_old"
-            conn.execute(sa_text(f'ALTER TABLE "{table}" RENAME TO "{old_table}"'))
-            conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{table}" RENAME TO "errors_{old_table}"'))
-
-            # Promote preview → main table name
-            conn.execute(sa_text(f'ALTER TABLE "{preview_table}" RENAME TO "{table}"'))
-            conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{table}"'))
-
-            # Drop the old table
-            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{old_table}"'))
-            conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{old_table}"'))
-
-        # Refresh the global db_operations so all subsequent histogram/summary
-        # endpoints pick up the promoted table's fresh data and column metadata.
-        db_operations.load_table(table, f"errors_{table}")
-
-        return {"success": True, "table": table}
+        return execute_wrangle_preview(table, preview_table, _preview_name)
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())
