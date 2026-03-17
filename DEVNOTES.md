@@ -13,9 +13,8 @@ This document explains all the different structures that power Buckaroo Visual W
 4. [DBOperations](#4-dboperations)
 5. [ColumnTypes](#5-columntypes)
 6. [FilteringSQL](#6-filteringsql)
-7. [How It All Connects](#7-how-it-all-connects)
-8. [Key Files](#8-key-files)
-9. [Known Gaps](#9-known-gaps)
+7. [Key Files](#7-key-files)
+8. [Known Gaps](#8-known-gaps)
 
 ---
 
