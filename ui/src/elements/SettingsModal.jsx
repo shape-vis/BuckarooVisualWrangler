@@ -34,7 +34,7 @@ export default function SettingsModal({ visible, onClose }) {
         <Modal visible={visible}>
             <h2 style={{ marginTop: 0, marginBottom: 20 }}>Plot Settings</h2>
 
-            <div className="settings-row">
+            {/* <div className="settings-row">
                 <label className="settings-label">Data Range</label>
                 <div className="settings-toggle">
                     <button
@@ -75,7 +75,7 @@ export default function SettingsModal({ visible, onClose }) {
                         />
                     </div>
                 </>
-            )}
+            )} */}
 
             <div className="settings-actions">
                 <button className="settings-btn settings-btn--apply" onClick={handleApply}>
@@ -85,6 +85,7 @@ export default function SettingsModal({ visible, onClose }) {
                     Cancel
                 </button>
             </div>
+            <p>Place to add settings later on such as anomaly type, or other things</p>
         </Modal>
     );
 }

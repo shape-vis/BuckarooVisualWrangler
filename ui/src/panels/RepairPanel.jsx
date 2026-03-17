@@ -96,7 +96,7 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
             }}
             onClick={handleRepairSelection}
           >
-            ⚒️ Repair Selection
+            Repair Selection
           </div>
 
           <div
@@ -104,7 +104,7 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
             className="regButton"
             style={{ width: "130px", marginLeft: "25px", marginRight: "25px" }}
           >
-            🔍 Zoom Selection
+            Zoom Selection
           </div>
 
           <div
@@ -113,11 +113,11 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
             style={{ width: "65px" }}
             onClick={handleClearSelection}
           >
-            ↩️ Undo
+            Undo
           </div>
 
           <div id="redoButton" className="regButton" style={{ width: "65px" }}>
-            🔄 Redo
+            Redo
           </div>
         </div>
 

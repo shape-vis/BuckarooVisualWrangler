@@ -1,28 +1,28 @@
 .panel {
   position: relative;
   display: flex;
-  height: 100%;               /* stretch to fill parent height */
-  transition: width 0.3s ease;
-  background: #fff;
+  height: 100%;
+  transition: width 0.25s ease;
+  background: #ffffff;
+  border-right: 1px solid #dddfe2;
 }
 
 /* Expanded */
 .panel.open {
-  /* width: 360px; */
-    width: fit-content;
+  width: fit-content;
 }
 
 /* Collapsed (left) */
 .panel.closed {
-  width: 48px;
+  width: 40px;
 }
 
 /* Content */
 .panel-content {
   flex: 1;
-  padding: 5px;
+  padding: 6px;
   white-space: nowrap;
-  overflow: hidden;           /* allows inner scroll containers to work */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -36,19 +36,32 @@
 .panel-toggle {
   position: absolute;
   right: 4px;
-  top: 5px;
-  height: 36px;
-  width: 36px;
+  top: 6px;
+  height: 28px;
+  width: 28px;
   border-radius: 50%;
-  border: none;
-  background: #2563eb;
-  color: white;
+  border: 1px solid #dddfe2;
+  background: #ffffff;
+  color: #1877F2;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel-toggle:hover {
+  background: #edf3fe;
+  box-shadow: 0 2px 6px rgba(24, 119, 242, 0.2);
 }
 
 /* Right-collapsing variant */
 .panel.collapse-right {
   flex-direction: row-reverse;
+  border-right: none;
+  border-left: 1px solid #dddfe2;
 }
 
 /* Move toggle button to the left for right-collapsing panels */
@@ -58,10 +71,10 @@
 }
 
 .panel-collapse-text {
-  writing-mode: vertical-rl;   /* vertical, top → bottom */
+  writing-mode: vertical-rl;
   text-orientation: mixed;
-  transform: rotate(180deg);   /* makes it read bottom → top */
-  
+  transform: rotate(180deg);
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,40 +82,36 @@
   height: 100%;
   padding: 8px 6px;
 
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 
-  background: #f3f4f6;
-  color: #374151;
-  border-left: 1px solid #e5e7eb;
+  background: #f0f2f5;
+  color: #65676b;
+  border-left: 1px solid #dddfe2;
 
   user-select: none;
 }
 
 /* Collapsed: collapse-down (height-based) */
 .panel.collapse-down {
-  /* normal (expanded) layout for collapse-down - full width */
   width: 100%;
   flex-direction: column;
+  border-right: none;
+  border-bottom: 1px solid #dddfe2;
 }
 
-/* When collapse-down variant is closed, reduce height instead of width */
 .panel.collapse-down.closed {
-  height: 48px;
+  height: 40px;
   width: 100%;
-  overflow: visible; /* allow toggle button to sit nicely */
+  overflow: visible;
 }
 
-/* panel-content adjustments for vertical shrink */
 .panel.collapse-down .panel-content {
-  /* padding: 8px; */
-  transition: transform 0.3s ease;
+  transition: transform 0.25s ease;
 }
 
-/* Hidden state for closed panels (both width and height variants) */
 .panel.closed .panel-content {
-  /* opacity: 0; */
   pointer-events: none;
   transform: translateY(-4px);
 }
@@ -110,50 +119,34 @@
 /* Toggle button positioning for collapse-down */
 .panel.collapse-down .panel-toggle {
   position: absolute;
-  /* place toggle centered horizontally when collapsed-down */
-  /* left: 50%; */
-  /* transform: translateX(-50%); */
-  /* bottom: 6px; */ /*place near bottom edge of the collapsed bar */
   top: auto;
-  height: 36px;
-  width: 36px;
+  height: 28px;
+  width: 28px;
   z-index: 10;
 }
 
-/* When collapse-down is open, put toggle at top-right (similar to default) */
 .panel.collapse-down.open .panel-toggle {
   left: auto;
   right: 8px;
-  top: 8px;
+  top: 6px;
   bottom: auto;
   transform: none;
 }
 
-/* When collapse-down is open, put toggle at top-right (similar to default) */
-.panel.collapse-down.open .panel-toggle {
-  left: auto;
-  right: 8px;
-  top: 8px;
-  bottom: auto;
-  transform: none;
-}
-
-/* Add a horizontal collapse-text for collapse-down variant (small center handle) */
+/* Horizontal collapse-text for collapse-down variant */
 .panel.collapse-down .panel-collapse-text {
   writing-mode: horizontal-tb;
   transform: none;
   height: auto;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-left: none;
-  border-top: 1px solid #e5e7eb;
-  background: #f3f4f6;
-  color: #374151;
+  border-top: 1px solid #dddfe2;
+  background: #f0f2f5;
+  color: #65676b;
   font-weight: 600;
+  font-size: 12px;
 }
 
-/* Small responsive tweak so closed panels don't accidentally overflow */
 .panel.closed, .panel.collapse-down.closed {
   overflow: hidden;
 }
-
-
