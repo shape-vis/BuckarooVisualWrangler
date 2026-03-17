@@ -14,6 +14,9 @@ If you want to see an early version of buckaroo (without going through any set u
 
 ## 2026 - How to Start - (to be added)
 
+## Dev Notes
+
+There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. Updated: 3/17/26
 
 ## Improvements Available: 
 
