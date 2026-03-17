@@ -16,7 +16,9 @@ If you want to see an early version of buckaroo (without going through any set u
 
 ## Dev Notes
 
-There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. Updated: 3/17/26
+There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. If others use this branch and change any of the main functionality found in there, please update it so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
+
+Updated: 3/17/26
 
 ## Improvements Available: 
 
