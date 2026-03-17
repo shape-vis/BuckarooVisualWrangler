@@ -309,12 +309,21 @@ def get_sqlalchemy_dtype_map(df):
         if is_categorical(df[col]):
             dtype_map[col] = sql_types.Text()
         else:
-            # Majority of values are numeric - check if they are all integers
-            numeric_series = pd.to_numeric(df[col], errors='coerce').dropna()
-            if (numeric_series == numeric_series.astype(int)).all():
-                dtype_map[col] = sql_types.BigInteger()
+            non_null = df[col].dropna()
+            numeric_series = pd.to_numeric(non_null, errors='coerce')
+            # If any non-null values failed numeric coercion, the column has true mixed
+            # values (e.g. "N/A" strings alongside numbers). Store as Text to preserve
+            # all values; gather_mixed_cols() will classify it as categorical_mixed.
+            if numeric_series.isna().any() or numeric_series.empty:
+                dtype_map[col] = sql_types.Text()
             else:
-                dtype_map[col] = sql_types.Float()
+                try:
+                    if (numeric_series == numeric_series.astype(int)).all():
+                        dtype_map[col] = sql_types.BigInteger()
+                    else:
+                        dtype_map[col] = sql_types.Float()
+                except (OverflowError, ValueError):
+                    dtype_map[col] = sql_types.Float()
     return dtype_map
 
 def create_bins_for_a_numeric_column(column,bin_count):

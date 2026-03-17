@@ -278,6 +278,15 @@ export async function queryPreviewScatterplot(params) {
     }
 }
 
+export async function resetApp() {
+    try {
+        const response = await fetch("/api/reset", { method: "POST" });
+        return await response.json();
+    } catch (error) {
+        console.error("[resetApp]", error.message);
+    }
+}
+
 export {
     uploadFileToDB,
     getSampleData,

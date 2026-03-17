@@ -120,6 +120,16 @@ class DBOperations:
         self.col_types = None
         self.filtering_table = None
 
+    def reset(self):
+        """
+        Resets the DBOperations state, clearing all loaded table references.
+        Called when the user navigates back to the home page.
+        """
+        self.main_table_name = None
+        self.error_table_name = None
+        self.col_types = None
+        self.filtering_table = None
+
     def load_table(self, main_table_name: str, error_table_name: str = None):
         """
         Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new

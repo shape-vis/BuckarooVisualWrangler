@@ -143,6 +143,15 @@ def get_errors():
         return {"success": False, "error": str(e)}
 
 
+@app.post("/api/reset")
+def reset_app():
+    """
+    Resets the server-side DBOperations state when the user navigates back to the home page.
+    """
+    db_operations.reset()
+    return {"success": True}
+
+
 @app.get("/")
 def home():
     # return render_template('ui/dist/index.html')
