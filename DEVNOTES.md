@@ -14,8 +14,7 @@ This document explains all the different structures that power Buckaroo Visual W
 5. [ColumnTypes](#5-columntypes)
 6. [FilteringSQL](#6-filteringsql)
 7. [Key Files](#7-key-files)
-8. [Known Gaps](#8-known-gaps)
-
+8. [Known Gaps](#8-Things-to-be-aware-of)
 ---
 
 ## 1. Detectors
@@ -204,7 +203,7 @@ It maintains a physical Postgres table — `<table>_filtering` — that holds on
 
 ---
 
-## 8. Things to be aware of...
+## 8. Things to be aware of
 
 - **Preview scatterplot isn't implemented.** The frontend references `GET /api/plots/preview-scatterplot` and `GET /api/plots/preview-heatmap`, but these endpoints do not exist in `plot_routes.py`. 2D preview visualizations are currently non-functional.
 
