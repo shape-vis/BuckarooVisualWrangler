@@ -66,39 +66,66 @@
 
 .navButton {
   cursor: pointer;
-  padding: 7px 16px;
-  margin-bottom: 4px;
-  margin-top: 2px;
-  border-radius: 6px;
-  background-color: #1877F2;
-  border: none;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 6px 16px;
+  border-radius: 6px 6px 0 0;
+  background-color: #c8d0e0;
+  border: 1px solid #a8b4c8;
+  border-bottom: none;
+  transition: background-color 0.15s ease;
   text-align: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  position: relative;
+  bottom: -2px;
+  margin-right: 2px;
 }
 
 .navButton:hover {
-  background-color: #166fe5;
-  box-shadow: 0 2px 6px rgba(24, 119, 242, 0.3);
+  background-color: #dce3ef;
 }
 
 .navButton--selected {
-  background-color: #e7f0fd;
-  box-shadow: none;
+  background-color: #ffffff;
+  border-color: #a8b4c8;
+  z-index: 1;
 }
 
 .navButton--selected .navButtonButtonText {
-  color: #1877F2;
+  color: #1a1a2e;
 }
 
 .navButtonButtonText {
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: #3a4560;
 }
 
 .navButtonContainer {
   display: flex;
-  gap: 8px;
+  gap: 0;
   align-items: center;
+  border-bottom: 2px solid #a8b4c8;
+  padding-left: 8px;
+}
+
+/* Tabs hang down to sit on the container's bottom border */
+.navButtonContainer .navButton {
+  align-self: flex-end;
+}
+
+.iconButton {
+  cursor: pointer;
+  padding: 6px 10px;
+  margin-left: 6px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 26px;
+  line-height: 1;
+  color: #3a4560;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  align-self: center;
+}
+
+.iconButton:hover {
+  background-color: #dce3ef;
+  border-color: #a8b4c8;
 }

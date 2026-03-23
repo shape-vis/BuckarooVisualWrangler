@@ -43,3 +43,16 @@ export function NavButton({ children, isSelected, onClick, style = {}, icon }) {
       </div>
   );
 }
+
+export function IconButton({ children, onClick, title, style = {} }) {
+  return (
+      <button
+          className="iconButton"
+          onClick={onClick}
+          title={title}
+          style={style}
+      >
+        {children}
+      </button>
+  );
+}

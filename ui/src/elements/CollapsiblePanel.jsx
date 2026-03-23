@@ -14,12 +14,7 @@ export default function CollapsiblePanel({
   const isRight = direction === "right";
   const isDown = direction === "down";
 
-  // Icons should point in the direction the panel is collapsing toward.
-  // left: collapse ◀, expand ▶
-  // right: collapse ▶, expand ◀
-  const collapseIcon = isRight ? "▶" : "◀";
-  const expandIcon = isRight ? "◀" : "▶";
-  const icon = isOpen ? collapseIcon : expandIcon;
+  const icon = "☰";
 
   return (
     <div
