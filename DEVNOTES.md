@@ -94,6 +94,23 @@ Drops a column in-place:
 2. `update_errors_table()` — re-runs all detectors and rewrites `errors_<table>`
 3. Returns the updated column list to the frontend
 
+**Two endpoints** in `app/plot_routes_sql.py`:
+These two endpoints just fetch the wrangled tables that create-previews put in the DB by the same name
+
+### `POST /api/plots/preview-histogram`
+1. Gets the table by using the tablename that create-previews put in the DB
+2. Makes a temp DBOperations object
+3. Uses the helpers to generate the JSON structure required from the view to render a histogram
+4. Returns that JSON
+5. 
+### `POST /api/plots/preview-scatterplot`
+This isn't hooked up to any fetch calls yet
+
+1. Gets the table by using the tablename that create-previews put in the DB
+2. Makes a temp DBOperations object
+3. Uses the helpers to generate the JSON structure required from the view to render a scatterplot
+4. Returns that JSON
+
 **SQL primitives** all live in `postgres_wrangling/query.py`:
 - `remove_rows_by_ids(table, ids)` — `DELETE WHERE "ID" = ANY(:ids)`
 - `impute_by_ids(table, column, ids)` — `UPDATE ... SET col = :fill_val WHERE "ID" = ANY(:ids)`
