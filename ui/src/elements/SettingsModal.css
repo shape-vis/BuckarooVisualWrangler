@@ -1,0 +1,103 @@
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    gap: 16px;
+}
+
+.settings-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1c1e21;
+    white-space: nowrap;
+}
+
+.settings-input {
+    width: 120px;
+    padding: 7px 10px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    font-size: 13px;
+    text-align: right;
+    background: #ffffff;
+    color: #1c1e21;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-input:focus {
+    outline: none;
+    border-color: #1877F2;
+    box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 24px;
+}
+
+.settings-btn {
+    padding: 7px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-btn--apply {
+    background-color: #1877F2;
+    color: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.settings-btn--apply:hover {
+    background-color: #166fe5;
+    box-shadow: 0 2px 6px rgba(24, 119, 242, 0.3);
+}
+
+.settings-btn--cancel {
+    background-color: #f0f2f5;
+    color: #1c1e21;
+    border: 1px solid #dddfe2;
+}
+
+.settings-btn--cancel:hover {
+    background-color: #e4e6ea;
+}
+
+.settings-toggle {
+    display: flex;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f0f2f5;
+}
+
+.settings-toggle-btn {
+    padding: 6px 16px;
+    border: none;
+    background-color: transparent;
+    color: #65676b;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-toggle-btn + .settings-toggle-btn {
+    border-left: 1px solid #dddfe2;
+}
+
+.settings-toggle-btn--active {
+    background-color: #1877F2;
+    color: white;
+}
+
+.settings-toggle-btn:hover:not(.settings-toggle-btn--active) {
+    background-color: #e4e6ea;
+    color: #1c1e21;
+}

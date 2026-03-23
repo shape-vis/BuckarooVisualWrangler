@@ -1,5 +1,4 @@
 
-
 .modal {
     position: fixed;
     left: 50%;
@@ -8,25 +7,20 @@
     z-index: 9999;
     width: 100%;
     height: 100%;
-    background-color: rgba(0,0,0,0.4);
-    border: 1px solid #888;
-    border-radius: 4px;
-    padding: 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    background-color: rgba(0, 0, 0, 0.5);
     overflow: hidden;
     display: block;
 }
 
-/* Modal content */
 .modal-content {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: white;
-    padding: 30px 40px;
-    border-radius: 8px;
+    background-color: #ffffff;
+    padding: 28px 36px;
+    border-radius: 12px;
     text-align: center;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    border: 1px solid #dddfe2;
 }
-

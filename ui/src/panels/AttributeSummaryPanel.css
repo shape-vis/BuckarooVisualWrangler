@@ -1,109 +1,123 @@
 
-/*#attribute-summary-root {*/
-/*      height: 100%;           !* fill viewport *!*/
-/*      display: flex;*/
-/*      flex-direction: column; !* vertical stacking *!    */
-/*      width: 260px;*/
-/*        !*width: 100%;*!*/
-/*}*/
-
 #attribute-summary-root {
     height: 100%;
     display: flex;
     flex-direction: column;
-    flex: 0 0 260px;           /* CHANGE: fixed width, don't grow or shrink */
+    flex: 0 0 260px;
 }
 
 #attribute-sorting {
-    border: 2px solid #ccc;
-    border-radius: 5px;
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
     padding: 8px;
     width: 250px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .attribute-sorting-item {
     display: flex;
     align-items: center;
-    margin: 2px 0;
-    margin-top: 5px;
-    font-size: 14px;
-    /* max-width: 250px; */
+    margin: 3px 0;
+    font-size: 13px;
     word-wrap: break-word;
     overflow-wrap: break-word;
     white-space: normal;
     cursor: pointer;
+    color: #1c1e21;
+    padding: 3px 4px;
+    border-radius: 4px;
+    transition: background-color 0.1s ease;
+}
+
+.attribute-sorting-item:hover {
+    background-color: #f0f2f5;
 }
 
 .attribute-sorting-item-color {
-    width: 15px;
-    height: 15px;
-    margin-right: 5px;
-    border: 1px solid black;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
     flex-shrink: 0;
 }
 
 .attribute-sorting-item-color-selected {
-    width: 11px;
-    height: 11px;
-    margin-right: 5px;
-    border: 3px solid red;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border: 3px solid #1877F2;
+    border-radius: 3px;
     flex-shrink: 0;
 }
 
 .attribute-sorting-title {
-    font-weight: bold;
-    margin-bottom: 2px;
+    font-weight: 600;
+    font-size: 12px;
+    color: #65676b;
+    margin-bottom: 4px;
     text-align: center;
-    border-bottom: solid 1px black;
+    border-bottom: 1px solid #dddfe2;
+    padding-bottom: 4px;
     width: 100%;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
-
 .attribute-list {
-    margin-top: 4px;
-    padding: 0.5rem;
-    background-color: #f5f5f5;
-    border: 2px solid #ccc;
-    border-radius: 4px;
+    margin-top: 6px;
+    padding: 6px;
+    background-color: #ffffff;
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     font-size: 0.85rem;
-    /* max-height: 425px; */
     overflow-y: auto;
     width: 250px;
-    /* height: calc(100vh - 100px); */
 }
 
 .attribute-list h4 {
     margin-top: 0;
     font-size: 1rem;
+    font-weight: 600;
+    color: #1c1e21;
 }
 
 .attribute-list ul {
     padding-left: 0;
     margin: 0;
-    list-style-type: disc;
+    list-style-type: none;
 }
 
 .attribute-list li {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 16px;
-    font-size: 16px;
+    gap: 4px;
+    margin-bottom: 12px;
+    font-size: 14px;
     font-weight: 500;
-    margin-right: 10px;
+    margin-right: 8px;
+    color: #1c1e21;
+    padding: 6px 4px;
+    border-radius: 6px;
+    transition: background-color 0.1s ease;
 }
 
+.attribute-list li:hover {
+    background-color: #f0f2f5;
+}
 
 .column-stats {
-    font-size: 12px;
-    color: #555;
+    font-size: 11px;
+    color: #65676b;
     margin-left: 4px;
-    line-height: 1.2em;
+    line-height: 1.4em;
     flex-direction: column;
     display: flex;
 }
 
-.attribute-summary-list{
+.attribute-summary-list {
     list-style: none;
     padding: 0;
     margin: 0;
@@ -121,19 +135,9 @@
   display: flex;
   flex-direction: row;
   gap: 2px;
-  border: 1px solid #ddd;
-  /* box-shadow: 0 2px 8px rgba(0,0,0,0.15); */
-  border-radius: 4px;
-  /* margin-top: 4px; */
+  border: 1px solid #dddfe2;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
   z-index: 1000;
 }
-/*
-.popupMenu > div {
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.popupMenu > div:hover {
-  background-color: #f5f5f5;
-} */

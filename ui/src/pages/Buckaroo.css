@@ -2,64 +2,39 @@
 
 .matrix-and-dropdown-container {
     display: flex;
-    /* align-items: flex-start; */
-    gap: 5px;
-    /* margin-top: 10px; */
-    /* height: 100%; */
-}
-
-.main-view {
-     display: flex;
-    /* justify-content: space-between; */
-    /* align-items: flex-start; */
-    width: calc(100vw - 270px);
-    /*width: 100%;*/
-    /* max-width: 1300px; */
-    /* flex: 1; */
-    height: calc(100vh - 52px);              /* full window height */
-    display: flex;
-  flex-direction: column;     /* vertical layout */
+    gap: 6px;
 }
 
 .main-view {
     display: flex;
     flex-direction: column;
-    flex: 1;                       /* Let it grow to fill available space */
+    flex: 1;
     min-width: 0;
-    height: calc(100vh - 52px);
-    /* Remove the width: calc(100vw - 270px); line */
+    height: calc(100vh - 48px);
+    background-color: #f0f2f5;
 }
 
-
-/*.svg-and-toolbox {*/
-/*    flex: 1;                    !* take remaining space *!*/
-/*    display: flex;*/
-/*    !* flex-direction: column; *!*/
-/*    align-items: center;*/
-/*    width: 100%;*/
-/*      min-height: 0;   !* important so the child can scroll instead of pushing the parent *!*/
-/*  min-width: 0;    !* same idea for horizontal overflow *!*/
-/*}*/
 .svg-and-toolbox {
-    flex: 1;                    /* take remaining space */
+    flex: 1;
     display: flex;
-    flex-direction: row;        /* ADD THIS - lay out children horizontally */
-    gap: 10px;                  /* ADD THIS - space between children */
-    align-items: flex-start;    /* CHANGE THIS from center */
+    flex-direction: row;
+    gap: 0;
+    align-items: stretch;
     width: 100%;
     min-height: 0;
     min-width: 0;
-    overflow: auto;             /* ADD THIS - allow scrolling if needed */
+    overflow: hidden;
 }
 
 .tooltip {
     position: absolute;
-    background-color: white;
-    border: 1px solid #ccc;
-    padding: 5px;
-    border-radius: 4px;
-    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+    background-color: #ffffff;
+    border: 1px solid #dddfe2;
+    padding: 6px 10px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     font-size: 12px;
+    color: #1c1e21;
     pointer-events: none;
     display: none;
     z-index: 9999;

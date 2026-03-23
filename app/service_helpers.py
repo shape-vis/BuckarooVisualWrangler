@@ -5,12 +5,14 @@ import random
 import string
 import re
 from sqlalchemy import types as sql_types
+from sqlalchemy import text as sa_text
 import pandas as pd
 from app.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
+from postgres_wrangling import query
 
 
 def generate_table_name(csv_name):
@@ -307,12 +309,21 @@ def get_sqlalchemy_dtype_map(df):
         if is_categorical(df[col]):
             dtype_map[col] = sql_types.Text()
         else:
-            # Majority of values are numeric - check if they are all integers
-            numeric_series = pd.to_numeric(df[col], errors='coerce').dropna()
-            if (numeric_series == numeric_series.astype(int)).all():
-                dtype_map[col] = sql_types.BigInteger()
+            non_null = df[col].dropna()
+            numeric_series = pd.to_numeric(non_null, errors='coerce')
+            # If any non-null values failed numeric coercion, the column has true mixed
+            # values (e.g. "N/A" strings alongside numbers). Store as Text to preserve
+            # all values; gather_mixed_cols() will classify it as categorical_mixed.
+            if numeric_series.isna().any() or numeric_series.empty:
+                dtype_map[col] = sql_types.Text()
             else:
-                dtype_map[col] = sql_types.Float()
+                try:
+                    if (numeric_series == numeric_series.astype(int)).all():
+                        dtype_map[col] = sql_types.BigInteger()
+                    else:
+                        dtype_map[col] = sql_types.Float()
+                except (OverflowError, ValueError):
+                    dtype_map[col] = sql_types.Float()
     return dtype_map
 
 def create_bins_for_a_numeric_column(column,bin_count):
@@ -327,3 +338,129 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
     # return pd.cut(column, bins=bin_count)
+
+
+def execute_wrangle_preview(table, preview_table, preview_name_fn):
+    """
+    Promote a preview table to become the main table:
+    1. Drop all other preview tables (and their errors_ siblings)
+    2. Rename the main table to <table>_old
+    3. Rename the selected preview table to <table>
+    4. Drop <table>_old
+    5. Reload db_operations for the promoted table
+    Returns a dict with success and table name.
+    """
+    from app import engine, db_operations
+
+    all_possible_previews = [
+        preview_name_fn(table, "_preview_delete"),
+        preview_name_fn(table, "_preview_impute"),
+        preview_name_fn(table, "_preview_impute_x"),
+        preview_name_fn(table, "_preview_impute_y"),
+    ]
+
+    with engine.begin() as conn:
+        for pt in all_possible_previews:
+            if pt != preview_table:
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{pt}"'))
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{pt}"'))
+
+        old_table = f"{table}_old"
+        conn.execute(sa_text(f'ALTER TABLE "{table}" RENAME TO "{old_table}"'))
+        conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{table}" RENAME TO "errors_{old_table}"'))
+
+        conn.execute(sa_text(f'ALTER TABLE "{preview_table}" RENAME TO "{table}"'))
+        conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{table}"'))
+
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{old_table}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{old_table}"'))
+
+    db_operations.load_table(table, f"errors_{table}")
+
+    return {"success": True, "table": table}
+
+
+def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
+    """
+    Create delete and impute preview tables for a 1D (single-column) selection.
+    Returns a dict with preview table names and dims=1.
+    """
+    from app import engine
+
+    errors_src     = f"errors_{table}"
+    preview_delete = preview_name_fn(table, "_preview_delete")
+    errors_dst_del = f"errors_{preview_delete}"
+    preview_impute = preview_name_fn(table, "_preview_impute")
+    errors_dst_imp = f"errors_{preview_impute}"
+
+    with engine.begin() as conn:
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
+
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{preview_impute}" AS SELECT * FROM "{table}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp}" AS SELECT * FROM "{errors_src}"'))
+
+    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
+    query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
+
+    update_errors_fn(preview_delete)
+    update_errors_fn(preview_impute)
+
+    return {
+        "success": True,
+        "preview_delete": preview_delete,
+        "preview_impute": preview_impute,
+        "dims": 1,
+    }
+
+
+def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
+    """
+    Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
+    Returns a dict with preview table names and dims=2.
+    """
+    from app import engine
+
+    errors_src       = f"errors_{table}"
+    preview_delete   = preview_name_fn(table, "_preview_delete")
+    errors_dst_del   = f"errors_{preview_delete}"
+    preview_impute_x = preview_name_fn(table, "_preview_impute_x")
+    errors_dst_imp_x = f"errors_{preview_impute_x}"
+    preview_impute_y = preview_name_fn(table, "_preview_impute_y")
+    errors_dst_imp_y = f"errors_{preview_impute_y}"
+
+    with engine.begin() as conn:
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
+
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_x}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{preview_impute_x}" AS SELECT * FROM "{table}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_x}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_x}" AS SELECT * FROM "{errors_src}"'))
+
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_y}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{preview_impute_y}" AS SELECT * FROM "{table}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_y}"'))
+        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_y}" AS SELECT * FROM "{errors_src}"'))
+
+    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
+    query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
+    query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
+
+    update_errors_fn(preview_delete)
+    update_errors_fn(preview_impute_x)
+    update_errors_fn(preview_impute_y)
+
+    return {
+        "success": True,
+        "preview_delete": preview_delete,
+        "preview_impute_x": preview_impute_x,
+        "preview_impute_y": preview_impute_y,
+        "dims": 2,
+    }

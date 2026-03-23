@@ -1,10 +1,13 @@
-// HistogramBarChart.jsx
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { queryHistogram1d } from "../utils/serverCalls.jsx";
+import { queryHistogram1d, queryHistogram1dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
+import { useRowRange } from "../utils/RowRangeContext.jsx";
 
+/**
+ * HistogramBarChart renders a stacked histogram with optional brushing/selection.
+ */
 export default function HistogramBarChart({
     cellID,
     pos,
@@ -13,38 +16,43 @@ export default function HistogramBarChart({
     attrX,
     errorColors,
 }) {
+
     const drawingRef = useRef(null);
     const clearSelectionRef = useRef(() => {});
-    const barsRef = useRef(null);
 
     const [histogramData, setHistogramData] = React.useState(null);
 
-    const { selection, filterVersion, addFilter, clearFilters } = useSelection();
+    // Refs to D3 elements / helpers so the highlight effect can re-color
+    // without rebuilding the chart.
+    const barsRef = useRef(null);
+    const colorScaleRef = useRef(k => "steelblue");
+    const numHistDataXRef = useRef([]);
 
-    // Re-fetch when filter changes
+    const { highlightedRowIds, setHighlightedRowIds, clearHighlight } = useSelection();
+    const setHighlightedRef = useRef(setHighlightedRowIds);
+    useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
+
+    const { useRange, minId, maxId } = useRowRange();
+
+    // ── data fetch ─────────────────────────────────────────────────────────
     useEffect(() => {
         async function fetchData() {
             try {
-                const response = await queryHistogram1d(table_name, attrX, 10);
+                const response = useRange
+                    ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId)
+                    : await queryHistogram1d(table_name, attrX, 10);
                 if (!response || !response.Success) {
                     throw new Error(`API failed: ${response?.Error || "Unknown error"}`);
                 }
                 setHistogramData(response.histogram);
             } catch (err) {
-                console.error("[HistogramBarChart]", err?.message || err);
+                console.error("[HistogramBarChart] " + (err?.message || err));
             }
         }
         fetchData();
-    }, [table_name, attrX, filterVersion]);
+    }, [table_name, attrX, useRange, minId, maxId]);
 
-    // Re-color bars on cross-plot selection change (no re-fetch needed)
-    useEffect(() => {
-        if (!barsRef.current) return;
-        const colorScale = errorColors || (k => "steelblue");
-        const currentSelection = selection;
-        barsRef.current.attr("fill", d => isBarHighlighted(d, currentSelection, attrX) ? "gold" : colorScale(d.name));
-    }, [selection]);
-
+    // ── draw chart ──────────────────────────────────────────────────────────
     useEffect(() => {
         if (!histogramData) return;
 
@@ -53,8 +61,10 @@ export default function HistogramBarChart({
 
         const numHistDataX = histogramData.scaleX.numeric || [];
         const catHistDataX = histogramData.scaleX.categorical || [];
+        numHistDataXRef.current = numHistDataX;
 
-        const numDomainY = numHistDataX.length === 0 ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];
+        const numDomainY = (numHistDataX.length === 0 || !numHistDataX[0])
+            ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];
         const catDomainY = catHistDataX.length === 0 ? null : catHistDataX.map(d => d);
 
         const xScale = createHybridScales(size.w, numHistDataX, catHistDataX, numDomainY, catDomainY, "horizontal");
@@ -64,7 +74,9 @@ export default function HistogramBarChart({
             .range([size.h, 0]);
 
         const colorScale = errorColors || (k => "steelblue");
+        colorScaleRef.current = colorScale;
 
+        // Flatten stacked data per bin.
         const myData = [];
         histogramData.histograms.forEach(d => {
             let items = d.count.items;
@@ -77,8 +89,9 @@ export default function HistogramBarChart({
             }
         });
 
-        let localSelected = [];
-        const barColor = d => localSelected.includes(d) ? "gold" : colorScale(d.name);
+        console.log("[HistogramBarChart] Transformed histogram data for bars:", myData);
+
+        const barColor = d => colorScale(d.name);
 
         const brushGroup = canvas.append("g").attr("class", "histogram-brush");
 
@@ -99,48 +112,42 @@ export default function HistogramBarChart({
 
         barsRef.current = bars;
 
-        function pushFilter(currentSelected) {
-            addFilter({
-                table: table_name,
-                viewType: "barchart",
-                cols: [attrX],
-                data: currentSelected,
-                scaleX: histogramData.scaleX,
-                scaleY: null,
-            });
-        }
-
+        // Brush for range selection.
         const brush = d3.brushX()
             .extent([[0, 0], [size.w, size.h]])
             .on("brush end", (event) => {
                 if (!event.selection) {
-                    localSelected = [];
                     bars.attr("fill", barColor);
                     return;
                 }
                 const [x0, x1] = event.selection;
-                const brushedItems = myData.filter(d => {
+                const brushedBins = new Set();
+                myData.forEach(d => {
+                    let start, end;
                     if (d.type === "numeric") {
                         const bin = numHistDataX[d.bin];
-                        if (!bin) return false;
-                        const start = xScale.apply(bin.x0, "numeric");
-                        const end = xScale.apply(bin.x1, "numeric");
-                        return end >= x0 && start <= x1;
+                        if (!bin) return;
+                        start = xScale.apply(bin.x0, "numeric");
+                        end = xScale.apply(bin.x1, "numeric");
+                    } else {
+                        start = xScale.apply(d.bin, "categorical");
+                        end = start + xScale.categoricalBandwidth();
                     }
-                    const start = xScale.apply(d.bin, "categorical");
-                    const end = start + xScale.categoricalBandwidth();
-                    return end >= x0 && start <= x1;
+                    if (end >= x0 && start <= x1) brushedBins.add(String(d.bin));
                 });
 
-                if (event.sourceEvent && event.sourceEvent.shiftKey) {
-                    brushedItems.forEach(d => { if (!localSelected.includes(d)) localSelected.push(d); });
-                } else {
-                    localSelected = brushedItems;
-                }
-                bars.attr("fill", barColor);
-                // Only push filter on "end" to avoid hammering the backend while dragging
-                if (event.type === "end" && localSelected.length > 0) {
-                    pushFilter(localSelected);
+                bars.attr("fill", d => brushedBins.has(String(d.bin)) ? "gold" : barColor(d));
+
+                // Async: fetch row IDs for all brushed bins and push to context.
+                if (event.type === "end" && brushedBins.size > 0) {
+                    const binsToQuery = [...brushedBins];
+                    Promise.all(binsToQuery.map(b =>
+                        queryRowsInBin({ type: "1d", column: attrX, bin: b, bin_count: 10 })
+                    )).then(results => {
+                        const allIds = [];
+                        results.forEach(r => { if (r?.Success) allIds.push(...r.row_ids); });
+                        setHighlightedRef.current([...new Set(allIds)], [attrX], "histogram");
+                    });
                 }
             });
 
@@ -148,10 +155,8 @@ export default function HistogramBarChart({
         brushGroup.lower();
 
         clearSelectionRef.current = () => {
-            localSelected = [];
             bars.attr("fill", barColor);
             brushGroup.call(brush.move, null);
-            clearFilters();
         };
 
         if (xScale && typeof xScale.draw === "function") xScale.draw(canvas);
@@ -165,73 +170,50 @@ export default function HistogramBarChart({
                 return `<strong>Bin: </strong>${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
             },
             (d, event) => {
-                if (event.shiftKey) {
-                    if (localSelected.includes(d)) localSelected = localSelected.filter(item => item !== d);
-                    else localSelected.push(d);
-                } else {
-                    localSelected = [d];
-                }
-                bars.attr("fill", barColor);
-                pushFilter(localSelected);
+                // Left click: fetch row IDs for this bin then update context.
+                queryRowsInBin({ type: "1d", column: attrX, bin: d.bin, bin_count: 10 })
+                    .then(result => {
+                        if (result?.Success) {
+                            setHighlightedRef.current(result.row_ids, [attrX], "histogram");
+                        }
+                    });
             },
-            (d) => { console.log("[HistogramBarChart] Right click", d); },
-            (d) => { console.log("[HistogramBarChart] Double click", d); }
+            (d) => { console.log("Right click on bar", d); },
+            (d) => { console.log("Double click on bar", d); }
         );
 
         return () => { canvas.selectAll("*").remove(); };
     }, [size, histogramData]);
 
-    function handleDeselect(e) {
-        e.preventDefault();
+    // ── react to cross-chart highlight changes ──────────────────────────────
+    useEffect(() => {
+        if (!barsRef.current) return;
+        const colorScale = colorScaleRef.current;
+
+        if (!highlightedRowIds || highlightedRowIds.length === 0) {
+            barsRef.current.attr("fill", d => colorScale(d.name));
+            return;
+        }
+
+        queryBinsForRows({ type: "1d", column: attrX, row_ids: highlightedRowIds, bin_count: 10 })
+            .then(result => {
+                if (!result?.Success || !barsRef.current) return;
+                const highlightedBins = new Set(result.bins.map(String));
+                barsRef.current.attr("fill", d =>
+                    highlightedBins.has(String(d.bin)) ? "gold" : colorScale(d.name)
+                );
+            });
+    }, [highlightedRowIds, attrX]);
+
+    function clearSelection() {
         clearSelectionRef.current();
+        clearHighlight();
     }
 
     return (
         <g key={cellID} transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
-            <rect width={size.w} height={size.h} fill="#ffffff00" onContextMenu={handleDeselect} />
+            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearSelection} />
             <g ref={drawingRef}></g>
         </g>
     );
-}
-
-// ── cross-plot highlight helpers ─────────────────────────────────────────────
-function isBarHighlighted(barDatum, selection, attrX) {
-    if (!selection) return false;
-
-    if (selection.viewType === "barchart") {
-        if (selection.cols[0] !== attrX) return false;
-        return selection.data.some(sel => sel.bin === barDatum.bin && sel.type === barDatum.type);
-    }
-
-    if (selection.viewType === "heatmap") {
-        const xCol = selection.cols[0], yCol = selection.cols[1];
-        if (xCol === attrX)
-            return selection.data.some(sel => sel.xBin === barDatum.bin && sel.xType === barDatum.type);
-        if (yCol === attrX)
-            return selection.data.some(sel => sel.yBin === barDatum.bin && sel.yType === barDatum.type);
-        return false;
-    }
-
-    if (selection.viewType === "scatterplot") {
-        const xCol = selection.cols[0], yCol = selection.cols[1];
-        if (xCol === attrX)
-            return selection.data.some(point => _valueInBin(point.x, barDatum.bin, barDatum.type, selection.scaleX));
-        if (yCol === attrX)
-            return selection.data.some(point => _valueInBin(point.y, barDatum.bin, barDatum.type, selection.scaleY));
-        return false;
-    }
-
-    return false;
-}
-
-function _valueInBin(value, binIdx, binType, scale) {
-    if (value == null) return false;
-    if (binType === "numeric") {
-        const bins = scale?.numeric;
-        if (!bins || binIdx == null || parseInt(binIdx) >= bins.length) return false;
-        const { x0, x1 } = bins[parseInt(binIdx)];
-        return Number(value) >= x0 && Number(value) <= x1;
-    }
-    if (binType === "categorical") return String(value) === String(binIdx);
-    return false;
 }

@@ -1,200 +1,196 @@
-import React, { useEffect } from "react";
-// import * as d3 from "d3";
+import { useContext, useState } from "react";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
-import {SelectionContext} from "../utils/SelectionContext.jsx";
+import { SelectionContext } from "../utils/SelectionContext.jsx";
+import { createPreviews, executeWrangle } from "../utils/serverCalls.jsx";
+import PreviewCard from "./PreviewCard.jsx";
 import "./RepairPanel.css";
+import * as d3 from "d3";
 
-/**
- * React wrapper that reproduces the behavior of the original SelectionControlPanel class
- * from your uploaded file. It exposes a global `window.selectionControlPanel` object for
- * backward compatibility (so other non-React modules can call setSelection / clearSelection).
- *
- * Props (all optional):
- *  - visualizations: object mapping names to { module: { draw: fn } } (used to render previews)
- *  - initAttachToDocument: boolean (default true) - if true the component will attach click handlers to
- *    elements with ids repairButton, zoomButton, undoButton, redoButton just like the original.
- */
-export default function RepairPanel({ visualizations = window.visualizations || {}, initAttachToDocument = true }) {
-  // useEffect(() => {
-  //   // Internal state stored in a plain object so other non-React code can use it via window.selectionControlPanel
-  //   const state = {
-  //     selectionView: null,
-  //     currentSelection: null,
-  //     deselectionCallback: null,
-  //     selectViewType: null,
-  //     viewParameters: null,
+const ERROR_COLORS = d3.scaleOrdinal()
+  .domain(["total", "missing", "mismatch", "anomaly", "incomplete", "none"])
+  .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
 
-  //     size: 260,
-  //     leftMargin: 60,
-  //     topMargin: 5,
-  //     rightMargin: 5,
-  //     bottomMargin: 50,
+export default function RepairPanel({ table_name, onWrangleExecuted }) {
+  const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } = useContext(SelectionContext);
 
-  //     errorTypes: { total: "Total Error %", missing: "Missing Values", mismatch: "Data Type Mismatch", anomaly: "Average Anomalies (Outliers)", incomplete: "Incomplete Data (< 3 points)", none: "None" },
-  //     errorColors: d3.scaleOrdinal().domain(["total", "missing", "mismatch", "anomaly", "incomplete", "none"]).range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]),
-  //   };
+  const [busy, setBusy] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+  const [previews, setPreviews] = useState(null);
+  // previews shape:
+  //   1D: { type: "histogram", preview_delete, preview_impute, cols }
+  //   2D: { type: "heatmap"|"scatterplot", preview_delete, preview_impute_x, preview_impute_y, cols }
 
-  //   function clearSelection(view) {
-  //     if (view !== state.selectionView && typeof state.deselectionCallback === "function") {
-  //       state.deselectionCallback();
-  //     }
-  //     state.currentSelection = null;
-  //   }
+  const hasSelection = highlightedRowIds && highlightedRowIds.length > 0;
 
-  //   function setSelection(view, viewType, viewParameters, selection, deselectionCallback) {
-  //     state.selectionView = view;
-  //     state.currentSelection = selection;
-  //     state.deselectionCallback = deselectionCallback;
-  //     state.selectViewType = viewType;
-  //     state.viewParameters = viewParameters;
-  //   }
+  async function handleRepairSelection() {
+    if (!hasSelection) return;
 
-  //   async function applyRepair(methodName) {
-  //     const table = localStorage.getItem("selectedSample")?.split('/').pop().replace('.csv', '');
+    setBusy(true);
+    setPreviewError(null);
+    setPreviews(null);
 
-  //     try {
-  //       const cols = [state.viewParameters[4], state.viewParameters[5]];
-  //       const isRemove = methodName === "Remove Data";
-  //       const endpoint = isRemove ? "/api/wrangle/remove" : "/api/wrangle/impute";
+    const cols = highlightedCols || [];
+    const result = await createPreviews(table_name, highlightedRowIds, cols);
 
-  //       const payload = { currentSelection: state.currentSelection, cols: cols, table: table };
-  //       if (!isRemove) {
-  //         payload.col = methodName === "Impute Mean X" ? cols[0] : cols[1];
-  //       }
+    setBusy(false);
 
-  //       const response = await fetch(endpoint, {
-  //         method: "POST",
-  //         headers: { "Content-Type": "application/json" },
-  //         body: JSON.stringify(payload),
-  //       });
+    if (!result?.success) {
+      setPreviewError(result?.error || "Preview generation failed.");
+      return;
+    }
 
-  //       const data = await response.json();
+    if (result.dims === 1) {
+      setPreviews({
+        type: "histogram",
+        preview_delete: result.preview_delete,
+        preview_impute: result.preview_impute,
+        cols,
+      });
+    } else {
+      setPreviews({
+        type: selectionSource || "heatmap",
+        preview_delete: result.preview_delete,
+        preview_impute_x: result.preview_impute_x,
+        preview_impute_y: result.preview_impute_y,
+        cols,
+      });
+    }
+  }
 
-  //       if (!response.ok || !data.success) {
-  //         alert("Error: " + (data?.error || `Server error ${response.status}`));
-  //         return;
-  //       }
+  async function handleExecuteWrangle(previewTableName) {
+    setBusy(true);
+    setPreviewError(null);
+    const result = await executeWrangle(table_name, previewTableName);
+    setBusy(false);
+    if (result?.success) {
+      setPreviews(null);
+      clearHighlight();
+      onWrangleExecuted?.();
+    } else {
+      setPreviewError(result?.error || "Execute wrangle failed.");
+    }
+  }
 
-  //       window.location.reload();
-  //     } catch (error) {
-  //       console.error(error);
-  //       alert("Error: " + error.message);
-  //     }
-  //   }
-
-  //   function plotRepairPanel() {
-  //     const size = 200;
-  //     const preview_area = d3.select("#preview-area");
-  //     if (preview_area.empty()) {
-  //       // If there is no preview-area in the DOM, create a minimal one and append to body
-  //       d3.select("body").append("div").attr("id", "preview-area").style("padding", "8px");
-  //     }
-
-  //     const area = d3.select("#preview-area");
-  //     area.selectAll(".repair-method").remove();
-
-  //     const repair_methods = [{ name: "Remove Data" }, { name: "Impute Mean X" }, { name: "Impute Mean Y" }];
-
-  //     repair_methods.forEach(method => {
-  //       const div = area.append("div").attr("class", "repair-method").style("margin-bottom", "8px");
-  //       div.append("strong").text(method.name);
-  //       div.append("span").text(" [ Apply ]").style("cursor", "pointer").style("color", "#4CAF50").on("click", () => applyRepair(method.name));
-  //       div.append("br");
-
-  //       const plotSize = Math.min(size - state.leftMargin - state.rightMargin, size - state.topMargin - state.bottomMargin);
-  //       const svg = div.append("svg").attr("width", size).attr("height", size);
-  //       const canvas = svg.append("g").attr("transform", `translate(${state.leftMargin}, ${state.topMargin})`);
-  //       const view = { svg: svg, plotSize: plotSize, errorColors: state.errorColors };
-
-  //       // Render a small preview of the current selection using the appropriate visualization
-  //       if (state.selectViewType === "barchart" && visualizations['barchart']) {
-  //         visualizations['barchart'].module.draw(state.viewParameters[0], view, canvas, ...state.viewParameters.slice(3), true);
-  //       } else if (state.selectViewType === "scatterplot" && visualizations['scatterplot']) {
-  //         visualizations['scatterplot'].module.draw(state.viewParameters[0], view, canvas, ...state.viewParameters.slice(3));
-  //       } else if (state.selectViewType === "heatmap" && visualizations['heatmap']) {
-  //         visualizations['heatmap'].module.draw(state.viewParameters[0], view, canvas, ...state.viewParameters.slice(3));
-  //       } else {
-  //         // If no matching visualization found, render a simple message
-  //         canvas.append("text").attr("x", 10).attr("y", 20).text("No preview available");
-  //       }
-  //     });
-  //   }
-
-  //   // Expose a backward-compatible object on window for other scripts
-  //   const exposed = {
-  //     clearSelection,
-  //     setSelection,
-  //     plotRepairPanel,
-  //     applyRepair,
-  //     // also expose state for inspection
-  //     _internalState: state,
-  //   };
-
-  //   window.selectionControlPanel = exposed;
-
-  //   // Attach document listeners similar to the original file
-  //   let repairListener = null;
-  //   let zoomListener = null;
-  //   let undoListener = null;
-  //   let redoListener = null;
-
-  //   if (initAttachToDocument) {
-  //     repairListener = (e) => {
-  //       if (e.target.id === "repairButton" || e.target.closest && e.target.closest("#repairButton")) {
-  //         plotRepairPanel();
-  //       }
-  //     };
-  //     document.addEventListener("click", repairListener);
-
-  //     zoomListener = () => console.log("Zoom Selection clicked");
-  //     undoListener = () => console.log("Undo Selection clicked");
-  //     redoListener = () => console.log("Redo Selection clicked");
-
-  //     const zoomButton = document.getElementById("zoomButton");
-  //     const undoButton = document.getElementById("undoButton");
-  //     const redoButton = document.getElementById("redoButton");
-
-  //     if (zoomButton) zoomButton.addEventListener("click", zoomListener);
-  //     if (undoButton) undoButton.addEventListener("click", undoListener);
-  //     if (redoButton) redoButton.addEventListener("click", redoListener);
-  //   }
-
-  //   // Cleanup on unmount
-  //   return () => {
-  //     if (initAttachToDocument && repairListener) document.removeEventListener("click", repairListener);
-  //     if (initAttachToDocument) {
-  //       const zoomButton = document.getElementById("zoomButton");
-  //       const undoButton = document.getElementById("undoButton");
-  //       const redoButton = document.getElementById("redoButton");
-  //       if (zoomButton && zoomListener) zoomButton.removeEventListener("click", zoomListener);
-  //       if (undoButton && undoListener) undoButton.removeEventListener("click", undoListener);
-  //       if (redoButton && redoListener) redoButton.removeEventListener("click", redoListener);
-  //     }
-  //     // remove global reference
-  //     if (window.selectionControlPanel === exposed) delete window.selectionControlPanel;
-  //   };
-  // }, [visualizations, initAttachToDocument]);
-
-  // // Render nothing (we operate on a global #preview-area div), but include a fallback preview-area
-  // return (
-  //   <div>
-  //     <div id="preview-area" />
-  //   </div>
-  // );
+  function handleClearSelection() {
+    clearHighlight();
+    setPreviews(null);
+    setPreviewError(null);
+  }
 
   return (
     <CollapsiblePanel direction="right" collapsed={"Data Repair Panel"} defaultOpen={false} style={{ height: "100%", margin: "0px 0" }}>
       <div id="toolbox">
-        <div style={{fontWeight: "bold", marginLeft: "auto", marginRight: "auto", marginTop: "10px", marginBottom: "10px"}}>Data Repair Panel</div>
-          <div className="repair-tools">
-            <div id="repairButton" className="regButton" style={{width:"130px"}}>⚒️ Repair Selection</div>
-              <div id="zoomButton" className="regButton" style={{width:"130px", marginLeft: "25px", marginRight: "25px"}}>🔍 Zoom Selection</div>
-              <div id="undoButton" className="regButton" style={{width:"65px"}}>↩️ Undo</div>
-              <div id="redoButton" className="regButton" style={{width:"65px"}}>🔄 Redo</div>
+        <div style={{ fontWeight: "bold", marginLeft: "auto", marginRight: "auto", marginTop: "10px", marginBottom: "10px" }}>
+          Data Repair Panel
+        </div>
+
+        {/* ── Action buttons ───────────────────────────────────────────── */}
+        <div className="repair-tools">
+          <div
+            id="repairButton"
+            className="regButton"
+            style={{
+              width: "130px",
+              opacity: hasSelection ? 1 : 0.4,
+              cursor: hasSelection ? "pointer" : "not-allowed",
+            }}
+            onClick={handleRepairSelection}
+          >
+            Repair Selection
           </div>
-          <div id="preview-area" className="toolbox-preview-area">
-        
+
+          <div
+            id="zoomButton"
+            className="regButton"
+            style={{ width: "130px", marginLeft: "25px", marginRight: "25px" }}
+          >
+            Zoom Selection
           </div>
+
+          <div
+            id="undoButton"
+            className="regButton"
+            style={{ width: "65px" }}
+            onClick={handleClearSelection}
+          >
+            Undo
+          </div>
+
+          <div id="redoButton" className="regButton" style={{ width: "65px" }}>
+            Redo
+          </div>
+        </div>
+
+        {/* ── Selection status ─────────────────────────────────────────── */}
+        <div style={{ fontSize: 11, color: "#555", margin: "6px 12px", minHeight: 16 }}>
+          {hasSelection
+            ? `${highlightedRowIds.length} row(s) selected${highlightedCols?.length ? ` · cols: ${highlightedCols.join(", ")}` : ""}`
+            : "No selection — click a point, bin, or bar in the plots."}
+        </div>
+
+        {/* ── Feedback ─────────────────────────────────────────────────── */}
+        {busy && (
+          <div style={{ fontSize: 12, color: "#555", margin: "8px 12px" }}>
+            Generating previews…
+          </div>
+        )}
+        {previewError && (
+          <div style={{ fontSize: 12, color: "red", margin: "8px 12px" }}>
+            Error: {previewError}
+          </div>
+        )}
+
+        {/* ── Preview area ──────────────────────────────────────────────── */}
+        <div id="preview-area" className="toolbox-preview-area">
+          {previews && previews.type === "histogram" && (
+            <>
+              <PreviewCard
+                label="Delete Preview"
+                tableName={previews.preview_delete}
+                cols={previews.cols}
+                errorColors={ERROR_COLORS}
+                chartType="histogram"
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_delete)}
+              />
+              <PreviewCard
+                label="Impute Preview"
+                tableName={previews.preview_impute}
+                cols={previews.cols}
+                errorColors={ERROR_COLORS}
+                chartType="histogram"
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_impute)}
+              />
+            </>
+          )}
+          {previews && (previews.type === "heatmap" || previews.type === "scatterplot") && (
+            <>
+              <PreviewCard
+                label="Delete Preview"
+                tableName={previews.preview_delete}
+                cols={previews.cols}
+                errorColors={ERROR_COLORS}
+                chartType={previews.type}
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_delete)}
+              />
+              <PreviewCard
+                label={`Impute "${previews.cols[0]}" Preview`}
+                tableName={previews.preview_impute_x}
+                cols={previews.cols}
+                errorColors={ERROR_COLORS}
+                chartType={previews.type}
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_impute_x)}
+              />
+              <PreviewCard
+                label={`Impute "${previews.cols[1]}" Preview`}
+                tableName={previews.preview_impute_y}
+                cols={previews.cols}
+                errorColors={ERROR_COLORS}
+                chartType={previews.type}
+                onExecuteWrangle={() => handleExecuteWrangle(previews.preview_impute_y)}
+              />
+            </>
+          )}
+        </div>
       </div>
     </CollapsiblePanel>
   );

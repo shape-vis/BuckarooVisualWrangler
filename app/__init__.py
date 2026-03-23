@@ -101,8 +101,8 @@ engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{
 db_operations = DBOperations(engine)
 
 # Initialize PostgreSQL stored procedures for histogram generation with errors
-from app.db_functions import initialize_database_functions
-initialize_database_functions(engine)
+# from app.db_functions import initialize_database_functions
+# initialize_database_functions(engine)
 
 from app import routes
 from app import wrangler_routes_sql as wrangler_routes

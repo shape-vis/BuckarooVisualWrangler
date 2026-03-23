@@ -97,11 +97,12 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
 
   const [tableData, setTableData] = useState(null);
   const [errorData, setErrorData] = useState(null);
-  // const [columns, setColumns] = useState([]);
+  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
 
     async function fetchData(){
+        setFetchError(null);
         try {
 
           const response = await queryTopErrorRows(table_name, maxRows);
@@ -112,23 +113,23 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
           }
 
           setTableData(response.table);
-          // setColumns(Object.keys(response.table));
 
           let errorDict = {};
-          for( let idx in Object.keys(response.errors.index) ){
+          const errorKeys = Object.keys(response.errors.row_id || response.errors.index || {});
+          for( let idx of errorKeys ){
             const key = response.errors.column_id[idx] + "_" + response.errors.row_id[idx];
 
             if (!errorDict[key]) {
               errorDict[key] = [];
             }
 
-            errorDict[key].push(response.errors.error_type[idx]);            
+            errorDict[key].push(response.errors.error_type[idx]);
           }
           setErrorData(errorDict);
-          // console.log("[TablePanel] Error data set:", errorDict);
 
         } catch (err) {
           console.error(err?.message || err);
+          setFetchError(err?.message || String(err));
         }
       }
 
@@ -145,10 +146,16 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
         </div>
         
         <div id="table-container">
-          <table id="table" style={{ borderCollapse: "collapse", width: "100%" }}>
-            <RowHeader columns={sortedAttributes}/>
-            <TableBody columns={sortedAttributes} tableData={tableData} numRows={maxRows} errorData={errorData} />
-          </table>          
+          {fetchError ? (
+            <div style={{ padding: 12, color: "red", fontSize: 12 }}>Error: {fetchError}</div>
+          ) : (!tableData || !errorData) ? (
+            <div style={{ padding: 12, color: "#888", fontSize: 12 }}>Loading…</div>
+          ) : (
+            <table id="table" style={{ borderCollapse: "collapse", width: "100%" }}>
+              <RowHeader columns={sortedAttributes}/>
+              <TableBody columns={sortedAttributes} tableData={tableData} numRows={maxRows} errorData={errorData} />
+            </table>
+          )}
         </div>
       </div>
     </CollapsiblePanel>

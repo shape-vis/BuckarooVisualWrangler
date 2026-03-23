@@ -1,89 +1,64 @@
 // SelectionContext.jsx
-// Global context that carries whatever the user last clicked in any plot.
-// Also manages the active FilteringSQL indices on the backend so that all
-// plots re-fetch scoped to the correct rows.
+// Global context shared by all plots and the RepairPanel.
+//
+// highlightedRowIds  – row IDs currently lit up across all charts (null = nothing)
+// highlightedCols    – the column name(s) involved in the selection (for imputation)
+//                      [colX] for histogram, [colX, colY] for heatmap/scatterplot
 
 import { createContext, useContext, useState, useCallback } from "react";
 
 export const SelectionContext = createContext(null);
 
 /**
- * Shape of selection state:
+ * Shape of selectionMeta (kept for RepairPanel back-compat):
  * {
- *   table:         string          — DB table name
- *   viewType:      "heatmap" | "barchart" | "scatterplot"
- *   cols:          string[]        — [xCol] for barchart, [xCol, yCol] for heatmap/scatter
- *   data:          object[]        — raw bin/point objects from the plot
- *   scaleX:        object          — histogram scaleX descriptor
- *   scaleY:        object | null   — histogram scaleY descriptor (null for barchart)
- *   filterIndices: number[]        — backend FilteringSQL indices for this selection
+ *   table:    string
+ *   viewType: "heatmap" | "barchart" | "scatterplot"
+ *   cols:     string[]
+ *   data:     object[]
+ *   scaleX:   object
+ *   scaleY:   object | null
  * }
- *
- * filterVersion increments every time the active filter changes.
- * Plots include it in their useEffect deps so they re-fetch automatically.
  */
 export function SelectionProvider({ children }) {
   const [selection, setSelectionState] = useState(null);
-  const [filterVersion, setFilterVersion] = useState(0);
+  const [highlightedRowIds, setHighlightedRowIdsState] = useState(null);
+  const [highlightedCols, setHighlightedColsState] = useState(null);
+  const [selectionSource, setSelectionSourceState] = useState(null);
 
-  /**
-   * Called by a plot when the user clicks/brushes a bin or point.
-   * Sends the selection to the backend to register a SQL filter,
-   * then stores the returned filterIndices so clearFilters can clean them up.
-   */
-  const addFilter = useCallback(async (meta) => {
-    // Optimistic update — show selection immediately
-    setSelectionState({ ...meta, filterIndices: [] });
+  const setSelection = useCallback((meta) => {
+    setSelectionState(meta);
+  }, []);
 
-    try {
-      const response = await fetch("/api/filter/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table: meta.table, selection: meta }),
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        setSelectionState(prev => prev
-          ? { ...prev, filterIndices: result.filterIndices }
-          : null
-        );
-        setFilterVersion(v => v + 1);
-      } else {
-        console.error("[SelectionContext] filter/add failed:", result.error);
-      }
-    } catch (err) {
-      console.error("[SelectionContext] filter/add error:", err);
-    }
+  const clearSelection = useCallback(() => {
+    setSelectionState(null);
   }, []);
 
   /**
-   * Clears all active filters on the backend and wipes local selection.
-   * Passing specific indices clears only those; passing nothing clears all.
+   * Set the cross-chart highlight.
+   * @param {number[]} ids    – row IDs to highlight (pass null/[] to clear)
+   * @param {string[]} cols   – columns involved (for preview / imputation)
+   * @param {string|null} source – "histogram" | "heatmap" | "scatterplot" | null
    */
-  const clearFilters = useCallback(async (indices = []) => {
-    setSelectionState(null);
+  const setHighlightedRowIds = useCallback((ids, cols, source = null) => {
+    setHighlightedRowIdsState(ids && ids.length > 0 ? ids : null);
+    setHighlightedColsState(cols && cols.length > 0 ? cols : null);
+    setSelectionSourceState(source);
+  }, []);
 
-    try {
-      const response = await fetch("/api/filter/clear", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filterIndices: indices }),
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        setFilterVersion(v => v + 1);
-      } else {
-        console.error("[SelectionContext] filter/clear failed:", result.error);
-      }
-    } catch (err) {
-      console.error("[SelectionContext] filter/clear error:", err);
-    }
+  const clearHighlight = useCallback(() => {
+    setHighlightedRowIdsState(null);
+    setHighlightedColsState(null);
+    setSelectionSourceState(null);
   }, []);
 
   return (
-    <SelectionContext.Provider value={{ selection, filterVersion, addFilter, clearFilters }}>
+    <SelectionContext.Provider value={{
+      selection, setSelection, clearSelection,
+      highlightedRowIds, highlightedCols,
+      selectionSource,
+      setHighlightedRowIds, clearHighlight,
+    }}>
       {children}
     </SelectionContext.Provider>
   );

@@ -121,24 +121,78 @@ def get_scatterplot_data():
         return {"Success": False, "Error": str(e)}
 
 
-# @app.get("/api/plots/group-by")
-# def get_group_by():
-#     """
-#     Endpoint to return the data according to the specified column the user wishes to group by a specific attribute - ex. group ages by continent
-#     :return: the data as a csv
-#     """
-#     column_a_name = request.args.get("column_a")
-#     group_by_name = request.args.get("group_by")
-#     df = data_state_manager.get_current_state()["df"]
-#     column_a = df[column_a_name]
-#     group_by = df[group_by_name]
-#     try:
-#         if is_categorical(column_a) and is_categorical(group_by):
-#             new_df = group_by_attribute(df, column_a_name, group_by_name).to_json()
-#             return {"Success": True, "group_by": new_df}
-#         return {"Success": False, "Error": "Both column input to the group_by are not categorical"}
-#     except Exception as e:
-#         return {"Success": False, "Error": str(e)}
+@app.post("/api/plots/rows-in-bin")
+def get_rows_in_bin():
+    """
+    Return the row IDs that fall inside a clicked histogram bin or heatmap tile.
+
+    Body JSON keys:
+      type        – "1d" or "2d"
+      column      – column name (1d only)
+      column_x, column_y – column names (2d only)
+      bin         – bin index (numeric) or category label (categorical), for 1d
+      x_bin, y_bin – same for 2d
+      bin_count   – number of bins (default 10)
+      x_bins, y_bins – bin counts for 2d (default 10)
+    """
+    try:
+        body = request.get_json(force=True)
+        dim = body.get("type", "1d")
+
+        if dim == "1d":
+            column = body["column"]
+            bin_value = body["bin"]
+            bin_count = int(body.get("bin_count", 10))
+            row_ids = db_operations.get_row_ids_in_1d_bin(column, bin_value, bin_count)
+        else:
+            col_x = body["column_x"]
+            col_y = body["column_y"]
+            x_bin = body["x_bin"]
+            y_bin = body["y_bin"]
+            x_bins = int(body.get("x_bins", 10))
+            y_bins = int(body.get("y_bins", 10))
+            row_ids = db_operations.get_row_ids_in_2d_bin(col_x, col_y, x_bin, y_bin, x_bins, y_bins)
+
+        return {"Success": True, "row_ids": row_ids}
+    except Exception as e:
+        traceback.print_exc()
+        return {"Success": False, "Error": str(e)}
+
+
+@app.post("/api/plots/bins-for-rows")
+def get_bins_for_rows():
+    """
+    Given a list of row IDs, return which histogram bins / heatmap tiles contain
+    at least one of those rows.
+
+    Body JSON keys:
+      type        – "1d" or "2d"
+      column      – column name (1d only)
+      column_x, column_y – column names (2d only)
+      row_ids     – array of integer row IDs
+      bin_count   – number of bins (default 10)
+      x_bins, y_bins – bin counts for 2d (default 10)
+    """
+    try:
+        body = request.get_json(force=True)
+        dim = body.get("type", "1d")
+        row_ids = body.get("row_ids", [])
+
+        if dim == "1d":
+            column = body["column"]
+            bin_count = int(body.get("bin_count", 10))
+            bins = db_operations.get_1d_bins_containing_rows(column, row_ids, bin_count)
+            return {"Success": True, "bins": bins}
+        else:
+            col_x = body["column_x"]
+            col_y = body["column_y"]
+            x_bins = int(body.get("x_bins", 10))
+            y_bins = int(body.get("y_bins", 10))
+            bins = db_operations.get_2d_bins_containing_rows(col_x, col_y, row_ids, x_bins, y_bins)
+            return {"Success": True, "bins": bins}
+    except Exception as e:
+        traceback.print_exc()
+        return {"Success": False, "Error": str(e)}
 
 
 @app.get("/api/plots/summaries")
