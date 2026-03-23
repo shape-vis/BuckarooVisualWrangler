@@ -1,4 +1,4 @@
-import {NavButton} from "./Buttons.jsx";
+import {NavButton, IconButton} from "./Buttons.jsx";
 import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
@@ -44,10 +44,10 @@ export function BuckarooHeader( { onReset} ) {
                 />
             </h1>
             <div className={"navButtonContainer"}>
-                <NavButton onClick={() => setActiveView('plots')}> 	&#177; Plots</NavButton>
-                <NavButton onClick={() => setActiveView('graph')}> 	 	&#177; Provenance Graph</NavButton>
-                <NavButton onClick={() => setSettingsOpen(true)}>&#9881; Settings</NavButton>
-                <NavButton onClick={handleBack}>&#8592; Home</NavButton>
+                <NavButton onClick={() => setActiveView('plots')}>Plots</NavButton>
+                <NavButton onClick={() => setActiveView('graph')}>Provenance Graph</NavButton>
+                <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>
+                <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
             </div>
             <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
