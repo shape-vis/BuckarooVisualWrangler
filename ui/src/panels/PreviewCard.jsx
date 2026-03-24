@@ -99,7 +99,8 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
       {onExecuteWrangle && (
         <button
           onClick={onExecuteWrangle}
-          style={{ marginLeft: 10, alignSelf: "center", padding: "6px 10px", cursor: "pointer" }}
+          className="regButton"
+          style={{ marginLeft: 10, alignSelf: "center" }}
         >
           Execute Wrangle
         </button>

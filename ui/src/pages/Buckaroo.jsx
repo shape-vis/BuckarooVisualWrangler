@@ -6,6 +6,7 @@ import MatrixView from "../panels/SelectionPanel.jsx";
 import RepairPanel from "../panels/RepairPanel.jsx";
 import { SelectionProvider } from "../utils/SelectionContext.jsx";
 import { RowRangeProvider } from "../utils/RowRangeContext.jsx";
+import { SettingsProvider } from "../utils/SettingsContext.jsx";
 
 import "./Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
@@ -24,6 +25,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
     return (
         <>
             <ViewContext.Provider value={{ activeView, setActiveView }}>
+                <SettingsProvider>
                 <RowRangeProvider>
                 {/* SelectionProvider wraps everything so both plots and RepairPanel share state */}
                 <SelectionProvider>
@@ -66,6 +68,7 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                     </div>
                 </SelectionProvider>
                 </RowRangeProvider>
+                </SettingsProvider>
             </ViewContext.Provider>
         </>
     );
