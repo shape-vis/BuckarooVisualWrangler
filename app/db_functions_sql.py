@@ -929,6 +929,9 @@ class DBOperations:
     # Cross-chart highlighting helpers
     # -------------------------------------------------------------------------
 
+    # TODO: Replace these with internal bin / row returns. Big selection bottleneck.
+    # TODO: Check if selecting a new view causes full recomputation of viewports.
+
     def _filter_join(self) -> str:
         """Return a JOIN clause for the active filter table, or empty string."""
         if self.filtering_table.table_exists:

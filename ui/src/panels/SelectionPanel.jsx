@@ -89,7 +89,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
         const { i, j } = focusedCell;
         const xCol = columns[j];
         const yCol = columns[i];
-        const cellID = `cell-focused-${i}-${j}`;
+        const cellID = `cell-focused-${xCol}-${yCol}`;
 
         // Leave room for axis labels.
         // focusedXPos needs to accommodate D3 left-axis tick labels (up to ~80px for 10-char strings).
@@ -179,6 +179,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
     }
 
     // ── Normal matrix view ────────────────────────────────────────────────────
+    // TODO: Only update views in which attributes actually change.
     return (
         <g ref={matrixPlotAreaRef} id="matrix-plot-area">
             {/* Column (x) labels */}
@@ -209,13 +210,17 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
             {/* Plot cells */}
             {columns.map((xCol, j) =>
                 columns.map((yCol, i) => {
-                    const cellID = `cell-${i}-${j}`;
+
+                    // CHANGE #1: cell identity based on columns
+                    const cellID = `cell-${xCol}-${yCol}`;
+
                     const xPos = view.leftMargin + (j + 1) * view.xPadding + j * plotSize;
                     const yPos = view.topMargin + i * (plotSize + view.yPadding);
                     const iconX = xPos + plotSize - 16;
                     const iconY = yPos;
 
                     let plot;
+
                     if (i === j) {
                         plot = (
                             <HistogramBarChart
@@ -256,7 +261,10 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     }
 
                     return (
-                        <g key={cellID} className="plot-cell-wrapper">
+                        <g
+                            key={cellID} // CHANGE #2: stable key
+                            className="plot-cell-wrapper"
+                        >
                             {plot}
                             <MagnifierIcon
                                 x={iconX}

@@ -6,7 +6,7 @@ import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
 
-export default function Heatmap({
+function Heatmap({
   cellID,
   xPos,
   yPos,
@@ -274,3 +274,6 @@ export default function Heatmap({
     </g>
   );
 }
+
+// Adds memoization (shallow copy) - may need to make a custom checker.
+export default React.memo(Heatmap);

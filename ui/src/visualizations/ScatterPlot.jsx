@@ -5,7 +5,7 @@ import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
 
-export default function ScatterPlot({
+function ScatterPlot({
   cellID,
   xPos,
   yPos,
@@ -191,3 +191,6 @@ export default function ScatterPlot({
     </g>
   );
 }
+
+// Adds memoization (shallow copy) - may need to make a custom checker.
+export default React.memo(ScatterPlot);

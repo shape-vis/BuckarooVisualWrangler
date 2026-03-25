@@ -8,7 +8,7 @@ import { useRowRange } from "../utils/RowRangeContext.jsx";
 /**
  * HistogramBarChart renders a stacked histogram with optional brushing/selection.
  */
-export default function HistogramBarChart({
+function HistogramBarChart({
     cellID,
     pos,
     size,
@@ -217,3 +217,6 @@ export default function HistogramBarChart({
         </g>
     );
 }
+
+// Adds memoization (shallow copy) - may need to make a custom checker.
+export default React.memo(HistogramBarChart);
