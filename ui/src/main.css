@@ -1,3 +1,7 @@
+:root {
+    --axis-text-size: 8px;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -363,12 +367,12 @@ p {
 
 .bottom-axis-text {
     text-anchor: end;
-    font-size: 8px;
+    font-size: var(--axis-text-size, 8px);
     transform: rotate(-45deg);
 }
 
 .left-axis-text {
-    font-size: 8px;
+    font-size: var(--axis-text-size, 8px);
 }
 
 #main-svg {

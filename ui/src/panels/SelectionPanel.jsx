@@ -61,8 +61,8 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
 
     const view = {
         xPadding: 85, yPadding: 70,
-        leftMargin: 30, rightMargin: 10,
-        topMargin: 50, bottomMargin: 0,
+        leftMargin: 30, rightMargin: 40,
+        topMargin: 50, bottomMargin: 50,
     };
 
     const columns = selectedAttributes || [];
@@ -97,8 +97,8 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
         const focusedXPos = 90;
         const focusedYPos = 70;
         const focusedSize = Math.min(
-            w - focusedXPos - 20,
-            h - focusedYPos - 50
+            w - focusedXPos - 40,
+            h - focusedYPos - 100
         );
         const clampedSize = Math.max(80, focusedSize);
 
@@ -306,7 +306,7 @@ export default function MatrixView({ table_name, selectedAttributes }) {
     }, [table_name, selectedAttributes]);
 
     return (
-        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} style={{ display: "block" }}>
+        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} style={{ display: "block" }} overflow="visible">
             <SelectionPanel table_name={table_name} selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
         </svg>
     );
