@@ -24,7 +24,7 @@ export default function Header( { onReset} ) {
 
 export function BuckarooHeader( { onReset} ) {
     onReset = onReset || (() => {});
-    const { setActiveView } = useContext(ViewContext);
+    const { activeView, setActiveView } = useContext(ViewContext);
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     const handleBack = async () => {
@@ -39,13 +39,15 @@ export function BuckarooHeader( { onReset} ) {
                 <img
                     src="/images/favicon/favicon-96x96.png"
                     style={{ verticalAlign: "middle" }}
-                    height="40"
+                    height="24"
                     alt="Buckaroo Logo"
                 />
             </h1>
-            <div className={"navButtonContainer"}>
-                <NavButton onClick={() => setActiveView('plots')}>Plots</NavButton>
-                <NavButton onClick={() => setActiveView('graph')}>Provenance Graph</NavButton>
+            <div className="navButtonContainer">
+                <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'}>Plots</NavButton>
+                <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'}>Provenance Graph</NavButton>
+            </div>
+            <div className="headerActions">
                 <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>
                 <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
             </div>

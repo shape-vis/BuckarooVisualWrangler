@@ -33,7 +33,7 @@ export function StandardButton({ children, isSelected, onClick, style = {} }) {
 export function NavButton({ children, isSelected, onClick, style = {}, icon }) {
   return (
       <div
-          className={`navButton ${isSelected ? "navButtonButton--selected" : ""}`}
+          className={`navButton ${isSelected ? "navButton--selected" : ""}`}
           onClick={onClick}
           style={style}
       >

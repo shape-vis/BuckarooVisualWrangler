@@ -3,6 +3,7 @@
 .matrix-and-dropdown-container {
     display: flex;
     gap: 6px;
+    margin-top: 44px;
 }
 
 .main-view {
@@ -10,7 +11,7 @@
     flex-direction: column;
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 48px);
+    height: calc(100vh - 44px);
     background-color: #f0f2f5;
 }
 
@@ -24,6 +25,8 @@
     min-height: 0;
     min-width: 0;
     overflow: hidden;
+    padding-bottom: 40px;
+    box-sizing: border-box;
 }
 
 .tooltip {

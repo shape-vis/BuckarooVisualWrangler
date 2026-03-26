@@ -160,7 +160,7 @@ function HistogramBarChart({
         };
 
         if (xScale && typeof xScale.draw === "function") xScale.draw(canvas);
-        canvas.append("g").call(d3.axisLeft(yScale)).style("font-size", "8px");
+        canvas.append("g").call(d3.axisLeft(yScale)).selectAll("text").attr("class", "left-axis-text");
 
         createTooltip(bars,
             d => {

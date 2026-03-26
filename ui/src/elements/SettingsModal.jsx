@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import Modal from "./Modal.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useSettings } from "../utils/SettingsContext.jsx";
 import "./SettingsModal.css";
 
 export default function SettingsModal({ visible, onClose }) {
     const { useRange, minId, maxId, setRowRange } = useRowRange();
+    const { axisTextSize, setAxisTextSize } = useSettings();
 
     const [localUseRange, setLocalUseRange] = useState(useRange);
     const [localMin, setLocalMin] = useState(minId);
@@ -77,6 +79,24 @@ export default function SettingsModal({ visible, onClose }) {
                 </>
             )} */}
 
+            <div className="settings-row">
+                <label className="settings-label">Axis Text Size</label>
+                <div className="settings-toggle">
+                    <button
+                        className={`settings-toggle-btn ${axisTextSize === 7 ? "settings-toggle-btn--active" : ""}`}
+                        onClick={() => setAxisTextSize(7)}
+                    >S</button>
+                    <button
+                        className={`settings-toggle-btn ${axisTextSize === 9 ? "settings-toggle-btn--active" : ""}`}
+                        onClick={() => setAxisTextSize(9)}
+                    >M</button>
+                    <button
+                        className={`settings-toggle-btn ${axisTextSize === 12 ? "settings-toggle-btn--active" : ""}`}
+                        onClick={() => setAxisTextSize(12)}
+                    >L</button>
+                </div>
+            </div>
+
             <div className="settings-actions">
                 <button className="settings-btn settings-btn--apply" onClick={handleApply}>
                     Apply
@@ -85,7 +105,6 @@ export default function SettingsModal({ visible, onClose }) {
                     Cancel
                 </button>
             </div>
-            <p>Place to add settings later on such as anomaly type, or other things</p>
         </Modal>
     );
 }

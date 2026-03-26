@@ -68,23 +68,23 @@
   cursor: pointer;
   padding: 6px 16px;
   border-radius: 6px 6px 0 0;
-  background-color: #c8d0e0;
+  background-color: #bec8d8;
   border: 1px solid #a8b4c8;
   border-bottom: none;
   transition: background-color 0.15s ease;
   text-align: center;
-  position: relative;
-  bottom: -2px;
+  margin-bottom: -2px;
   margin-right: 2px;
 }
 
 .navButton:hover {
-  background-color: #dce3ef;
+  background-color: #d0d8e8;
 }
 
 .navButton--selected {
   background-color: #ffffff;
   border-color: #a8b4c8;
+  border-bottom: 2px solid #ffffff;
   z-index: 1;
 }
 
@@ -101,14 +101,8 @@
 .navButtonContainer {
   display: flex;
   gap: 0;
-  align-items: center;
-  border-bottom: 2px solid #a8b4c8;
-  padding-left: 8px;
-}
-
-/* Tabs hang down to sit on the container's bottom border */
-.navButtonContainer .navButton {
-  align-self: flex-end;
+  align-items: flex-end;
+  margin-left: auto;
 }
 
 .iconButton {
