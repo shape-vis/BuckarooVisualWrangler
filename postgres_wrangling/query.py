@@ -129,7 +129,7 @@ def remove_rows_by_ids(table: str, ids: List[int]) -> int:
     if not ids:
         return 0
 
-    errors_table = _get_errors_table(table)
+    # errors_table = _get_errors_table(table)
 
     with engine.begin() as conn:
         # removd join to try to fix bug not removing rows
