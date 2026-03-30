@@ -186,6 +186,22 @@ export async function queryRowsInBin(params) {
 }
 
 /**
+ * POST /api/plots/update-backend-attributes
+ * When attributes are changed on the frontend, make sure associated active attributes are reflected on the backend.
+ *
+ * params: {list of removed attributes}
+ */
+export function updateBackendAttributes(params) {
+    fetch("/api/plots/update-backend-attributes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params)
+    }).catch(error => {
+        console.error("[updateBackendAttributes]", error.message);
+    });
+}
+
+/**
  * POST /api/plots/bins-for-rows
  * Given row IDs, find which bins contain them.
  *

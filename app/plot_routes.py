@@ -159,6 +159,31 @@ def get_rows_in_bin():
         return {"Success": False, "Error": str(e)}
 
 
+@app.post("/api/plots/update-backend-attributes")
+def update_backend_attributes():
+    """
+    Given a list of now non-active attributes, remove their storage bins from the backend.
+
+    Body JSON keys:
+      removed_atributes - list of non-active attributes
+    """
+    try:
+        body = request.get_json(force=True)
+        removed_attributes = body.get("removed_keys", [])
+        parsed_removed_keys = []
+
+        for removed_attribute in removed_attributes:
+            if removed_attribute.get("type") == "1d":
+                parsed_removed_keys.append(removed_attribute["column"])
+            else:
+                x_col, y_col = removed_attribute["columns"]
+                parsed_removed_keys.append((x_col, y_col))
+
+        db_operations.del_nonactive_hists(parsed_removed_keys)
+    except Exception as e:
+        print(f"Error with updating backend attributes: {e}")
+
+
 @app.post("/api/plots/bins-for-rows")
 def get_bins_for_rows():
     """

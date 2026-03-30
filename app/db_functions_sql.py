@@ -965,6 +965,19 @@ class DBOperations:
     # Cross-chart highlighting helpers
     # -------------------------------------------------------------------------
 
+
+    def del_nonactive_hists(self, nonactive_hists: list):
+        """
+        Given a list of now non-active attributes, remove their storage bins from the backend.
+
+        :arg: nonative_hists: the nonactive attributes to remove from storage.
+        """
+
+        # Get rid of nonactive views that are stored, ignore ones that aren't being stored.
+        for nonactive_attribute in nonactive_hists:
+            self.active_hists.pop(nonactive_attribute, None)
+
+
     def get_row_ids_in_bin(self, column, bin_value: str) -> list:
         """
         Return the row IDs that fall inside the given 1-D histogram bin.

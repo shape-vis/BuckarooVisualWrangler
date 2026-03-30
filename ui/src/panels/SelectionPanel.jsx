@@ -4,6 +4,7 @@ import HeatMap from "../visualizations/HeatMap.jsx";
 import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
 import "./SelectionPanel.css";
+import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
 function MagnifierIcon({ x, y, onClick }) {
@@ -66,6 +67,49 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
     };
 
     const columns = selectedAttributes || [];
+    const [prevAttributes, setPrevAttributes] = useState(columns);
+
+    // Updates active active attributes to backend
+    useEffect(() => {
+        // Determine removed attributes
+        const removed = prevAttributes.filter(attr => !columns.includes(attr));
+
+        if (removed.length === 0) {
+            setPrevAttributes(columns);
+            return;
+        }
+
+        const removedKeys = [];
+
+        // Add 1D hist keys for removed attributes
+        removed.forEach(attr => {
+            removedKeys.push({ type: "1d", column: attr });
+        });
+
+        // Add 2D hist keys between removed + active attributes
+        removed.forEach(removedAttr => {
+            columns.forEach(activeAttr => {
+                removedKeys.push({ type: "2d", columns: [removedAttr, activeAttr] }); // upper
+                removedKeys.push({ type: "2d", columns: [activeAttr, removedAttr] }); // lower
+            });
+        });
+
+        // Add 2D keys between removed attributes themselves if more than one removed
+        if (removed.length > 1) {
+            for (let i = 0; i < removed.length; i++) {
+                for (let j = i + 1; j < removed.length; j++) {
+                    removedKeys.push({ type: "2d", columns: [removed[i], removed[j]] }); // upper
+                    removedKeys.push({ type: "2d", columns: [removed[j], removed[i]] }); // lower
+                }
+            }
+        }
+
+        // send nonactive views to backend.
+        updateBackendAttributes({ removed_keys: removedKeys });
+
+        // Update prevAttributes for next run
+        setPrevAttributes(columns);
+    }, [selectedAttributes]);
 
     // Clear focus if columns change (e.g. user deselects an attribute)
     useEffect(() => {
@@ -89,7 +133,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
         const { i, j } = focusedCell;
         const xCol = columns[j];
         const yCol = columns[i];
-        const cellID = `cell-focused-${xCol}-${yCol}`;
+        const cellID = `cell-${xCol}-${yCol}`;
 
         // Leave room for axis labels.
         // focusedXPos needs to accommodate D3 left-axis tick labels (up to ~80px for 10-char strings).
