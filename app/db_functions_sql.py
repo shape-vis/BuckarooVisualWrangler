@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from .filtering_sql import FilteringSQL
 from .execute_sql import fetch_sql
 """
@@ -119,6 +121,7 @@ class DBOperations:
         self.error_table_name = None
         self.col_types = None
         self.filtering_table = None
+        self.active_hists = {}
 
     def reset(self):
         """
@@ -129,6 +132,7 @@ class DBOperations:
         self.error_table_name = None
         self.col_types = None
         self.filtering_table = None
+        self.active_hists = {}
 
     def load_table(self, main_table_name: str, error_table_name: str = None):
         """
@@ -141,6 +145,7 @@ class DBOperations:
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
+        self.active_hists = {}
 
     def get_row_count(self, table_name: str) -> int:
         """
@@ -189,7 +194,33 @@ class DBOperations:
                          self.construct_1d_hist_json(axis_column)]
 
         hist_1d_final_query = "".join(hist_1d_steps)
-        return fetch_sql(hist_1d_final_query, True, self.engine)
+        binned_data, hist = fetch_sql(hist_1d_final_query, False, self.engine)[0]
+        self.update_active_hists(binned_data, True, axis_column)
+        return hist
+
+
+    def update_active_hists(self, binned_data: list, one_dim: bool, col_key):
+        """
+        Caches viewport data in the backend for future reference.
+        :arg: binned_data: A list of string tuples containing (ID, bin).
+        :arg: one_dim: whether the viewport only has one dimension (column) or not.
+        :arg: col_key: the column(s) name tuple or string if singular.
+        """
+
+        rows_to_bins = {}
+        bins_to_rows = defaultdict(list)
+
+        if one_dim:
+            for row_id, row_bin in binned_data:
+                rows_to_bins[row_id] = row_bin
+                bins_to_rows[row_bin].append(row_id)
+        else:
+            for row_id, x_bin, y_bin in binned_data:
+                joint_bin = (x_bin, y_bin)
+                rows_to_bins[row_id] = joint_bin
+                bins_to_rows[joint_bin].append(row_id)
+
+        self.active_hists[col_key] = (rows_to_bins, bins_to_rows)
 
 
     def gather_filtered_rows(self, x_axis_column: str, y_axis_column: object) -> str:
@@ -357,9 +388,11 @@ class DBOperations:
 
         numeric_regex = r"'^\d+$'"
         empty_set = r"'{}'"
+        binned_data = '''SELECT (SELECT json_agg(json_build_array("ID", bin)) FROM binned_data),'''
+
 
         if self.col_types.is_numeric_col(axis_column):
-            return f'''SELECT json_build_object(
+            return f'''{binned_data} (SELECT json_build_object(
                 'histograms',
                     -- For numeric: handle mixed bins (numeric and "null") - keep bins as text
                     (SELECT COALESCE(json_agg(
@@ -383,9 +416,9 @@ class DBOperations:
                         WHERE NOT (bin ~ {numeric_regex})  -- Only non-numeric bin labels
                     )
                 )
-            )'''
+            ))'''
         else:
-            return f'''SELECT json_build_object(
+            return f'''{binned_data} (SELECT json_build_object(
                 'histograms',
                     -- For categorical: keep bin as text
                     (SELECT COALESCE(json_agg(
@@ -409,7 +442,7 @@ class DBOperations:
                         WHERE NOT (bin ~ {numeric_regex})  -- Only non-numeric bin labels
                     )
                 )
-            )'''
+            ))'''
 
 
     def generate_two_d_histogram_with_errors(self, x_axis_column: str, y_axis_column: str, x_bin_count=10, y_bin_count=10) -> str:
@@ -442,7 +475,9 @@ class DBOperations:
                          self.construct_2d_hist_json(x_axis_column, y_axis_column, x_scale_table_name, y_scale_table_name)]
 
         hist_2d_final_query = "".join(hist_2d_steps)
-        return fetch_sql(hist_2d_final_query, True, self.engine)
+        binned_data, hist = fetch_sql(hist_2d_final_query, False, self.engine)[0]
+        self.update_active_hists(binned_data, False, (x_axis_column, y_axis_column))
+        return hist
 
 
     def generate_2d_hist_bounds(self, bound_table_name: str, axis_column: str, col_alias: str) -> str:
@@ -638,8 +673,9 @@ class DBOperations:
 
         json_order_by = ", ".join([json_order_by_x, json_order_by_y])
 
+        binned_data = '''SELECT (SELECT json_agg(json_build_array("ID", x_bin, y_bin)) FROM binned_data),'''
 
-        json_hist_data = f'''SELECT json_build_object(
+        json_hist_data = f'''{binned_data} (SELECT json_build_object(
                         'histograms',
                             (SELECT COALESCE(json_agg(
                                 json_build_object(
@@ -663,8 +699,8 @@ class DBOperations:
             else:
                 axis_numeric_info = "'[]'::json"
 
-            # The final scale data needs to close the entire encapsulating JSON object.
-            ending_parenthesis = ")" if i == len(json_scale_data) - 1 else ""
+            # The final scale data needs to close the entire encapsulating JSON object and SELECT.
+            ending_parenthesis = "))" if i == len(json_scale_data) - 1 else ""
 
             scale_query_component = f'''
             '{scale_label}', json_build_object(
@@ -929,229 +965,55 @@ class DBOperations:
     # Cross-chart highlighting helpers
     # -------------------------------------------------------------------------
 
-    # TODO: Replace these with internal bin / row returns. Big selection bottleneck.
-    # TODO: Check if selecting a new view causes full recomputation of viewports.
-
-    def _filter_join(self) -> str:
-        """Return a JOIN clause for the active filter table, or empty string."""
-        if self.filtering_table.table_exists:
-            ft = self.filtering_table.filtering_table_name
-            return f'JOIN "{ft}" ON "{self.main_table_name}"."ID" = "{ft}"."ID"'
-        return ""
-
-    def get_row_ids_in_1d_bin(self, column: str, bin_value, bin_count: int = 10) -> list:
+    def get_row_ids_in_bin(self, column, bin_value: str) -> list:
         """
         Return the row IDs that fall inside the given 1-D histogram bin.
 
         For numeric columns bin_value is the integer bin index (0-based).
         For categorical columns bin_value is the category label (string).
         """
-        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
-        fj = self._filter_join()
 
-        if self.col_types.is_numeric_col(column) and str(bin_value) != "null":
-            bin_idx = int(bin_value)
-            query = f"""
-                WITH filtered_data AS (
-                    SELECT "{self.main_table_name}"."ID",
-                           "{self.main_table_name}"."{column}" AS value
-                    FROM "{self.main_table_name}" {fj}
-                ),
-                range_data AS (
-                    SELECT MIN(value::numeric) AS min_val,
-                           MAX(value::numeric) AS max_val
-                    FROM filtered_data
-                    WHERE value IS NOT NULL AND value::text ~ {numeric_regex}
-                )
-                SELECT array_agg(d."ID")
-                FROM filtered_data d CROSS JOIN range_data r
-                WHERE d.value IS NOT NULL AND d.value::text ~ {numeric_regex}
-                  AND CASE
-                        WHEN r.min_val = r.max_val THEN 0
-                        ELSE LEAST(GREATEST(
-                            COALESCE(width_bucket(d.value::numeric, r.min_val, r.max_val, {bin_count}) - 1, 0),
-                            0), {bin_count - 1})
-                      END = {bin_idx}
-            """
+        bins_to_rows = self.active_hists[column][1]
+        if bin_value in bins_to_rows:
+            return bins_to_rows[bin_value]
         else:
-            safe_bin = str(bin_value).replace("'", "''")
-            if safe_bin == "null":
-                where = f'"{self.main_table_name}"."{column}" IS NULL'
-            else:
-                where = f'"{self.main_table_name}"."{column}"::text = \'{safe_bin}\''
-            query = f"""
-                SELECT array_agg("{self.main_table_name}"."ID")
-                FROM "{self.main_table_name}" {fj}
-                WHERE {where}
-            """
+            return []
 
-        result = fetch_sql(query, True, self.engine)
-        return list(result) if result is not None else []
 
-    def get_row_ids_in_2d_bin(self, col_x: str, col_y: str, x_bin, y_bin,
-                               x_bins: int = 10, y_bins: int = 10) -> list:
-        """
-        Return the row IDs that fall inside the given 2-D histogram bin.
-
-        For numeric axes bin values are integer bin indices (0-based).
-        For categorical axes they are string labels.
-        """
-        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
-        fj = self._filter_join()
-        x_is_num = self.col_types.is_numeric_col(col_x)
-        y_is_num = self.col_types.is_numeric_col(col_y)
-
-        cte_parts = [f"""filtered_data AS (
-            SELECT "{self.main_table_name}"."ID",
-                   "{self.main_table_name}"."{col_x}" AS x_value,
-                   "{self.main_table_name}"."{col_y}" AS y_value
-            FROM "{self.main_table_name}" {fj}
-        )"""]
-        if x_is_num:
-            cte_parts.append(f"""x_range AS (
-                SELECT MIN(x_value::numeric) AS min_val, MAX(x_value::numeric) AS max_val
-                FROM filtered_data WHERE x_value IS NOT NULL AND x_value::text ~ {numeric_regex}
-            )""")
-        if y_is_num:
-            cte_parts.append(f"""y_range AS (
-                SELECT MIN(y_value::numeric) AS min_val, MAX(y_value::numeric) AS max_val
-                FROM filtered_data WHERE y_value IS NOT NULL AND y_value::text ~ {numeric_regex}
-            )""")
-
-        cte_sql = "WITH " + ", ".join(cte_parts)
-
-        def build_cond(is_num, alias, bin_val, bin_count, range_cte):
-            if is_num and str(bin_val) != "null":
-                b = int(bin_val)
-                return f"""({alias} IS NOT NULL AND {alias}::text ~ {numeric_regex}
-                    AND CASE WHEN (SELECT min_val FROM {range_cte}) = (SELECT max_val FROM {range_cte}) THEN 0
-                        ELSE LEAST(GREATEST(
-                            COALESCE(width_bucket({alias}::numeric,
-                                (SELECT min_val FROM {range_cte}),
-                                (SELECT max_val FROM {range_cte}),
-                                {bin_count}) - 1, 0), 0), {bin_count - 1})
-                        END = {b})"""
-            safe = str(bin_val).replace("'", "''")
-            return f"({alias} IS NULL)" if safe == "null" else f"({alias}::text = '{safe}')"
-
-        from_clause = "FROM filtered_data fd"
-        if x_is_num:
-            from_clause += " CROSS JOIN x_range"
-        if y_is_num:
-            from_clause += " CROSS JOIN y_range"
-
-        x_cond = build_cond(x_is_num, "fd.x_value", x_bin, x_bins, "x_range")
-        y_cond = build_cond(y_is_num, "fd.y_value", y_bin, y_bins, "y_range")
-
-        query = f"""
-            {cte_sql}
-            SELECT array_agg(fd."ID")
-            {from_clause}
-            WHERE {x_cond} AND {y_cond}
-        """
-
-        result = fetch_sql(query, True, self.engine)
-        return list(result) if result is not None else []
-
-    def get_1d_bins_containing_rows(self, column: str, row_ids: list,
-                                     bin_count: int = 10) -> list:
+    def get_1d_bins_containing_rows(self, column: str, row_ids: list) -> list:
         """
         Given a list of row IDs, return which 1-D bin indices/labels those
         rows fall into.  Returns a list of bin identifier strings.
         """
         if not row_ids:
             return []
-        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
-        ids_literal = ", ".join(str(int(r)) for r in row_ids)
 
-        if self.col_types.is_numeric_col(column):
-            query = f"""
-                WITH full_range AS (
-                    SELECT MIN("{column}"::numeric) AS min_val,
-                           MAX("{column}"::numeric) AS max_val
-                    FROM "{self.main_table_name}"
-                    WHERE "{column}"::text ~ {numeric_regex}
-                )
-                SELECT DISTINCT
-                    CASE
-                        WHEN m."{column}" IS NULL OR NOT (m."{column}"::text ~ {numeric_regex}) THEN 'null'
-                        WHEN r.min_val = r.max_val THEN '0'
-                        ELSE LEAST(GREATEST(
-                            COALESCE(width_bucket(m."{column}"::numeric,
-                                r.min_val, r.max_val, {bin_count}) - 1, 0),
-                            0), {bin_count - 1})::text
-                    END AS bin
-                FROM "{self.main_table_name}" m CROSS JOIN full_range r
-                WHERE m."ID" = ANY(ARRAY[{ids_literal}]::integer[])
-            """
-        else:
-            query = f"""
-                SELECT DISTINCT COALESCE("{column}"::text, 'null') AS bin
-                FROM "{self.main_table_name}"
-                WHERE "ID" = ANY(ARRAY[{ids_literal}]::integer[])
-            """
+        affected_bins = set()
+        rows_to_bins = self.active_hists[column][0]
+        for row_id in row_ids:
+            if row_id in rows_to_bins:
+                affected_bins.add(rows_to_bins[row_id])
 
-        rows = fetch_sql(query, False, self.engine)
-        return [row[0] for row in rows] if rows else []
+        return list(affected_bins)
 
-    def get_2d_bins_containing_rows(self, col_x: str, col_y: str,
-                                     row_ids: list, x_bins: int = 10,
-                                     y_bins: int = 10) -> list:
+
+    def get_2d_bins_containing_rows(self, joint_col: str, row_ids: list) -> list:
         """
         Given a list of row IDs, return which 2-D bin coordinates (xBin, yBin)
         those rows fall into.  Returns a list of {xBin, yBin} dicts.
         """
         if not row_ids:
             return []
-        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
-        ids_literal = ", ".join(str(int(r)) for r in row_ids)
-        x_is_num = self.col_types.is_numeric_col(col_x)
-        y_is_num = self.col_types.is_numeric_col(col_y)
 
-        cte_parts = []
-        if x_is_num:
-            cte_parts.append(f"""x_range AS (
-                SELECT MIN("{col_x}"::numeric) AS min_val, MAX("{col_x}"::numeric) AS max_val
-                FROM "{self.main_table_name}" WHERE "{col_x}"::text ~ {numeric_regex}
-            )""")
-        if y_is_num:
-            cte_parts.append(f"""y_range AS (
-                SELECT MIN("{col_y}"::numeric) AS min_val, MAX("{col_y}"::numeric) AS max_val
-                FROM "{self.main_table_name}" WHERE "{col_y}"::text ~ {numeric_regex}
-            )""")
+        affected_bins = set()
+        rows_to_bins = self.active_hists[joint_col][0]
+        for row_id in row_ids:
+            if row_id in rows_to_bins:
+                affected_bins.add(rows_to_bins[row_id])
 
-        cte_sql = ("WITH " + ", ".join(cte_parts) + " ") if cte_parts else ""
-        tbl = self.main_table_name
+        # Now to satisfy the front-end formatting
+        affected_bins_list = []
+        for x_bin, y_bin in affected_bins:
+            affected_bins_list.append({"xBin": x_bin, "yBin": y_bin})
 
-        def bin_expr(is_num, alias, bin_count, range_cte):
-            if is_num:
-                return f"""CASE
-                    WHEN {alias} IS NULL OR NOT ({alias}::text ~ {numeric_regex}) THEN 'null'
-                    WHEN (SELECT min_val FROM {range_cte}) = (SELECT max_val FROM {range_cte}) THEN '0'
-                    ELSE LEAST(GREATEST(
-                        COALESCE(width_bucket({alias}::numeric,
-                            (SELECT min_val FROM {range_cte}),
-                            (SELECT max_val FROM {range_cte}),
-                            {bin_count}) - 1, 0), 0), {bin_count - 1})::text
-                    END"""
-            return f"COALESCE({alias}::text, 'null')"
-
-        x_alias = f'm."{col_x}"'
-        y_alias = f'm."{col_y}"'
-        from_clause = f'FROM "{tbl}" m'
-        if x_is_num:
-            from_clause += " CROSS JOIN x_range"
-        if y_is_num:
-            from_clause += " CROSS JOIN y_range"
-
-        query = f"""
-            {cte_sql}
-            SELECT DISTINCT
-                {bin_expr(x_is_num, x_alias, x_bins, 'x_range')} AS x_bin,
-                {bin_expr(y_is_num, y_alias, y_bins, 'y_range')} AS y_bin
-            {from_clause}
-            WHERE m."ID" = ANY(ARRAY[{ids_literal}]::integer[])
-        """
-
-        rows = fetch_sql(query, False, self.engine)
-        return [{"xBin": row[0], "yBin": row[1]} for row in rows] if rows else []
+        return affected_bins_list

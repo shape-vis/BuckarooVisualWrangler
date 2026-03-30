@@ -142,16 +142,16 @@ def get_rows_in_bin():
         if dim == "1d":
             column = body["column"]
             bin_value = body["bin"]
-            bin_count = int(body.get("bin_count", 10))
-            row_ids = db_operations.get_row_ids_in_1d_bin(column, bin_value, bin_count)
+            row_ids = db_operations.get_row_ids_in_bin(column, bin_value)
         else:
             col_x = body["column_x"]
             col_y = body["column_y"]
             x_bin = body["x_bin"]
             y_bin = body["y_bin"]
-            x_bins = int(body.get("x_bins", 10))
-            y_bins = int(body.get("y_bins", 10))
-            row_ids = db_operations.get_row_ids_in_2d_bin(col_x, col_y, x_bin, y_bin, x_bins, y_bins)
+
+            joint_col = (col_x, col_y)
+            joint_bin_val = (x_bin, y_bin)
+            row_ids = db_operations.get_row_ids_in_bin(joint_col, joint_bin_val)
 
         return {"Success": True, "row_ids": row_ids}
     except Exception as e:
@@ -180,15 +180,14 @@ def get_bins_for_rows():
 
         if dim == "1d":
             column = body["column"]
-            bin_count = int(body.get("bin_count", 10))
-            bins = db_operations.get_1d_bins_containing_rows(column, row_ids, bin_count)
+            bins = db_operations.get_1d_bins_containing_rows(column, row_ids)
             return {"Success": True, "bins": bins}
         else:
             col_x = body["column_x"]
             col_y = body["column_y"]
-            x_bins = int(body.get("x_bins", 10))
-            y_bins = int(body.get("y_bins", 10))
-            bins = db_operations.get_2d_bins_containing_rows(col_x, col_y, row_ids, x_bins, y_bins)
+            joint_col = (col_x, col_y)
+
+            bins = db_operations.get_2d_bins_containing_rows(joint_col, row_ids)
             return {"Success": True, "bins": bins}
     except Exception as e:
         traceback.print_exc()
