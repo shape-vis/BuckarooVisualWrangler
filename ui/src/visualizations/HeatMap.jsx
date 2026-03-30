@@ -167,8 +167,6 @@ function Heatmap({
               column_y: attrY,
               x_bin: d.xBin,
               y_bin: d.yBin,
-              x_bins: 10,
-              y_bins: 10,
             })
           )).then(results => {
             const allIds = [];
@@ -213,8 +211,6 @@ function Heatmap({
           column_y: attrY,
           x_bin: d.xBin,
           y_bin: d.yBin,
-          x_bins: 10,
-          y_bins: 10,
         }).then(result => {
           if (result?.Success) {
             setHighlightedRef.current(result.row_ids, [attrX, attrY], "heatmap");
@@ -250,8 +246,6 @@ function Heatmap({
       column_x: attrX,
       column_y: attrY,
       row_ids: highlightedRowIds,
-      x_bins: 10,
-      y_bins: 10,
     }).then(result => {
       if (!result?.Success || !tilesRef.current) return;
       // Build a Set of "xBin|yBin" keys for O(1) lookup.

@@ -142,7 +142,7 @@ function HistogramBarChart({
                 if (event.type === "end" && brushedBins.size > 0) {
                     const binsToQuery = [...brushedBins];
                     Promise.all(binsToQuery.map(b =>
-                        queryRowsInBin({ type: "1d", column: attrX, bin: b, bin_count: 10 })
+                        queryRowsInBin({ type: "1d", column: attrX, bin: b})
                     )).then(results => {
                         const allIds = [];
                         results.forEach(r => { if (r?.Success) allIds.push(...r.row_ids); });
@@ -171,7 +171,7 @@ function HistogramBarChart({
             },
             (d, event) => {
                 // Left click: fetch row IDs for this bin then update context.
-                queryRowsInBin({ type: "1d", column: attrX, bin: d.bin, bin_count: 10 })
+                queryRowsInBin({ type: "1d", column: attrX, bin: d.bin})
                     .then(result => {
                         if (result?.Success) {
                             setHighlightedRef.current(result.row_ids, [attrX], "histogram");
@@ -195,7 +195,7 @@ function HistogramBarChart({
             return;
         }
 
-        queryBinsForRows({ type: "1d", column: attrX, row_ids: highlightedRowIds, bin_count: 10 })
+        queryBinsForRows({ type: "1d", column: attrX, row_ids: highlightedRowIds})
             .then(result => {
                 if (!result?.Success || !barsRef.current) return;
                 const highlightedBins = new Set(result.bins.map(String));
