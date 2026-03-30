@@ -180,8 +180,10 @@ def update_backend_attributes():
                 parsed_removed_keys.append((x_col, y_col))
 
         db_operations.del_nonactive_hists(parsed_removed_keys)
+        return {"Success": True}
     except Exception as e:
         print(f"Error with updating backend attributes: {e}")
+        return {"Success": False, "Error": str(e)}
 
 
 @app.post("/api/plots/bins-for-rows")
