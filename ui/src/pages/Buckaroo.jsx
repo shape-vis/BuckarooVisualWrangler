@@ -8,6 +8,7 @@ import { SelectionProvider } from "../utils/SelectionContext.jsx";
 import { RowRangeProvider } from "../utils/RowRangeContext.jsx";
 import { SettingsProvider } from "../utils/SettingsContext.jsx";
 
+import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../utils/visualizationCaches.jsx";
 import "./Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
@@ -49,7 +50,12 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                                         />
                                         <RepairPanel
                                             table_name={table_name}
-                                            onWrangleExecuted={() => setRefreshKey(k => k + 1)}
+                                            onWrangleExecuted={() => {
+                                            clearScatterPlotCache();
+                                            clearHeatMapCache();
+                                            clearHistogramCache();
+                                            setRefreshKey(k => k + 1);
+                                        }}
                                         />
                                     </>
                                 )}

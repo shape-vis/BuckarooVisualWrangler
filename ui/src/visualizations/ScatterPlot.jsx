@@ -5,6 +5,10 @@ import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
 
+// Module-level cache so base samples survive component unmount/remount (e.g. focus zoom in/out).
+import { scatterPlotCache } from "../utils/visualizationCaches.jsx";
+const baseSampleCache = scatterPlotCache;
+
 function ScatterPlot({
   cellID,
   xPos,
@@ -39,7 +43,15 @@ function ScatterPlot({
 
   // ── data fetch ────────────────────────────────────────────────────────────
   useEffect(() => {
+    const cacheKey = `${table_name}|${attrX}|${attrY}|${errorSampleCount}|${totalSampleCount}`;
+
     async function fetchData() {
+      // Restore cached base sample instead of re-fetching (survives unmount/remount from focus zoom).
+      if (!useRange && baseSampleCache.has(cacheKey)) {
+        setSampleData(baseSampleCache.get(cacheKey));
+        return;
+      }
+
       try {
         const response = useRange
           ? await querySample2dRange(table_name, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId)
@@ -53,8 +65,13 @@ function ScatterPlot({
 
         const data = response.scatterplot_data;
         if (!data) throw new Error("No scatterplot data returned from server");
+
         setSampleData(data);
 
+        // Cache the base sample so future mounts restore it without re-fetching.
+        if (!useRange) {
+          baseSampleCache.set(cacheKey, data);
+        }
       } catch (err) {
         console.error(err?.message || err);
       }
@@ -73,9 +90,12 @@ function ScatterPlot({
     colorScaleRef.current = colorScale;
 
     const numHistDataX = sampleData.scaleX.numeric || [];
-    const catHistDataX = sampleData.scaleX.categorical || [];
     const numHistDataY = sampleData.scaleY.numeric || [];
-    const catHistDataY = sampleData.scaleY.categorical || [];
+
+    const actualXCats = new Set((sampleData.data || []).filter(d => d.xType === "categorical").map(d => d.x));
+    const actualYCats = new Set((sampleData.data || []).filter(d => d.yType === "categorical").map(d => d.y));
+    const catHistDataX = errorColors ? (sampleData.scaleX.categorical || []).filter(v => actualXCats.has(v)) : [];
+    const catHistDataY = errorColors ? (sampleData.scaleY.categorical || []).filter(v => actualYCats.has(v)) : [];
 
     const xScale = createHybridScales(
       size, numHistDataX, catHistDataX,
@@ -100,8 +120,13 @@ function ScatterPlot({
       return colorScale(d.errors[0]);
     };
 
+    // When no null columns, filter out categorical-null points so no null area is rendered.
+    const chartData = errorColors
+      ? (sampleData.data || [])
+      : (sampleData.data || []).filter(d => d.xType !== "categorical" && d.yType !== "categorical");
+
     const circles = canvas.selectAll("circle")
-      .data(sampleData.data || [])
+      .data(chartData)
       .join("circle")
       .attr("cx", d => xScale ? xScale.apply(d.x, d.xType, true) : 0)
       .attr("cy", d => yScale ? yScale.apply(d.y, d.yType, true) : 0)
@@ -184,7 +209,7 @@ function ScatterPlot({
       if (d.errors.length === 1) return colorScale(d.errors[0]);
       return colorScale(d.errors[0]);
     });
-  }, [highlightedRowIds]);
+  }, [highlightedRowIds, sampleData]);
 
   function handleBackgroundClick() {
     clearSelectionRef.current();

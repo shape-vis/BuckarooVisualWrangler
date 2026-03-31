@@ -5,6 +5,10 @@ import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
 
+// Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
+import { histogramCache } from "../utils/visualizationCaches.jsx";
+const baseSampleCache = histogramCache;
+
 /**
  * HistogramBarChart renders a stacked histogram with optional brushing/selection.
  */
@@ -38,7 +42,15 @@ function HistogramBarChart({
 
     // ── data fetch ─────────────────────────────────────────────────────────
     useEffect(() => {
+        const cacheKey = `${table_name}|${attrX}|10`;
+
         async function fetchData() {
+            // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
+            if (!useRange && baseSampleCache.has(cacheKey)) {
+                setHistogramData(baseSampleCache.get(cacheKey));
+                return;
+            }
+
             try {
                 const response = useRange
                     ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId)
@@ -47,6 +59,11 @@ function HistogramBarChart({
                     throw new Error(`API failed: ${response?.Error || "Unknown error"}`);
                 }
                 setHistogramData(response.histogram);
+
+                // Cache the base data so future mounts restore it without re-fetching.
+                if (!useRange) {
+                    baseSampleCache.set(cacheKey, response.histogram);
+                }
             } catch (err) {
                 console.error("[HistogramBarChart] " + (err?.message || err));
             }
@@ -62,7 +79,7 @@ function HistogramBarChart({
         canvas.selectAll("*").remove();
 
         const numHistDataX = histogramData.scaleX.numeric || [];
-        const catHistDataX = histogramData.scaleX.categorical || [];
+        const catHistDataX = errorColors ? (histogramData.scaleX.categorical || []) : [];
         numHistDataXRef.current = numHistDataX;
 
         const numDomainY = (numHistDataX.length === 0 || !numHistDataX[0])
@@ -78,9 +95,9 @@ function HistogramBarChart({
         const colorScale = errorColors || (k => "steelblue");
         colorScaleRef.current = colorScale;
 
-        // Flatten stacked data per bin.
+        // Flatten stacked data per bin. When no null columns, skip categorical bins entirely.
         const myData = [];
-        histogramData.histograms.forEach(d => {
+        (errorColors ? histogramData.histograms : histogramData.histograms.filter(d => d.xType !== "categorical")).forEach(d => {
             let items = d.count.items;
             Object.keys(d.count).filter(k => k !== "items").forEach(key => {
                 myData.push({ bin: d.xBin, type: d.xType, value: d.count[key], name: key, top: items, bottom: items - d.count[key] });
@@ -218,7 +235,7 @@ function HistogramBarChart({
         return () => {
             isActive = false;
         };
-    }, [highlightedRowIds, attrX, highlightRevision]);
+    }, [highlightedRowIds, attrX, highlightRevision, histogramData]);
 
     function clearSelection() {
         clearSelectionRef.current();

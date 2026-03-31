@@ -6,6 +6,10 @@ import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
 
+// Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
+import { heatMapCache } from "../utils/visualizationCaches.jsx";
+const baseSampleCache = heatMapCache;
+
 function Heatmap({
   cellID,
   xPos,
@@ -36,7 +40,15 @@ function Heatmap({
 
   // ── data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
+    const cacheKey = `${table_name}|${attrX}|${attrY}|10`;
+
     async function fetchData() {
+      // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
+      if (!useRange && baseSampleCache.has(cacheKey)) {
+        setHistogramData(baseSampleCache.get(cacheKey));
+        return;
+      }
+
       try {
         const response = useRange
           ? await queryHistogram2dRange(table_name, attrX, attrY, 10, minId, maxId)
@@ -49,6 +61,11 @@ function Heatmap({
         }
 
         setHistogramData(response.histogram);
+
+        // Cache the base data so future mounts restore it without re-fetching.
+        if (!useRange) {
+          baseSampleCache.set(cacheKey, response.histogram);
+        }
       } catch (err) {
         console.error(err?.message || err);
       }
@@ -269,7 +286,7 @@ function Heatmap({
     return () => {
       isActive = false;
     };
-  }, [highlightedRowIds, attrX, attrY, highlightRevision]);
+  }, [highlightedRowIds, attrX, attrY, highlightRevision, histogramData]);
 
   function handleBackgroundClick() {
     clearSelectionRef.current();
