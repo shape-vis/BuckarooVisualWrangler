@@ -28,9 +28,11 @@ function HistogramBarChart({
     const colorScaleRef = useRef(k => "steelblue");
     const numHistDataXRef = useRef([]);
 
-    const { highlightedRowIds, setHighlightedRowIds, clearHighlight } = useSelection();
+    const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
     const setHighlightedRef = useRef(setHighlightedRowIds);
+    const highlightRevisionRef = useRef(highlightRevision);
     useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
+    useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
     const { useRange, minId, maxId } = useRowRange();
 
@@ -118,6 +120,9 @@ function HistogramBarChart({
             .on("brush end", (event) => {
                 if (!event.selection) {
                     bars.attr("fill", barColor);
+                    if (event.type === "end" && event.sourceEvent) {
+                        clearHighlight();
+                    }
                     return;
                 }
                 const [x0, x1] = event.selection;
@@ -140,10 +145,12 @@ function HistogramBarChart({
 
                 // Async: fetch row IDs for all brushed bins and push to context.
                 if (event.type === "end" && brushedBins.size > 0) {
+                    const requestRevision = highlightRevisionRef.current;
                     const binsToQuery = [...brushedBins];
                     Promise.all(binsToQuery.map(b =>
                         queryRowsInBin({ type: "1d", column: attrX, bin: b})
                     )).then(results => {
+                        if (highlightRevisionRef.current !== requestRevision) return;
                         const allIds = [];
                         results.forEach(r => { if (r?.Success) allIds.push(...r.row_ids); });
                         setHighlightedRef.current([...new Set(allIds)], [attrX], "histogram");
@@ -171,8 +178,10 @@ function HistogramBarChart({
             },
             (d, event) => {
                 // Left click: fetch row IDs for this bin then update context.
+                const requestRevision = highlightRevisionRef.current;
                 queryRowsInBin({ type: "1d", column: attrX, bin: d.bin})
                     .then(result => {
+                        if (highlightRevisionRef.current !== requestRevision) return;
                         if (result?.Success) {
                             setHighlightedRef.current(result.row_ids, [attrX], "histogram");
                         }
@@ -191,19 +200,25 @@ function HistogramBarChart({
         const colorScale = colorScaleRef.current;
 
         if (!highlightedRowIds || highlightedRowIds.length === 0) {
-            barsRef.current.attr("fill", d => colorScale(d.name));
+            clearSelectionRef.current();
             return;
         }
 
+        let isActive = true;
+
         queryBinsForRows({ type: "1d", column: attrX, row_ids: highlightedRowIds})
             .then(result => {
-                if (!result?.Success || !barsRef.current) return;
+                if (!isActive || !result?.Success || !barsRef.current) return;
                 const highlightedBins = new Set(result.bins.map(String));
                 barsRef.current.attr("fill", d =>
                     highlightedBins.has(String(d.bin)) ? "gold" : colorScale(d.name)
                 );
             });
-    }, [highlightedRowIds, attrX]);
+
+        return () => {
+            isActive = false;
+        };
+    }, [highlightedRowIds, attrX, highlightRevision]);
 
     function clearSelection() {
         clearSelectionRef.current();

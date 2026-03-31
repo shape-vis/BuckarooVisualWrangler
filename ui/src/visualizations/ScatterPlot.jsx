@@ -26,12 +26,14 @@ function ScatterPlot({
   const circlesRef = useRef(null);
   const colorScaleRef = useRef(() => "steelblue");
 
-  const { highlightedRowIds, setHighlightedRowIds, clearHighlight } = useSelection();
+  const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
 
   // Keep a stable ref to setHighlightedRowIds so closures inside the draw
   // effect always call the latest version without stale captures.
   const setHighlightedRef = useRef(setHighlightedRowIds);
+  const highlightRevisionRef = useRef(highlightRevision);
   useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
+  useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
   const { useRange, minId, maxId } = useRowRange();
 
@@ -120,10 +122,14 @@ function ScatterPlot({
         if (event.type === "end") lastBrushEnd = Date.now();
         if (!event.selection) {
           circles.attr("fill", d => circleFill(d, null));
+          if (event.type === "end" && event.sourceEvent) {
+            clearHighlight();
+          }
           return;
         }
         const [[x0, y0], [x1, y1]] = event.selection;
         const brushedIds = [];
+        const requestRevision = highlightRevisionRef.current;
         circles.each(function (d) {
           const cx = +d3.select(this).attr("cx");
           const cy = +d3.select(this).attr("cy");
@@ -133,6 +139,7 @@ function ScatterPlot({
         });
 
         if (event.type === "end" && brushedIds.length > 0) {
+          if (highlightRevisionRef.current !== requestRevision) return;
           setHighlightedRef.current([...new Set(brushedIds)], [attrX, attrY], "scatterplot");
         }
       });

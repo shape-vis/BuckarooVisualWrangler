@@ -25,6 +25,7 @@ export function SelectionProvider({ children }) {
   const [highlightedRowIds, setHighlightedRowIdsState] = useState(null);
   const [highlightedCols, setHighlightedColsState] = useState(null);
   const [selectionSource, setSelectionSourceState] = useState(null);
+  const [highlightRevision, setHighlightRevision] = useState(0);
 
   const setSelection = useCallback((meta) => {
     setSelectionState(meta);
@@ -44,19 +45,21 @@ export function SelectionProvider({ children }) {
     setHighlightedRowIdsState(ids && ids.length > 0 ? ids : null);
     setHighlightedColsState(cols && cols.length > 0 ? cols : null);
     setSelectionSourceState(source);
+    setHighlightRevision(rev => rev + 1);
   }, []);
 
   const clearHighlight = useCallback(() => {
     setHighlightedRowIdsState(null);
     setHighlightedColsState(null);
     setSelectionSourceState(null);
+    setHighlightRevision(rev => rev + 1);
   }, []);
 
   return (
     <SelectionContext.Provider value={{
       selection, setSelection, clearSelection,
       highlightedRowIds, highlightedCols,
-      selectionSource,
+      selectionSource, highlightRevision,
       setHighlightedRowIds, clearHighlight,
     }}>
       {children}
