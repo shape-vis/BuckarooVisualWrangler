@@ -26,9 +26,11 @@ function Heatmap({
   const numHistDataXRef = useRef([]);
   const numHistDataYRef = useRef([]);
 
-  const { highlightedRowIds, setHighlightedRowIds, clearHighlight } = useSelection();
+  const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
   const setHighlightedRef = useRef(setHighlightedRowIds);
+  const highlightRevisionRef = useRef(highlightRevision);
   useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
+  useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
   const { useRange, minId, maxId } = useRowRange();
 
@@ -146,6 +148,9 @@ function Heatmap({
         if (event.type === "end") lastBrushEnd = Date.now();
         if (!event.selection) {
           tiles.attr("fill", tileFill);
+          if (event.type === "end" && event.sourceEvent) {
+            clearHighlight();
+          }
           return;
         }
         const [[bx0, by0], [bx1, by1]] = event.selection;
@@ -160,6 +165,7 @@ function Heatmap({
         });
 
         if (event.type === "end" && brushedBins.length > 0) {
+          const requestRevision = highlightRevisionRef.current;
           Promise.all(brushedBins.map(d =>
             queryRowsInBin({
               type: "2d",
@@ -169,6 +175,7 @@ function Heatmap({
               y_bin: d.yBin,
             })
           )).then(results => {
+            if (highlightRevisionRef.current !== requestRevision) return;
             const allIds = [];
             results.forEach(r => { if (r?.Success) allIds.push(...r.row_ids); });
             setHighlightedRef.current([...new Set(allIds)], [attrX, attrY], "heatmap");
@@ -205,6 +212,7 @@ function Heatmap({
         // Skip click if a brush drag just ended (prevents overwriting multi-select).
         if (Date.now() - lastBrushEnd < 300) return;
         // Left click: fetch row IDs for this tile then update context.
+        const requestRevision = highlightRevisionRef.current;
         queryRowsInBin({
           type: "2d",
           column_x: attrX,
@@ -212,6 +220,7 @@ function Heatmap({
           x_bin: d.xBin,
           y_bin: d.yBin,
         }).then(result => {
+          if (highlightRevisionRef.current !== requestRevision) return;
           if (result?.Success) {
             setHighlightedRef.current(result.row_ids, [attrX, attrY], "heatmap");
           }
@@ -237,9 +246,11 @@ function Heatmap({
     };
 
     if (!highlightedRowIds || highlightedRowIds.length === 0) {
-      tilesRef.current.attr("fill", tileFill);
+      clearSelectionRef.current();
       return;
     }
+
+    let isActive = true;
 
     queryBinsForRows({
       type: "2d",
@@ -247,14 +258,18 @@ function Heatmap({
       column_y: attrY,
       row_ids: highlightedRowIds,
     }).then(result => {
-      if (!result?.Success || !tilesRef.current) return;
+      if (!isActive || !result?.Success || !tilesRef.current) return;
       // Build a Set of "xBin|yBin" keys for O(1) lookup.
       const highlightSet = new Set(result.bins.map(b => `${b.xBin}|${b.yBin}`));
       tilesRef.current.attr("fill", d =>
         highlightSet.has(`${d.xBin}|${d.yBin}`) ? "gold" : tileFill(d)
       );
     });
-  }, [highlightedRowIds, attrX, attrY]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [highlightedRowIds, attrX, attrY, highlightRevision]);
 
   function handleBackgroundClick() {
     clearSelectionRef.current();
