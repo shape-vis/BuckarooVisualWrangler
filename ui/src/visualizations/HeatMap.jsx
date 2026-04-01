@@ -55,9 +55,9 @@ function Heatmap({
           : await queryHistogram2d(table_name, attrX, attrY, 10);
         console.log("[HEATMAP] Response:", response);
 
-        if (!response || !response.Success) {
+        if (!response || !response.success) {
           console.error("[HEATMAP] API call failed:", response);
-          throw new Error(`2D Histogram API failed: ${response?.Error || "Unknown error"}`);
+          throw new Error(`2D Histogram API failed: ${response?.error || "Unknown error"}`);
         }
 
         setHistogramData(response.histogram);
@@ -194,7 +194,7 @@ function Heatmap({
           )).then(results => {
             if (highlightRevisionRef.current !== requestRevision) return;
             const allIds = [];
-            results.forEach(r => { if (r?.Success) allIds.push(...r.row_ids); });
+            results.forEach(r => { if (r?.success) allIds.push(...r.row_ids); });
             setHighlightedRef.current([...new Set(allIds)], [attrX, attrY], "heatmap");
           });
         }
@@ -238,7 +238,7 @@ function Heatmap({
           y_bin: d.yBin,
         }).then(result => {
           if (highlightRevisionRef.current !== requestRevision) return;
-          if (result?.Success) {
+          if (result?.success) {
             setHighlightedRef.current(result.row_ids, [attrX, attrY], "heatmap");
           }
         });
@@ -275,7 +275,7 @@ function Heatmap({
       column_y: attrY,
       row_ids: highlightedRowIds,
     }).then(result => {
-      if (!isActive || !result?.Success || !tilesRef.current) return;
+      if (!isActive || !result?.success || !tilesRef.current) return;
       // Build a Set of "xBin|yBin" keys for O(1) lookup.
       const highlightSet = new Set(result.bins.map(b => `${b.xBin}|${b.yBin}`));
       tilesRef.current.attr("fill", d =>

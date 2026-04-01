@@ -9,10 +9,7 @@ from app import DBOperations
 
 class GraphNode:
     def __init__(self, engine, parent_id, wrangle_op: str, table_name: str, error_table_name: str):
-        """
-        Creates a node so that all members of it don't need to be loaded in at init time
-        :param engine: db engine for DBOperations
-        """
+
         self.parent_id = parent_id
         self.wrangle_op = wrangle_op
         self.db_op = DBOperations(engine)
@@ -26,14 +23,7 @@ class GraphNode:
         self.mismatch_metric = 0
 
     def update_metrics(self, anomaly, missing, incomplete, mismatch):
-        """
-        the helper that will store all the metrics for this table state
-        :param anomaly: percentage of anomalies found in the table
-        :param missing: percentage of missing found in the table
-        :param incomplete: percentage of incomplete found in the table
-        :param mismatch: percentage of mismatch found in the table
-        :return:
-        """
+
         self.anomaly_metric = anomaly
         self.missing_metric = missing
         self.incomplete_metric = incomplete

@@ -1,71 +1,34 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import * as d3 from "d3";
 
 import { queryAttributeSummaries } from "../utils/serverCalls.jsx";
+import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
+import { truncateText } from "../utils/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
 
 import "./AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
 
-// Utility: truncate text to given length (preserve whole words if possible)
-function truncateText(text, maxLen) {
-  if (!text) return "";
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen - 1) + "…";
-}
-
-// Moved outside component so it's a stable reference and doesn't
-// cause useMemo(errorColors) to recompute on every render
-const ERROR_TYPES = {
-  total: "Total Error %",
-  missing: "Missing Values",
-  mismatch: "Data Type Mismatch",
-  anomaly: "Average Anomalies (Outliers)",
-  incomplete: "Incomplete Data (< 3 points)",
-  none: "None",
-};
-
-function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, errorColors, handleToggleSelect, showFilter }) {
-  const columnErrors = summaryData?.columnErrors?.[attr] || {};
-  const attrDist = summaryData?.attributeDistributions?.[attr] || {};
-
-  const errorEntries = Object.entries(columnErrors);
-  const errorSum = errorEntries.reduce((s, [_, pct]) => s + pct, 0);
-  // const cleanPct = Math.max(0, 1 - errorSum);
 
 
-  function handleToggleGroupBy(attr) {
-    setGroupByAttribute(prev => {
-      return prev === attr ? null : attr;
-    });
-  }  
-
-function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAttributes, handleToggleSelect }) {
+function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAttributes, handleToggleSelect, showFilter }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
-  // Close popup when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
         setOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleOptionClick = (value) => {
-    console.log("Selected:", value);
-    setOpen(false);
-  };
-
-    const isSelected = selectedAttributes.includes(attr);
+  const isSelected = selectedAttributes.includes(attr);
 
   return (
-    <div className="popupMenuWrapper" ref={ref} >
+    <div className="popupMenuWrapper" ref={ref}>
       <StandardButton
         isSelected={open}
         onClick={() => setOpen((prev) => !prev)}
@@ -78,37 +41,37 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
         style={{fontSize: 10, height: "34px", marginTop: "4px"}}
       >
         {isSelected ? "Selected" : "Select"}
-      </RotatedButton>      
+      </RotatedButton>
 
       {open && (
         <div className="popupMenu">
           <RotatedButton isSelected={groupByAttribute === attr} style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => handleToggleGroupBy(attr)}>Group By</RotatedButton>
           <RotatedButton style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => showFilter(attr)}>Filter</RotatedButton>
-          <RotatedButton style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => handleOptionClick("option3")}>Delete</RotatedButton>
+          <RotatedButton style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => setOpen(false)}>Delete</RotatedButton>
         </div>
       )}
     </div>
   );
-}  
+}
+
+function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, handleToggleSelect, showFilter }) {
+  const columnErrors = summaryData?.columnErrors?.[attr] || {};
+  const attrDist = summaryData?.attributeDistributions?.[attr] || {};
+
+  const errorEntries = Object.entries(columnErrors);
+
+  function handleToggleGroupBy(attr) {
+    setGroupByAttribute(prev => prev === attr ? null : attr);
+  }
 
   return (
     <li style={{display: "flex", flexDirection: "row", gap: 8, marginBottom: 8}} key={attr}>
-      <GroupByButton attr={attr} groupByAttribute={groupByAttribute} handleToggleGroupBy={handleToggleGroupBy} selectedAttributes={selectedAttributes} handleToggleSelect={handleToggleSelect} />
+      <GroupByButton attr={attr} groupByAttribute={groupByAttribute} handleToggleGroupBy={handleToggleGroupBy} selectedAttributes={selectedAttributes} handleToggleSelect={handleToggleSelect} showFilter={showFilter} />
 
       <div style={{display: "flex", flexDirection: "column", gap: 4, flexGrow: 1}}>
         <div style={{display: "flex", alignItems: "center", gap: 6}}>
           <span title={attr} style={{fontSize: 16, fontWeight: 700, marginRight: 6}}>{truncateText(attr.toLowerCase(), Math.max(5, 18 - errorEntries.length * 3))}</span>
 
-          {/*{errorEntries.map(([type, pct]) => (*/}
-          {/*  <span*/}
-          {/*    key={type}*/}
-          {/*    title={`${type}: ${(pct * 100).toFixed(1)}% of entries`}*/}
-          {/*    className="error-scent"*/}
-          {/*    style={{backgroundColor: errorColors(type)}}*/}
-          {/*  >*/}
-          {/*    {Math.round(pct * 100)}%*/}
-          {/*  </span>*/}
-          {/*))}*/}
           {errorEntries.length > 0
               ? errorEntries.map(([type, pct]) => (
               <span
@@ -152,25 +115,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // // Error type labels
-  // const errorTypes = {
-  //   total: "Total Error %",
-  //   missing: "Missing Values",
-  //   mismatch: "Data Type Mismatch",
-  //   anomaly: "Average Anomalies (Outliers)",
-  //   incomplete: "Incomplete Data (< 3 points)",
-  //   none: "None",
-  // };
-
- // errorTypes is now ERROR_TYPES (module-level constant),
-  // so this useMemo has a stable dependency and never needlessly recomputes
-  const errorColors = useMemo(() => {
-    return d3.scaleOrdinal()
-      .domain(Object.keys(ERROR_TYPES))
-      .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
-  }, []);
-
-  // Fetch summary data from server (mirrors populateDropdownFromTable)
+  // Fetch summary data from server
   async function fetchSummaryData() {
     setLoading(true);
     try {
@@ -247,8 +192,6 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
         next = next.slice(1);
       }
 
-      // trigger controller update
-      // controller.updateGrouping(next, groupByAttribute);
       return next;
     });
   }
@@ -289,7 +232,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
         <ul className="attribute-summary-list">
           {loading && <li>Loading attribute summaries…</li>}
           {!loading && summaryData && sortedAttributes.map(attr => (
-            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} errorColors={errorColors} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
+            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
           ))}
         </ul>
       </div>

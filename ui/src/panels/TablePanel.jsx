@@ -2,13 +2,7 @@ import React, { useMemo } from "react";
 import { useEffect, useState } from "react";
 import { queryTopErrorRows } from "../utils/serverCalls.jsx";
 import CollapsiblePanel from "../elements/CollapsiblePanel";
-
-// Utility to truncate long text
-function truncateText(text, maxLen) {
-  if (!text) return "";
-  if (String(text).length <= maxLen) return String(text);
-  return String(text).slice(0, maxLen - 1) + "…";
-}
+import { truncateText } from "../utils/textUtils.js";
 
 function RowHeader({ columns }) {
   return (
@@ -108,8 +102,8 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
           const response = await queryTopErrorRows(table_name, maxRows);
           console.log("[TablePanel] Response:", response);
 
-          if (!response || !response.Success) {
-            throw new Error(`[TablePanel] API call failed: ${response?.Error || "Unknown error"}`);
+          if (!response || !response.success) {
+            throw new Error(`[TablePanel] API call failed: ${response?.error || "Unknown error"}`);
           }
 
           setTableData(response.table);

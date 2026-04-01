@@ -37,30 +37,30 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
     if (chartType === "histogram") {
       queryPreviewHistogram({ type: "1d", tablename: tableName, column: cols[0], bins: 10 })
         .then(result => {
-          if (result?.Success) {
+          if (result?.success) {
             setData(result.histogram);
           } else {
-            setError(result?.Error || "Failed to load preview");
+            setError(result?.error || "Failed to load preview");
           }
           setLoading(false);
         });
     } else if (chartType === "heatmap") {
       queryPreviewHistogram({ type: "2d", tablename: tableName, column_x: cols[0], column_y: cols[1], x_bins: 10, y_bins: 10 })
         .then(result => {
-          if (result?.Success) {
+          if (result?.success) {
             setData(result.histogram);
           } else {
-            setError(result?.Error || "Failed to load preview");
+            setError(result?.error || "Failed to load preview");
           }
           setLoading(false);
         });
     } else if (chartType === "scatterplot") {
       queryPreviewScatterplot({ tablename: tableName, x_column: cols[0], y_column: cols[1], error_sample_count: 300, total_sample_count: 1000 })
         .then(result => {
-          if (result?.Success) {
+          if (result?.success) {
             setData(result.scatterplot_data);
           } else {
-            setError(result?.Error || "Failed to load preview");
+            setError(result?.error || "Failed to load preview");
           }
           setLoading(false);
         });

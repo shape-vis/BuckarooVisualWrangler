@@ -55,8 +55,8 @@ function HistogramBarChart({
                 const response = useRange
                     ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId)
                     : await queryHistogram1d(table_name, attrX, 10);
-                if (!response || !response.Success) {
-                    throw new Error(`API failed: ${response?.Error || "Unknown error"}`);
+                if (!response || !response.success) {
+                    throw new Error(`API failed: ${response?.error || "Unknown error"}`);
                 }
                 setHistogramData(response.histogram);
 
@@ -169,7 +169,7 @@ function HistogramBarChart({
                     )).then(results => {
                         if (highlightRevisionRef.current !== requestRevision) return;
                         const allIds = [];
-                        results.forEach(r => { if (r?.Success) allIds.push(...r.row_ids); });
+                        results.forEach(r => { if (r?.success) allIds.push(...r.row_ids); });
                         setHighlightedRef.current([...new Set(allIds)], [attrX], "histogram");
                     });
                 }
@@ -199,7 +199,7 @@ function HistogramBarChart({
                 queryRowsInBin({ type: "1d", column: attrX, bin: d.bin})
                     .then(result => {
                         if (highlightRevisionRef.current !== requestRevision) return;
-                        if (result?.Success) {
+                        if (result?.success) {
                             setHighlightedRef.current(result.row_ids, [attrX], "histogram");
                         }
                     });
@@ -225,7 +225,7 @@ function HistogramBarChart({
 
         queryBinsForRows({ type: "1d", column: attrX, row_ids: highlightedRowIds})
             .then(result => {
-                if (!isActive || !result?.Success || !barsRef.current) return;
+                if (!isActive || !result?.success || !barsRef.current) return;
                 const highlightedBins = new Set(result.bins.map(String));
                 barsRef.current.attr("fill", d =>
                     highlightedBins.has(String(d.bin)) ? "gold" : colorScale(d.name)

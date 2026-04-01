@@ -13,9 +13,6 @@ import json
 from app.db_functions_sql import DBOperations
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-from app.pgraph.pgraph import PGraph
-from app.pgraph.node import GraphNode
-
 # Function to create the database if it does not exist
 # This function checks if the database exists and creates it if it does not
 def create_database_if_not_exists(conn, db_name):
@@ -102,10 +99,8 @@ engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{
 
 db_operations = DBOperations(engine)
 
-
-# Initialize PostgreSQL stored procedures for histogram generation with errors
-# from app.db_functions import initialize_database_functions
-# initialize_database_functions(engine)
+#flag if a wrangle has happened in the session yet
+wrangle_occurred = False
 
 from app import routes
 from app import wrangler_routes_sql as wrangler_routes

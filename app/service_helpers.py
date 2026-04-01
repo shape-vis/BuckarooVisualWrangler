@@ -15,6 +15,18 @@ from detectors.missing_value import missing_value
 from postgres_wrangling import query
 
 
+def _validate_identifier(name: str) -> str:
+    """
+    Ensures a table or column name contains only safe characters before it
+    is interpolated into a SQL string.  Raises ValueError if the name does
+    not match the expected pattern so callers get an explicit, early error
+    rather than a silent SQL injection.
+    """
+    if not re.fullmatch(r'[a-zA-Z0-9_]+', name):
+        raise ValueError(f"Unsafe SQL identifier rejected: {name!r}")
+    return name
+
+
 def generate_table_name(csv_name):
     """
     Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
@@ -31,52 +43,18 @@ def generate_table_name(csv_name):
     return "data_" + clean_name.lower() + "_" + random_string
 
 
-def init_session_data_state(df,error_df,data_state_manager):
+def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name, engine):
     """
-    Initializes the session data state with the undetected and detected dataframes
-    so that as the user performs actions on the data, we can keep track of the different states
-    :param df: the undetected dataframe
-    :param error_df: the detected dataframe
-    :param data_state_manager: the data state manager object the current app session is using
-    :return: None
-    """
-
-    table_dict = {"df":df,"error_df":error_df}
-
-    data_state_manager.set_original_df(df)
-    data_state_manager.set_original_error_table(error_df)
-    data_state_manager.set_current_state(table_dict)
-
-def update_data_state(wrangled_df, new_error_df):
-    """
-    Updates the current data state with the new wrangled dataframe and error dataframe, the idea is that 
-    the user has performed an action on the data, and we need to update the session state with the new data
-    :param wrangled_df: the wrangled dataframe after the user has performed an action
-    :param new_error_df: the new error dataframe after the user has performed an action
-    :return: None
-    """
-
-    new_state = {"df":wrangled_df,"error_df":new_error_df}
-    data_state_manager.set_current_state(new_state)
-
-def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name,engine):
-    """
-    Fetches the undetected and detected dataframes from the database by first constructing the queries using the helper which takes in 
-    the name of the table to fetch from the db, and initializes the session data state
+    Fetches the undetected and detected dataframes from the database.
     :param cleaned_table_name: the name of the table in the database
     :param engine: the database connection
     :return: None
     """
-
     try:
-        full_df_query = get_whole_table_query(cleaned_table_name,False)
-        error_df_query = get_whole_table_query(cleaned_table_name,True)
-        undetected_df = pd.read_sql_query(full_df_query, engine)
-        detected_df = pd.read_sql_query(error_df_query, engine)
-        # set the first datastate for later wrangling purposes
-        print("starting initial data-state:")
-        init_session_data_state(undetected_df, detected_df, data_state_manager)
-
+        full_df_query = get_whole_table_query(cleaned_table_name, False)
+        error_df_query = get_whole_table_query(cleaned_table_name, True)
+        pd.read_sql_query(full_df_query, engine)
+        pd.read_sql_query(error_df_query, engine)
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -87,11 +65,10 @@ def get_whole_table_query(table_name, get_errors):
     :param get_errors: boolean to determine if the query is for the error table or the undetected table
     :return: the query string to fetch the whole table
     """
+    _validate_identifier(table_name)
     if get_errors:
-        query = f"SELECT * FROM errors_{table_name}"
-        return query
-    query = f"SELECT * FROM {table_name}"
-    return query
+        return f'SELECT * FROM "errors_{table_name}"'
+    return f'SELECT * FROM "{table_name}"'
 
 def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
     """
@@ -102,11 +79,12 @@ def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
     :param get_errors: boolean to determine if the query is for the error table or the undetected table
     :return: the query string to fetch the range of IDs
     """
+    _validate_identifier(table_name)
+    min_id_int = int(min_id)
+    max_id_int = int(max_id)
     if get_errors:
-        query = f"SELECT * FROM errors_{table_name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
-        return query
-    query = f"SELECT * FROM {table_name} WHERE " + "'ID'" + f" BETWEEN {min_id} AND {max_id}"
-    return query
+        return f'SELECT * FROM "errors_{table_name}" WHERE "ID" BETWEEN {min_id_int} AND {max_id_int}'
+    return f'SELECT * FROM "{table_name}" WHERE "ID" BETWEEN {min_id_int} AND {max_id_int}'
 
 def get_values_for_df_melt(df):
     """
@@ -254,8 +232,9 @@ def slice_data_by_min_max_ranges(min_val,max_val,df,error_df):
     if "ID" not in df.columns:
         df = set_id_column(df)
 
-    sliced_max_df = df[df["ID" or "index"] <= max_val_int]
-    sliced_min_max_df = sliced_max_df[sliced_max_df["ID" or "index"] >= min_val_int]
+    id_col = "ID" if "ID" in df.columns else "index"
+    sliced_max_df = df[df[id_col] <= max_val_int]
+    sliced_min_max_df = sliced_max_df[sliced_max_df[id_col] >= min_val_int]
 
     sliced_error_max_df = error_df[error_df["row_id"] <= max_val_int]
     sliced_min_max_error_df = sliced_error_max_df[sliced_error_max_df["row_id"] >= min_val_int]
@@ -337,8 +316,6 @@ def create_bins_for_a_numeric_column(column,bin_count):
     column_numeric = pd.to_numeric(column, errors='coerce')
     return pd.cut(column_numeric, bins=bin_count)
 
-    # return pd.cut(column, bins=bin_count)
-
 
 def execute_wrangle_preview(table, preview_table, preview_name_fn):
     """
@@ -380,6 +357,15 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn):
     return {"success": True, "table": table}
 
 
+def _clone_table_pair(conn, source_table, dest_table, errors_source):
+    """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
+    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dest_table}"'))
+    conn.execute(sa_text(f'CREATE TABLE "{dest_table}" AS SELECT * FROM "{source_table}"'))
+    errors_dest = f"errors_{dest_table}"
+    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
+    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
+
+
 def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
     Create delete and impute preview tables for a 1D (single-column) selection.
@@ -389,20 +375,11 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
 
     errors_src     = f"errors_{table}"
     preview_delete = preview_name_fn(table, "_preview_delete")
-    errors_dst_del = f"errors_{preview_delete}"
     preview_impute = preview_name_fn(table, "_preview_impute")
-    errors_dst_imp = f"errors_{preview_impute}"
 
     with engine.begin() as conn:
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
-
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{preview_impute}" AS SELECT * FROM "{table}"'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp}" AS SELECT * FROM "{errors_src}"'))
+        _clone_table_pair(conn, table, preview_delete, errors_src)
+        _clone_table_pair(conn, table, preview_impute, errors_src)
 
     query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
     query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
@@ -427,27 +404,13 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
 
     errors_src       = f"errors_{table}"
     preview_delete   = preview_name_fn(table, "_preview_delete")
-    errors_dst_del   = f"errors_{preview_delete}"
     preview_impute_x = preview_name_fn(table, "_preview_impute_x")
-    errors_dst_imp_x = f"errors_{preview_impute_x}"
     preview_impute_y = preview_name_fn(table, "_preview_impute_y")
-    errors_dst_imp_y = f"errors_{preview_impute_y}"
 
     with engine.begin() as conn:
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{preview_delete}" AS SELECT * FROM "{table}"'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_del}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_del}" AS SELECT * FROM "{errors_src}"'))
-
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_x}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{preview_impute_x}" AS SELECT * FROM "{table}"'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_x}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_x}" AS SELECT * FROM "{errors_src}"'))
-
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute_y}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{preview_impute_y}" AS SELECT * FROM "{table}"'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dst_imp_y}"'))
-        conn.execute(sa_text(f'CREATE TABLE "{errors_dst_imp_y}" AS SELECT * FROM "{errors_src}"'))
+        _clone_table_pair(conn, table, preview_delete, errors_src)
+        _clone_table_pair(conn, table, preview_impute_x, errors_src)
+        _clone_table_pair(conn, table, preview_impute_y, errors_src)
 
     query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
     query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)

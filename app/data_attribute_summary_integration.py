@@ -8,7 +8,7 @@ Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.
 import pandas as pd
 
 from app.execute_sql import fetch_sql
-from app.service_helpers import get_error_dist, is_categorical
+from app.service_helpers import get_error_dist, is_categorical, _validate_identifier
 
 
 def get_default_attributes_from_rankings(tablename, engine):
@@ -19,6 +19,7 @@ def get_default_attributes_from_rankings(tablename, engine):
     :return: List of top 3 attribute names
     """
     try:
+        _validate_identifier(tablename)
         query = f'SELECT attribute FROM "rankings_{tablename}" ORDER BY rank ASC LIMIT 3'
         rows = fetch_sql(query, False, engine)
         return [row[0] for row in rows] if rows else []
@@ -39,6 +40,7 @@ def generate_complete_json(tablename):
     if not tablename:
         return {"columnErrors": {}, "attributes": [], "attributeDistributions": {}, "defaultAttributes": []}
 
+    _validate_identifier(tablename)
     print(f"Generating JSON for table: {tablename}")
 
     main_rows = fetch_sql(f'SELECT * FROM "{tablename}"', False, engine)

@@ -333,6 +333,6 @@ const serverCalls = {
 
 export default serverCalls;
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && import.meta.env.DEV) {
     window.serverCalls = serverCalls;
 }

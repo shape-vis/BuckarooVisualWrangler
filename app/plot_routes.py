@@ -1,17 +1,12 @@
 #Buckaroo Project - July 2, 2025,
 #This file handles all endpoints surrounding plots
-import hashlib
-import json
-from pathlib import Path
-
 from flask import request
 import pandas as pd
 import traceback
 
 from app import app, engine, service_helpers, db_operations
 from app.service_helpers import group_by_attribute, get_whole_table_query
-from app.data_attribute_summary_integration import *
-# from data_management.data_integration import *
+from app.data_attribute_summary_integration import generate_complete_json
 
 import math
 
@@ -45,9 +40,9 @@ def get_1d_histogram():
 
     try:
         histogram = db_operations.generate_one_d_histogram_with_errors(column,bin_count)
-        return {"Success": True, "histogram": histogram}
+        return {"success": True, "histogram": histogram}
     except Exception as e:
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 @app.get("/api/plots/2-d-histogram")
 def get_2d_histogram():
@@ -62,9 +57,9 @@ def get_2d_histogram():
 
     try:
         histogram = db_operations.generate_two_d_histogram_with_errors(column_x,column_y,x_bins,y_bins)
-        return {"Success": True, "histogram": histogram}
+        return {"success": True, "histogram": histogram}
     except Exception as e:
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 
@@ -75,32 +70,20 @@ def get_top_error_rows():
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
     table = request.args.get("tablename")
-    num_rows = request.args.get("num_rows", default=10)
+    num_rows = int(request.args.get("num_rows", default=10))
 
     try:
-        top_errors_query = f"SELECT * FROM \"errors_{table}\" WHERE row_id IN (  SELECT row_id   FROM \"errors_{table}\"   GROUP BY row_id   ORDER BY COUNT(*) DESC   LIMIT {num_rows} ) ORDER BY row_id;"
+        service_helpers._validate_identifier(table)
+        top_errors_query = f'SELECT * FROM "errors_{table}" WHERE row_id IN ( SELECT row_id FROM "errors_{table}" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} ) ORDER BY row_id;'
         top_errors_result = pd.read_sql_query(top_errors_query, engine)
 
-        print(f"### Top errors query: {top_errors_query}")
-        print(f"### Top errors result: {top_errors_result}")
-
-        # top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"{table}_errors\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"index\" = t.row_id;"
-        top_data_query = f"WITH top_row_ids AS ( SELECT row_id FROM \"errors_{table}\" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM \"{table}\" d JOIN top_row_ids t ON d.\"ID\" = t.row_id;"
+        top_data_query = f'WITH top_row_ids AS ( SELECT row_id FROM "errors_{table}" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM "{table}" d JOIN top_row_ids t ON d."ID" = t.row_id;'
         top_data_result = pd.read_sql_query(top_data_query, engine)
 
-        print(f"### Top data query: {top_data_query}")
-        print(f"### Top data result: ")
-        print(top_data_result)
-
-        # # TODO: Implement logic to get top error rows based on error counts
-        # query = f"SELECT * FROM \"{table}\" LIMIT {num_rows};"
-        # print(f"Executing query: {query}")
-        # result = pd.read_sql_query(query, engine).to_dict()
-
-        return {"Success": True, "table": replace_nan(top_data_result.to_dict()), "errors": top_errors_result.to_dict()}
+        return {"success": True, "table": replace_nan(top_data_result.to_dict()), "errors": top_errors_result.to_dict()}
 
     except Exception as e:
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @app.get("/api/plots/scatterplot")
@@ -115,10 +98,10 @@ def get_scatterplot_data():
 
     try:
         scatterplot_data = db_operations.generate_scatterplot_with_errors(x_column_name,y_column_name,error_sample_count,total_sample_count)
-        return {"Success": True, "scatterplot_data": scatterplot_data}
+        return {"success": True, "scatterplot_data": scatterplot_data}
 
     except Exception as e:
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/api/plots/rows-in-bin")
@@ -153,10 +136,10 @@ def get_rows_in_bin():
             joint_bin_val = (x_bin, y_bin)
             row_ids = db_operations.get_row_ids_in_bin(joint_col, joint_bin_val)
 
-        return {"Success": True, "row_ids": row_ids}
+        return {"success": True, "row_ids": row_ids}
     except Exception as e:
         traceback.print_exc()
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/api/plots/update-backend-attributes")
@@ -180,10 +163,10 @@ def update_backend_attributes():
                 parsed_removed_keys.append((x_col, y_col))
 
         db_operations.del_nonactive_hists(parsed_removed_keys)
-        return {"Success": True}
+        return {"success": True}
     except Exception as e:
         print(f"Error with updating backend attributes: {e}")
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/api/plots/bins-for-rows")
@@ -208,17 +191,17 @@ def get_bins_for_rows():
         if dim == "1d":
             column = body["column"]
             bins = db_operations.get_1d_bins_containing_rows(column, row_ids)
-            return {"Success": True, "bins": bins}
+            return {"success": True, "bins": bins}
         else:
             col_x = body["column_x"]
             col_y = body["column_y"]
             joint_col = (col_x, col_y)
 
             bins = db_operations.get_2d_bins_containing_rows(joint_col, row_ids)
-            return {"Success": True, "bins": bins}
+            return {"success": True, "bins": bins}
     except Exception as e:
         traceback.print_exc()
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @app.get("/api/plots/summaries")
@@ -269,18 +252,18 @@ def get_preview_histogram():
             column    = request.args.get("column")
             bin_count = int(request.args.get("bins", 10))
             histogram = preview_ops.generate_one_d_histogram_with_errors(column, bin_count)
-            return {"Success": True, "histogram": histogram}
+            return {"success": True, "histogram": histogram}
         else:
             column_x = request.args.get("column_x")
             column_y = request.args.get("column_y")
             x_bins   = int(request.args.get("x_bins", 10))
             y_bins   = int(request.args.get("y_bins", 10))
             histogram = preview_ops.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
-            return {"Success": True, "histogram": histogram}
+            return {"success": True, "histogram": histogram}
 
     except Exception as e:
         traceback.print_exc()
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @app.get("/api/plots/preview-scatterplot")
@@ -308,7 +291,7 @@ def get_preview_scatterplot():
         preview_ops = DBOperations(engine)
         preview_ops.load_table(table, error_table_name=errors_table)
         scatterplot_data = preview_ops.generate_scatterplot_with_errors(x_column, y_column, error_sample_count, total_sample_count)
-        return {"Success": True, "scatterplot_data": scatterplot_data}
+        return {"success": True, "scatterplot_data": scatterplot_data}
     except Exception as e:
         traceback.print_exc()
-        return {"Success": False, "Error": str(e)}
+        return {"success": False, "error": str(e)}

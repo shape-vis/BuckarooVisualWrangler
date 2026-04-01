@@ -4,11 +4,7 @@ import { SelectionContext } from "../utils/SelectionContext.jsx";
 import { createPreviews, executeWrangle } from "../utils/serverCalls.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "./RepairPanel.css";
-import * as d3 from "d3";
-
-const ERROR_COLORS = d3.scaleOrdinal()
-  .domain(["total", "missing", "mismatch", "anomaly", "incomplete", "none"])
-  .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
+import { errorColors as ERROR_COLORS } from "../utils/errorColors.js";
 
 export default function RepairPanel({ table_name, onWrangleExecuted }) {
   const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } = useContext(SelectionContext);

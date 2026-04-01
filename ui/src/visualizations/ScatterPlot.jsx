@@ -58,9 +58,9 @@ function ScatterPlot({
           : await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount);
         console.log("[SCATTERPLOT] Response:", response);
 
-        if (!response || !response.Success) {
+        if (!response || !response.success) {
           console.error("[SCATTERPLOT] API call failed:", response);
-          throw new Error(`2D ScatterPlot API failed: ${response?.Error || "Unknown error"}`);
+          throw new Error(`2D ScatterPlot API failed: ${response?.error || "Unknown error"}`);
         }
 
         const data = response.scatterplot_data;

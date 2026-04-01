@@ -666,7 +666,7 @@ class DBOperations:
         # Handles mixed types in y-axis.
         if self.col_types.is_numeric_col(y_axis_column):
             json_y_type = f'''CASE WHEN y_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
-            json_order_by_y = f'''CASE WHEN y_bin ~ {numeric_regex} THEN lpad(x_bin, 10, '0') ELSE x_bin END'''
+            json_order_by_y = f'''CASE WHEN y_bin ~ {numeric_regex} THEN lpad(y_bin, 10, '0') ELSE y_bin END'''
         else:
             json_y_type = "'categorical'"
             json_order_by_y = "y_bin"

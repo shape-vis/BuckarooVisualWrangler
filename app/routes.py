@@ -4,15 +4,20 @@
 
 import numpy as np
 import pandas as pd
-from flask import request, render_template, send_file
+from flask import request, send_file
 import time
-from app import app, db_operations
-from app import connection, engine
-from app.service_helpers import *
+from app import app, db_operations, engine
+from app.service_helpers import (
+    generate_table_name,
+    run_detectors,
+    get_whole_table_query,
+    get_sqlalchemy_dtype_map,
+    create_error_dict,
+    calculate_attribute_rankings,
+    fetch_detected_and_undetected_current_dataset_from_db,
+)
 from app.set_id_column import set_id_column
 import json
-import random
-import string
 
 
 def load_file(csv_file, filename):
@@ -40,8 +45,6 @@ def load_file(csv_file, filename):
 
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
-
-    # json.dump({'table': table_name, "clean_time": time_to_detect, "dataframe_shape": list(detected_data.shape)}, open(f"report/{table_name}.json", "w"))
 
     try:
         """
@@ -100,51 +103,6 @@ def preloaded_csv():
     return load_file("provided_datasets/" + csv_file, csv_file)
 
 
-@app.get("/api/get-sample")
-def get_sample():
-    """
-    Constructs a postgresql query to get the undetected table data from the database
-    :return: a dictionary of the table dataa
-    """
-    data_size = request.args.get("datasize")
-    table_name = request.args.get("table_name")
-
-    if not table_name:
-        return {"success": False, "error": "Table name required"}
-
-    QUERY = get_whole_table_query(table_name, False) + " LIMIT " + data_size
-    try:
-        fetch_detected_and_undetected_current_dataset_from_db(table_name, engine)
-        # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
-        sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(
-            orient="records")
-        # print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
-        return sample_dataframe_as_dictionary
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-@app.get("/api/get-errors")
-def get_errors():
-    """
-    Constructs a postgresql query to get the error table corresponding to the current table from the database
-    :return: a dictionary of the error table
-    """
-    data_size = request.args.get("datasize")
-    data_size_int = int(data_size)
-    table_name = request.args.get("table_name")
-
-    if not table_name:
-        return {"success": False, "error": "Table name required"}
-    query = get_whole_table_query(table_name, True)
-    try:
-        full_error_df = pd.read_sql_query(query, engine)
-        data_sized_error_dictionary = create_error_dict(full_error_df, data_size_int)
-        return data_sized_error_dictionary
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
 @app.post("/api/reset")
 def reset_app():
     """
@@ -156,5 +114,4 @@ def reset_app():
 
 @app.get("/")
 def home():
-    # return render_template('ui/dist/index.html')
     return send_file("../ui/dist/index.html")

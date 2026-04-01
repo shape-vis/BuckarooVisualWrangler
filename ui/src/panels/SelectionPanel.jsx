@@ -5,6 +5,7 @@ import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
 import "./SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
+import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
 function MagnifierIcon({ x, y, onClick }) {
@@ -340,8 +341,7 @@ export default function MatrixView({ table_name, selectedAttributes }) {
     const [w, setW] = React.useState(800);
     const [h, setH] = React.useState(600);
 
-    const errorTypes = { total: "Total Error %", missing: "Missing Values", mismatch: "Data Type Mismatch", anomaly: "Average Anomalies (Outliers)", incomplete: "Incomplete Data (< 3 points)", none: "None" };
-    const errorColors = d3.scaleOrdinal().domain(["total", "missing", "mismatch", "anomaly", "incomplete", "none"]).range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
+    const errorTypes = ERROR_TYPES;
 
     useEffect(() => {
         const svg = d3.select(svgRef.current);
@@ -355,6 +355,8 @@ export default function MatrixView({ table_name, selectedAttributes }) {
         if (svgRef.current) {
             resizeObserver.observe(svgRef.current);
         }
+
+        return () => resizeObserver.disconnect();
     }, [table_name, selectedAttributes]);
 
     return (
