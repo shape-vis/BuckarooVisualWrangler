@@ -14,6 +14,7 @@ import json
 import random
 import string
 
+
 def load_file(csv_file, filename):
     """
     This loads the csv from the local path of the repo that the user clicked;
@@ -51,8 +52,8 @@ def load_file(csv_file, filename):
         The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
         """
-        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace',dtype=dtype_map)
-        detected_rows_affected = detected_data.to_sql("errors_"+table_name, engine, if_exists='replace')
+        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace', dtype=dtype_map)
+        detected_rows_affected = detected_data.to_sql("errors_" + table_name, engine, if_exists='replace')
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
@@ -64,9 +65,10 @@ def load_file(csv_file, filename):
 
         #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
         rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings_"+table_name, engine, if_exists='replace', index=False)
+        rankings.to_sql("rankings_" + table_name, engine, if_exists='replace', index=False)
 
-        return{"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected, "table_name": table_name}
+        return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
+                "table_name": table_name}
     except Exception as e:
         print(f"Error in upload: {e}")
         import traceback
@@ -98,7 +100,6 @@ def preloaded_csv():
     return load_file("provided_datasets/" + csv_file, csv_file)
 
 
-
 @app.get("/api/get-sample")
 def get_sample():
     """
@@ -111,11 +112,12 @@ def get_sample():
     if not table_name:
         return {"success": False, "error": "Table name required"}
 
-    QUERY = get_whole_table_query(table_name,False) + " LIMIT "+ data_size
+    QUERY = get_whole_table_query(table_name, False) + " LIMIT " + data_size
     try:
-        fetch_detected_and_undetected_current_dataset_from_db(table_name,engine)
+        fetch_detected_and_undetected_current_dataset_from_db(table_name, engine)
         # sample_dataframe = pd.read_sql_query(QUERY, engine).to_dict(orient="records")
-        sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(orient="records")
+        sample_dataframe_as_dictionary = pd.read_sql_query(QUERY, engine).replace(np.nan, None).to_dict(
+            orient="records")
         # print("First row:", sample_dataframe_as_dictionary[0])  # See what keys exist
         return sample_dataframe_as_dictionary
     except Exception as e:
@@ -134,10 +136,10 @@ def get_errors():
 
     if not table_name:
         return {"success": False, "error": "Table name required"}
-    query = get_whole_table_query(table_name,True)
+    query = get_whole_table_query(table_name, True)
     try:
         full_error_df = pd.read_sql_query(query, engine)
-        data_sized_error_dictionary = create_error_dict(full_error_df,data_size_int)
+        data_sized_error_dictionary = create_error_dict(full_error_df, data_size_int)
         return data_sized_error_dictionary
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -156,4 +158,3 @@ def reset_app():
 def home():
     # return render_template('ui/dist/index.html')
     return send_file("../ui/dist/index.html")
-
