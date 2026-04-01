@@ -6,29 +6,12 @@ from app import app
 from app import engine
 from postgres_wrangling import query
 import traceback
-import hashlib
 import pandas as pd
 from pprint import pprint
-from app.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview
+from app.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
 from sqlalchemy import text as sa_text
 
 
-def _preview_name(base: str, suffix: str) -> str:
-    """
-    Build a preview table name guaranteed to keep both itself and its
-    derived 'errors_<name>' sibling within PostgreSQL's 63-char limit.
-
-    errors_ prefix = 7 chars, so the preview name itself must be ≤ 56 chars.
-    If base+suffix already fits, use it as-is.  Otherwise truncate the base
-    and append an 8-char MD5 hash so the name stays unique.
-    """
-    MAX_LEN = 56  # 63 - len("errors_")
-    candidate = f"{base}{suffix}"
-    if len(candidate) <= MAX_LEN:
-        return candidate
-    h = hashlib.md5(base.encode()).hexdigest()[:8]
-    max_base = MAX_LEN - len(suffix) - 9  # 9 = 1 underscore + 8 hash chars
-    return f"{base[:max_base]}_{h}{suffix}"
 
 """
 Wrangling Endpoints - In-place modification of tables
@@ -95,9 +78,9 @@ def create_previews():
             return {"success": False, "error": "No rows selected"}, 400
 
         if len(cols) == 1:
-            return create_previews_1d(table, row_ids, cols, _preview_name, update_errors_table)
+            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table)
         else:
-            return create_previews_2d(table, row_ids, cols, _preview_name, update_errors_table)
+            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table)
 
     except Exception as e:
         print("ERROR in create_previews")
@@ -119,7 +102,7 @@ def execute_wrangle():
         table         = body["table"]          # main table name
         preview_table = body["preview_table"]  # the preview to promote
 
-        return execute_wrangle_preview(table, preview_table, _preview_name)
+        return execute_wrangle_preview(table, preview_table, _safe_pg_name)
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())

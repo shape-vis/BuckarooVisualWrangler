@@ -91,13 +91,11 @@ def get_categorical_stats(df, column):
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the categorical column
     """
-    df_cat = df.copy()
-
-    df_cat[column] = df_cat[column].fillna('N/A')
+    col_data = df[column].fillna('N/A')
     return {
         "categorical": {
-            "categories": df_cat[column].nunique(),
-            "mode": df_cat[column].mode().iloc[0]
+            "categories": col_data.nunique(),
+            "mode": col_data.mode().iloc[0]
         }
     }
 
@@ -108,14 +106,12 @@ def get_numeric_stats(df, column):
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the numeric column
     """
-    df = df[pd.to_numeric(df[column], errors='coerce').notna()]
-    # Convert to numeric (handles both int and float)
-    df[column] = pd.to_numeric(df[column], errors='coerce')
+    col_data = pd.to_numeric(df[column], errors='coerce').dropna()
     return {
         "numeric": {
-            "mean": df[column].mean().item(),
-            "min": df[column].min().item(),
-            "max": df[column].max().item()
+            "mean": col_data.mean().item(),
+            "min": col_data.min().item(),
+            "max": col_data.max().item()
         }
     }
 

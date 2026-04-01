@@ -3,12 +3,31 @@
 
 
 #make it able to read the variables from the .env file
+import builtins
+import logging
 import os
 import psycopg2
 from dotenv import load_dotenv
 from flask import Flask
 from sqlalchemy import create_engine
 import json
+
+
+#This is so that that whatever we print in the server comes out blue in the terminal
+_original_print = builtins.print
+def _blue_print(*args, **kwargs):
+    _original_print('\033[94m' + ' '.join(str(a) for a in args) + '\033[0m', **kwargs)
+builtins.print = _blue_print
+
+
+#This is so that endpoint calls in the server are always white, only errors are red now
+class _WhiteFormatter(logging.Formatter):
+    def format(self, record):
+        return '\033[97m' + super().format(record) + '\033[0m'
+
+_werkzeug_handler = logging.StreamHandler()
+_werkzeug_handler.setFormatter(_WhiteFormatter('%(message)s'))
+logging.getLogger('werkzeug').handlers = [_werkzeug_handler]
 
 from app.db_functions_sql import DBOperations
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT

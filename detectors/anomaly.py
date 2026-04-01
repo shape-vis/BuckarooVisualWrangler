@@ -12,13 +12,13 @@ def anomaly(data_frame):
         numeric_mask = pd.to_numeric(data_frame[column], errors='coerce').notna()
         if numeric_mask.sum() < 10: continue
         #TODO: this doesn't work when trying to upload any dataset other than the stackoverflow one, it has issues with the to_numeric call as well
-        data_frame[[column]] = data_frame[[column]].apply(pd.to_numeric, errors='coerce')
-        column_mean = data_frame[[column]].mean().iloc[0]
-        column_std = data_frame[[column]].std().iloc[0]
+        numeric_col = pd.to_numeric(data_frame[column], errors='coerce')
+        column_mean = numeric_col.mean()
+        column_std = numeric_col.std()
 
         if column_std == 0 or column_std is None: continue
 
-        anomaly_mask = np.abs(data_frame[column] - column_mean) > 2 * column_std
+        anomaly_mask = np.abs(numeric_col - column_mean) > 2 * column_std
         row_locations = anomaly_mask[anomaly_mask].index
 
         for row in row_locations:

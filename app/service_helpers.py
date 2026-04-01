@@ -1,6 +1,7 @@
 #Buckaroo Project - started: June 1, 2025
 #This file helps deliver on endpoint services
 
+import hashlib
 import random
 import string
 import re
@@ -27,6 +28,28 @@ def _validate_identifier(name: str) -> str:
     return name
 
 
+def _safe_pg_name(base: str, suffix: str) -> str:
+    """
+    Build a table name guaranteed to keep both itself and all derived
+    sibling tables within PostgreSQL's 63-char identifier limit.
+
+    Derived siblings and their affixes:
+      errors_<name>     prefix  7 chars  -> name <= 56
+      rankings_<name>   prefix  9 chars  -> name <= 54
+      <name>_filtering  suffix 10 chars  -> name <= 53  (most restrictive)
+
+    If base+suffix already fits, use it as-is. Otherwise truncate the base
+    and append an 8-char MD5 hash so the name stays unique.
+    """
+    MAX_LEN = 53  # 63 - len("_filtering")
+    candidate = f"{base}{suffix}"
+    if len(candidate) <= MAX_LEN:
+        return candidate
+    h = hashlib.md5(base.encode()).hexdigest()[:8]
+    max_base = MAX_LEN - len(suffix) - 9  # 9 = 1 underscore + 8 hash chars
+    return f"{base[:max_base]}_{h}{suffix}"
+
+
 def generate_table_name(csv_name):
     """
     Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
@@ -37,10 +60,9 @@ def generate_table_name(csv_name):
     if ".csv" in csv_name:
         csv_name = csv_name[0:len(csv_name)-4]
 
-    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name)
-    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=10)
-)
-    return "data_" + clean_name.lower() + "_" + random_string
+    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name).lower()
+    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=10))
+    return _safe_pg_name("data_" + clean_name, "_" + random_string)
 
 
 def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name, engine):
