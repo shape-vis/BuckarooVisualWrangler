@@ -42,7 +42,7 @@ def load_file(csv_file, filename):
     time_to_detect = time.time() - start_time
 
     table_name = generate_table_name(filename)
-
+    table_name_with_node_id = f"n0_{table_name}"
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
 
@@ -55,23 +55,23 @@ def load_file(csv_file, filename):
         The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
         """
-        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace', dtype=dtype_map)
-        detected_rows_affected = detected_data.to_sql("errors_" + table_name, engine, if_exists='replace')
+        rows_affected = table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
+        detected_rows_affected = detected_data.to_sql("errors_" + table_name_with_node_id, engine, if_exists='replace')
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
         get the actual row counts since .to_sql is buggy and not right
         """
-        db_operations.load_table(table_name)
-        rows_affected = db_operations.get_row_count(table_name)
-        detected_rows_affected = db_operations.get_row_count("errors_" + table_name)
+        db_operations.load_table(table_name_with_node_id)
+        rows_affected = db_operations.get_row_count(table_name_with_node_id)
+        detected_rows_affected = db_operations.get_row_count("errors_" + table_name_with_node_id)
 
         #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
         rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings_" + table_name, engine, if_exists='replace', index=False)
+        rankings.to_sql("rankings_" + table_name_with_node_id, engine, if_exists='replace', index=False)
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
-                "table_name": table_name}
+                "table_name": table_name_with_node_id}
     except Exception as e:
         print(f"Error in upload: {e}")
         import traceback

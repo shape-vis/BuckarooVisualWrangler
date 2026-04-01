@@ -1,7 +1,8 @@
 from collections import defaultdict
 
 from .filtering_sql import FilteringSQL
-from .execute_sql import fetch_sql
+from .execute_sql import fetch_sql, execute_sql
+
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
 with support for data filtering and error annotation overlays on all chart types.
@@ -163,6 +164,27 @@ class DBOperations:
         """
 
         return self.filtering_table.add_filters(sql_filters)
+
+    def drop_preview_tables(self, all_possible_previews: list, keep_table: str):
+        """
+        Drop all preview tables (and their errors_ siblings) except the one
+        being promoted. Disposes the connection pool first to release any
+        lingering locks from prior queries.
+        """
+        # self.engine.dispose()
+        for pt in all_possible_previews:
+            if pt != keep_table:
+                execute_sql(f'DROP TABLE IF EXISTS "{pt}"', self.engine)
+                execute_sql(f'DROP TABLE IF EXISTS "errors_{pt}"', self.engine)
+
+    def rename_preview_to_new(self, preview_table: str, new_table_name: str):
+        """
+        Rename a preview table (and its errors_ sibling) to the new promoted name.
+        Disposes the connection pool first to avoid lock contention.
+        """
+        # self.engine.dispose()
+        execute_sql(f'ALTER TABLE "{preview_table}" RENAME TO "{new_table_name}"', self.engine)
+        execute_sql(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{new_table_name}"', self.engine)
 
 
     def remove_data_filters(self, sql_filters) -> dict:

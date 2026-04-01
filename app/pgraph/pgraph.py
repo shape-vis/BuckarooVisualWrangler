@@ -18,7 +18,7 @@ class PGraph:
         self.wrangle_map = {}
 
     def add_node(self, node: GraphNode):
-        name = node.db_op.main_table_name
+        name = node.table_name
         self.node_map[name] = node
         self.wrangle_counter += 1
         self.wrangle_map[self.wrangle_counter] = node.wrangle_op
@@ -26,6 +26,9 @@ class PGraph:
         if node.parent_id in self.node_map:
             parent = self.node_map[node.parent_id]
             parent.add_child(node)
+
+    def get_new_node_id(self):
+        return f"n{self.wrangle_counter}"
 
 
 

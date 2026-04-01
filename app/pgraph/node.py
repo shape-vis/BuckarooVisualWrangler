@@ -8,12 +8,12 @@ from app import DBOperations
 
 
 class GraphNode:
-    def __init__(self, engine, parent_id, wrangle_op: str, table_name: str, error_table_name: str):
+    def __init__(self, parent_id, wrangle_op: str, table_name: str, error_table_name: str):
 
         self.parent_id = parent_id
         self.wrangle_op = wrangle_op
-        self.db_op = DBOperations(engine)
-        self.db_op.load_table(table_name, error_table_name)
+        self.table_name = table_name
+        self.error_table_name = error_table_name
         self.children = []
 
         """ quality metric parts """

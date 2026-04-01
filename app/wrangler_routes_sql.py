@@ -2,7 +2,7 @@
 # This file handles all endpoints surrounding wranglers
 
 from flask import request
-from app import app
+from app import app, db_operations
 from app import engine
 from postgres_wrangling import query
 import traceback
@@ -102,7 +102,7 @@ def execute_wrangle():
         table         = body["table"]          # main table name
         preview_table = body["preview_table"]  # the preview to promote
 
-        return execute_wrangle_preview(table, preview_table, _safe_pg_name)
+        return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())

@@ -120,6 +120,7 @@ db_operations = DBOperations(engine)
 
 #flag if a wrangle has happened in the session yet
 wrangle_occurred = False
+pgraph_for_session = None
 
 from app import routes
 from app import wrangler_routes_sql as wrangler_routes
