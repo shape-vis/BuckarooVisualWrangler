@@ -3,8 +3,7 @@ Tests for data wrangling operations (postgres_wrangling.query module).
 """
 import pytest
 import pandas as pd
-from sqlalchemy import text
-from postgres_wrangling.query import (
+from app.query import (
     remove_rows_by_ids,
     impute_by_ids,
     remove_flagged_rows_in_1d_bin,

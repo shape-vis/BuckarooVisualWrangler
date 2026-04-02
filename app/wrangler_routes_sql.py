@@ -2,12 +2,10 @@
 # This file handles all endpoints surrounding wranglers
 
 from flask import request
-from app import app, db_operations
+from app import app, db_operations, query
 from app import engine
-from postgres_wrangling import query
 import traceback
 import pandas as pd
-from pprint import pprint
 from app.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
 from sqlalchemy import text as sa_text
 

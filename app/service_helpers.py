@@ -5,12 +5,12 @@ import hashlib
 import random
 import string
 import re
-from sqlalchemy import types as sql_types, true
+from sqlalchemy import types as sql_types
 from sqlalchemy import text as sa_text
 import pandas as pd
 
 import app
-from app import wrangle_occurred
+from app import query
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
 from app.set_id_column import set_id_column
@@ -18,7 +18,6 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
-from postgres_wrangling import query
 
 
 def _validate_identifier(name: str) -> str:
