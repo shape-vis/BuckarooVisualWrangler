@@ -110,14 +110,14 @@ function prepForControllerInit(userUploadedFile, table, fileName,errorData,minID
 function getSelectedAnomalyMethodsFromStorage() {
     try {
         const raw = localStorage.getItem("anomalyMethods");
-        if (!raw) return ["zscore", "mad", "iqr"];
+        if (!raw) return ["zscore"];
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return ["zscore", "mad", "iqr"];
+        if (!Array.isArray(parsed)) return ["zscore"];
         return parsed
             .map(method => String(method).trim().toLowerCase())
             .filter(method => allowedAnomalyMethods.includes(method));
     } catch (error) {
-        return ["zscore", "mad", "iqr"];
+        return ["zscore"];
     }
 }
 

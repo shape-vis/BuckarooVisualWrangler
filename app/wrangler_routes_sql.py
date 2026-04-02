@@ -6,9 +6,8 @@ from app import app
 from app import engine
 from postgres_wrangling import query
 import traceback
-import pandas as pd
 from pprint import pprint
-from app.service_helpers import run_detectors
+from app.service_helpers import refresh_errors_table, refresh_rankings_table
 
 """
 Wrangling Endpoints - In-place modification of tables
@@ -24,22 +23,18 @@ def update_errors_table(table_name: str) -> None:
     and update the errors table.
     """
     try:
-        detected_errors_df = run_detectors(
+        detected_row_count = refresh_errors_table(
             table_name,
-            anomaly_methods=["zscore", "mad", "iqr"]
+            anomaly_methods=["zscore"],
+            rarity_threshold=0.01
         )
-        if "error_type" in detected_errors_df.columns:
-            detected_errors_df["raw_error_type"] = detected_errors_df["error_type"]
-            if "column_name" in detected_errors_df.columns:
-                if "column_id" not in detected_errors_df.columns:
-                    detected_errors_df["column_id"] = detected_errors_df["column_name"]
-                else:
-                    detected_errors_df["column_id"] = detected_errors_df["column_id"].fillna(detected_errors_df["column_name"])
-            anomaly_mask = detected_errors_df["error_type"].astype(str).str.contains("anomaly", na=False)
-            detected_errors_df.loc[anomaly_mask, "error_type"] = "anomaly"
+        refresh_rankings_table(
+            table_name,
+            anomaly_methods=["zscore"],
+            rarity_threshold=0.01
+        )
         errors_table_name = f"errors{table_name}"
-        detected_errors_df.to_sql(errors_table_name, engine, if_exists='replace', index=False)
-        print(f"✓ Updated errors table: {errors_table_name}")
+        print(f"✓ Updated errors table: {errors_table_name} ({detected_row_count} rows)")
     except Exception as e:
         print(f"Warning: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()

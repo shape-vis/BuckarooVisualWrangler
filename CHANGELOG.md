@@ -13,7 +13,7 @@ This entry starts with anomaly detection improvements; upcoming work will contin
 
 ### Changed
 - Removed anomaly method selection UI from the home page (`app/templates/index.html`):
-  - Datasets/uploads now initialize anomaly methods to all methods (`zscore`, `mad`, `iqr`).
+  - Datasets/uploads now initialize anomaly methods to the default method (`zscore`).
   - Filtering is now done only in the visual tool page.
 
 - Updated anomaly method selection behavior on the home page (`app/templates/index.html`):
@@ -64,9 +64,12 @@ This entry starts with anomaly detection improvements; upcoming work will contin
   - File: `app/service_helpers.py`.
 
 - Updated upload-time anomaly detection behavior:
-  - Upload now computes all anomaly methods (`zscore`, `mad`, `iqr`) so users can switch methods later in the visual tool without re-uploading.
-  - Initial index selection is treated as initial display filter, not detection limitation.
-  - File: `app/routes.py`.
+  - Upload now persists only the default detector state (`zscore` anomaly + default rarity threshold).
+  - Additional anomaly methods (`mad`, `iqr`) and alternate rarity thresholds are computed on demand when the user changes filters in the visual tool.
+  - Files:
+    - `app/routes.py`
+    - `app/service_helpers.py`
+    - `app/plot_routes.py`
 
 - Added method-aware filtering in data/plot endpoints:
   - `/api/get-errors` filters anomaly rows by selected methods.
@@ -88,9 +91,9 @@ This entry starts with anomaly detection improvements; upcoming work will contin
     - `app/static/js/serverCalls.js`
 
 - Fixed post-repair error recomputation to use the current detector pipeline:
-  - SQL wrangler repair endpoints now re-run error detection using all anomaly methods (`zscore`, `mad`, `iqr`).
-  - Recomputed errors are normalized to include `raw_error_type` and UI-friendly `error_type = "anomaly"` rows, matching upload behavior.
-  - This keeps anomaly method filtering working correctly after repairs.
+  - SQL wrangler repair endpoints now rebuild the persisted default error state (`zscore` + default rarity threshold) through the SQL detector path.
+  - When users choose non-default anomaly methods or rarity thresholds later, the backend computes those selected views on demand for plots, summaries, and error retrieval.
+  - Recomputed errors are normalized to include `raw_error_type` and UI-friendly `error_type = "anomaly"` rows.
   - File: `app/wrangler_routes_sql.py`
 
 - Migrated incomplete detector behavior to SQL rarity detection:
@@ -159,8 +162,44 @@ This entry starts with anomaly detection improvements; upcoming work will contin
     - `detectors/datatype_mismatch.py`
 
 - Added detector-specific demo data for safer testing:
-  - Kept `provided_datasets/anomaly_test.csv` focused on anomaly, rarity, and missing-value scenarios without introducing mixed-type numeric columns that destabilize summary views.
+  - Reworked `provided_datasets/anomaly_test.csv` into a simpler clustered demo dataset so plots and repair selections are easier to inspect visually.
+  - The anomaly demo now emphasizes:
+    - repeated clean numeric clusters
+    - obvious anomaly rows
+    - simple missing-value cases
+    - one-off rarity categories
   - Added `provided_datasets/datatype_mismatch_test.csv` for boolean/date mismatch demos so mismatch testing does not interfere with the main anomaly demo file.
+
+- Continued SQL-first backend migration around detector infrastructure:
+  - Upload now stores CSV data directly in PostgreSQL with inferred SQL column types and SQL-side ID handling instead of relying on pandas-first table materialization.
+  - Detector result assembly is now largely SQL-built rather than pivoted/melted repeatedly in pandas.
+  - Errors table rebuilds are now created directly in SQL for both upload and post-repair recomputation.
+  - Rankings are rebuilt directly in SQL from the persisted errors table.
+  - Attribute summaries now use SQL queries for per-column stats, error percentages, and default ranking lookup.
+  - `/api/get-errors` now performs backend filtering closer to SQL/data source rather than loading the full persisted errors table into pandas first.
+  - Files:
+    - `app/routes.py`
+    - `app/service_helpers.py`
+    - `app/plot_routes.py`
+    - `app/wrangler_routes_sql.py`
+    - `data_management/data_attribute_summary_integration.py`
+
+- Added on-demand detector execution for non-default filter selections:
+  - Persisted backend state now stores the default detector view (`zscore` + default rarity threshold) instead of precomputing all anomaly methods up front.
+  - When users enable `mad`/`iqr` or change the rarity threshold in the visual tool, the backend materializes the selected detector/error state on demand and refreshes:
+    - plots
+    - attribute summaries
+    - error table / error map
+  - This keeps repair recomputation and initial upload lightweight while still supporting interactive filter-driven analysis.
+  - Files:
+    - `app/service_helpers.py`
+    - `app/routes.py`
+    - `app/plot_routes.py`
+    - `app/wrangler_routes_sql.py`
+    - `data_management/data_attribute_summary_integration.py`
+    - `app/templates/index.html`
+    - `app/static/js/dataSelection.js`
+    - `app/static/js/serverCalls.js`
 
 ### Documentation
 - Added automated Python API docs setup using Sphinx + AutoAPI:

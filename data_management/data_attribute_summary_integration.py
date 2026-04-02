@@ -1,168 +1,230 @@
 """
-Converts the current datastate data into JSON the view can use
+Build attribute-summary JSON directly from PostgreSQL tables.
 """
-import pandas as pd
+from sqlalchemy import text
 
-from app.service_helpers import get_error_dist, is_categorical, filter_error_dataframe_by_anomaly_methods
-from data_management.data_integration import get_filtered_dataframes
+from app.service_helpers import (
+    clean_table_name,
+    anomaly_methods_to_raw_error_types,
+    _normalize_rarity_threshold,
+)
+
+
+NUMERIC_TYPES = {
+    "smallint",
+    "integer",
+    "bigint",
+    "numeric",
+    "real",
+    "double precision",
+}
+
+
+def _quote_identifier(identifier: str) -> str:
+    return '"' + str(identifier).replace('"', '""') + '"'
 
 
 def get_default_attributes_from_rankings(tablename, engine):
     """
-    Fetch top 3 attributes from pre-computed rankings table
-    :param tablename: Name of the data table (will be cleaned if needed)
-    :param engine: SQLAlchemy engine
-    :return: List of top 3 attribute names
+    Fetch top 3 attributes from the pre-computed rankings table.
     """
-    from app.service_helpers import clean_table_name
-
     try:
         cleaned_tablename = clean_table_name(tablename)
         rankings_table = f"rankings{cleaned_tablename}"
 
-        # Try exact match first
         try:
-            query = f"SELECT attribute FROM {rankings_table} ORDER BY rank ASC LIMIT 3"
-            result = pd.read_sql_query(query, engine)
-            return result['attribute'].tolist()
+            query = text(f'SELECT attribute FROM "{rankings_table}" ORDER BY rank ASC LIMIT 3')
+            with engine.connect() as conn:
+                return [row[0] for row in conn.execute(query).fetchall()]
         except Exception:
-            # Fallback: search for similar table names (handles version suffixes)
-            # Create pattern: if looking for "rankingsstackoverflow_db_uncleaned_version_5"
-            # also match "rankingsstackoverflow_db_uncleaned"
             base_pattern = cleaned_tablename.split('_version')[0] if '_version' in cleaned_tablename else cleaned_tablename
             pattern = f"rankings{base_pattern}%"
 
-            matching_tables = pd.read_sql_query(
-                "SELECT tablename FROM pg_tables WHERE tablename LIKE %s ORDER BY tablename DESC LIMIT 1",
-                engine,
-                params=(pattern,)
-            )
+            with engine.connect() as conn:
+                matching_tables = conn.execute(
+                    text("SELECT tablename FROM pg_tables WHERE tablename LIKE :pattern ORDER BY tablename DESC LIMIT 1"),
+                    {"pattern": pattern}
+                ).fetchall()
 
-            if not matching_tables.empty:
-                found_table = matching_tables.iloc[0]['tablename']
-                query = f"SELECT attribute FROM {found_table} ORDER BY rank ASC LIMIT 3"
-                result = pd.read_sql_query(query, engine)
-                return result['attribute'].tolist()
-            else:
+                if matching_tables:
+                    found_table = matching_tables[0][0]
+                    query = text(f'SELECT attribute FROM "{found_table}" ORDER BY rank ASC LIMIT 3')
+                    return [row[0] for row in conn.execute(query).fetchall()]
                 return []
-
     except Exception as e:
         print(f"Error fetching rankings for table '{tablename}': {e}")
         return []
 
-def generate_complete_json(min_id, max_id, tablename=None, anomaly_methods=None, rarity_threshold=0.01):
-    """
-    Generate a complete JSON representation of the current data state
-    1. Get the current data state from the data state manager, filtered by min and max ID
-    2. Get the error distribution for the current data state
-    3. Convert the error distribution to a dictionary format
-    4. Get the attributes from the main DataFrame
-    5. Build the attribute distributions for each attribute in the main DataFrame
-    6. Return a JSON object containing the column errors, attributes, and attribute distributions
 
-    :param min_id: minimum ID for filtering data
-    :param max_id: maximum ID for filtering data
-    :param tablename: name of the table (optional, for fetching default attributes)
-    :return: JSON representation of the data state
+def _get_table_columns(table_name: str, engine):
+    query = text("""
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = :table_name
+        ORDER BY ordinal_position
+    """)
+    with engine.connect() as conn:
+        return [dict(row._mapping) for row in conn.execute(query, {"table_name": table_name}).fetchall()]
+
+
+def _build_error_filter_clause(anomaly_methods, rarity_threshold):
+    selected_raw_types = anomaly_methods_to_raw_error_types(anomaly_methods)
+    threshold = _normalize_rarity_threshold(rarity_threshold)
+    return """
+        (
+            e.error_type <> 'anomaly'
+            OR e.raw_error_type = ANY(:selected_raw_types)
+        )
+        AND (
+            e.error_type <> 'incomplete'
+            OR e.rarity_score IS NULL
+            OR e.rarity_score <= :rarity_threshold
+        )
+    """, {
+        "selected_raw_types": selected_raw_types,
+        "rarity_threshold": threshold,
+    }
+
+
+def _get_column_error_percentages(table_name, error_table_name, min_id, max_id, engine):
+    query = text(f"""
+        WITH total_rows AS (
+            SELECT COUNT(*)::numeric AS total_count
+            FROM "{table_name}"
+            WHERE "ID" BETWEEN :min_id AND :max_id
+        )
+        SELECT
+            e.column_id,
+            e.error_type,
+            COUNT(*)::numeric / NULLIF((SELECT total_count FROM total_rows), 0) AS error_pct
+        FROM "{error_table_name}" e
+        WHERE e.row_id BETWEEN :min_id AND :max_id
+          AND e.column_id IS NOT NULL
+          AND BTRIM(e.column_id) <> ''
+        GROUP BY e.column_id, e.error_type
+    """)
+
+    params = {"min_id": min_id, "max_id": max_id}
+    with engine.connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    result = {}
+    for row in rows:
+        mapping = row._mapping
+        result.setdefault(mapping["column_id"], {})[mapping["error_type"]] = float(mapping["error_pct"] or 0)
+    return result
+
+
+def _get_numeric_stats(table_name: str, column_name: str, min_id: int, max_id: int, engine):
+    quoted_column = _quote_identifier(column_name)
+    query = text(f"""
+        SELECT
+            AVG({quoted_column}::double precision) AS mean_value,
+            MIN({quoted_column}) AS min_value,
+            MAX({quoted_column}) AS max_value
+        FROM "{table_name}"
+        WHERE "ID" BETWEEN :min_id AND :max_id
+          AND {quoted_column} IS NOT NULL
+    """)
+    with engine.connect() as conn:
+        row = conn.execute(query, {"min_id": min_id, "max_id": max_id}).first()
+
+    if not row or row._mapping["mean_value"] is None:
+        return {"numeric": {"mean": 0.0, "min": 0, "max": 0}}
+
+    mapping = row._mapping
+    return {
+        "numeric": {
+            "mean": float(mapping["mean_value"]),
+            "min": mapping["min_value"],
+            "max": mapping["max_value"],
+        }
+    }
+
+
+def _get_categorical_stats(table_name: str, column_name: str, min_id: int, max_id: int, engine):
+    quoted_column = _quote_identifier(column_name)
+    distinct_query = text(f"""
+        SELECT COUNT(DISTINCT COALESCE(NULLIF(BTRIM({quoted_column}::text), ''), 'N/A')) AS category_count
+        FROM "{table_name}"
+        WHERE "ID" BETWEEN :min_id AND :max_id
+    """)
+    mode_query = text(f"""
+        SELECT COALESCE(NULLIF(BTRIM({quoted_column}::text), ''), 'N/A') AS mode_value
+        FROM "{table_name}"
+        WHERE "ID" BETWEEN :min_id AND :max_id
+        GROUP BY COALESCE(NULLIF(BTRIM({quoted_column}::text), ''), 'N/A')
+        ORDER BY COUNT(*) DESC, mode_value ASC
+        LIMIT 1
+    """)
+
+    with engine.connect() as conn:
+        category_count = conn.execute(distinct_query, {"min_id": min_id, "max_id": max_id}).scalar() or 0
+        mode_value = conn.execute(mode_query, {"min_id": min_id, "max_id": max_id}).scalar() or "N/A"
+
+    return {
+        "categorical": {
+            "categories": int(category_count),
+            "mode": str(mode_value),
+        }
+    }
+
+
+def _build_attribute_distributions(table_name: str, columns, min_id: int, max_id: int, engine):
+    distributions = {}
+    for column in columns:
+        column_name = column["column_name"]
+        data_type = column["data_type"]
+        if data_type in NUMERIC_TYPES:
+            distributions[column_name] = _get_numeric_stats(table_name, column_name, min_id, max_id, engine)
+        else:
+            distributions[column_name] = _get_categorical_stats(table_name, column_name, min_id, max_id, engine)
+    return distributions
+
+
+def generate_complete_json(
+    min_id,
+    max_id,
+    tablename=None,
+    anomaly_methods=None,
+    rarity_threshold=0.01,
+    error_table_name=None
+):
+    """
+    Generate the attribute-summary payload directly from SQL tables.
     """
     from app import engine
 
-    main_df, error_df = get_filtered_dataframes(min_id, max_id)
-    print("ERROR DF:")
-    print(error_df)
+    if not tablename:
+        return {
+            "columnErrors": {},
+            "attributes": [],
+            "attributeDistributions": {},
+            "defaultAttributes": [],
+        }
 
-    error_df = filter_error_dataframe_by_anomaly_methods(
-        error_df,
-        anomaly_methods,
-        rarity_threshold=rarity_threshold
+    cleaned_table_name = clean_table_name(tablename)
+    effective_error_table = error_table_name or f"errors{cleaned_table_name}"
+    columns = _get_table_columns(cleaned_table_name, engine)
+    column_errors = _get_column_error_percentages(
+        cleaned_table_name,
+        effective_error_table,
+        int(min_id),
+        int(max_id),
+        engine
     )
-
-    error_list = get_error_dist(error_df, main_df).to_dict('records')
-
-    default_attributes = []
-    if tablename:
-        default_attributes = get_default_attributes_from_rankings(tablename, engine)
+    attribute_distributions = _build_attribute_distributions(
+        cleaned_table_name,
+        columns,
+        int(min_id),
+        int(max_id),
+        engine
+    )
+    default_attributes = get_default_attributes_from_rankings(cleaned_table_name, engine)
 
     return {
-        "columnErrors": convert_error_list_to_dict(error_list),
-        "attributes": list(main_df.columns),
-        "attributeDistributions": build_attribute_distributions(main_df),
-        "defaultAttributes": default_attributes
+        "columnErrors": column_errors,
+        "attributes": [column["column_name"] for column in columns],
+        "attributeDistributions": attribute_distributions,
+        "defaultAttributes": default_attributes,
     }
-
-def get_attribute_stats(df, column):
-    """
-    Get statistics for a specific attribute in the DataFrame
-    :param df: DataFrame containing the data
-    :param column: name of the column to get statistics for
-    :return: dictionary containing statistics for the column
-    """
-    if is_categorical(df[column]):
-        return get_categorical_stats(df, column)
-    return get_numeric_stats(df, column)
-
-def build_attribute_distributions(main_df):
-    """
-    Build distributions for each attribute in the main DataFrame
-    :param main_df: DataFrame containing the main data
-    :return: dictionary containing distributions for each attribute
-    """
-    distributions = {}
-    for col in main_df.columns:
-        distributions[col] = get_attribute_stats(main_df, col)
-    return distributions
-
-def get_categorical_stats(df, column):
-    """
-    Get statistics for a categorical attribute in the DataFrame
-    :param df: DataFrame containing the data
-    :param column: name of the column to get statistics for
-    :return: dictionary containing statistics for the categorical column
-    """
-    df_cat = df.copy()
-    df_cat[column] = df_cat[column].fillna('N/A')
-    return {
-        "categorical": {
-            "categories": df_cat[column].nunique(),
-            "mode": df_cat[column].mode().iloc[0]
-        }
-    }
-
-def get_numeric_stats(df, column):
-    """
-    Get statistics for a numeric attribute in the DataFrame
-    :param df: DataFrame containing the data
-    :param column: name of the column to get statistics for
-    :return: dictionary containing statistics for the numeric column
-    """
-    df = df[pd.to_numeric(df[column], errors='coerce').notna()]
-    df[column] = df[column].astype('int64')
-    return {
-        "numeric": {
-            "mean": df[column].mean().item(),
-            "min": df[column].min().item(),
-            "max": df[column].max().item()
-        }
-    }
-
-def convert_error_list_to_dict(error_list):
-   """ 
-   Convert the error list to a dictionary format
-   :param error_list: list of error dictionaries
-   :return: dictionary with a format like this (an example):
-            "Age": {"incomplete": 0.75},
-            "Country": {"missing": 2.25},
-            "ConvertedSalary": {"incomplete": 2.5}
-   """
-   result = {}
-   for row in error_list:
-       if row != "error_type":
-           error_type = row["error_type"]
-           for col_key, percentage in row.items():
-               if col_key != "error_type" and float(percentage) > 0:
-                   col_name = col_key.strip()
-                   if col_name not in result:
-                       result[col_name] = {}
-                   result[col_name][error_type] = float(percentage)
-   return result
-

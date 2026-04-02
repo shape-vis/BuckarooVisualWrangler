@@ -224,116 +224,211 @@ def filter_error_dataframe_by_anomaly_methods(
     return filtered_df
 
 
-def run_detectors(table_name: str, anomaly_method: str = "zscore", anomaly_methods=None):
+def _build_detector_rows_query(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+):
+    methods_to_run = _normalize_anomaly_methods(
+        anomaly_methods=anomaly_methods,
+        anomaly_method=anomaly_method
+    )
+
+    anomaly_selects = []
+    params = {
+        "table_name": table_name,
+        "rarity_threshold_pct": _normalize_rarity_threshold(rarity_threshold),
+    }
+    for index, method in enumerate(methods_to_run):
+        method_key = f"anomaly_method_{index}"
+        params[method_key] = method
+        anomaly_selects.append(
+            f"SELECT row_id, column_name, error_type FROM detect_anomalies(:table_name, :{method_key})"
+        )
+
+    anomaly_union_sql = "\nUNION ALL\n".join(anomaly_selects)
+
+    sql = text(f"""
+        WITH anomaly_union AS (
+            {anomaly_union_sql}
+        ),
+        anomaly_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                MIN(error_type) AS error_type,
+                NULL::numeric AS rarity_score
+            FROM anomaly_union
+            GROUP BY row_id, column_name
+        ),
+        rarity_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                error_type,
+                rarity_score
+            FROM detect_rarity(:table_name, :rarity_threshold_pct)
+        ),
+        missing_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                error_type,
+                NULL::numeric AS rarity_score
+            FROM detect_missing_values(:table_name)
+        ),
+        mismatch_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                error_type,
+                NULL::numeric AS rarity_score
+            FROM detect_datatype_mismatch(:table_name)
+        )
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM anomaly_rows
+        UNION ALL
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM rarity_rows
+        UNION ALL
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM missing_rows
+        UNION ALL
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM mismatch_rows
+        ORDER BY row_id, column_id, error_type
+    """)
+
+    return sql, params
+
+
+def _build_materialized_errors_select_query(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+):
+    detector_sql, params = _build_detector_rows_query(
+        table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+
+    materialized_sql = text(f"""
+        SELECT
+            row_id,
+            column_id,
+            CASE
+                WHEN error_type LIKE '%anomaly%' THEN 'anomaly'
+                ELSE error_type
+            END AS error_type,
+            error_type AS raw_error_type,
+            rarity_score
+        FROM ({detector_sql.text}) detector_rows
+    """)
+    return materialized_sql, params
+
+
+def run_detectors(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+):
     """
     Run all detector categories for a table and return a unified long error dataframe.
-
-    Anomaly detection can run one or many methods; results are unioned across methods
-    and deduplicated by (row_id, column_name).
     """
-    methods_to_run = _normalize_anomaly_methods(anomaly_methods=anomaly_methods, anomaly_method=anomaly_method)
-
-    sql = text("""
-        SELECT row_id, column_name, error_type
-        FROM detect_anomalies(:table_name, :method)
-    """)
-    anomaly_frames = []
-    for method in methods_to_run:
-        anomaly_frames.append(
-            pd.read_sql_query(
-                sql,
-                engine,
-                params={"table_name": table_name, "method": method}
-            )
-        )
-
-    anomaly_long = pd.concat(anomaly_frames, ignore_index=True)
-    if not anomaly_long.empty:
-        anomaly_long = anomaly_long.drop_duplicates(subset=["row_id", "column_name"])
-
-    if anomaly_long.empty:
-        anomaly_df = pd.DataFrame({"ID": []})
-    else:
-        anomaly_df = (
-            anomaly_long
-            .rename(columns={"row_id": "ID"})
-            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
-            .reset_index()
-        )
-
-    rarity_sql = text("""
-        SELECT row_id, column_name, error_type, rarity_score
-        FROM detect_rarity(:table_name, :threshold_pct)
-    """)
-    rarity_long = pd.read_sql_query(
-        rarity_sql,
-        engine,
-        params={"table_name": table_name, "threshold_pct": 1.0}
+    sql, params = _build_materialized_errors_select_query(
+        table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
     )
 
-    if rarity_long.empty:
-        rarity_df = pd.DataFrame({"ID": []})
-        rarity_scores = pd.DataFrame(columns=["row_id", "column_id", "rarity_score"])
-    else:
-        rarity_scores = (
-            rarity_long[["row_id", "column_name", "rarity_score"]]
-            .rename(columns={"column_name": "column_id"})
-            .drop_duplicates(subset=["row_id", "column_id"])
-        )
-        rarity_df = (
-            rarity_long
-            .rename(columns={"row_id": "ID"})
-            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
-            .reset_index()
-        )
-
-    missing_sql = text("""
-        SELECT row_id, column_name, error_type
-        FROM detect_missing_values(:table_name)
-    """)
-    missing_long = pd.read_sql_query(
-        missing_sql,
-        engine,
-        params={"table_name": table_name}
-    )
-
-    if missing_long.empty:
-        missing_value_df = pd.DataFrame({"ID": []})
-    else:
-        missing_value_df = (
-            missing_long
-            .rename(columns={"row_id": "ID"})
-            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
-            .reset_index()
-        )
-
-    mismatch_sql = text("""
-        SELECT row_id, column_name, error_type
-        FROM detect_datatype_mismatch(:table_name)
-    """)
-    mismatch_long = pd.read_sql_query(
-        mismatch_sql,
-        engine,
-        params={"table_name": table_name}
-    )
-
-    if mismatch_long.empty:
-        datatype_mismatch_df = pd.DataFrame({"ID": []})
-    else:
-        datatype_mismatch_df = (
-            mismatch_long
-            .rename(columns={"row_id": "ID"})
-            .pivot_table(index="ID", columns="column_name", values="error_type", aggfunc="first")
-            .reset_index()
-        )
-
-    frames = [anomaly_df, rarity_df, missing_value_df, datatype_mismatch_df]
-    combined = perform_melt(frames)
-    if not rarity_scores.empty:
-        combined = combined.merge(rarity_scores, on=["row_id", "column_id"], how="left")
-    else:
-        combined["rarity_score"] = pd.NA
+    combined = pd.read_sql_query(sql, engine, params=params)
+    if combined.empty:
+        return pd.DataFrame(columns=["row_id", "column_id", "error_type", "raw_error_type", "rarity_score"])
     return combined
+
+
+def refresh_errors_table(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+) -> int:
+    """
+    Rebuild errors{table_name} directly in SQL from the detector functions.
+    """
+    cleaned_table_name = clean_table_name(table_name)
+    errors_table = f"errors{cleaned_table_name}"
+    sql, params = _build_materialized_errors_select_query(
+        cleaned_table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+
+    create_sql = text(f"""
+        CREATE TABLE "{errors_table}" AS
+        {sql.text}
+    """)
+    count_sql = text(f'SELECT COUNT(*) FROM "{errors_table}"')
+    drop_sql = text(f'DROP TABLE IF EXISTS "{errors_table}"')
+
+    with engine.begin() as conn:
+        conn.execute(drop_sql)
+        conn.execute(create_sql, params)
+        row_count = conn.execute(count_sql).scalar() or 0
+
+    return int(row_count)
+
+
+def materialize_selected_errors_table(
+    table_name: str,
+    target_table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+) -> int:
+    """
+    Materialize a selected-method / selected-rarity error table directly in SQL.
+    """
+    cleaned_table_name = clean_table_name(table_name)
+    sql, params = _build_materialized_errors_select_query(
+        cleaned_table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+    drop_sql = text(f'DROP TABLE IF EXISTS "{target_table_name}"')
+    create_sql = text(f'CREATE TABLE "{target_table_name}" AS {sql.text}')
+    count_sql = text(f'SELECT COUNT(*) FROM "{target_table_name}"')
+
+    with engine.begin() as conn:
+        conn.execute(drop_sql)
+        conn.execute(create_sql, params)
+        row_count = conn.execute(count_sql).scalar() or 0
+
+    return int(row_count)
 
 def calculate_attribute_rankings(error_df):
     """
@@ -350,6 +445,66 @@ def calculate_attribute_rankings(error_df):
     ranking = ranking.rename(columns={'column_id': 'attribute'})
 
     return ranking[['attribute', 'total_errors', 'rank']]
+
+
+def refresh_rankings_table(
+    table_name: str,
+    anomaly_methods=None,
+    rarity_threshold: float | None = 0.01
+):
+    """
+    Rebuild rankings{table_name} directly in SQL from the persisted errors table.
+
+    This keeps rankings computation DB-side instead of materializing the full error
+    dataframe in pandas for grouping/sorting.
+    """
+    cleaned_table_name = clean_table_name(table_name)
+    rankings_table = f"rankings{cleaned_table_name}"
+    errors_table = f"errors{cleaned_table_name}"
+
+    selected_raw_types = anomaly_methods_to_raw_error_types(anomaly_methods)
+    threshold = _normalize_rarity_threshold(rarity_threshold)
+
+    params = {
+        "threshold": threshold,
+        "selected_raw_types": selected_raw_types,
+    }
+
+    drop_sql = text(f'DROP TABLE IF EXISTS "{rankings_table}"')
+    create_sql = text(f"""
+        CREATE TABLE "{rankings_table}" AS
+        WITH filtered_errors AS (
+            SELECT e.*
+            FROM "{errors_table}" e
+            WHERE (
+                e.error_type <> 'anomaly'
+                OR e.raw_error_type = ANY(:selected_raw_types)
+            )
+            AND (
+                e.error_type <> 'incomplete'
+                OR e.rarity_score IS NULL
+                OR e.rarity_score <= :threshold
+            )
+        ),
+        counts AS (
+            SELECT
+                column_id AS attribute,
+                COUNT(*)::int AS total_errors
+            FROM filtered_errors
+            WHERE column_id IS NOT NULL
+              AND BTRIM(column_id) <> ''
+            GROUP BY column_id
+        )
+        SELECT
+            attribute,
+            total_errors,
+            ROW_NUMBER() OVER (ORDER BY total_errors DESC, attribute ASC)::int AS rank
+        FROM counts;
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(drop_sql)
+        conn.execute(create_sql, params)
 
 def get_error_dist(error_df,normal_df):
     """

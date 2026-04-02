@@ -179,7 +179,7 @@
                 const fileToSend = new FormData();
                 console.log("starting upload", uploadedFile);
 
-                const methods = ["zscore", "mad", "iqr"];
+                const methods = ["zscore"];
                 fileToSend.append("anomaly_methods", JSON.stringify(methods));
                 fileToSend.append("anomaly_method", methods[0] || "zscore");
 
@@ -215,7 +215,8 @@
             const useDb = document.getElementById("use-db").checked;
             localStorage.setItem("useDatabase", useDb);
 
-            localStorage.setItem("anomalyMethods", JSON.stringify(["zscore", "mad", "iqr"]));
+            localStorage.setItem("anomalyMethods", JSON.stringify(["zscore"]));
+            localStorage.setItem("rarityThreshold", "0.01");
         }
 
 

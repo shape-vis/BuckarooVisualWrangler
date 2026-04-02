@@ -70,37 +70,18 @@ def _error_table_has_column(error_table_name: str, column_name: str) -> bool:
 
 
 def _create_filtered_error_table(base_table_name: str, selected_anomaly_methods, rarity_threshold: float = 0.01):
-    default_methods = {"zscore", "mad", "iqr"}
-    if (selected_anomaly_methods is None or set(selected_anomaly_methods) == default_methods) and rarity_threshold >= 1.0:
+    default_methods = {"zscore"}
+    normalized_methods = set(selected_anomaly_methods or ["zscore"])
+    if normalized_methods == default_methods and abs(rarity_threshold - 0.01) < 1e-12:
         return f"errors{base_table_name}", None
 
     filtered_table_name = f"errors_{base_table_name}_filtered_{uuid.uuid4().hex[:10]}"
-    where_clauses = []
-    params = {"rarity_threshold": rarity_threshold}
-
-    if selected_anomaly_methods is not None:
-        selected_raw_types = service_helpers.anomaly_methods_to_raw_error_types(selected_anomaly_methods)
-        if selected_raw_types:
-            placeholders = []
-            for idx, raw_type in enumerate(selected_raw_types):
-                key = f"raw{idx}"
-                placeholders.append(f":{key}")
-                params[key] = raw_type
-            where_clauses.append(f"(error_type <> 'anomaly' OR COALESCE(raw_error_type, '') IN ({', '.join(placeholders)}))")
-        else:
-            where_clauses.append("error_type <> 'anomaly'")
-
-    if _error_table_has_column(f"errors{base_table_name}", "rarity_score"):
-        where_clauses.append("(error_type <> 'incomplete' OR COALESCE(rarity_score, 1.0) <= :rarity_threshold)")
-
-    where_clause = " AND ".join(where_clauses) if where_clauses else "TRUE"
-    create_sql = text(
-        f'CREATE TABLE "{filtered_table_name}" AS '
-        f'SELECT * FROM "errors{base_table_name}" WHERE {where_clause}'
+    service_helpers.materialize_selected_errors_table(
+        base_table_name,
+        filtered_table_name,
+        anomaly_methods=list(normalized_methods),
+        rarity_threshold=rarity_threshold
     )
-
-    with engine.begin() as conn:
-        conn.execute(create_sql, params)
 
     return filtered_table_name, filtered_table_name
 
@@ -369,18 +350,27 @@ def attribute_summaries():
     tablename = request.args.get("tablename")
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
     rarity_threshold = _parse_rarity_threshold_query_arg(default=0.01)
+    error_table_name = None
+    cleanup_table_name = None
     try:
-        #get the current error table
+        error_table_name, cleanup_table_name = _create_filtered_error_table(
+            clean_table_name(tablename),
+            selected_anomaly_methods,
+            rarity_threshold
+        )
         table_attribute_summaries = generate_complete_json(
             int(min_id),
             int(max_id),
             tablename,
             anomaly_methods=selected_anomaly_methods,
-            rarity_threshold=rarity_threshold
+            rarity_threshold=rarity_threshold,
+            error_table_name=error_table_name
         )
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    finally:
+        _drop_filtered_error_table(cleanup_table_name)
 
 
 

@@ -225,7 +225,7 @@ export async function wrangleRemove(xCol, minId, maxId) {
 
 export {uploadFileToDB, getSampleData, getErrorData, queryHistogram1d, queryHistogram2d};
 function getActiveAnomalyMethods() {
-    const defaultMethods = ["zscore", "mad", "iqr"];
+    const defaultMethods = ["zscore"];
     try {
         const raw = localStorage.getItem("anomalyMethods");
         if (!raw) return defaultMethods;
