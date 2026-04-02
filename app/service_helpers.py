@@ -186,7 +186,7 @@ def get_error_dist(error_df,normal_df):
     res = error_df.pivot_table("row_id", index="error_type", columns='column_id', aggfunc="count")
     res_mask = res.fillna(0)
     total_ids = normal_df['ID'].count()
-    res_mask.iloc[:, 0:] = res_mask.iloc[:, 0:].div(total_ids)
+    res_mask = res_mask.div(total_ids)
 
     # Flatten the multi-level columns
     res_mask = res_mask.reset_index()
@@ -369,6 +369,9 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
     app.db_operations.rename_preview_to_new(preview_table, new_table_name)
     db_operations.load_table(new_table_name, f"errors_{new_table_name}")
+
+    app.db_operations.update_rankings(new_table_name)
+
 
     return {"success": True, "table": new_table_name}
 

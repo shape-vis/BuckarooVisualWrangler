@@ -3,7 +3,24 @@ import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
 import { resetApp } from "../utils/serverCalls.jsx";
+import { useTableName } from "../utils/TableNameContext.jsx";
+import { useLoading } from "../utils/LoadingContext.jsx";
 import "../styles/Header.css"
+
+function TableStatus() {
+    const { tableName } = useTableName();
+    const { isLoading } = useLoading();
+
+    const match = tableName?.match(/^n(\d+)_(.+)$/);
+    const label = match ? `n${match[1]} - ${match[2]}` : tableName || "No table";
+
+    return (
+        <div className="table-status">
+            <span className={`table-status-dot ${isLoading ? "table-status-dot--loading" : "table-status-dot--ready"}`} />
+            <span className="table-status-label">{label}</span>
+        </div>
+    );
+}
 
 export default function Header( { onReset} ) {
   onReset = onReset || (() => {});
@@ -41,6 +58,7 @@ export function BuckarooHeader( { onReset} ) {
                     alt="Buckaroo Logo"
                 />
             </h1>
+            <TableStatus />
             <div className="navButtonContainer">
                 <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'}>Plots</NavButton>
                 <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'}>Provenance Graph</NavButton>

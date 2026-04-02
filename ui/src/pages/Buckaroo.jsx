@@ -15,12 +15,11 @@ import { BuckarooHeader } from "../elements/Header.jsx";
 
 export const ViewContext = createContext();
 
-export default function Buckaroo({ onReset, uploadResponse }) {
+export default function Buckaroo({ onReset }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const table_name = uploadResponse?.table_name || "unknown_table";
     const [activeView, setActiveView] = useState("plots");
 
     return (
@@ -33,7 +32,6 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                     <BuckarooHeader onReset={onReset} />
                     <div key={refreshKey} className="matrix-and-dropdown-container">
                         <AttributeSummaryPanel
-                            table_name={table_name}
                             selectedAttributes={selectedAttributes}
                             setSelectedAttributes={setSelectedAttributes}
                             setSortedAttributes={setSortedAttributes}
@@ -45,11 +43,9 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                                 {activeView === "plots" && (
                                     <>
                                         <MatrixView
-                                            table_name={table_name}
                                             selectedAttributes={selectedAttributes}
                                         />
                                         <RepairPanel
-                                            table_name={table_name}
                                             onWrangleExecuted={() => {
                                             clearScatterPlotCache();
                                             clearHeatMapCache();
@@ -61,14 +57,10 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                                 )}
                                 {/*Graph View*/}
                                 {activeView === "graph" &&
-                                    <PGraph
-                                        table_name={table_name}
-                                        
-                                    />}
+                                    <PGraph />}
                             </div>
                             <div className={`table-panel-wrapper ${activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
                                 <TablePanel
-                                    table_name={table_name}
                                     sortedAttributes={sortedAttributes}
                                 />
                             </div>

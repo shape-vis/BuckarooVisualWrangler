@@ -69,11 +69,10 @@ def get_top_error_rows():
     Endpoint to return data to be used to construct the table of errors in the view
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
-    table = request.args.get("tablename")
+    table = db_operations.main_table_name
     num_rows = int(request.args.get("num_rows", default=10))
 
     try:
-        service_helpers._validate_identifier(table)
         top_errors_query = f'SELECT * FROM "errors_{table}" WHERE row_id IN ( SELECT row_id FROM "errors_{table}" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} ) ORDER BY row_id;'
         top_errors_result = pd.read_sql_query(top_errors_query, engine)
 
@@ -88,11 +87,8 @@ def get_top_error_rows():
 
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():
-    table = request.args.get("tablename")
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
-    min_id = request.args.get("min_id", default=0)
-    max_id = request.args.get("max_id", default=200)
     error_sample_count = int(request.args.get("error_sample_count", default=30))
     total_sample_count = int(request.args.get("total_sample_count", default=100))
 

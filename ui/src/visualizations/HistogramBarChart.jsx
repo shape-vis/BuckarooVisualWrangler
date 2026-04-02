@@ -4,6 +4,7 @@ import { queryHistogram1d, queryHistogram1dRange, queryRowsInBin, queryBinsForRo
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useTableName } from "../utils/TableNameContext.jsx";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
 import { histogramCache } from "../utils/visualizationCaches.jsx";
@@ -16,10 +17,10 @@ function HistogramBarChart({
     cellID,
     pos,
     size,
-    table_name,
     attrX,
     errorColors,
 }) {
+    const { tableName: table_name } = useTableName();
 
     const drawingRef = useRef(null);
     const clearSelectionRef = useRef(() => {});

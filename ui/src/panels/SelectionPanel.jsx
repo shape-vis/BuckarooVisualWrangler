@@ -6,6 +6,7 @@ import ScatterPlot from "../visualizations/ScatterPlot.jsx";
 import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
+import { useTableName } from "../utils/TableNameContext.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
 function MagnifierIcon({ x, y, onClick }) {
@@ -54,7 +55,8 @@ function MinimizeIcon({ x, y, onClick }) {
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, errorColors }) {
+function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
+    const { tableName: table_name } = useTableName();
     const matrixPlotAreaRef = useRef(null);
     const [plotSize, setPlotSize] = useState(180);
     const [focusedCell, setFocusedCell] = useState(null); // { i, j } or null
@@ -152,7 +154,6 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     cellID={cellID}
                     pos={{ x: focusedXPos, y: focusedYPos }}
                     size={{ w: clampedSize, h: clampedSize }}
-                    table_name={table_name}
                     attrX={xCol}
                     errorColors={errorColors}
                 />
@@ -164,7 +165,6 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     xPos={focusedXPos}
                     yPos={focusedYPos}
                     size={clampedSize}
-                    table_name={table_name}
                     attrX={xCol}
                     attrY={yCol}
                     errorColors={errorColors}
@@ -177,7 +177,6 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     xPos={focusedXPos}
                     yPos={focusedYPos}
                     size={clampedSize}
-                    table_name={table_name}
                     attrX={xCol}
                     attrY={yCol}
                     errorColors={errorColors}
@@ -270,7 +269,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                                 cellID={cellID}
                                 pos={{ x: xPos, y: yPos }}
                                 size={{ w: plotSize, h: plotSize }}
-                                table_name={table_name}
+
                                 attrX={xCol}
                                 errorColors={errorColors}
                             />
@@ -282,7 +281,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                                 xPos={xPos}
                                 yPos={yPos}
                                 size={plotSize}
-                                table_name={table_name}
+
                                 attrX={xCol}
                                 attrY={yCol}
                                 errorColors={errorColors}
@@ -295,7 +294,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                                 xPos={xPos}
                                 yPos={yPos}
                                 size={plotSize}
-                                table_name={table_name}
+
                                 attrX={xCol}
                                 attrY={yCol}
                                 errorColors={errorColors}
@@ -333,8 +332,9 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
  * - visualizations: mapping (e.g. window.visualizations) with modules that expose .module.draw(svgModel, view, canvas, ...args)
  * - width, height (optional) - if not provided component will size SVG to parent bounding box
  */
-export default function MatrixView({ table_name, selectedAttributes }) {
+export default function MatrixView({ selectedAttributes }) {
     const svgRef = useRef(null);
+    const { tableName: table_name } = useTableName();
 
     const [w, setW] = React.useState(800);
     const [h, setH] = React.useState(600);
@@ -359,7 +359,7 @@ export default function MatrixView({ table_name, selectedAttributes }) {
 
     return (
         <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
-            <SelectionPanel table_name={table_name} selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
+            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
         </svg>
     );
 }

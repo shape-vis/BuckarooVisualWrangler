@@ -5,6 +5,7 @@ import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRo
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useTableName } from "../utils/TableNameContext.jsx";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
 import { heatMapCache } from "../utils/visualizationCaches.jsx";
@@ -15,11 +16,11 @@ function Heatmap({
   xPos,
   yPos,
   size,
-  table_name,
   attrX,
   attrY,
   errorColors
 }) {
+  const { tableName: table_name } = useTableName();
   const drawingRef = useRef(null);
   const clearSelectionRef = useRef(() => {});
   const [histogramData, setHistogramData] = React.useState(null);

@@ -29,7 +29,6 @@ _werkzeug_handler = logging.StreamHandler()
 _werkzeug_handler.setFormatter(_WhiteFormatter('%(message)s'))
 logging.getLogger('werkzeug').handlers = [_werkzeug_handler]
 
-from app.db_functions_sql import DBOperations
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 # Function to create the database if it does not exist
@@ -80,7 +79,7 @@ def load_database_info():
                 "password": password,
                 "db_name": db_name
             }
-            f.write(json.dumps(db_info, indent=4))    
+            f.write(json.dumps(db_info, indent=4))
 
     return host, port, user, password, db_name
 
@@ -116,9 +115,10 @@ create_database_if_not_exists(connection, db_name)
 print(f"Connecting to database: {db_name}")
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
+from app.db_functions_sql import DBOperations
 db_operations = DBOperations(engine)
 
-#flag if a wrangle has happened in the session yet
+""" Global vars to use throughout session """
 wrangle_occurred = False
 pgraph_for_session = None
 

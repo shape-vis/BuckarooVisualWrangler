@@ -53,3 +53,42 @@
     gap: 4px;
     padding-bottom: 4px;
 }
+
+/* ── Table status label ──────────────────────────────────────────── */
+
+.table-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 16px;
+    padding: 3px 12px;
+    background: #fff;
+    border: 1.5px solid #a8b4c8;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    align-self: center;
+}
+
+.table-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.table-status-dot--ready {
+    background: #34c759;
+}
+
+.table-status-dot--loading {
+    background: #e53935;
+    animation: status-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

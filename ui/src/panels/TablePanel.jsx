@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { queryTopErrorRows } from "../utils/serverCalls.jsx";
 import CollapsiblePanel from "../elements/CollapsiblePanel";
 import { truncateText } from "../utils/textUtils.js";
+import { useTableName } from "../utils/TableNameContext.jsx";
+import { useLoading } from "../utils/LoadingContext.jsx";
 import "../styles/TablePanel.css";
 
 function RowHeader({ columns }) {
@@ -72,7 +74,9 @@ function TableBody({ columns, tableData, numRows, errorData}) {
  *  - model: an object exposing getColumnErrors() and dataSource with objects() method (same expectations as original TableView)
  *  - maxRows (optional): number of top rows to show (default 10)
  */
-export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 }) {
+export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
+  const { tableName: table_name } = useTableName();
+  const { addLoader, removeLoader } = useLoading();
 
   const [tableData, setTableData] = useState(null);
   const [errorData, setErrorData] = useState(null);
@@ -82,9 +86,10 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
 
     async function fetchData(){
         setFetchError(null);
+        addLoader();
         try {
 
-          const response = await queryTopErrorRows(table_name, maxRows);
+          const response = await queryTopErrorRows(maxRows);
           console.log("[TablePanel] Response:", response);
 
           if (!response || !response.success) {
@@ -109,6 +114,8 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
         } catch (err) {
           console.error(err?.message || err);
           setFetchError(err?.message || String(err));
+        } finally {
+          removeLoader();
         }
       }
 

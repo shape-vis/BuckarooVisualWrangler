@@ -68,7 +68,7 @@ def create_previews():
     """
     try:
         body = request.get_json(force=True)
-        table   = body["table"]
+        table   = db_operations.main_table_name
         row_ids = body.get("row_ids", [])
         cols    = body.get("cols", [])
 
@@ -97,7 +97,7 @@ def execute_wrangle():
     """
     try:
         body = request.get_json(force=True)
-        table         = body["table"]          # main table name
+        table         = db_operations.main_table_name
         preview_table = body["preview_table"]  # the preview to promote
 
         return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
@@ -116,7 +116,7 @@ def wrangle_delete_column():
     """
     try:
         body = request.get_json(force=True)
-        table = body["table"]
+        table = db_operations.main_table_name
         column = body["column"]
 
         print(f"Deleting column '{column}' from table '{table}'")

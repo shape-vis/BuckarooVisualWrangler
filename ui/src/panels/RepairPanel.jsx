@@ -1,12 +1,16 @@
 import { useContext, useState } from "react";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { SelectionContext } from "../utils/SelectionContext.jsx";
-import { createPreviews, executeWrangle } from "../utils/serverCalls.jsx";
+import { createPreviews, executeWrangle, undoWrangle, redoWrangle } from "../utils/serverCalls.jsx";
+import { useTableName } from "../utils/TableNameContext.jsx";
+import { useLoading } from "../utils/LoadingContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../utils/errorColors.js";
 
-export default function RepairPanel({ table_name, onWrangleExecuted }) {
+export default function RepairPanel({ onWrangleExecuted }) {
+  const { setTableName } = useTableName();
+  const { addLoader, removeLoader } = useLoading();
   const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } = useContext(SelectionContext);
 
   const [busy, setBusy] = useState(false);
@@ -23,14 +27,16 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
     if (!hasSelection) return;
 
     setBusy(true);
+    addLoader();
     setPreviewError(null);
     setPreviews(null);
     setPreviewsGenerated(false);
 
     const cols = highlightedCols || [];
-    const result = await createPreviews(table_name, highlightedRowIds, cols);
+    const result = await createPreviews(highlightedRowIds, cols);
 
     setBusy(false);
+    removeLoader();
 
     if (!result?.success) {
       setPreviewError(result?.error || "Preview generation failed.");
@@ -59,10 +65,16 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
 
   async function handleExecuteWrangle(previewTableName) {
     setBusy(true);
+    addLoader();
     setPreviewError(null);
-    const result = await executeWrangle(table_name, previewTableName);
+    const result = await executeWrangle(previewTableName);
     setBusy(false);
+    removeLoader();
     if (result?.success) {
+      // Backend returns the new table name after wrangle — update global state
+      if (result.table) {
+        setTableName(result.table);
+      }
       setPreviews(null);
       clearHighlight();
       onWrangleExecuted?.();
@@ -71,11 +83,38 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
     }
   }
 
-  function handleClearSelection() {
-    clearHighlight();
-    setPreviews(null);
+  async function handleUndo() {
+    setBusy(true);
+    addLoader();
     setPreviewError(null);
-    setPreviewsGenerated(false);
+    const result = await undoWrangle();
+    setBusy(false);
+    removeLoader();
+    if (result?.success) {
+      setTableName(result.table_name);
+      setPreviews(null);
+      clearHighlight();
+      onWrangleExecuted?.();
+    } else {
+      setPreviewError(result?.error || "Undo failed.");
+    }
+  }
+
+  async function handleRedo() {
+    setBusy(true);
+    addLoader();
+    setPreviewError(null);
+    const result = await redoWrangle();
+    setBusy(false);
+    removeLoader();
+    if (result?.success) {
+      setTableName(result.table_name);
+      setPreviews(null);
+      clearHighlight();
+      onWrangleExecuted?.();
+    } else {
+      setPreviewError(result?.error || "Redo failed.");
+    }
   }
 
   return (
@@ -105,12 +144,16 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
           <div
             id="undoButton"
             className="regButton regButton--small"
-            onClick={handleClearSelection}
+            onClick={handleUndo}
           >
             Undo
           </div>
 
-          <div id="redoButton" className="regButton regButton--small">
+          <div
+            id="redoButton"
+            className="regButton regButton--small"
+            onClick={handleRedo}
+          >
             Redo
           </div>
         </div>

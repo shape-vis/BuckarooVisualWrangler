@@ -4,7 +4,7 @@ When the user performs a new wrangling operation, a new instance of this class i
 and put into the provenance graph
 
 """
-from app import DBOperations
+
 
 
 class GraphNode:

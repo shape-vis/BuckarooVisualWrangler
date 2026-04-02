@@ -1,5 +1,8 @@
 from collections import defaultdict
 
+import pandas as pd
+
+from . import service_helpers
 from .filtering_sql import FilteringSQL
 from .execute_sql import fetch_sql, execute_sql
 
@@ -156,6 +159,10 @@ class DBOperations:
         """
         return fetch_sql(f'SELECT COUNT(*) FROM "{table_name}"', True, self.engine)
 
+    def update_rankings(self, new_table_name):
+        df = pd.read_sql_table(f"errors_{new_table_name}", self.engine)
+        rankings = service_helpers.calculate_attribute_rankings(df)
+        rankings.to_sql("rankings_" + new_table_name, self.engine, if_exists='replace', index=False)
 
     def add_data_filters(self, sql_filters) -> dict:
         """

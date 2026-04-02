@@ -5,6 +5,8 @@ import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
+import { useTableName } from "../utils/TableNameContext.jsx";
+import { useLoading } from "../utils/LoadingContext.jsx";
 
 import "../styles/AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
@@ -109,7 +111,9 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
 
 
 
-export default function AttributeSummaryView({ table_name, setSelectedAttributes, selectedAttributes, setSortedAttributes }) {
+export default function AttributeSummaryView({ setSelectedAttributes, selectedAttributes, setSortedAttributes }) {
+  const { tableName: table_name } = useTableName();
+  const { addLoader, removeLoader } = useLoading();
   const [groupByAttribute, setGroupByAttribute] = useState(null);
   const [sortBy, setSortBy] = useState("total");
   const [summaryData, setSummaryData] = useState(null);
@@ -118,6 +122,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   // Fetch summary data from server
   async function fetchSummaryData() {
     setLoading(true);
+    addLoader();
     try {
       const response = await queryAttributeSummaries( table_name );
       const data = response?.data ?? null;
@@ -134,9 +139,10 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
 
     } catch (err) {
       console.error(err.message || err);
-    } 
+    }
     finally {
       setLoading(false);
+      removeLoader();
     }
   }
 
@@ -226,7 +232,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
         </div>
       </div>
 
-      <FilterModal visible={filterVisible} attribute={filterAttribute} onClose={() => setFilterVisible(false)} onApply={() => setFilterVisible(false)} table_name={table_name} errorColors={errorColors} />
+      <FilterModal visible={filterVisible} attribute={filterAttribute} onClose={() => setFilterVisible(false)} onApply={() => setFilterVisible(false)} errorColors={errorColors} />
 
       <div className="attribute-list">
         <ul className="attribute-summary-list">

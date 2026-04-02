@@ -4,6 +4,7 @@ import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useTableName } from "../utils/TableNameContext.jsx";
 
 // Module-level cache so base samples survive component unmount/remount (e.g. focus zoom in/out).
 import { scatterPlotCache } from "../utils/visualizationCaches.jsx";
@@ -14,13 +15,13 @@ function ScatterPlot({
   xPos,
   yPos,
   size,
-  table_name,
   attrX,
   attrY,
   errorColors,
   errorSampleCount = 300,
   totalSampleCount = 1000,
 }) {
+  const { tableName: table_name } = useTableName();
   const drawingRef = useRef(null);
   const clearSelectionRef = useRef(() => {});
   const [sampleData, setSampleData] = React.useState(null);
