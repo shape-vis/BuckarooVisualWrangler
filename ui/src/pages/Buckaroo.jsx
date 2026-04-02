@@ -9,7 +9,7 @@ import { RowRangeProvider } from "../utils/RowRangeContext.jsx";
 import { SettingsProvider } from "../utils/SettingsContext.jsx";
 
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../utils/visualizationCaches.jsx";
-import "./Buckaroo.css";
+import "../styles/Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
 
@@ -60,9 +60,13 @@ export default function Buckaroo({ onReset, uploadResponse }) {
                                     </>
                                 )}
                                 {/*Graph View*/}
-                                {activeView === "graph" && <PGraph />}
+                                {activeView === "graph" &&
+                                    <PGraph
+                                        table_name={table_name}
+                                        
+                                    />}
                             </div>
-                            <div style={{ display: activeView === "plots" ? "block" : "none" }}>
+                            <div className={`table-panel-wrapper ${activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
                                 <TablePanel
                                     table_name={table_name}
                                     sortedAttributes={sortedAttributes}

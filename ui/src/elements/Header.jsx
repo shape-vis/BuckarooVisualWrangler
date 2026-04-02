@@ -3,17 +3,16 @@ import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
 import { resetApp } from "../utils/serverCalls.jsx";
-import "./Header.css"
+import "../styles/Header.css"
 
 export default function Header( { onReset} ) {
   onReset = onReset || (() => {});
   return (
     <div id="header" className="header">
-      <h1 onClick={ onReset } style={{cursor: "pointer"}}>
+      <h1 onClick={ onReset }>
         Buckaroo Visual Wrangler{" "}
         <img
           src="/images/favicon/favicon-96x96.png"
-          style={{ verticalAlign: "middle" }}
           height="40"
           alt="Buckaroo Logo"
         />
@@ -34,11 +33,10 @@ export function BuckarooHeader( { onReset} ) {
 
     return (
         <div id="header">
-            <h1 onClick={ onReset } style={{cursor: "pointer"}}>
+            <h1 onClick={ onReset }>
                 Buckaroo Visual Wrangler{" "}
                 <img
                     src="/images/favicon/favicon-96x96.png"
-                    style={{ verticalAlign: "middle" }}
                     height="24"
                     alt="Buckaroo Logo"
                 />

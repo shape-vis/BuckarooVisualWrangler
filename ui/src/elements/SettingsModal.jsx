@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Modal from "./Modal.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
 import { useSettings } from "../utils/SettingsContext.jsx";
-import "./SettingsModal.css";
+import "../styles/SettingsModal.css";
 
 export default function SettingsModal({ visible, onClose }) {
     const { useRange, minId, maxId, setRowRange } = useRowRange();
@@ -34,7 +34,7 @@ export default function SettingsModal({ visible, onClose }) {
 
     return (
         <Modal visible={visible}>
-            <h2 style={{ marginTop: 0, marginBottom: 20 }}>Plot Settings</h2>
+            <h2>Plot Settings</h2>
 
             {/* <div className="settings-row">
                 <label className="settings-label">Data Range</label>

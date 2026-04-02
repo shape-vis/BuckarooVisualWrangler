@@ -123,3 +123,24 @@
   background-color: #dce3ef;
   border-color: #a8b4c8;
 }
+
+/* Variant: small menu-trigger button */
+.standardButton--menu-trigger {
+  width: 10px;
+  height: 6px;
+  font-size: 14px;
+}
+
+/* Variant: select toggle in attribute panel */
+.rotatedButton--select-toggle {
+  font-size: 10px;
+  height: 34px;
+  margin-top: 4px;
+}
+
+/* Variant: small popup menu item */
+.rotatedButton--popup-item {
+  width: 8px;
+  height: 34px;
+  font-size: 9px;
+}

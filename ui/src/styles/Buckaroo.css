@@ -29,6 +29,14 @@
     box-sizing: border-box;
 }
 
+.table-panel-wrapper {
+    display: none;
+}
+
+.table-panel-wrapper--visible {
+    display: block;
+}
+
 .tooltip {
     position: absolute;
     background-color: #ffffff;

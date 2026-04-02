@@ -1,4 +1,5 @@
 .plot-cell-icon {
+    cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s ease;
 }
@@ -8,10 +9,15 @@
 }
 
 .plot-minimize-icon {
+    cursor: pointer;
     opacity: 0.75;
     transition: opacity 0.15s ease;
 }
 
 .plot-minimize-icon:hover {
     opacity: 1;
+}
+
+#main-svg {
+    display: block;
 }

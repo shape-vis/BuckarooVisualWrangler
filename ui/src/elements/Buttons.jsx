@@ -1,13 +1,12 @@
 
-import "./Buttons.css";
+import "../styles/Buttons.css";
 
-export function RotatedButton({ children, isSelected, onClick, style = {}, ref = null }) {
+export function RotatedButton({ children, isSelected, onClick, className = "", ref = null }) {
   return (
     <div
       ref={ref}
-      className={`rotatedButton ${isSelected ? "rotatedButton--selected" : ""}`}
+      className={`rotatedButton ${isSelected ? "rotatedButton--selected" : ""} ${className}`}
       onClick={onClick}
-      style={style}
     >
       <span className="rotatedButtonText">
         {children}
@@ -16,12 +15,11 @@ export function RotatedButton({ children, isSelected, onClick, style = {}, ref =
   );
 }
 
-export function StandardButton({ children, isSelected, onClick, style = {} }) {
+export function StandardButton({ children, isSelected, onClick, className = "" }) {
   return (
     <div
-      className={`standardButton ${isSelected ? "standardButton--selected" : ""}`}
+      className={`standardButton ${isSelected ? "standardButton--selected" : ""} ${className}`}
       onClick={onClick}
-      style={style}
     >
         <span className="standardButtonText">
             {children}
@@ -30,12 +28,11 @@ export function StandardButton({ children, isSelected, onClick, style = {} }) {
   );
 }
 
-export function NavButton({ children, isSelected, onClick, style = {}, icon }) {
+export function NavButton({ children, isSelected, onClick, className = "", icon }) {
   return (
       <div
-          className={`navButton ${isSelected ? "navButton--selected" : ""}`}
+          className={`navButton ${isSelected ? "navButton--selected" : ""} ${className}`}
           onClick={onClick}
-          style={style}
       >
         <span className="navButtonButtonText">
             {children}
@@ -44,13 +41,12 @@ export function NavButton({ children, isSelected, onClick, style = {}, icon }) {
   );
 }
 
-export function IconButton({ children, onClick, title, style = {} }) {
+export function IconButton({ children, onClick, title, className = "" }) {
   return (
       <button
-          className="iconButton"
+          className={`iconButton ${className}`}
           onClick={onClick}
           title={title}
-          style={style}
       >
         {children}
       </button>

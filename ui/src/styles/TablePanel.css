@@ -1,0 +1,62 @@
+.panel--table {
+  width: 100%;
+}
+
+#table-div {
+  width: 100%;
+}
+
+.table-title {
+  font-weight: bold;
+  text-align: center;
+}
+
+#table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#table th {
+  border: 1px solid #ddd;
+  padding: 6px;
+  background-color: #f0f0f0;
+  text-align: left;
+}
+
+#table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+}
+
+/* Error cell colors */
+#table td[data-error="mismatch"] {
+  color: black;
+  background-color: hotpink;
+}
+
+#table td[data-error="missing"] {
+  color: white;
+  background-color: saddlebrown;
+}
+
+#table td[data-error="anomaly"] {
+  color: white;
+  background-color: red;
+}
+
+#table td[data-error="incomplete"] {
+  color: white;
+  background-color: gray;
+}
+
+.table-error-message {
+  padding: 12px;
+  color: red;
+  font-size: 12px;
+}
+
+.table-loading-message {
+  padding: 12px;
+  color: #888;
+  font-size: 12px;
+}

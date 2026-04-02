@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { queryPreviewHistogram, queryPreviewScatterplot } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import "../styles/PreviewCard.css";
 
 const PLOT_SIZE  = 150;   // px – inner chart area (square)
 const LEFT_M     = 35;
@@ -87,11 +88,11 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
   }, [data, chartType]);
 
   return (
-    <div className="repair-method" style={{ display: "flex", flexDirection: "row", alignItems: "center", padding: 8 }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ fontWeight: "bold", fontSize: 12, marginBottom: 4, textAlign: "center" }}>{label}</div>
-        {loading && <div style={{ fontSize: 11, color: "#888", marginTop: 20 }}>Loading…</div>}
-        {error   && <div style={{ fontSize: 11, color: "red",  marginTop: 20 }}>{error}</div>}
+    <div className="repair-method preview-card">
+      <div className="preview-card-chart">
+        <div className="preview-card-label">{label}</div>
+        {loading && <div className="preview-card-loading">Loading…</div>}
+        {error   && <div className="preview-card-error">{error}</div>}
         {!loading && !error && (
           <svg ref={svgRef} width={SVG_W} height={SVG_H} />
         )}
@@ -99,8 +100,7 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
       {onExecuteWrangle && (
         <button
           onClick={onExecuteWrangle}
-          className="regButton"
-          style={{ marginLeft: 10, alignSelf: "center" }}
+          className="regButton preview-card-execute"
         >
           Execute Wrangle
         </button>

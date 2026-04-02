@@ -1,4 +1,8 @@
 
+.panel--attribute-summary {
+  height: calc(100vh - 52px);
+}
+
 #attribute-summary-root {
     height: 100%;
     display: flex;
@@ -92,9 +96,9 @@
 
 .attribute-list li {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 12px;
+    flex-direction: row;
+    gap: 8px;
+    margin-bottom: 8px;
     font-size: 14px;
     font-weight: 500;
     margin-right: 8px;
@@ -126,6 +130,76 @@
 .popupMenuWrapper {
   position: relative;
   display: inline-block;
+}
+
+/* Error color backgrounds via data attribute */
+.error-scent[data-error-type="missing"] { background-color: saddlebrown; }
+.error-scent[data-error-type="mismatch"] { background-color: hotpink; }
+.error-scent[data-error-type="anomaly"] { background-color: red; }
+.error-scent[data-error-type="incomplete"] { background-color: gray; }
+.error-scent[data-error-type="none"],
+.error-scent--ok { background-color: steelblue; }
+
+/* Sorting color swatch backgrounds via data attribute */
+.attribute-sorting-item-color[data-error-type="total"],
+.attribute-sorting-item-color-selected[data-error-type="total"] { background-color: transparent; }
+.attribute-sorting-item-color[data-error-type="missing"],
+.attribute-sorting-item-color-selected[data-error-type="missing"] { background-color: saddlebrown; }
+.attribute-sorting-item-color[data-error-type="mismatch"],
+.attribute-sorting-item-color-selected[data-error-type="mismatch"] { background-color: hotpink; }
+.attribute-sorting-item-color[data-error-type="anomaly"],
+.attribute-sorting-item-color-selected[data-error-type="anomaly"] { background-color: red; }
+.attribute-sorting-item-color[data-error-type="incomplete"],
+.attribute-sorting-item-color-selected[data-error-type="incomplete"] { background-color: gray; }
+.attribute-sorting-item-color[data-error-type="none"],
+.attribute-sorting-item-color-selected[data-error-type="none"] { background-color: steelblue; }
+
+/* AttributeRow layout */
+.attribute-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.attribute-row-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-grow: 1;
+}
+
+.attribute-row-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attribute-row-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* Sorting controls */
+.attribute-sorting-controls {
+  display: flex;
+  gap: 0;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.attribute-sorting-swatch {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  border-radius: 3px;
+}
+
+/* GroupByButton: elevated dots text */
+.groupby-dots {
+  position: relative;
+  top: -8px;
 }
 
 .popupMenu {

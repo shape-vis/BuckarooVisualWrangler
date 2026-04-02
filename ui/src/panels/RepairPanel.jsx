@@ -3,7 +3,7 @@ import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { SelectionContext } from "../utils/SelectionContext.jsx";
 import { createPreviews, executeWrangle } from "../utils/serverCalls.jsx";
 import PreviewCard from "./PreviewCard.jsx";
-import "./RepairPanel.css";
+import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../utils/errorColors.js";
 
 export default function RepairPanel({ table_name, onWrangleExecuted }) {
@@ -12,6 +12,7 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
   const [busy, setBusy] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const [previews, setPreviews] = useState(null);
+  const [previewsGenerated, setPreviewsGenerated] = useState(false);
   // previews shape:
   //   1D: { type: "histogram", preview_delete, preview_impute, cols }
   //   2D: { type: "heatmap"|"scatterplot", preview_delete, preview_impute_x, preview_impute_y, cols }
@@ -24,6 +25,7 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
     setBusy(true);
     setPreviewError(null);
     setPreviews(null);
+    setPreviewsGenerated(false);
 
     const cols = highlightedCols || [];
     const result = await createPreviews(table_name, highlightedRowIds, cols);
@@ -34,6 +36,8 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
       setPreviewError(result?.error || "Preview generation failed.");
       return;
     }
+
+    setPreviewsGenerated(true);
 
     if (result.dims === 1) {
       setPreviews({
@@ -71,12 +75,13 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
     clearHighlight();
     setPreviews(null);
     setPreviewError(null);
+    setPreviewsGenerated(false);
   }
 
   return (
-    <CollapsiblePanel direction="right" collapsed={"Data Repair Panel"} defaultOpen={false} style={{ height: "100%", margin: "0px 0" }}>
+    <CollapsiblePanel direction="right" collapsed={"Data Repair Panel"} defaultOpen={false} className="panel--repair">
       <div id="toolbox">
-        <div style={{ fontWeight: "bold", marginLeft: "auto", marginRight: "auto", marginTop: "10px", marginBottom: "10px" }}>
+        <div className="repair-panel-title">
           Data Repair Panel
         </div>
 
@@ -84,12 +89,7 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
         <div className="repair-tools">
           <div
             id="repairButton"
-            className="regButton"
-            style={{
-              width: "130px",
-              opacity: hasSelection ? 1 : 0.4,
-              cursor: hasSelection ? "pointer" : "not-allowed",
-            }}
+            className={`regButton ${hasSelection ? "regButton--repair" : "regButton--repair-disabled"}`}
             onClick={handleRepairSelection}
           >
             Repair Selection
@@ -97,28 +97,26 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
 
           <div
             id="zoomButton"
-            className="regButton"
-            style={{ width: "130px", marginLeft: "25px", marginRight: "25px" }}
+            className="regButton regButton--zoom"
           >
             Zoom Selection
           </div>
 
           <div
             id="undoButton"
-            className="regButton"
-            style={{ width: "65px" }}
+            className="regButton regButton--small"
             onClick={handleClearSelection}
           >
             Undo
           </div>
 
-          <div id="redoButton" className="regButton" style={{ width: "65px" }}>
+          <div id="redoButton" className="regButton regButton--small">
             Redo
           </div>
         </div>
 
         {/* ── Selection status ─────────────────────────────────────────── */}
-        <div style={{ fontSize: 11, color: "#555", margin: "6px 12px", minHeight: 16 }}>
+        <div className="repair-selection-status">
           {hasSelection
             ? `${highlightedRowIds.length} row(s) selected${highlightedCols?.length ? ` · cols: ${highlightedCols.join(", ")}` : ""}`
             : "No selection — click a point, bin, or bar in the plots."}
@@ -126,12 +124,20 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
 
         {/* ── Feedback ─────────────────────────────────────────────────── */}
         {busy && (
-          <div style={{ fontSize: 12, color: "#555", margin: "8px 12px" }}>
+          <div className="repair-feedback-centered">
             Generating previews…
+            <div className="repair-loading-bar-track">
+              <div className="repair-loading-bar-fill" />
+            </div>
+          </div>
+        )}
+        {!busy && previewsGenerated && !previewError && (
+          <div className="repair-feedback-centered repair-success">
+            Previews generated
           </div>
         )}
         {previewError && (
-          <div style={{ fontSize: 12, color: "red", margin: "8px 12px" }}>
+          <div className="repair-error">
             Error: {previewError}
           </div>
         )}

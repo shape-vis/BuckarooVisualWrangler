@@ -150,3 +150,7 @@
 .panel.closed, .panel.collapse-down.closed {
   overflow: hidden;
 }
+
+.panel-toggle--down {
+  transform: rotate(270deg);
+}

@@ -81,12 +81,10 @@ A wrangle is a committed data modification — it turns a chosen preview into th
 Creates the preview tables described above. No changes to the main table.
 
 ### `POST /api/wrangle/execute`
-Promotes a chosen preview to the main table. The swap is atomic:
-1. All *other* preview tables (and their `errors_` companions) are dropped
-2. `ALTER TABLE "<table>" RENAME TO "<table>_old"`
-3. `ALTER TABLE "<preview>" RENAME TO "<table>"`
-4. `DROP TABLE "<table>_old"`
-5. `db_operations.load_table()` is called — this rebuilds `ColumnTypes` and `FilteringSQL` for the new table state
+Creates a new node in the provenance graph with the wrangled table. 
+1. All *other* preview tables (and their `errors_` companions) are dropped from the create-previews endpoint
+2. `ALTER TABLE "<table>" RENAME TO "<new_table>"`
+3. `db_operations.load_table()` is called — this rebuilds `ColumnTypes` and `FilteringSQL` for the new table state
 
 ### `POST /api/wrangle/delete-column`
 Drops a column in-place:

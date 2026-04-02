@@ -3,7 +3,7 @@ import * as d3 from "d3";
 import HeatMap from "../visualizations/HeatMap.jsx";
 import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
-import "./SelectionPanel.css";
+import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
 
@@ -16,7 +16,6 @@ function MagnifierIcon({ x, y, onClick }) {
         <g
             className="plot-cell-icon"
             onClick={e => { e.stopPropagation(); onClick(); }}
-            style={{ cursor: "pointer" }}
         >
             <rect x={x - 1} y={y - 1} width={16} height={16} rx={3} fill="white" fillOpacity={0.85} />
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="#444" strokeWidth={1.5} />
@@ -38,7 +37,6 @@ function MinimizeIcon({ x, y, onClick }) {
         <g
             className="plot-minimize-icon"
             onClick={e => { e.stopPropagation(); onClick(); }}
-            style={{ cursor: "pointer" }}
         >
             <rect x={x - 1} y={y - 1} width={s + 2} height={s + 2} rx={3} fill="white" fillOpacity={0.85} />
             {/* top-left corner arrows pointing inward */}
@@ -360,7 +358,7 @@ export default function MatrixView({ table_name, selectedAttributes }) {
     }, [table_name, selectedAttributes]);
 
     return (
-        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} style={{ display: "block" }} overflow="visible">
+        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
             <SelectionPanel table_name={table_name} selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
         </svg>
     );

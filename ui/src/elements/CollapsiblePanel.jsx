@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "./CollapsiblePanel.css";
+import "../styles/CollapsiblePanel.css";
 
 
 export default function CollapsiblePanel({
@@ -7,7 +7,7 @@ export default function CollapsiblePanel({
   collapsed = null,
   direction = "left", // "left" | "right"  | "down"
   defaultOpen = true,
-  style = {}
+  className = ""
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -20,20 +20,18 @@ export default function CollapsiblePanel({
     <div
       className={`panel ${isOpen ? "open" : "closed"} ${
         isRight ? "collapse-right" : isDown ? "collapse-down" : ""
-      }`}
+      } ${className}`}
       data-direction={direction}
-      style={style}
     >
       <div className="panel-content">
         {isOpen ? children : <div className="panel-collapse-text">{collapsed}</div>}
       </div>
 
       <button
-        className="panel-toggle"
+        className={`panel-toggle ${isDown ? "panel-toggle--down" : ""}`}
         onClick={() => setIsOpen((o) => !o)}
         aria-expanded={isOpen}
         aria-label={isOpen ? "Collapse panel" : "Expand panel"}
-        style={{transform: isDown ? "rotate(270deg)" : "none"}}
       >
         {icon}
       </button>

@@ -6,7 +6,7 @@ import { truncateText } from "../utils/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
 
-import "./AttributeSummaryPanel.css";
+import "../styles/AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
 
 
@@ -32,22 +32,22 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
       <StandardButton
         isSelected={open}
         onClick={() => setOpen((prev) => !prev)}
-        style={{ width: "10px", height: "6px", fontSize: 14 }}
-      ><span style={{position: "relative", top: "-8px"}}>...</span></StandardButton>
+        className="standardButton--menu-trigger"
+      ><span className="groupby-dots">...</span></StandardButton>
 
       <RotatedButton
         isSelected={isSelected}
         onClick={() => handleToggleSelect(attr)}
-        style={{fontSize: 10, height: "34px", marginTop: "4px"}}
+        className="rotatedButton--select-toggle"
       >
         {isSelected ? "Selected" : "Select"}
       </RotatedButton>
 
       {open && (
         <div className="popupMenu">
-          <RotatedButton isSelected={groupByAttribute === attr} style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => handleToggleGroupBy(attr)}>Group By</RotatedButton>
-          <RotatedButton style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => showFilter(attr)}>Filter</RotatedButton>
-          <RotatedButton style={{width: "8px", height: "34px", fontSize: 9}} onClick={() => setOpen(false)}>Delete</RotatedButton>
+          <RotatedButton isSelected={groupByAttribute === attr} className="rotatedButton--popup-item" onClick={() => handleToggleGroupBy(attr)}>Group By</RotatedButton>
+          <RotatedButton className="rotatedButton--popup-item" onClick={() => showFilter(attr)}>Filter</RotatedButton>
+          <RotatedButton className="rotatedButton--popup-item" onClick={() => setOpen(false)}>Delete</RotatedButton>
         </div>
       )}
     </div>
@@ -65,12 +65,12 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
   }
 
   return (
-    <li style={{display: "flex", flexDirection: "row", gap: 8, marginBottom: 8}} key={attr}>
+    <li className="attribute-row" key={attr}>
       <GroupByButton attr={attr} groupByAttribute={groupByAttribute} handleToggleGroupBy={handleToggleGroupBy} selectedAttributes={selectedAttributes} handleToggleSelect={handleToggleSelect} showFilter={showFilter} />
 
-      <div style={{display: "flex", flexDirection: "column", gap: 4, flexGrow: 1}}>
-        <div style={{display: "flex", alignItems: "center", gap: 6}}>
-          <span title={attr} style={{fontSize: 16, fontWeight: 700, marginRight: 6}}>{truncateText(attr.toLowerCase(), Math.max(5, 18 - errorEntries.length * 3))}</span>
+      <div className="attribute-row-details">
+        <div className="attribute-row-header">
+          <span title={attr} className="attribute-row-name">{truncateText(attr.toLowerCase(), Math.max(5, 18 - errorEntries.length * 3))}</span>
 
           {errorEntries.length > 0
               ? errorEntries.map(([type, pct]) => (
@@ -78,12 +78,12 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
                   key={type}
                   title={`${type}: ${(pct * 100).toFixed(1)}% of entries`}
                   className="error-scent"
-                  style={{backgroundColor: errorColors(type)}}
+                  data-error-type={type}
                 >
                   {(pct * 100).toFixed(2)}%
               </span>
             ))
-          : <span className="error-scent" style={{backgroundColor: "steelblue"}}>✓</span>
+          : <span className="error-scent error-scent--ok">✓</span>
         }
         </div>
 
@@ -206,18 +206,18 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   const [filterAttribute, setFilterAttribute] = useState(null);
 
   return (
-    <CollapsiblePanel collapsed={"Attribute Summaries"} direction="left" defaultOpen={true} style={{height: "calc(100vh - 52px)"}}>
+    <CollapsiblePanel collapsed={"Attribute Summaries"} direction="left" defaultOpen={true} className="panel--attribute-summary">
     <div id="attribute-summary-root">
       <div id="attribute-sorting">
         <div className="attribute-sorting-title">Sort Attributes By</div>
-        <div style={{display: "flex", gap: 0, marginTop: 8, flexWrap: "wrap"}}>
+        <div className="attribute-sorting-controls">
           {Object.keys(ERROR_TYPES).map(error => {
             const selected = sortBy === error;
             return (
-              <div key={error} className="attribute-sorting-item" onClick={() => handleSortClick(error)} style={{width: "100%", alignItems: "center", cursor: "pointer"}}>
+              <div key={error} className="attribute-sorting-item" onClick={() => handleSortClick(error)}>
                 <span
-                  className={selected ? "attribute-sorting-item-color-selected" : "attribute-sorting-item-color"}
-                  style={{backgroundColor: errorColors(error), width: 18, height: 18, display: "inline-block", borderRadius: 3}}
+                  className={`attribute-sorting-swatch ${selected ? "attribute-sorting-item-color-selected" : "attribute-sorting-item-color"}`}
+                  data-error-type={error}
                 />
                 <span>{ERROR_TYPES[error]}</span>
               </div>

@@ -9,7 +9,7 @@ import "@xyflow/react/dist/style.css";
 import { useState, useCallback, Activity } from "react";
 import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import { TextUpdaterNode } from "../graph_objects/TextUpdaterNode";
-// import {SelectionContext} from "../utils/SelectionContext.jsx";
+import "../styles/PGraph.css";
 //
 const nodeTypes = {
   textUpdater: TextUpdaterNode,
@@ -58,7 +58,7 @@ export default function PGraph() {
   );
 
   return (
-    <div style={{ height: "100%", width: "100%" }}>
+    <div className="pgraph-container">
       <ReactFlow
         nodes={nodes}
         edges={edges}

@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './FilterModal.css'
+import '../styles/FilterModal.css'
 import Modal from './Modal.jsx';
 import { StandardButton } from './Buttons.jsx';
 import HistogramBarChart from '../visualizations/HistogramBarChart.jsx';

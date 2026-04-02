@@ -1,0 +1,36 @@
+.preview-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px;
+}
+
+.preview-card-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.preview-card-label {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.preview-card-loading {
+  font-size: 11px;
+  color: #888;
+  margin-top: 20px;
+}
+
+.preview-card-error {
+  font-size: 11px;
+  color: red;
+  margin-top: 20px;
+}
+
+.preview-card-execute {
+  margin-left: 10px;
+  align-self: center;
+}

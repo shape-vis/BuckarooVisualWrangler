@@ -5,7 +5,7 @@ import Header from "../elements/Header.jsx";
 import SpinnerModal from "../elements/SpinnerModal.jsx";
 import UploadBox from "../elements/UploadBox.jsx";
 
-import './Home.css';
+import '../styles/Home.css';
 
 export default function Home( { onSuccess } ) {
   const [uploading, setUploading] = useState(false);
@@ -75,12 +75,9 @@ export default function Home( { onSuccess } ) {
 
       <Header />
       <div className="ui-nav-box">
-        <div
-          id="placeholder-message"
-          style={{ textAlign: "center", fontSize: "40px", color: "darkslategrey" }}
-        >
+        <div id="placeholder-message">
           <div>Welcome to Buckaroo!</div>
-          <div style={{ fontSize: "24px", marginTop: "10px", color: "gray" }}>
+          <div className="placeholder-subtitle">
             <p>Start by uploading your own or selecting a sample dataset:</p>
 
             <UploadBox fileUpload={fileUpload} />
@@ -91,9 +88,9 @@ export default function Home( { onSuccess } ) {
               </div>
             )}
 
-            <p style={{ marginTop: "24px", marginBottom: 0 }}>Sample Datasets</p>
+            <p className="sample-datasets-heading">Sample Datasets</p>
 
-            <div style={{ display: "flex", margin: "auto", justifyContent: "center", gap: 12 }}>
+            <div className="dataset-button-row">
               <div
                 className="dataset-button"
                 onClick={() => loadDataset("stackoverflow_db_uncleaned_original.csv")}
