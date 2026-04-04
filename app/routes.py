@@ -33,20 +33,22 @@ def load_file(csv_file, filename):
     :param filename: the name of the csv_file
     :return: json object
     """
-    dataframe = pd.read_csv(csv_file)
-
-    # run the detectors on the uploaded file for the starting data state
-    table_with_id_added = set_id_column(dataframe)
-    start_time = time.time()
-    detected_data = run_detectors(dataframe)
-    time_to_detect = time.time() - start_time
-
-    table_name = generate_table_name(filename)
-
-    # Build dtype map from actual column values before pushing to DB
-    dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
-
     try:
+        # Load in the initial dataframe.
+        table_name = generate_table_name(filename)
+        dataframe = pd.read_csv(csv_file)
+
+        # run the detectors on the uploaded file for the starting data state
+        table_with_id_added = set_id_column(dataframe)
+        # Build dtype map from actual column values before pushing to DB
+        dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
+        table_with_id_added.to_sql(table_name, engine, if_exists='replace', dtype=dtype_map)
+
+        # Error table creation will be handled by DBOperations.
+        # Useful reusable metadata will exist in DBOperations for error detection after initial DB load.
+
+        detected_data = run_detectors(dataframe)
+
         """
         pulled from the Pandas Docs for reference because these values returned by .to_sql is not the actual numbers:
 

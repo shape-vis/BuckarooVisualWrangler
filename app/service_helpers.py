@@ -378,7 +378,6 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn):
 
     return {"success": True, "table": table}
 
-
 def _clone_table_pair(conn, source_table, dest_table, errors_source):
     """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dest_table}"'))
@@ -387,6 +386,28 @@ def _clone_table_pair(conn, source_table, dest_table, errors_source):
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
 
+def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
+    """
+    Drop and recreate a minimal dest table and empty error table to populate only with regard to the cols.
+    This is because we don't know which wrangle the user will select, so only generate enough information
+    to populate the preview.
+
+    :arg: conn               - connection to the Postgres database.
+    :arg: source_table       - name of the current main table.
+    :arg: preview_table_name - temporary preview table to create.
+    :arg: errors_source      - the current main table error table.
+    :arg: cols               - the column(s) of interest for the preview.
+    """
+
+    col_sel_query = ", ".join(cols)
+
+    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_table_name}"'))
+    conn.execute(sa_text(f'CREATE TABLE "{preview_table_name}" AS SELECT {col_sel_query} FROM "{source_table}"'))
+    errors_dest = f"errors_{preview_table_name}"
+    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
+
+    # Copy schema but leave empty.
+    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
 
 def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
@@ -402,6 +423,9 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     with engine.begin() as conn:
         _clone_table_pair(conn, table, preview_delete, errors_src)
         _clone_table_pair(conn, table, preview_impute, errors_src)
+        #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
+        #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
+
 
     query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
     query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)

@@ -29,3 +29,11 @@ def anomaly(data_frame):
                 error_map[column][int(data_frame.loc[row, 'ID'])] = "anomaly"
     return error_map
 
+def anomaly_sql(table_name: str, err_table_name: str) -> str:
+    """
+    determines whether a cell in a column of numeric values has a zscore > 2
+    :return: the CTEs for the anomaly table.
+    """
+
+    query = f''''''
+
