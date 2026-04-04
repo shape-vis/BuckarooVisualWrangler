@@ -347,6 +347,28 @@ def _build_materialized_errors_select_query(
     return materialized_sql, params
 
 
+def _create_error_table_indexes(conn, table_name: str) -> None:
+    """
+    Add the most useful indexes for persisted or materialized error tables.
+
+    Main query patterns use:
+    - row_id range filters
+    - joins on row_id
+    - grouping/filtering by column_id
+    - anomaly-method filtering through (error_type, raw_error_type)
+    - rarity filtering through (error_type, rarity_score)
+    """
+    statements = [
+        text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_row_id" ON "{table_name}" (row_id)'),
+        text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_column_id" ON "{table_name}" (column_id)'),
+        text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_row_column" ON "{table_name}" (row_id, column_id)'),
+        text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_error_raw" ON "{table_name}" (error_type, raw_error_type)'),
+        text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_error_rarity" ON "{table_name}" (error_type, rarity_score)'),
+    ]
+    for statement in statements:
+        conn.execute(statement)
+
+
 def run_detectors(
     table_name: str,
     anomaly_method: str = "zscore",
@@ -397,6 +419,7 @@ def refresh_errors_table(
     with engine.begin() as conn:
         conn.execute(drop_sql)
         conn.execute(create_sql, params)
+        _create_error_table_indexes(conn, errors_table)
         row_count = conn.execute(count_sql).scalar() or 0
 
     return int(row_count)
@@ -426,6 +449,7 @@ def materialize_selected_errors_table(
     with engine.begin() as conn:
         conn.execute(drop_sql)
         conn.execute(create_sql, params)
+        _create_error_table_indexes(conn, target_table_name)
         row_count = conn.execute(count_sql).scalar() or 0
 
     return int(row_count)
