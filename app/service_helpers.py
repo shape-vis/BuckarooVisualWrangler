@@ -8,6 +8,7 @@ import re
 from sqlalchemy import types as sql_types
 from sqlalchemy import text as sa_text
 import pandas as pd
+from app import engine
 from app.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
@@ -63,6 +64,19 @@ def generate_table_name(csv_name):
     clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name).lower()
     random_string = "".join(random.choices(string.ascii_letters + string.digits, k=10))
     return _safe_pg_name("data_" + clean_name, "_" + random_string)
+
+
+def clean_table_name(csv_name):
+    """
+    Clean a table or file name so we can safely use it as the base SQL table name.
+    """
+    if ".csv" in csv_name:
+        csv_name = csv_name[0:len(csv_name)-4]
+
+    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name)
+    if clean_name and not clean_name[0].isalpha():
+        clean_name = 'table' + clean_name
+    return clean_name.lower()
 
 
 def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name, engine):
@@ -140,6 +154,187 @@ def perform_melt(dfs):
     df_combined.reset_index(drop=True, inplace=True)
 
     return df_combined
+
+
+def _normalize_anomaly_methods(anomaly_methods=None, anomaly_method: str = "zscore", allow_empty: bool = False):
+    """
+    Turn the anomaly method input into a clean list we can trust.
+    """
+    allowed_methods = {"zscore", "mad", "iqr"}
+
+    if anomaly_methods is None:
+        candidates = [anomaly_method]
+    elif isinstance(anomaly_methods, str):
+        candidates = [anomaly_methods]
+    else:
+        candidates = list(anomaly_methods)
+
+    normalized = []
+    for method in candidates:
+        method_normalized = str(method).strip().lower()
+        if method_normalized in allowed_methods and method_normalized not in normalized:
+            normalized.append(method_normalized)
+
+    if allow_empty:
+        return normalized
+    return normalized or ["zscore"]
+
+
+def anomaly_methods_to_raw_error_types(anomaly_methods):
+    method_to_raw = {
+        "zscore": "zscore_anomaly",
+        "mad": "mad_anomaly",
+        "iqr": "iqr_anomaly",
+    }
+    normalized = _normalize_anomaly_methods(anomaly_methods=anomaly_methods, allow_empty=True)
+    return [method_to_raw[method] for method in normalized if method in method_to_raw]
+
+
+def _normalize_rarity_threshold(rarity_threshold, default: float = 0.01) -> float:
+    try:
+        threshold = float(rarity_threshold)
+    except (TypeError, ValueError):
+        threshold = default
+    return max(0.0, min(1.0, threshold))
+
+
+def _build_detector_rows_query(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+):
+    methods_to_run = _normalize_anomaly_methods(
+        anomaly_methods=anomaly_methods,
+        anomaly_method=anomaly_method
+    )
+
+    anomaly_selects = []
+    params = {
+        "table_name": table_name,
+        "rarity_threshold_pct": _normalize_rarity_threshold(rarity_threshold),
+    }
+    for index, method in enumerate(methods_to_run):
+        method_key = f"anomaly_method_{index}"
+        params[method_key] = method
+        anomaly_selects.append(
+            f"SELECT row_id, column_name, error_type FROM detect_anomalies(:table_name, :{method_key})"
+        )
+
+    anomaly_union_sql = "\nUNION ALL\n".join(anomaly_selects)
+
+    sql = sa_text(f"""
+        WITH anomaly_union AS (
+            {anomaly_union_sql}
+        ),
+        anomaly_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                MIN(error_type) AS error_type,
+                NULL::numeric AS rarity_score
+            FROM anomaly_union
+            GROUP BY row_id, column_name
+        ),
+        rarity_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                error_type,
+                rarity_score
+            FROM detect_rarity(:table_name, :rarity_threshold_pct)
+        ),
+        missing_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                error_type,
+                NULL::numeric AS rarity_score
+            FROM detect_missing_values(:table_name)
+        ),
+        mismatch_rows AS (
+            SELECT
+                row_id,
+                column_name,
+                error_type,
+                NULL::numeric AS rarity_score
+            FROM detect_datatype_mismatch(:table_name)
+        )
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM anomaly_rows
+        UNION ALL
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM rarity_rows
+        UNION ALL
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM missing_rows
+        UNION ALL
+        SELECT
+            row_id,
+            column_name AS column_id,
+            error_type,
+            rarity_score
+        FROM mismatch_rows
+        ORDER BY row_id, column_id, error_type
+    """)
+
+    return sql, params
+
+
+def _build_materialized_errors_select_query(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+):
+    detector_sql, params = _build_detector_rows_query(
+        table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+
+    materialized_sql = sa_text(f"""
+        SELECT
+            row_id,
+            column_id,
+            CASE
+                WHEN error_type LIKE '%anomaly%' THEN 'anomaly'
+                ELSE error_type
+            END AS error_type,
+            error_type AS raw_error_type,
+            rarity_score
+        FROM ({detector_sql.text}) detector_rows
+    """)
+    return materialized_sql, params
+
+
+def _create_error_table_indexes(conn, table_name: str) -> None:
+    """
+    Add the indexes we care about for error tables.
+    """
+    statements = [
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_row_id" ON "{table_name}" (row_id)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_column_id" ON "{table_name}" (column_id)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_row_column" ON "{table_name}" (row_id, column_id)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_error_raw" ON "{table_name}" (error_type, raw_error_type)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_error_rarity" ON "{table_name}" (error_type, rarity_score)'),
+    ]
+    for statement in statements:
+        conn.execute(statement)
+
 
 def run_detectors(data_frame):
     """
