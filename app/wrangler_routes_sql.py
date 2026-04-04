@@ -97,7 +97,7 @@ def create_previews():
         cols    = body.get("cols", [])
 
         # extra case protection.
-        cols    = [f'"{col}"' for col in cols]
+        cols    = [f'{col}' for col in cols]
 
         if not row_ids:
             return {"success": False, "error": "No rows selected"}, 400

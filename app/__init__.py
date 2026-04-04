@@ -101,7 +101,13 @@ host, port, user, password, db_name = load_database_info()
 we use psycopg2 directly for the initial connection
  but only for the one-time database creation check at startup
 """
-connection = psycopg2.connect(host=host, port=port, user=user, password=password)
+connection = psycopg2.connect(
+    host=host,
+    port=port,
+    user=user,
+    password=password,
+    dbname="postgres",
+)
 
 # Create the database if it does not exist
 create_database_if_not_exists(connection, db_name)
