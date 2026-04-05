@@ -29,7 +29,7 @@ def get_default_attributes_from_rankings(tablename, engine):
 
 
 
-def generate_complete_json(tablename):
+def generate_complete_json(tablename, error_table_name=None, anomaly_methods=None, rarity_threshold=0.05):
     """
     Generate a complete JSON representation of the current data state using the whole table.
     :param tablename: name of the table
@@ -43,11 +43,14 @@ def generate_complete_json(tablename):
     _validate_identifier(tablename)
     print(f"Generating JSON for table: {tablename}")
 
+    effective_error_table = error_table_name or f"errors_{tablename}"
+    _validate_identifier(effective_error_table)
+
     main_rows = fetch_sql(f'SELECT * FROM "{tablename}"', False, engine)
-    error_rows = fetch_sql(f'SELECT * FROM "errors_{tablename}"', False, engine)
+    error_rows = fetch_sql(f'SELECT * FROM "{effective_error_table}"', False, engine)
 
     main_cols = fetch_sql(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{tablename}' ORDER BY ordinal_position", False, engine)
-    error_cols = fetch_sql(f"SELECT column_name FROM information_schema.columns WHERE table_name = 'errors_{tablename}' ORDER BY ordinal_position", False, engine)
+    error_cols = fetch_sql(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{effective_error_table}' ORDER BY ordinal_position", False, engine)
 
     main_df = pd.DataFrame(main_rows, columns=[row[0] for row in main_cols] if main_cols else None)
     error_df = pd.DataFrame(error_rows, columns=[row[0] for row in error_cols] if error_cols else None)

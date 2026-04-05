@@ -1,9 +1,9 @@
 .settings-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-    gap: 16px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    margin-bottom: 20px;
+    gap: 24px;
 }
 
 .settings-label {
@@ -11,6 +11,9 @@
     font-weight: 500;
     color: #1c1e21;
     white-space: nowrap;
+    width: 130px;
+    flex-shrink: 0;
+    padding-top: 8px;
 }
 
 .settings-input {
@@ -25,6 +28,64 @@
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.settings-slider-block {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    width: 280px;
+    padding: 10px 12px 12px;
+    border: 1px solid #e2e7f0;
+    border-radius: 10px;
+    background: #f8faff;
+}
+
+.settings-slider-value {
+    align-self: flex-start;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1877F2;
+    line-height: 1;
+}
+
+.settings-slider {
+    width: 100%;
+    margin: 0;
+    accent-color: #1877F2;
+    cursor: pointer;
+}
+
+.settings-slider-presets {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.settings-preset-btn {
+    flex: 1;
+    padding: 6px 0;
+    border: 1px solid #dddfe2;
+    border-radius: 999px;
+    background: #f8f9fb;
+    color: #445066;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-preset-btn:hover {
+    background: #eef3ff;
+    border-color: #c8d6f3;
+}
+
+.settings-preset-btn--active {
+    background: #1877F2;
+    border-color: #1877F2;
+    color: #ffffff;
+}
+
 .settings-input:focus {
     outline: none;
     border-color: #1877F2;
@@ -33,9 +94,10 @@
 
 .settings-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 8px;
-    margin-top: 24px;
+    margin-top: 30px;
+    padding-top: 8px;
 }
 
 .settings-btn {
@@ -75,6 +137,7 @@
     border-radius: 6px;
     overflow: hidden;
     background: #f0f2f5;
+    min-height: 34px;
 }
 
 .settings-toggle-btn {

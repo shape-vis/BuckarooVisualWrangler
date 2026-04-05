@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { queryTopErrorRows } from "../utils/serverCalls.jsx";
 import CollapsiblePanel from "../elements/CollapsiblePanel";
 import { truncateText } from "../utils/textUtils.js";
+import { useSettings } from "../utils/SettingsContext.jsx";
 
 function RowHeader({ columns }) {
   return (
@@ -92,6 +93,7 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
   const [tableData, setTableData] = useState(null);
   const [errorData, setErrorData] = useState(null);
   const [fetchError, setFetchError] = useState(null);
+  const { selectedAnomalyMethods, rarityThreshold } = useSettings();
 
   useEffect(() => {
 
@@ -99,7 +101,10 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
         setFetchError(null);
         try {
 
-          const response = await queryTopErrorRows(table_name, maxRows);
+          const response = await queryTopErrorRows(table_name, maxRows, {
+            anomalyMethods: selectedAnomalyMethods,
+            rarityThreshold,
+          });
           console.log("[TablePanel] Response:", response);
 
           if (!response || !response.success) {
@@ -129,7 +134,7 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
 
       fetchData();
 
-  }, [table_name, maxRows]);  
+  }, [table_name, maxRows, selectedAnomalyMethods, rarityThreshold]);  
 
 
   return (

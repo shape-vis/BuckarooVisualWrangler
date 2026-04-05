@@ -190,7 +190,7 @@ def anomaly_methods_to_raw_error_types(anomaly_methods):
     return [method_to_raw[method] for method in normalized if method in method_to_raw]
 
 
-def _normalize_rarity_threshold(rarity_threshold, default: float = 0.01) -> float:
+def _normalize_rarity_threshold(rarity_threshold, default: float = 0.05) -> float:
     try:
         threshold = float(rarity_threshold)
     except (TypeError, ValueError):
@@ -202,7 +202,7 @@ def _build_detector_rows_query(
     table_name: str,
     anomaly_method: str = "zscore",
     anomaly_methods=None,
-    rarity_threshold: float = 0.01
+    rarity_threshold: float = 0.05
 ):
     methods_to_run = _normalize_anomaly_methods(
         anomaly_methods=anomaly_methods,
@@ -297,7 +297,7 @@ def _build_materialized_errors_select_query(
     table_name: str,
     anomaly_method: str = "zscore",
     anomaly_methods=None,
-    rarity_threshold: float = 0.01
+    rarity_threshold: float = 0.05
 ):
     detector_sql, params = _build_detector_rows_query(
         table_name,
@@ -325,12 +325,13 @@ def _create_error_table_indexes(conn, table_name: str) -> None:
     """
     Add the indexes we care about for error tables.
     """
+    table_hash = hashlib.md5(table_name.encode()).hexdigest()[:8]
     statements = [
-        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_row_id" ON "{table_name}" (row_id)'),
-        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_column_id" ON "{table_name}" (column_id)'),
-        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_row_column" ON "{table_name}" (row_id, column_id)'),
-        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_error_raw" ON "{table_name}" (error_type, raw_error_type)'),
-        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_error_rarity" ON "{table_name}" (error_type, rarity_score)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_err_{table_hash}_row_id" ON "{table_name}" (row_id)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_err_{table_hash}_column_id" ON "{table_name}" (column_id)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_err_{table_hash}_row_column" ON "{table_name}" (row_id, column_id)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_err_{table_hash}_error_raw" ON "{table_name}" (error_type, raw_error_type)'),
+        sa_text(f'CREATE INDEX IF NOT EXISTS "idx_err_{table_hash}_error_rarity" ON "{table_name}" (error_type, rarity_score)'),
     ]
     for statement in statements:
         conn.execute(statement)
@@ -341,7 +342,7 @@ def materialize_selected_errors_table(
     target_table_name: str,
     anomaly_method: str = "zscore",
     anomaly_methods=None,
-    rarity_threshold: float = 0.01
+    rarity_threshold: float = 0.05
 ) -> int:
     """
     Materialize a selected-method / selected-rarity error table directly in SQL.
@@ -368,7 +369,7 @@ def materialize_selected_errors_table(
 def refresh_rankings_table(
     table_name: str,
     anomaly_methods=None,
-    rarity_threshold: float | None = 0.01
+    rarity_threshold: float | None = 0.05
 ):
     """
     Rebuild rankings for a table from the current persisted errors table.

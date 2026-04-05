@@ -5,6 +5,7 @@ import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRo
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useSettings } from "../utils/SettingsContext.jsx";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
 import { heatMapCache } from "../utils/visualizationCaches.jsx";
@@ -37,10 +38,11 @@ function Heatmap({
   useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
   const { useRange, minId, maxId } = useRowRange();
+  const { selectedAnomalyMethods, rarityThreshold } = useSettings();
 
   // ── data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}|10`;
+    const cacheKey = `${table_name}|${attrX}|${attrY}|10|${selectedAnomalyMethods.join(",")}|${rarityThreshold}`;
 
     async function fetchData() {
       // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
@@ -51,8 +53,8 @@ function Heatmap({
 
       try {
         const response = useRange
-          ? await queryHistogram2dRange(table_name, attrX, attrY, 10, minId, maxId)
-          : await queryHistogram2d(table_name, attrX, attrY, 10);
+          ? await queryHistogram2dRange(table_name, attrX, attrY, 10, minId, maxId, { anomalyMethods: selectedAnomalyMethods, rarityThreshold })
+          : await queryHistogram2d(table_name, attrX, attrY, 10, { anomalyMethods: selectedAnomalyMethods, rarityThreshold });
         console.log("[HEATMAP] Response:", response);
 
         if (!response || !response.success) {
@@ -71,7 +73,7 @@ function Heatmap({
       }
     }
     fetchData();
-  }, [table_name, attrX, attrY, useRange, minId, maxId]);
+  }, [table_name, attrX, attrY, useRange, minId, maxId, selectedAnomalyMethods, rarityThreshold]);
 
   // ── draw chart ──────────────────────────────────────────────────────────
   useEffect(() => {

@@ -4,6 +4,7 @@ import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useSettings } from "../utils/SettingsContext.jsx";
 
 // Module-level cache so base samples survive component unmount/remount (e.g. focus zoom in/out).
 import { scatterPlotCache } from "../utils/visualizationCaches.jsx";
@@ -40,10 +41,11 @@ function ScatterPlot({
   useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
   const { useRange, minId, maxId } = useRowRange();
+  const { selectedAnomalyMethods, rarityThreshold } = useSettings();
 
   // ── data fetch ────────────────────────────────────────────────────────────
   useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}|${errorSampleCount}|${totalSampleCount}`;
+    const cacheKey = `${table_name}|${attrX}|${attrY}|${errorSampleCount}|${totalSampleCount}|${selectedAnomalyMethods.join(",")}|${rarityThreshold}`;
 
     async function fetchData() {
       // Restore cached base sample instead of re-fetching (survives unmount/remount from focus zoom).
@@ -54,8 +56,8 @@ function ScatterPlot({
 
       try {
         const response = useRange
-          ? await querySample2dRange(table_name, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId)
-          : await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount);
+          ? await querySample2dRange(table_name, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId, { anomalyMethods: selectedAnomalyMethods, rarityThreshold })
+          : await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount, { anomalyMethods: selectedAnomalyMethods, rarityThreshold });
         console.log("[SCATTERPLOT] Response:", response);
 
         if (!response || !response.success) {
@@ -77,7 +79,7 @@ function ScatterPlot({
       }
     }
     fetchData();
-  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount, useRange, minId, maxId]);
+  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount, useRange, minId, maxId, selectedAnomalyMethods, rarityThreshold]);
 
   // ── draw chart ────────────────────────────────────────────────────────────
   useEffect(() => {

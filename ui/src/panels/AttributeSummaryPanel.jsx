@@ -5,6 +5,7 @@ import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
+import { useSettings } from "../utils/SettingsContext.jsx";
 
 import "./AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
@@ -114,12 +115,16 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   const [sortBy, setSortBy] = useState("total");
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { selectedAnomalyMethods, rarityThreshold } = useSettings();
 
   // Fetch summary data from server
   async function fetchSummaryData() {
     setLoading(true);
     try {
-      const response = await queryAttributeSummaries( table_name );
+      const response = await queryAttributeSummaries(table_name, {
+        anomalyMethods: selectedAnomalyMethods,
+        rarityThreshold,
+      });
       const data = response?.data ?? null;
 
       // initialize selectedAttributes from server defaults if provided
@@ -144,7 +149,7 @@ export default function AttributeSummaryView({ table_name, setSelectedAttributes
   useEffect(() => {
     fetchSummaryData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table_name]);
+  }, [table_name, selectedAnomalyMethods, rarityThreshold]);
 
   
   // sortAttributes is now a pure function — no setSortedAttributes call inside.

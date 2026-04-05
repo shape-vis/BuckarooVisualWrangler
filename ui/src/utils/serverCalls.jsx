@@ -1,5 +1,19 @@
 // serverCalls.jsx
 
+function appendDetectorFilterParams(params, detectorFilters = {}) {
+    const { anomalyMethods, rarityThreshold } = detectorFilters;
+
+    if (Array.isArray(anomalyMethods) && anomalyMethods.length > 0) {
+        params.set("anomaly_methods", JSON.stringify(anomalyMethods));
+    }
+
+    if (rarityThreshold !== undefined && rarityThreshold !== null && rarityThreshold !== "") {
+        params.set("rarity_threshold", String(rarityThreshold));
+    }
+
+    return params;
+}
+
 async function uploadFileToDB(fileToSend) {
     const url = "/api/upload";
     try {
@@ -33,8 +47,11 @@ async function getErrorData(filename, dataSize) {
     }
 }
 
-async function queryHistogram1d(tableName, columnName, binCount) {
-    const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: 0, max_id: 10000, bins: binCount });
+async function queryHistogram1d(tableName, columnName, binCount, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ column: columnName, tablename: tableName, min_id: 0, max_id: 10000, bins: binCount }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/1-d-histogram?${params}`, { method: "GET" });
         return await response.json();
@@ -43,8 +60,11 @@ async function queryHistogram1d(tableName, columnName, binCount) {
     }
 }
 
-async function queryHistogram2d(tableName, columnX, columnY, bins) {
-    const params = new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: 0, max_id: 10000, x_bins: bins, y_bins: bins });
+async function queryHistogram2d(tableName, columnX, columnY, bins, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: 0, max_id: 10000, x_bins: bins, y_bins: bins }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/2-d-histogram?${params}`, { method: "GET" });
         return await response.json();
@@ -53,8 +73,11 @@ async function queryHistogram2d(tableName, columnX, columnY, bins) {
     }
 }
 
-export async function queryHistogram1dRange(tableName, columnName, binCount, minId, maxId) {
-    const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: minId, max_id: maxId, bins: binCount });
+export async function queryHistogram1dRange(tableName, columnName, binCount, minId, maxId, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ column: columnName, tablename: tableName, min_id: minId, max_id: maxId, bins: binCount }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/1-d-histogram?${params}`, { method: "GET" });
         return await response.json();
@@ -63,8 +86,11 @@ export async function queryHistogram1dRange(tableName, columnName, binCount, min
     }
 }
 
-export async function queryHistogram2dRange(tableName, columnX, columnY, bins, minId, maxId) {
-    const params = new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: minId, max_id: maxId, x_bins: bins, y_bins: bins });
+export async function queryHistogram2dRange(tableName, columnX, columnY, bins, minId, maxId, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: minId, max_id: maxId, x_bins: bins, y_bins: bins }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/2-d-histogram?${params}`, { method: "GET" });
         return await response.json();
@@ -73,8 +99,11 @@ export async function queryHistogram2dRange(tableName, columnX, columnY, bins, m
     }
 }
 
-export async function querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples, minId, maxId) {
-    const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: minId, max_id: maxId, error_sample_count: errorSamples, total_sample_count: totalSamples });
+export async function querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples, minId, maxId, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: minId, max_id: maxId, error_sample_count: errorSamples, total_sample_count: totalSamples }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/scatterplot?${params}`, { method: "GET" });
         return await response.json();
@@ -83,8 +112,11 @@ export async function querySample2dRange(tableName, xColumn, yColumn, errorSampl
     }
 }
 
-export async function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples) {
-    const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: 0, max_id: 10000, error_sample_count: errorSamples, total_sample_count: totalSamples });
+export async function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: 0, max_id: 10000, error_sample_count: errorSamples, total_sample_count: totalSamples }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/scatterplot?${params}`, { method: "GET" });
         return await response.json();
@@ -93,8 +125,11 @@ export async function querySample2d(tableName, xColumn, yColumn, errorSamples, t
     }
 }
 
-export async function queryAttributeSummaries(table_name) {
-    const params = new URLSearchParams({ tablename: table_name });
+export async function queryAttributeSummaries(table_name, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ tablename: table_name }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/summaries?${params}`, { method: "GET" });
         return await response.json();
@@ -103,8 +138,11 @@ export async function queryAttributeSummaries(table_name) {
     }
 }
 
-export async function queryTopErrorRows(tableName, numRows) {
-    const params = new URLSearchParams({ tablename: tableName, num_rows: numRows });
+export async function queryTopErrorRows(tableName, numRows, detectorFilters = {}) {
+    const params = appendDetectorFilterParams(
+        new URLSearchParams({ tablename: tableName, num_rows: numRows }),
+        detectorFilters
+    );
     try {
         const response = await fetch(`/api/plots/top-error-rows?${params}`, { method: "GET" });
         return await response.json();

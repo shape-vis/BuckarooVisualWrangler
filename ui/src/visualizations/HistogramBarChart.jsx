@@ -4,6 +4,7 @@ import { queryHistogram1d, queryHistogram1dRange, queryRowsInBin, queryBinsForRo
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../utils/SelectionContext.jsx";
 import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useSettings } from "../utils/SettingsContext.jsx";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
 import { histogramCache } from "../utils/visualizationCaches.jsx";
@@ -39,10 +40,11 @@ function HistogramBarChart({
     useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
     const { useRange, minId, maxId } = useRowRange();
+    const { selectedAnomalyMethods, rarityThreshold } = useSettings();
 
     // ── data fetch ─────────────────────────────────────────────────────────
     useEffect(() => {
-        const cacheKey = `${table_name}|${attrX}|10`;
+        const cacheKey = `${table_name}|${attrX}|10|${selectedAnomalyMethods.join(",")}|${rarityThreshold}`;
 
         async function fetchData() {
             // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
@@ -53,8 +55,8 @@ function HistogramBarChart({
 
             try {
                 const response = useRange
-                    ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId)
-                    : await queryHistogram1d(table_name, attrX, 10);
+                    ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId, { anomalyMethods: selectedAnomalyMethods, rarityThreshold })
+                    : await queryHistogram1d(table_name, attrX, 10, { anomalyMethods: selectedAnomalyMethods, rarityThreshold });
                 if (!response || !response.success) {
                     throw new Error(`API failed: ${response?.error || "Unknown error"}`);
                 }
@@ -69,7 +71,7 @@ function HistogramBarChart({
             }
         }
         fetchData();
-    }, [table_name, attrX, useRange, minId, maxId]);
+    }, [table_name, attrX, useRange, minId, maxId, selectedAnomalyMethods, rarityThreshold]);
 
     // ── draw chart ──────────────────────────────────────────────────────────
     useEffect(() => {
