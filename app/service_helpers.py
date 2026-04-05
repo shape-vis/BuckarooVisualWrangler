@@ -336,6 +336,93 @@ def _create_error_table_indexes(conn, table_name: str) -> None:
         conn.execute(statement)
 
 
+def materialize_selected_errors_table(
+    table_name: str,
+    target_table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.01
+) -> int:
+    """
+    Materialize a selected-method / selected-rarity error table directly in SQL.
+    """
+    cleaned_table_name = clean_table_name(table_name)
+    sql, params = _build_materialized_errors_select_query(
+        cleaned_table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+    drop_sql = sa_text(f'DROP TABLE IF EXISTS "{target_table_name}"')
+    create_sql = sa_text(f'CREATE TABLE "{target_table_name}" AS {sql.text}')
+    count_sql = sa_text(f'SELECT COUNT(*) FROM "{target_table_name}"')
+
+    with engine.begin() as conn:
+        conn.execute(drop_sql)
+        conn.execute(create_sql, params)
+        _create_error_table_indexes(conn, target_table_name)
+        row_count = conn.execute(count_sql).scalar() or 0
+
+    return int(row_count)
+
+
+def refresh_rankings_table(
+    table_name: str,
+    anomaly_methods=None,
+    rarity_threshold: float | None = 0.01
+):
+    """
+    Rebuild rankings for a table from the current persisted errors table.
+    """
+    cleaned_table_name = clean_table_name(table_name)
+    rankings_table = f"rankings{cleaned_table_name}"
+    errors_table = f"errors{cleaned_table_name}"
+
+    selected_raw_types = anomaly_methods_to_raw_error_types(anomaly_methods)
+    threshold = _normalize_rarity_threshold(rarity_threshold)
+
+    params = {
+        "threshold": threshold,
+        "selected_raw_types": selected_raw_types,
+    }
+
+    drop_sql = sa_text(f'DROP TABLE IF EXISTS "{rankings_table}"')
+    create_sql = sa_text(f"""
+        CREATE TABLE "{rankings_table}" AS
+        WITH filtered_errors AS (
+            SELECT e.*
+            FROM "{errors_table}" e
+            WHERE (
+                e.error_type <> 'anomaly'
+                OR e.raw_error_type = ANY(:selected_raw_types)
+            )
+            AND (
+                e.error_type <> 'incomplete'
+                OR e.rarity_score IS NULL
+                OR e.rarity_score <= :threshold
+            )
+        ),
+        counts AS (
+            SELECT
+                column_id AS attribute,
+                COUNT(*)::int AS total_errors
+            FROM filtered_errors
+            WHERE column_id IS NOT NULL
+              AND BTRIM(column_id) <> ''
+            GROUP BY column_id
+        )
+        SELECT
+            attribute,
+            total_errors,
+            ROW_NUMBER() OVER (ORDER BY total_errors DESC, attribute ASC)::int AS rank
+        FROM counts;
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(drop_sql)
+        conn.execute(create_sql, params)
+
+
 def run_detectors(data_frame):
     """
     Runs all 4 detectors that are implemented
