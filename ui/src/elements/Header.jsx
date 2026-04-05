@@ -5,6 +5,7 @@ import SettingsModal from "./SettingsModal.jsx";
 import { resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../utils/TableNameContext.jsx";
 import { useLoading } from "../utils/LoadingContext.jsx";
+import { useRepair } from "../utils/RepairContext.jsx";
 import "../styles/Header.css"
 
 function TableStatus() {
@@ -42,6 +43,7 @@ export function BuckarooHeader( { onReset} ) {
     onReset = onReset || (() => {});
     const { activeView, setActiveView } = useContext(ViewContext);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection } = useRepair();
 
     const handleBack = async () => {
         await resetApp();
@@ -64,6 +66,32 @@ export function BuckarooHeader( { onReset} ) {
                 <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'}>Provenance Graph</NavButton>
             </div>
             <div className="headerActions">
+                {activeView === "plots" && (
+                    <button
+                        className="header-repair-btn"
+                        onClick={triggerRepairSelection}
+                        disabled={busy || !hasSelection}
+                        title="Repair Selection"
+                    >
+                        Repair
+                    </button>
+                )}
+                <button
+                    className="header-repair-btn header-repair-btn--small"
+                    onClick={handleUndo}
+                    disabled={busy}
+                    title="Undo"
+                >
+                    Undo
+                </button>
+                <button
+                    className="header-repair-btn header-repair-btn--small"
+                    onClick={handleRedo}
+                    disabled={busy}
+                    title="Redo"
+                >
+                    Redo
+                </button>
                 <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>
                 <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
             </div>

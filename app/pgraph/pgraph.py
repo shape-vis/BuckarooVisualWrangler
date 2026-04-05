@@ -52,14 +52,16 @@ class PGraph:
         return f"n{self.node_count}"
 
     def undo_pgraph(self):
-        self.next_node_table_name = self.current_node_table_name
-        self.current_node_table_name = self.prev_node_table_name
         if self.prev_node_table_name == "root":
             return None
+        self.next_node_table_name = self.current_node_table_name
+        self.current_node_table_name = self.prev_node_table_name
         self.prev_node_table_name = self.node_map[self.prev_node_table_name].parent_table
         return self.current_node_table_name
 
     def redo_pgraph(self):
+        if self.next_node_table_name is None:
+            return None
         self.prev_node_table_name = self.current_node_table_name
         self.current_node_table_name = self.next_node_table_name
         current_node = self.node_map[self.current_node_table_name]

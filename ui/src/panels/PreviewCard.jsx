@@ -94,7 +94,7 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
         {loading && <div className="preview-card-loading">Loading…</div>}
         {error   && <div className="preview-card-error">{error}</div>}
         {!loading && !error && (
-          <svg ref={svgRef} width={SVG_W} height={SVG_H} />
+          <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ width: "100%", height: "auto" }} />
         )}
       </div>
       {onExecuteWrangle && (

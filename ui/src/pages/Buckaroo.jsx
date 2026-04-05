@@ -1,5 +1,5 @@
 // Buckaroo.jsx
-import { createContext, useState } from "react";
+import { createContext, useState, useCallback } from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
@@ -12,6 +12,7 @@ import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from ".
 import "../styles/Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
+import { RepairProvider } from "../utils/RepairContext.jsx";
 
 export const ViewContext = createContext();
 
@@ -22,13 +23,20 @@ export default function Buckaroo({ onReset }) {
 
     const [activeView, setActiveView] = useState("plots");
 
+    const handleWrangleExecuted = useCallback(() => {
+        clearScatterPlotCache();
+        clearHeatMapCache();
+        clearHistogramCache();
+        setRefreshKey(k => k + 1);
+    }, []);
+
     return (
         <>
             <ViewContext.Provider value={{ activeView, setActiveView }}>
                 <SettingsProvider>
                 <RowRangeProvider>
-                {/* SelectionProvider wraps everything so both plots and RepairPanel share state */}
                 <SelectionProvider>
+                <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
                     <BuckarooHeader onReset={onReset} />
                     <div key={refreshKey} className="matrix-and-dropdown-container">
                         <AttributeSummaryPanel
@@ -45,14 +53,7 @@ export default function Buckaroo({ onReset }) {
                                         <MatrixView
                                             selectedAttributes={selectedAttributes}
                                         />
-                                        <RepairPanel
-                                            onWrangleExecuted={() => {
-                                            clearScatterPlotCache();
-                                            clearHeatMapCache();
-                                            clearHistogramCache();
-                                            setRefreshKey(k => k + 1);
-                                        }}
-                                        />
+                                        <RepairPanel />
                                     </>
                                 )}
                                 {/*Graph View*/}
@@ -68,6 +69,7 @@ export default function Buckaroo({ onReset }) {
 
                         <div id="tooltip" className="tooltip"></div>
                     </div>
+                </RepairProvider>
                 </SelectionProvider>
                 </RowRangeProvider>
                 </SettingsProvider>

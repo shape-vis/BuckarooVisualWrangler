@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "../styles/CollapsiblePanel.css";
 
 
@@ -7,9 +7,19 @@ export default function CollapsiblePanel({
   collapsed = null,
   direction = "left", // "left" | "right"  | "down"
   defaultOpen = true,
-  className = ""
+  className = "",
+  openTrigger = 0,
+  closeTrigger = 0,
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    if (openTrigger > 0) setIsOpen(true);
+  }, [openTrigger]);
+
+  useEffect(() => {
+    if (closeTrigger > 0) setIsOpen(false);
+  }, [closeTrigger]);
 
   const isRight = direction === "right";
   const isDown = direction === "down";

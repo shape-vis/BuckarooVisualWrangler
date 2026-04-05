@@ -131,10 +131,12 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
       if (data) {
         setSummaryData(data);
         const sorted = sortAttributes(data.attributes || [], data.columnErrors || {} , sortBy);
-        const defaults = data.defaultAttributes && data.defaultAttributes.length > 0
-          ? data.defaultAttributes
-          : sorted.slice(0, 3);
-        setSelectedAttributes(defaults);
+        setSelectedAttributes(prev => {
+          if (prev.length > 0) return prev;
+          return data.defaultAttributes && data.defaultAttributes.length > 0
+            ? data.defaultAttributes
+            : sorted.slice(0, 3);
+        });
       }
 
     } catch (err) {

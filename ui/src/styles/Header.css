@@ -51,7 +51,37 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    margin-left: 16px;
     padding-bottom: 4px;
+}
+
+/* ── Repair action buttons in header ──────────────────────────── */
+.header-repair-btn {
+    cursor: pointer;
+    padding: 4px 12px;
+    border-radius: 6px;
+    background: #f0f2f5;
+    border: 1px solid #dddfe2;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1c1e21;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+    align-self: center;
+    white-space: nowrap;
+}
+
+.header-repair-btn:hover:not(:disabled) {
+    background-color: #e4e6ea;
+    border-color: #1877F2;
+}
+
+.header-repair-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.header-repair-btn--small {
+    padding: 4px 8px;
 }
 
 /* ── Table status label ──────────────────────────────────────────── */
