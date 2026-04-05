@@ -1059,3 +1059,9 @@ class DBOperations:
             affected_bins_list.append({"xBin": x_bin, "yBin": y_bin})
 
         return affected_bins_list
+
+    def table_exists(self, name):
+        """Check if a table exists in the database."""
+        query = f"SELECT 1 FROM information_schema.tables WHERE table_name = '{name}'"
+        result = fetch_sql(query= query, scalar= True, engine= self.engine)
+        return result is not None

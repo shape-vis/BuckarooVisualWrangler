@@ -8,15 +8,16 @@ import pandas as pd
 from flask import request, send_file
 import time
 from sqlalchemy import text as sa_text
-from app import app, db_operations, engine
+from app import app
+from app import db_operations, engine
 from app.service_helpers import (
     generate_table_name,
     run_detectors,
     get_whole_table_query,
     get_sqlalchemy_dtype_map,
     create_error_dict,
-    calculate_attribute_rankings,
-    fetch_detected_and_undetected_current_dataset_from_db,
+    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo,
+
 )
 from app.set_id_column import set_id_column
 import json
@@ -42,7 +43,7 @@ def load_file(csv_file, filename):
     start_time = time.time()
     detected_data = run_detectors(dataframe)
     time_to_detect = time.time() - start_time
-
+    app.original_table_name = filename
     table_name = generate_table_name(filename)
     table_name_with_node_id = f"n0_{table_name}"
     # Build dtype map from actual column values before pushing to DB
@@ -117,48 +118,33 @@ def get_tablename():
     return {"success": True, "table_name": name}
 
 
-def _parse_node_id(table_name):
-    """Parse 'n3_rest_of_name' into (3, 'rest_of_name'). Returns None on failure."""
-    m = re.match(r'^n(\d+)_(.+)$', table_name)
-    if not m:
-        return None
-    return int(m.group(1)), m.group(2)
 
-
-def _table_exists(name):
-    """Check if a table exists in the database."""
-    with engine.connect() as conn:
-        result = conn.execute(
-            sa_text("SELECT 1 FROM information_schema.tables WHERE table_name = :t"),
-            {"t": name}
-        )
-        return result.fetchone() is not None
+# def _table_exists(name):
+#     """Check if a table exists in the database."""
+#     with engine.connect() as conn:
+#         result = conn.execute(
+#             sa_text("SELECT 1 FROM information_schema.tables WHERE table_name = :t"),
+#             {"t": name}
+#         )
+#         return result.fetchone() is not None
 
 
 @app.post("/api/undo")
 def undo_wrangle():
     """
-    Navigate to the previous version of the table (decrement node ID).
-    e.g. n2_data_xyz -> n1_data_xyz
+    Navigate to the previous version of the table
     """
-    current = db_operations.main_table_name
-    if not current:
-        return {"success": False, "error": "No table loaded"}, 400
+    prev = get_pgraph_undo()
 
-    parsed = _parse_node_id(current)
-    if not parsed:
-        return {"success": False, "error": f"Cannot parse node ID from '{current}'"}, 400
+    if prev is None:
+        return {"success": False, "error": "Already at the root table, cannot undo further"}, 400
 
-    node_id, base = parsed
-    if node_id <= 0:
-        return {"success": False, "error": "Already at the original table, cannot undo further"}, 400
+    if not db_operations.table_exists(prev):
+        return {"success": False, "error": f"Table '{prev}' does not exist"}, 404
 
-    target = f"n{node_id - 1}_{base}"
-    if not _table_exists(target):
-        return {"success": False, "error": f"Table '{target}' does not exist"}, 404
+    db_operations.load_table(prev, f"errors_{prev}")
 
-    db_operations.load_table(target, f"errors_{target}")
-    return {"success": True, "table_name": target}
+    return {"success": True, "table_name": prev}
 
 
 @app.post("/api/redo")
@@ -167,21 +153,19 @@ def redo_wrangle():
     Navigate to the next version of the table (increment node ID).
     e.g. n1_data_xyz -> n2_data_xyz
     """
-    current = db_operations.main_table_name
-    if not current:
-        return {"success": False, "error": "No table loaded"}, 400
+    next_node = get_pgraph_redo()
 
-    parsed = _parse_node_id(current)
-    if not parsed:
-        return {"success": False, "error": f"Cannot parse node ID from '{current}'"}, 400
+    if next_node is None:
+        return {"success": False, "error": "There is no further redo to execute"}, 404
 
-    node_id, base = parsed
-    target = f"n{node_id + 1}_{base}"
-    if not _table_exists(target):
-        return {"success": False, "error": "No newer version to redo to"}, 404
+    if not db_operations.table_exists(next_node):
+        return {"success": False, "error": "Table does not exist"}, 404
 
-    db_operations.load_table(target, f"errors_{target}")
-    return {"success": True, "table_name": target}
+    if next_node == db_operations.main_table_name:
+        return {"success": False, "error": "You have reached the most up to date table"}
+
+    db_operations.load_table(next_node, f"errors_{next_node}")
+    return {"success": True, "table_name": next_node}
 
 
 @app.post("/api/reset")

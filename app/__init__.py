@@ -120,9 +120,6 @@ db_operations = DBOperations(engine)
 
 """ Global vars to use throughout session """
 wrangle_occurred = False
-pgraph_for_session = None
+app.pgraph_for_session = None
 
-from app import routes
-from app import wrangler_routes_sql as wrangler_routes
-from app import plot_routes
 #manages the different data instances of the data during the users session

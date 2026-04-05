@@ -20,6 +20,7 @@ from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 
 
+
 def _validate_identifier(name: str) -> str:
     """
     Ensures a table or column name contains only safe characters before it
@@ -31,6 +32,11 @@ def _validate_identifier(name: str) -> str:
         raise ValueError(f"Unsafe SQL identifier rejected: {name!r}")
     return name
 
+def get_pgraph_redo():
+    return app.pgraph_for_session.redo_pgraph()
+
+def get_pgraph_undo():
+    return app.pgraph_for_session.undo_pgraph()
 
 def _safe_pg_name(base: str, suffix: str) -> str:
     """
@@ -65,8 +71,8 @@ def generate_table_name(csv_name):
         csv_name = csv_name[0:len(csv_name)-4]
 
     clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name).lower()
-    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=10))
-    return _safe_pg_name("data_" + clean_name, "_" + random_string)
+    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=5))
+    return _safe_pg_name(clean_name, "_" + random_string)
 
 
 def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name, engine):
@@ -404,15 +410,16 @@ def pgraph_entry_point(table, preview_table, wrangle_executed):
 def first_wrangle(parent_table, child_table, wrangle_executed):
     app.pgraph_for_session = PGraph()
 
-    # create the root node
+    # create the root node, add it to the pgraph as the root
     root_node = GraphNode("root", "root", parent_table, f"errors_{parent_table}")
-    app.pgraph_for_session.add_node(root_node)
+    app.pgraph_for_session.add_root_node(root_node)
 
     #get new table name for child -> should be n1_<....>
     new_table_name = make_new_table_name(child_table)
     #create the new current node
     current_node = GraphNode(parent_table, wrangle_executed, new_table_name, f"errors_{new_table_name}")
 
+    #add the first child node to the pgraph with the parent as the root
     app.pgraph_for_session.add_node(current_node)
 
     app.wrangle_occurred = True
@@ -498,3 +505,10 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
         "preview_impute_y": preview_impute_y,
         "dims": 2,
     }
+
+def _parse_node_id(table_name):
+    """Parse 'n3_rest_of_name' into (3, 'rest_of_name'). Returns None on failure."""
+    m = re.match(r'^n(\d+)_(.+)$', table_name)
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)

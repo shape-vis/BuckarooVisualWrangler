@@ -6,30 +6,68 @@ to traverse up and down, it access' the child's parent node
 """
 from typing import TypedDict
 
+from sqlalchemy import String
+
 from app.pgraph.node import GraphNode
 
 class PGraph:
     def __init__(self):
         self.root_node = None
-        # this will be [node_name, GraphNode) for easy node access
+        # this will be [node_table_name, GraphNode) for easy node access
         self.node_map = {}
-        self.wrangle_counter = 0
+        self.node_count = 0
         # keep track of the wrangle number and what it was for meta post-processing
         self.wrangle_map = {}
+        """
+        these are referenced by table names, and then and services should load the node from the graph
+        using the table names    
+        """
+        self.prev_node_table_name = None
+        self.next_node_table_name = None
+        self.current_node_table_name = None
+
 
     def add_node(self, node: GraphNode):
-        name = node.table_name
-        self.node_map[name] = node
-        self.wrangle_counter += 1
-        self.wrangle_map[self.wrangle_counter] = node.wrangle_op
+        new_node_table_name = node.table_name
+        self.node_map[new_node_table_name] = node
+        self.node_count += 1
+        self.wrangle_map[self.node_count] = node.wrangle_op
 
-        if node.parent_id in self.node_map:
-            parent = self.node_map[node.parent_id]
-            parent.add_child(node)
+        #update the children of the parent node
+        if node.parent_table in self.node_map:
+            self.node_map[node.parent_table].add_child(new_node_table_name)
+
+        self.prev_node_table_name = self.current_node_table_name
+        self.current_node_table_name = new_node_table_name
+
+    def add_root_node(self, node: GraphNode):
+        root_node_table_name = node.table_name
+        self.node_map[root_node_table_name] = node
+        self.node_count += 1
+
+        self.prev_node_table_name = self.current_node_table_name
+        self.current_node_table_name = root_node_table_name
 
     def get_new_node_id(self):
-        return f"n{self.wrangle_counter}"
+        return f"n{self.node_count}"
 
+    def undo_pgraph(self):
+        self.next_node_table_name = self.current_node_table_name
+        self.current_node_table_name = self.prev_node_table_name
+        if self.prev_node_table_name == "root":
+            return None
+        self.prev_node_table_name = self.node_map[self.prev_node_table_name].parent_table
+        return self.current_node_table_name
 
+    def redo_pgraph(self):
+        self.prev_node_table_name = self.current_node_table_name
+        self.current_node_table_name = self.next_node_table_name
+        current_node = self.node_map[self.current_node_table_name]
+        current_node_child_list = current_node.children
+        if len(current_node_child_list) == 0:
+            self.next_node_table_name = None
+            return self.current_node_table_name
+        #set next to the last child added if there are children for this node
+        self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
 
-
+        return self.current_node_table_name

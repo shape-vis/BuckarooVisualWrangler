@@ -8,13 +8,14 @@ and put into the provenance graph
 
 
 class GraphNode:
-    def __init__(self, parent_id, wrangle_op: str, table_name: str, error_table_name: str):
+    def __init__(self, parent_table, wrangle_op: str, table_name: str, error_table_name: str):
 
-        self.parent_id = parent_id
+        self.parent_table = parent_table
         self.wrangle_op = wrangle_op
         self.table_name = table_name
         self.error_table_name = error_table_name
         self.children = []
+
 
         """ quality metric parts """
         self.anomaly_metric = 0
@@ -29,7 +30,7 @@ class GraphNode:
         self.incomplete_metric = incomplete
         self.mismatch_metric = mismatch
 
-    def add_child(self, child_node: GraphNode):
+    def add_child(self, child_node: str):
         self.children.append(child_node)
 
 
