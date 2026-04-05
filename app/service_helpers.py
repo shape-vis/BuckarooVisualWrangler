@@ -346,9 +346,8 @@ def materialize_selected_errors_table(
     """
     Materialize a selected-method / selected-rarity error table directly in SQL.
     """
-    cleaned_table_name = clean_table_name(table_name)
     sql, params = _build_materialized_errors_select_query(
-        cleaned_table_name,
+        table_name,
         anomaly_method=anomaly_method,
         anomaly_methods=anomaly_methods,
         rarity_threshold=rarity_threshold
@@ -374,9 +373,8 @@ def refresh_rankings_table(
     """
     Rebuild rankings for a table from the current persisted errors table.
     """
-    cleaned_table_name = clean_table_name(table_name)
-    rankings_table = f"rankings{cleaned_table_name}"
-    errors_table = f"errors{cleaned_table_name}"
+    rankings_table = f"rankings_{table_name}"
+    errors_table = f"errors_{table_name}"
 
     selected_raw_types = anomaly_methods_to_raw_error_types(anomaly_methods)
     threshold = _normalize_rarity_threshold(rarity_threshold)
