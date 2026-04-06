@@ -58,11 +58,7 @@ def _parse_rarity_threshold_query_arg(default: float = 0.05):
 
 
 def _create_filtered_error_table(base_table_name: str, selected_anomaly_methods, rarity_threshold: float = 0.05):
-    default_methods = {"zscore"}
     normalized_methods = set(selected_anomaly_methods or ["zscore"])
-
-    if normalized_methods == default_methods and abs(rarity_threshold - 0.05) < 1e-12:
-        return f"errors_{base_table_name}", None
 
     filtered_table_name = service_helpers._safe_pg_name(
         f"errors_{base_table_name}",
