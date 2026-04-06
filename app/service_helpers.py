@@ -366,6 +366,35 @@ def materialize_selected_errors_table(
     return int(row_count)
 
 
+def refresh_errors_table(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.05
+) -> int:
+    """
+    Rebuild errors_<table_name> directly from the SQL detector functions.
+    """
+    errors_table_name = f"errors_{table_name}"
+    sql, params = _build_materialized_errors_select_query(
+        table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+    drop_sql = sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"')
+    create_sql = sa_text(f'CREATE TABLE "{errors_table_name}" AS {sql.text}')
+    count_sql = sa_text(f'SELECT COUNT(*) FROM "{errors_table_name}"')
+
+    with engine.begin() as conn:
+        conn.execute(drop_sql)
+        conn.execute(create_sql, params)
+        _create_error_table_indexes(conn, errors_table_name)
+        row_count = conn.execute(count_sql).scalar() or 0
+
+    return int(row_count)
+
+
 def refresh_rankings_table(
     table_name: str,
     anomaly_methods=None,

@@ -9,12 +9,9 @@ import time
 from app import app, db_operations, engine
 from app.service_helpers import (
     generate_table_name,
-    run_detectors,
-    get_whole_table_query,
     get_sqlalchemy_dtype_map,
-    create_error_dict,
-    calculate_attribute_rankings,
-    fetch_detected_and_undetected_current_dataset_from_db,
+    refresh_errors_table,
+    refresh_rankings_table,
 )
 from app.set_id_column import set_id_column
 import json
@@ -38,27 +35,19 @@ def load_file(csv_file, filename):
         table_name = generate_table_name(filename)
         dataframe = pd.read_csv(csv_file)
 
-        # run the detectors on the uploaded file for the starting data state
         table_with_id_added = set_id_column(dataframe)
-        # Build dtype map from actual column values before pushing to DB
         dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
         table_with_id_added.to_sql(table_name, engine, if_exists='replace', dtype=dtype_map)
-
-        # Error table creation will be handled by DBOperations.
-        # Useful reusable metadata will exist in DBOperations for error detection after initial DB load.
-
-        detected_data = run_detectors(dataframe)
-
-        """
-        pulled from the Pandas Docs for reference because these values returned by .to_sql is not the actual numbers:
-
-        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
-
-        The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
-        connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
-        """
-        rows_affected = table_with_id_added.to_sql(table_name, engine, if_exists='replace', dtype=dtype_map)
-        detected_rows_affected = detected_data.to_sql("errors_" + table_name, engine, if_exists='replace')
+        detected_rows_affected = refresh_errors_table(
+            table_name,
+            anomaly_methods=["zscore"],
+            rarity_threshold=0.05,
+        )
+        refresh_rankings_table(
+            table_name,
+            anomaly_methods=["zscore"],
+            rarity_threshold=0.05,
+        )
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
@@ -67,10 +56,6 @@ def load_file(csv_file, filename):
         db_operations.load_table(table_name)
         rows_affected = db_operations.get_row_count(table_name)
         detected_rows_affected = db_operations.get_row_count("errors_" + table_name)
-
-        #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
-        rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings_" + table_name, engine, if_exists='replace', index=False)
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name}
