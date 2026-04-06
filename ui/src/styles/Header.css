@@ -11,22 +11,21 @@
     top: 0;
     left: 0;
     width: 100%;
-    height: 44px;
+    height: 56px;
     z-index: 10;
     display: flex;
-    align-items: flex-end;
-    background: #dde1ea;
-    border-bottom: 2px solid #a8b4c8;
-    padding: 0 12px 0 12px;
+    align-items: center;
+    background: #f8f9fa;
+    border-bottom: 1.5px solid #dadce0;
+    padding: 0 16px;
     box-sizing: border-box;
 }
 
 #header h1 {
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 600;
-    margin: 16px 17px 6px 0;
+    margin: 0 17px 0 0;
     white-space: nowrap;
-    align-self: center;
     flex-shrink: 0;
     line-height: 1;
 }
@@ -50,38 +49,53 @@
 .headerActions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 10px;
     margin-left: 16px;
-    padding-bottom: 4px;
+    padding-bottom: 6px;
 }
 
-/* ── Repair action buttons in header ──────────────────────────── */
-.header-repair-btn {
+/* ── Action buttons in header (undo / redo / repair) ─────────── */
+.header-action-btn {
     cursor: pointer;
-    padding: 4px 12px;
-    border-radius: 6px;
-    background: #f0f2f5;
-    border: 1px solid #dddfe2;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1.5px solid #dadce0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
     font-size: 14px;
-    font-weight: 600;
-    color: #1c1e21;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    font-weight: 500;
+    color: #3c4043;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     align-self: center;
     white-space: nowrap;
 }
 
-.header-repair-btn:hover:not(:disabled) {
-    background-color: #e4e6ea;
-    border-color: #1877F2;
+.header-action-btn:hover:not(:disabled) {
+    background-color: #f8f9fa;
+    border-color: #c0c4c9;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.header-repair-btn:disabled {
+.header-action-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
 
-.header-repair-btn--small {
-    padding: 4px 8px;
+.header-action-btn .btn-icon {
+    font-size: 15px;
+    color: #5f6368;
+    line-height: 1;
+    display: inline-flex;
+}
+
+.header-action-btn .btn-svg-icon {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    filter: brightness(0) saturate(100%) invert(35%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%);
 }
 
 /* ── Table status label ──────────────────────────────────────────── */

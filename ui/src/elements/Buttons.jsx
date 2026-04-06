@@ -34,6 +34,7 @@ export function NavButton({ children, isSelected, onClick, className = "", icon 
           className={`navButton ${isSelected ? "navButton--selected" : ""} ${className}`}
           onClick={onClick}
       >
+        {icon && <span className="navButtonIcon">{icon}</span>}
         <span className="navButtonButtonText">
             {children}
         </span>

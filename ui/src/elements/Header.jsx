@@ -62,34 +62,35 @@ export function BuckarooHeader( { onReset} ) {
             </h1>
             <TableStatus />
             <div className="navButtonContainer">
-                <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'}>Plots</NavButton>
-                <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'}>Provenance Graph</NavButton>
+                <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'} icon={<img src="/images/icons/plotlogo.svg" alt="" className="navButtonSvgIcon" />}>Plots</NavButton>
+                <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'} icon={<img src="/images/icons/pgraphlogo.svg" alt="" className="navButtonSvgIcon" />}>Provenance Graph</NavButton>
             </div>
             <div className="headerActions">
-                {activeView === "plots" && (
-                    <button
-                        className="header-repair-btn"
-                        onClick={triggerRepairSelection}
-                        disabled={busy || !hasSelection}
-                        title="Repair Selection"
-                    >
-                        Repair
-                    </button>
-                )}
                 <button
-                    className="header-repair-btn header-repair-btn--small"
+                    className="header-action-btn"
+                    onClick={triggerRepairSelection}
+                    disabled={busy || !hasSelection}
+                    title="Repair Selection"
+                >
+                    <img src="/images/icons/repair.svg" alt="" className="btn-svg-icon" />
+                    Repair
+                </button>
+                <button
+                    className="header-action-btn"
                     onClick={handleUndo}
                     disabled={busy}
                     title="Undo"
                 >
+                    <span className="btn-icon">&#8617;</span>
                     Undo
                 </button>
                 <button
-                    className="header-repair-btn header-repair-btn--small"
+                    className="header-action-btn"
                     onClick={handleRedo}
                     disabled={busy}
                     title="Redo"
                 >
+                    <span className="btn-icon">&#8618;</span>
                     Redo
                 </button>
                 <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>

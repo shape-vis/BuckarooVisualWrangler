@@ -66,42 +66,79 @@
 
 .navButton {
   cursor: pointer;
-  padding: 6px 16px;
-  border-radius: 6px 6px 0 0;
-  background-color: #bec8d8;
-  border: 1px solid #a8b4c8;
-  border-bottom: none;
-  transition: background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 28px;
+  background-color: #f7f9fa;
+  border: 1.5px solid #e0e0e0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   text-align: center;
-  margin-bottom: -2px;
-  margin-right: 2px;
+}
+
+/* first tab: round left corners */
+.navButtonContainer .navButton:first-child {
+  border-radius: 10px 0 0 10px;
+  border-right: none;
+}
+
+/* last tab: round right corners */
+.navButtonContainer .navButton:last-child {
+  border-radius: 0 10px 10px 0;
+  border-left: none;
+}
+
+/* middle tabs if more than two */
+.navButtonContainer .navButton:not(:first-child):not(:last-child) {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
 }
 
 .navButton:hover {
-  background-color: #d0d8e8;
+  background-color: #e8eaed;
 }
 
 .navButton--selected {
   background-color: #ffffff;
-  border-color: #a8b4c8;
-  border-bottom: 2px solid #ffffff;
+  border-color: #e0e0e0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   z-index: 1;
+  position: relative;
+  border: 1.5px solid #e0e0e0 !important;
+}
+
+.navButton--selected .navButtonSvgIcon {
+  filter: brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1600%) hue-rotate(206deg) brightness(96%) contrast(92%);
 }
 
 .navButton--selected .navButtonButtonText {
-  color: #1a1a2e;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.navButtonSvgIcon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  filter: brightness(0) saturate(100%);
+}
+
+.navButtonIcon {
+  display: inline-flex;
+  line-height: 1;
 }
 
 .navButtonButtonText {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  color: #3a4560;
+  color: #1c1e21;
 }
 
 .navButtonContainer {
   display: flex;
   gap: 0;
-  align-items: flex-end;
+  align-items: center;
   margin-left: auto;
 }
 
