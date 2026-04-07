@@ -1,11 +1,7 @@
 import unittest
 
-import numpy as np
 import pandas as pd
 
-from app.set_id_column import set_id_column
-from detectors.anomaly import anomaly
-from detectors.missing_value import missing_value
 from wranglers.remove_data import remove_data
 
 

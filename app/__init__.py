@@ -115,11 +115,16 @@ create_database_if_not_exists(connection, db_name)
 print(f"Connecting to database: {db_name}")
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
-from app.db_functions_sql import DBOperations
+from app.db_utils.db_functions_sql import DBOperations
 db_operations = DBOperations(engine)
 
 """ Global vars to use throughout session """
 wrangle_occurred = False
 app.pgraph_for_session = None
 
-#manages the different data instances of the data during the users session
+from app.routes import routes
+from app.routes import wrangler_routes_sql
+from app.routes import plot_routes
+from app.routes import filter_routes
+
+

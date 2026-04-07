@@ -10,10 +10,10 @@ from sqlalchemy import text as sa_text
 import pandas as pd
 
 import app
-from app import query
+from app.db_utils import query
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
-from app.set_id_column import set_id_column
+from app.server_utils.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete

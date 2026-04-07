@@ -1,8 +1,6 @@
 import unittest
 import pandas as pd
-import numpy as np
 
-from app.plot_routes import attribute_summaries
 from data_management.data_attribute_summary_integration import get_categorical_stats, get_numeric_stats, \
     build_attribute_distributions, convert_error_list_to_dict, generate_complete_json
 

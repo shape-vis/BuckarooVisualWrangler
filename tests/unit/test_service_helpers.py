@@ -1,12 +1,9 @@
-from inspect import stack
 from unittest import TestCase
 
 import pandas as pd
 from numpy.ma.testutils import assert_equal
-from sqlalchemy import column
-from sqlalchemy.testing import assert_raises
 
-from app.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
+from app.server_utils.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
     get_range_of_ids_query, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
     group_by_attribute, get_error_dist
 from wranglers.remove_data import remove_data

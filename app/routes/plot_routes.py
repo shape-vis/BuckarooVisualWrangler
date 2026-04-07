@@ -4,9 +4,8 @@ from flask import request
 import pandas as pd
 import traceback
 
-from app import app, engine, service_helpers, db_operations
-from app.service_helpers import group_by_attribute, get_whole_table_query
-from app.data_attribute_summary_integration import generate_complete_json
+from app import app, engine, db_operations
+from app.server_utils.data_attribute_summary_integration import generate_complete_json
 
 import math
 
@@ -234,7 +233,7 @@ def get_preview_histogram():
       bins       – bin count for 1d (default 10)
       x_bins, y_bins – bin counts for 2d (default 10)
     """
-    from app.db_functions_sql import DBOperations
+    from app.db_utils.db_functions_sql import DBOperations
 
     table  = request.args.get("tablename")
     type_  = request.args.get("type", "2d")
@@ -274,7 +273,7 @@ def get_preview_scatterplot():
       error_sample_count – default 300
       total_sample_count – default 1000
     """
-    from app.db_functions_sql import DBOperations
+    from app.db_utils.db_functions_sql import DBOperations
 
     table = request.args.get("tablename")
     x_column = request.args.get("x_column")

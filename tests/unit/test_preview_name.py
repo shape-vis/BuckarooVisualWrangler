@@ -6,7 +6,7 @@ both the preview name and its 'errors_<name>' sibling stay within the
 63-character PostgreSQL identifier limit.
 """
 import hashlib
-from app.service_helpers import _safe_pg_name
+from app.server_utils.service_helpers import _safe_pg_name
 
 MAX_LEN = 56  # 63 - len("errors_")
 

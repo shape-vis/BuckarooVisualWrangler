@@ -2,25 +2,19 @@
 #This file handles all endpoints from the front-end
 
 
-import re
-import numpy as np
 import pandas as pd
 from flask import request, send_file
 import time
-from sqlalchemy import text as sa_text
 from app import app
 from app import db_operations, engine
-from app.service_helpers import (
+from app.server_utils.service_helpers import (
     generate_table_name,
     run_detectors,
-    get_whole_table_query,
     get_sqlalchemy_dtype_map,
-    create_error_dict,
     calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo,
 
 )
-from app.set_id_column import set_id_column
-import json
+from app.server_utils.set_id_column import set_id_column
 
 
 def load_file(csv_file, filename):
@@ -179,4 +173,4 @@ def reset_app():
 
 @app.get("/")
 def home():
-    return send_file("../ui/dist/index.html")
+    return send_file("../../ui/dist/index.html")

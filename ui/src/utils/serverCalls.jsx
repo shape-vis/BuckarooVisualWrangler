@@ -302,6 +302,15 @@ export async function redoWrangle() {
     }
 }
 
+export async function getPGraph(){
+    try {
+        const response = await fetch("/api/routes/update_p_graph", {method: "GET"});
+        return await response.json();
+    } catch (error) {
+        console.error("[getPGraph]", error.message)
+    }
+}
+
 export async function resetApp() {
     try {
         const response = await fetch("/api/reset", { method: "POST" });

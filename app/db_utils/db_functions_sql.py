@@ -2,9 +2,9 @@ from collections import defaultdict
 
 import pandas as pd
 
-from . import service_helpers
-from .filtering_sql import FilteringSQL
-from .execute_sql import fetch_sql, execute_sql
+from app.server_utils import service_helpers
+from app.db_utils.filtering_sql import FilteringSQL
+from app.db_utils.execute_sql import fetch_sql, execute_sql
 
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
