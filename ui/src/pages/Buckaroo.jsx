@@ -13,6 +13,7 @@ import "../styles/Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
 import { RepairProvider } from "../utils/RepairContext.jsx";
+import {PGraphProvider} from "../utils/PGraphContext.tsx";
 
 export const ViewContext = createContext();
 
@@ -34,6 +35,7 @@ export default function Buckaroo({ onReset }) {
         <>
             <ViewContext.Provider value={{ activeView, setActiveView }}>
                 <SettingsProvider>
+                <PGraphProvider>
                 <RowRangeProvider>
                 <SelectionProvider>
                 <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
@@ -72,6 +74,7 @@ export default function Buckaroo({ onReset }) {
                 </RepairProvider>
                 </SelectionProvider>
                 </RowRangeProvider>
+                </PGraphProvider>
                 </SettingsProvider>
             </ViewContext.Provider>
         </>

@@ -2,6 +2,7 @@
 #This file helps deliver on endpoint services
 
 import hashlib
+import json
 import random
 import string
 import re
@@ -19,7 +20,15 @@ from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 
-
+def get_current_pgraph():
+    """
+    Every Python object has a __dict__ attribute that stores its
+    attributes in a dictionary form. By accessing this attribute,
+    you can quickly convert the object's data into a dictionary,
+    which can then be serialized into a JSON string using json.dumps()
+    :return:
+    """
+    return json.dumps(app.pgraph_for_session.__dict__)
 
 def _validate_identifier(name: str) -> str:
     """
