@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Modal from "./Modal.jsx";
-import { useRowRange } from "../utils/RowRangeContext.jsx";
-import { useSettings } from "../utils/SettingsContext.jsx";
+import { useRowRange } from "../store/RowRangeContext.jsx";
+import { useSettings } from "../store/SettingsContext.jsx";
 import "../styles/SettingsModal.css";
 
 export default function SettingsModal({ visible, onClose }) {

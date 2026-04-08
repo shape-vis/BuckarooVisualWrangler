@@ -1,13 +1,13 @@
 import { useContext, useState, useEffect, useCallback } from "react";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
-import { SelectionContext } from "../utils/SelectionContext.jsx";
-import { executeWrangle } from "../utils/serverCalls.jsx";
-import { useTableName } from "../utils/TableNameContext.jsx";
-import { useLoading } from "../utils/LoadingContext.jsx";
-import { useRepair } from "../utils/RepairContext.jsx";
+import { SelectionContext } from "../store/SelectionContext.jsx";
+import { executeWrangle } from "../store/serverCalls.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
+import { useLoading } from "../store/LoadingContext.jsx";
+import { useRepair } from "../store/RepairContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "../styles/RepairPanel.css";
-import { errorColors as ERROR_COLORS } from "../utils/errorColors.js";
+import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
 
 export default function RepairPanel() {
   const { setTableName } = useTableName();

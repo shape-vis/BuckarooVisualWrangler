@@ -4,16 +4,16 @@ import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
 import RepairPanel from "../panels/RepairPanel.jsx";
-import { SelectionProvider } from "../utils/SelectionContext.jsx";
-import { RowRangeProvider } from "../utils/RowRangeContext.jsx";
-import { SettingsProvider } from "../utils/SettingsContext.jsx";
+import { SelectionProvider } from "../store/SelectionContext.jsx";
+import { RowRangeProvider } from "../store/RowRangeContext.jsx";
+import { SettingsProvider } from "../store/SettingsContext.jsx";
 
-import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../utils/visualizationCaches.jsx";
+import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../store/visualizationCaches.jsx";
 import "../styles/Buckaroo.css";
 import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
-import { RepairProvider } from "../utils/RepairContext.jsx";
-import {PGraphProvider} from "../utils/PGraphContext.tsx";
+import { RepairProvider } from "../store/RepairContext.jsx";
+import {PGraphProvider} from "../store/PGraphContext.tsx";
 
 export const ViewContext = createContext();
 

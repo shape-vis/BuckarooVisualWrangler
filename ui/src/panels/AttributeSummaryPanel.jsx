@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 
-import { queryAttributeSummaries } from "../utils/serverCalls.jsx";
-import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
-import { truncateText } from "../utils/textUtils.js";
+import { queryAttributeSummaries } from "../store/serverCalls.jsx";
+import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
+import { truncateText } from "../store/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
-import { useTableName } from "../utils/TableNameContext.jsx";
-import { useLoading } from "../utils/LoadingContext.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
+import { useLoading } from "../store/LoadingContext.jsx";
 
 import "../styles/AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";

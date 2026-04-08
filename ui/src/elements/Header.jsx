@@ -2,10 +2,10 @@ import {NavButton, IconButton} from "./Buttons.jsx";
 import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
-import { resetApp } from "../utils/serverCalls.jsx";
-import { useTableName } from "../utils/TableNameContext.jsx";
-import { useLoading } from "../utils/LoadingContext.jsx";
-import { useRepair } from "../utils/RepairContext.jsx";
+import { resetApp } from "../store/serverCalls.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
+import { useLoading } from "../store/LoadingContext.jsx";
+import { useRepair } from "../store/RepairContext.jsx";
 import "../styles/Header.css"
 
 function TableStatus() {

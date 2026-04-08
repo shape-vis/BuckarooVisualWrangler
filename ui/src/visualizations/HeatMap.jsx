@@ -1,14 +1,14 @@
 // Heatmap.jsx
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
-import { useSelection } from "../utils/SelectionContext.jsx";
-import { useRowRange } from "../utils/RowRangeContext.jsx";
-import { useTableName } from "../utils/TableNameContext.jsx";
+import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRows } from "../store/serverCalls.jsx";
+import { createHybridScales, createTooltip } from "../store/visCommon.jsx";
+import { useSelection } from "../store/SelectionContext.jsx";
+import { useRowRange } from "../store/RowRangeContext.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
-import { heatMapCache } from "../utils/visualizationCaches.jsx";
+import { heatMapCache } from "../store/visualizationCaches.jsx";
 const baseSampleCache = heatMapCache;
 
 function Heatmap({

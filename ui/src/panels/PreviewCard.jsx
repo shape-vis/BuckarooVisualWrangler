@@ -4,8 +4,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
-import { queryPreviewHistogram, queryPreviewScatterplot } from "../utils/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import { queryPreviewHistogram, queryPreviewScatterplot } from "../store/serverCalls.jsx";
+import { createHybridScales, createTooltip } from "../store/visCommon.jsx";
 import "../styles/PreviewCard.css";
 
 const PLOT_SIZE  = 150;   // px – inner chart area (square)

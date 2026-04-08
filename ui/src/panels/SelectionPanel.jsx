@@ -4,9 +4,9 @@ import HeatMap from "../visualizations/HeatMap.jsx";
 import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
 import "../styles/SelectionPanel.css";
-import { updateBackendAttributes } from "../utils/serverCalls.jsx";
-import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
-import { useTableName } from "../utils/TableNameContext.jsx";
+import { updateBackendAttributes } from "../store/serverCalls.jsx";
+import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
+import { useTableName } from "../store/TableNameContext.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
 function MagnifierIcon({ x, y, onClick }) {

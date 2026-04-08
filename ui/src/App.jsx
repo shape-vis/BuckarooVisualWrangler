@@ -1,8 +1,8 @@
 import Home from './pages/Home'
 import Buckaroo from './pages/Buckaroo'
 import { useState } from 'react';
-import { TableNameProvider } from './utils/TableNameContext.jsx';
-import { LoadingProvider } from './utils/LoadingContext.jsx';
+import { TableNameProvider } from './store/TableNameContext.jsx';
+import { LoadingProvider } from './store/LoadingContext.jsx';
 
 export default function App() {
 
