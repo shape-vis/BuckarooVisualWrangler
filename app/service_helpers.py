@@ -491,10 +491,14 @@ def get_error_dist(error_df,normal_df):
     :param normal_df: the normal dataframe to get the total number of IDs from
     :return: a pivot table of the error distribution
     """
+    if error_df.empty:
+        return pd.DataFrame(columns=["error_type"])
+
     res = error_df.pivot_table("row_id", index="error_type", columns='column_id', aggfunc="count")
-    res_mask = res.fillna(0)
+    res_mask = res.fillna(0).astype(float)
     total_ids = normal_df['ID'].count()
-    res_mask.iloc[:, 0:] = res_mask.iloc[:, 0:].div(total_ids)
+    if total_ids > 0:
+        res_mask = res_mask.div(total_ids)
 
     # Flatten the multi-level columns
     res_mask = res_mask.reset_index()
