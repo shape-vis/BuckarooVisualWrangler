@@ -4,8 +4,6 @@ from flask import request
 import json
 import pandas as pd
 import traceback
-import uuid
-from sqlalchemy import text as sa_text
 
 from app import app, engine, service_helpers, db_operations
 from app.service_helpers import group_by_attribute, get_whole_table_query
@@ -57,45 +55,6 @@ def _parse_rarity_threshold_query_arg(default: float = 0.05):
     return service_helpers._normalize_rarity_threshold(raw, default=default)
 
 
-def _create_filtered_error_table(base_table_name: str, selected_anomaly_methods, rarity_threshold: float = 0.05):
-    normalized_methods = set(selected_anomaly_methods or ["zscore"])
-
-    filtered_table_name = service_helpers._safe_pg_name(
-        f"errors_{base_table_name}",
-        f"_filtered_{uuid.uuid4().hex[:10]}"
-    )
-    service_helpers.materialize_selected_errors_table(
-        base_table_name,
-        filtered_table_name,
-        anomaly_methods=list(normalized_methods),
-        rarity_threshold=rarity_threshold,
-    )
-    return filtered_table_name, filtered_table_name
-
-
-def _drop_filtered_error_table(table_name):
-    if not table_name:
-        return
-
-    with engine.begin() as conn:
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{table_name}"'))
-
-
-def _build_ops_for_request(request_table_name, selected_anomaly_methods, rarity_threshold):
-    from app.db_functions_sql import DBOperations
-
-    table_name = request_table_name or db_operations.main_table_name
-    error_table_name, cleanup_table_name = _create_filtered_error_table(
-        table_name,
-        selected_anomaly_methods,
-        rarity_threshold,
-    )
-
-    request_ops = DBOperations(engine)
-    request_ops.load_table(table_name, error_table_name=error_table_name)
-    return request_ops, table_name, error_table_name, cleanup_table_name
-
-
 def _sync_active_hists(request_ops):
     db_operations.active_hists.update(request_ops.active_hists)
 
@@ -115,14 +74,18 @@ def get_1d_histogram():
     cleanup_table_name = None
 
     try:
-        request_ops, _, _, cleanup_table_name = _build_ops_for_request(request_table_name, selected_anomaly_methods, rarity_threshold)
+        request_ops, _, _, cleanup_table_name = db_operations.build_filtered_request_ops(
+            request_table_name,
+            selected_anomaly_methods,
+            rarity_threshold
+        )
         histogram = request_ops.generate_one_d_histogram_with_errors(column, bin_count)
         _sync_active_hists(request_ops)
         return {"success": True, "histogram": histogram}
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:
-        _drop_filtered_error_table(cleanup_table_name)
+        db_operations.drop_error_table(cleanup_table_name)
 
 @app.get("/api/plots/2-d-histogram")
 def get_2d_histogram():
@@ -140,14 +103,18 @@ def get_2d_histogram():
     cleanup_table_name = None
 
     try:
-        request_ops, _, _, cleanup_table_name = _build_ops_for_request(request_table_name, selected_anomaly_methods, rarity_threshold)
+        request_ops, _, _, cleanup_table_name = db_operations.build_filtered_request_ops(
+            request_table_name,
+            selected_anomaly_methods,
+            rarity_threshold
+        )
         histogram = request_ops.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
         _sync_active_hists(request_ops)
         return {"success": True, "histogram": histogram}
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:
-        _drop_filtered_error_table(cleanup_table_name)
+        db_operations.drop_error_table(cleanup_table_name)
 
 
 
@@ -165,7 +132,7 @@ def get_top_error_rows():
 
     try:
         service_helpers._validate_identifier(table)
-        error_table_name, cleanup_table_name = _create_filtered_error_table(
+        request_ops, _, error_table_name, cleanup_table_name = db_operations.build_filtered_request_ops(
             table,
             selected_anomaly_methods,
             rarity_threshold,
@@ -185,7 +152,7 @@ def get_top_error_rows():
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:
-        _drop_filtered_error_table(cleanup_table_name)
+        db_operations.drop_error_table(cleanup_table_name)
 
 
 @app.get("/api/plots/scatterplot")
@@ -202,14 +169,18 @@ def get_scatterplot_data():
     cleanup_table_name = None
 
     try:
-        request_ops, _, _, cleanup_table_name = _build_ops_for_request(table, selected_anomaly_methods, rarity_threshold)
+        request_ops, _, _, cleanup_table_name = db_operations.build_filtered_request_ops(
+            table,
+            selected_anomaly_methods,
+            rarity_threshold
+        )
         scatterplot_data = request_ops.generate_scatterplot_with_errors(x_column_name, y_column_name, error_sample_count, total_sample_count)
         return {"success": True, "scatterplot_data": scatterplot_data}
 
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:
-        _drop_filtered_error_table(cleanup_table_name)
+        db_operations.drop_error_table(cleanup_table_name)
 
 
 @app.post("/api/plots/rows-in-bin")
@@ -323,7 +294,11 @@ def attribute_summaries():
     cleanup_table_name = None
     try:
         tablename = request.args.get("tablename") or db_operations.main_table_name
-        _, _, error_table_name, cleanup_table_name = _build_ops_for_request(tablename, selected_anomaly_methods, rarity_threshold)
+        _, _, error_table_name, cleanup_table_name = db_operations.build_filtered_request_ops(
+            tablename,
+            selected_anomaly_methods,
+            rarity_threshold
+        )
         print(f"Generating attribute summaries for table {tablename}")
         table_attribute_summaries = generate_complete_json(
             tablename,
@@ -338,7 +313,7 @@ def attribute_summaries():
         traceback.print_exc()
         return {"success": False, "error": str(e)}
     finally:
-        _drop_filtered_error_table(cleanup_table_name)
+        db_operations.drop_error_table(cleanup_table_name)
 
 @app.get("/api/plots/preview-histogram")
 def get_preview_histogram():

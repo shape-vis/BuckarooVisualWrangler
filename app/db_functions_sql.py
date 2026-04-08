@@ -2,6 +2,8 @@ from collections import defaultdict
 
 from .filtering_sql import FilteringSQL
 from .execute_sql import fetch_sql
+import uuid
+from sqlalchemy import text as sa_text
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
 with support for data filtering and error annotation overlays on all chart types.
@@ -146,6 +148,58 @@ class DBOperations:
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
         self.active_hists = {}
+
+    def create_filtered_error_table(self, selected_anomaly_methods=None, rarity_threshold: float = 0.05):
+        """
+        Materialize a temporary filtered error table for the currently loaded main table.
+        Returns the filtered error table name.
+        """
+        if not self.main_table_name:
+            raise ValueError("No main table is loaded in DBOperations.")
+
+        from app import service_helpers
+
+        normalized_methods = set(selected_anomaly_methods or ["zscore"])
+        filtered_table_name = service_helpers._safe_pg_name(
+            f"errors_{self.main_table_name}",
+            f"_filtered_{uuid.uuid4().hex[:10]}"
+        )
+        service_helpers.materialize_selected_errors_table(
+            self.main_table_name,
+            filtered_table_name,
+            anomaly_methods=list(normalized_methods),
+            rarity_threshold=rarity_threshold,
+        )
+        return filtered_table_name
+
+    def drop_error_table(self, table_name: str | None):
+        """
+        Drop a temporary error table if one was created for a request.
+        """
+        if not table_name:
+            return
+
+        with self.engine.begin() as conn:
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{table_name}"'))
+
+    def build_filtered_request_ops(self, request_table_name=None, selected_anomaly_methods=None, rarity_threshold: float = 0.05):
+        """
+        Create a request-scoped DBOperations object pointed at a filtered temporary
+        error table for the requested or currently loaded main table.
+        Returns the request ops, resolved table name, error table name, and cleanup table name.
+        """
+        table_name = request_table_name or self.main_table_name
+        if not table_name:
+            raise ValueError("No table name provided and no main table is loaded.")
+
+        request_ops = self.__class__(self.engine)
+        request_ops.load_table(table_name)
+        cleanup_table_name = request_ops.create_filtered_error_table(
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
+        )
+        request_ops.load_table(table_name, error_table_name=cleanup_table_name)
+        return request_ops, table_name, cleanup_table_name, cleanup_table_name
 
     def get_row_count(self, table_name: str) -> int:
         """

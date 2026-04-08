@@ -4,8 +4,8 @@ export const ERROR_TYPES = {
   total: "Total Error %",
   missing: "Missing Values",
   mismatch: "Data Type Mismatch",
-  anomaly: "Average Anomalies (Outliers)",
-  incomplete: "Incomplete Data (< 3 points)",
+  anomaly: "Anomalies",
+  incomplete: "Rare Values",
   none: "None",
 };
 
