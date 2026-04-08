@@ -21,7 +21,7 @@
 }
 
 .fullscreen-bg {
-    background-image: url('../../public/images/favicon/bg.jpg');
+    background-image: url('/images/favicon/bg.jpg');
     background-size: cover;
     min-height: 100vh;
     display: flex;
