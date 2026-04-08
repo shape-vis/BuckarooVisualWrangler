@@ -139,6 +139,31 @@ def _infer_sql_type(column_state) -> str:
     return "TEXT"
 
 
+def _coerce_value_for_sql_type(value, sql_type: str):
+    trimmed = _trimmed_value(value)
+    if trimmed == "":
+        return ""
+
+    if sql_type in {"BIGINT", "INTEGER", "SMALLINT"}:
+        parsed_int = _parse_integer_literal(trimmed)
+        return "" if parsed_int is None else str(parsed_int)
+
+    if sql_type == "DOUBLE PRECISION":
+        return trimmed
+
+    if sql_type == "BOOLEAN":
+        lowered = trimmed.lower()
+        truthy = {"true", "t", "yes", "y", "1"}
+        falsy = {"false", "f", "no", "n", "0"}
+        if lowered in truthy:
+            return "true"
+        if lowered in falsy:
+            return "false"
+        return trimmed
+
+    return trimmed
+
+
 def _analyze_csv_upload(csv_path: str):
     with open(csv_path, "r", encoding="utf-8-sig", newline="") as infile:
         reader = csv.DictReader(infile)
@@ -227,18 +252,27 @@ def _build_final_csv_for_sql(csv_path: str, analysis: dict):
                 for header in final_headers:
                     if header == "ID":
                         continue
-                    output_row[header] = normalized_row.get(header, "")
+                    output_row[header] = _coerce_value_for_sql_type(
+                        normalized_row.get(header, ""),
+                        final_column_types[header]
+                    )
             elif has_original_id:
                 output_row = {"ID": row_id, "Original_ID": normalized_row.get("ID", "")}
                 for header in final_headers:
                     if header in {"ID", "Original_ID"}:
                         continue
-                    output_row[header] = normalized_row.get(header, "")
+                    output_row[header] = _coerce_value_for_sql_type(
+                        normalized_row.get(header, ""),
+                        final_column_types[header]
+                    )
                 row_id += 1
             else:
                 output_row = {"ID": row_id}
                 for header in original_headers:
-                    output_row[header] = normalized_row.get(header, "")
+                    output_row[header] = _coerce_value_for_sql_type(
+                        normalized_row.get(header, ""),
+                        final_column_types[header]
+                    )
                 row_id += 1
 
             writer.writerow(output_row)
