@@ -16,6 +16,7 @@ export default function Home( { onSuccess } ) {
     console.log("Loading dataset:", path);
 
     setUploading(true);
+    setUploadError(null);
 
     try {
       const response = await fetch("/api/preloaded?file=" + encodeURIComponent(path), {
@@ -27,6 +28,9 @@ export default function Home( { onSuccess } ) {
       }
 
       const data = await response.json();
+      if (!data?.success || !data?.table_name) {
+        throw new Error(data?.error || "Dataset load failed.");
+      }
 
       onSuccess(data);
 
@@ -44,6 +48,7 @@ export default function Home( { onSuccess } ) {
     fileToSend.append("file", uploadedFile);
 
     setUploading(true);
+    setUploadError(null);
 
     try {
       const response = await fetch("/api/upload", {
@@ -56,6 +61,9 @@ export default function Home( { onSuccess } ) {
       }
 
       const data = await response.json();
+      if (!data?.success || !data?.table_name) {
+        throw new Error(data?.error || "Upload failed.");
+      }
 
       onSuccess(data);
 

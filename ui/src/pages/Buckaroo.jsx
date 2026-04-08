@@ -20,8 +20,12 @@ export default function Buckaroo({ onReset, uploadResponse }) {
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const table_name = uploadResponse?.table_name || "unknown_table";
+    const table_name = uploadResponse?.table_name;
     const [activeView, setActiveView] = useState("plots");
+
+    if (!table_name) {
+        return null;
+    }
 
     return (
         <>

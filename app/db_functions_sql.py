@@ -75,7 +75,7 @@ class ColumnTypes:
             f"""(
                 SELECT '{col}' AS column_name
                 FROM "{main_table_name}"
-                WHERE "{col}" ~ {numeric_regex}
+                WHERE "{col}"::text ~ {numeric_regex}
                 LIMIT 1
             )"""
             for col in self.categorical_mixed
