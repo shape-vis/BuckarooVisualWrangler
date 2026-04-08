@@ -10,10 +10,6 @@ from sqlalchemy import text as sa_text
 import pandas as pd
 from app import engine
 from app.set_id_column import set_id_column
-from detectors.anomaly import anomaly
-from detectors.datatype_mismatch import datatype_mismatch
-from detectors.incomplete import incomplete
-from detectors.missing_value import missing_value
 from postgres_wrangling import query
 
 
@@ -451,20 +447,26 @@ def refresh_rankings_table(
         conn.execute(create_sql, params)
 
 
-def run_detectors(data_frame):
+def run_detectors(
+    table_name: str,
+    anomaly_method: str = "zscore",
+    anomaly_methods=None,
+    rarity_threshold: float = 0.05
+):
     """
-    Runs all 4 detectors that are implemented
-    on the server, on the data, and returns a compiled dataframe of the complete errors
-    :param data_frame:the dataframe to run the detectors on
-    :return: a single compiled dataframe of all the errors detected
+    Run all detector categories for a table and return a unified long error dataframe.
     """
-    df_with_id = set_id_column(data_frame)
-    anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
-    return perform_melt(frames)
+    sql, params = _build_materialized_errors_select_query(
+        table_name,
+        anomaly_method=anomaly_method,
+        anomaly_methods=anomaly_methods,
+        rarity_threshold=rarity_threshold
+    )
+
+    combined = pd.read_sql_query(sql, engine, params=params)
+    if combined.empty:
+        return pd.DataFrame(columns=["row_id", "column_id", "error_type", "raw_error_type", "rarity_score"])
+    return combined
 
 def calculate_attribute_rankings(error_df):
     """
