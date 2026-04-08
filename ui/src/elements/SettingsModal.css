@@ -33,7 +33,7 @@
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
-    width: 280px;
+    width: 320px;
     padding: 10px 12px 12px;
     border: 1px solid #e2e7f0;
     border-radius: 10px;
@@ -55,15 +55,36 @@
     cursor: pointer;
 }
 
+.settings-slider-ticks {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: -2px;
+}
+
+.settings-slider-tick-slot {
+    flex: 1 1 56px;
+    display: flex;
+    justify-content: center;
+}
+
+.settings-slider-tick {
+    width: 1px;
+    height: 8px;
+    background: #8f98aa;
+    border-radius: 999px;
+}
+
 .settings-slider-presets {
     display: flex;
     justify-content: space-between;
     gap: 8px;
     margin-top: 2px;
+    flex-wrap: wrap;
 }
 
 .settings-preset-btn {
-    flex: 1;
+    flex: 1 1 56px;
     padding: 6px 0;
     border: 1px solid #dddfe2;
     border-radius: 999px;

@@ -4,9 +4,9 @@ import { useRowRange } from "../utils/RowRangeContext.jsx";
 import { useSettings } from "../utils/SettingsContext.jsx";
 import "./SettingsModal.css";
 
-const RARITY_PRESETS = [0.01, 0.05, 0.10, 0.15];
-const MIN_RARITY = 0.01;
-const MAX_RARITY = 0.15;
+const RARITY_PRESETS = [0.001, 0.01, 0.05, 0.10, 0.20];
+const MIN_RARITY = 0.001;
+const MAX_RARITY = 0.20;
 const RARITY_STEP = 0.0001;
 
 export default function SettingsModal({ visible, onClose }) {
@@ -105,6 +105,10 @@ export default function SettingsModal({ visible, onClose }) {
 
     function formatPercent(value) {
         return `${(value * 100).toFixed(2)}%`;
+    }
+
+    function formatPresetPercent(value) {
+        return value < 0.01 ? `${(value * 100).toFixed(2)}%` : `${Math.round(value * 100)}%`;
     }
 
     return (
@@ -206,15 +210,16 @@ export default function SettingsModal({ visible, onClose }) {
                         min={MIN_RARITY}
                         max={MAX_RARITY}
                         step={RARITY_STEP}
-                        list="rarity-threshold-presets"
                         value={localRarityThreshold}
                         onChange={handleRaritySliderChange}
                     />
-                    <datalist id="rarity-threshold-presets">
+                    <div className="settings-slider-ticks" aria-hidden="true">
                         {RARITY_PRESETS.map(value => (
-                            <option key={value} value={value} label={`${value * 100}%`} />
+                            <span key={value} className="settings-slider-tick-slot">
+                                <span className="settings-slider-tick" />
+                            </span>
                         ))}
-                    </datalist>
+                    </div>
                     <div className="settings-slider-presets">
                         {RARITY_PRESETS.map(value => (
                             <button
@@ -222,7 +227,7 @@ export default function SettingsModal({ visible, onClose }) {
                                 className={`settings-preset-btn ${Math.abs(localRarityThreshold - value) < (RARITY_STEP / 2) ? "settings-preset-btn--active" : ""}`}
                                 onClick={() => handlePresetClick(value)}
                             >
-                                {Math.round(value * 100)}%
+                                {formatPresetPercent(value)}
                             </button>
                         ))}
                     </div>
