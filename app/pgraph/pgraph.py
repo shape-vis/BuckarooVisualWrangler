@@ -4,6 +4,7 @@ the class for the pgraph which creates the DAG structure - March 31, 2026 - Nico
 uses a dictionary to have parent <--> child interaction
 to traverse up and down, it access' the child's parent node
 """
+import json
 from typing import TypedDict
 
 from sqlalchemy import String
@@ -26,6 +27,48 @@ class PGraph:
         self.next_node_table_name = None
         self.current_node_table_name = None
 
+    def serialize_node_map(self):
+        ser_map = {}
+        for key in self.node_map.keys():
+            node = self.node_map[key]
+            ser_map[key] = json.dumps(node, default=lambda o: o.__json__()
+                         if hasattr(o, '__json__') else None)
+        return ser_map
+
+    def __json__(self):
+        return {
+            "nodes": self.serialize_node_map(),
+            "edges": self.serialize_edges(),
+            "current_table": self.current_node_table_name,
+            "prev_table": self.prev_node_table_name,
+            "next_table": self.next_node_table_name
+        }
+
+    def serialize_nodes(self):
+        list_of_nodes = []
+        for key in self.node_map.keys():
+            list_of_nodes.append(
+                {
+                    "id": key,
+                    "data": {"label": key},
+                    "position": ""
+                }
+            )
+        return list_of_nodes
+
+    def serialize_edges(self):
+        list_of_edges = []
+        for k,v in self.node_map.items():
+            list_of_edges.append(
+                {
+                    "id": f"e{k+v}",
+                    "source": k,
+                    "target": v,
+                    "type": "edgeType",
+                    "animated": "true"
+                }
+            )
+        return list_of_edges
 
     def add_node(self, node: GraphNode):
         new_node_table_name = node.table_name
@@ -47,6 +90,8 @@ class PGraph:
 
         self.prev_node_table_name = self.current_node_table_name
         self.current_node_table_name = root_node_table_name
+
+        self.root_node = root_node_table_name
 
     def get_new_node_id(self):
         return f"n{self.node_count}"

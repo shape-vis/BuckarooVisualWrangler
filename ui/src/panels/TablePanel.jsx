@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { useEffect, useState } from "react";
-import { queryTopErrorRows } from "../store/serverCalls.jsx";
+import { queryTopErrorRows } from "../utils/serverCalls.jsx";
 import CollapsiblePanel from "../elements/CollapsiblePanel";
-import { truncateText } from "../store/textUtils.js";
+import { truncateText } from "../utils/textUtils.js";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import "../styles/TablePanel.css";

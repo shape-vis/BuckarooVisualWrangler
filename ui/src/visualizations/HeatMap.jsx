@@ -1,8 +1,8 @@
 // Heatmap.jsx
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRows } from "../store/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../store/visCommon.jsx";
+import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
+import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../store/SelectionContext.jsx";
 import { useRowRange } from "../store/RowRangeContext.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";

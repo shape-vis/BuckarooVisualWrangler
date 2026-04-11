@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
-import { querySample2d, querySample2dRange } from "../store/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../store/visCommon.jsx";
+import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
+import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../store/SelectionContext.jsx";
 import { useRowRange } from "../store/RowRangeContext.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";

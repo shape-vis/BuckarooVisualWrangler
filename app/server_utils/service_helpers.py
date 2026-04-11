@@ -22,13 +22,11 @@ from detectors.missing_value import missing_value
 
 def get_current_pgraph():
     """
-    Every Python object has a __dict__ attribute that stores its
-    attributes in a dictionary form. By accessing this attribute,
-    you can quickly convert the object's data into a dictionary,
-    which can then be serialized into a JSON string using json.dumps()
+    uses the custom json function in graph to send a json version of the graph back to the view
     :return:
     """
-    return json.dumps(app.pgraph_for_session.__dict__)
+    return json.dumps(app.pgraph_for_session, default=lambda o: o.__json__() if hasattr(o, '__json__') else None)
+
 
 def _validate_identifier(name: str) -> str:
     """

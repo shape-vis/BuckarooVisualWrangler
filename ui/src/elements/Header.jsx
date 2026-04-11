@@ -2,7 +2,7 @@ import {NavButton, IconButton} from "./Buttons.jsx";
 import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
-import { resetApp } from "../store/serverCalls.jsx";
+import { resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";

@@ -6,6 +6,8 @@
 import builtins
 import logging
 import os
+import pkgutil
+
 import psycopg2
 from dotenv import load_dotenv
 from flask import Flask
@@ -122,9 +124,9 @@ db_operations = DBOperations(engine)
 wrangle_occurred = False
 app.pgraph_for_session = None
 
-from app.routes import routes
-from app.routes import wrangler_routes_sql
-from app.routes import plot_routes
-from app.routes import filter_routes
+#this automatically imports any new route files added to the app/routes dir
+import app.routes as _routes_pkg
+for _, module_name, _ in pkgutil.iter_modules(_routes_pkg.__path__):
+    __import__(f"app.routes.{module_name}")
 
 

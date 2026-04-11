@@ -7,7 +7,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
-import {getPGraph} from "../store/serverCalls.jsx";
+import {getPGraph} from "../utils/serverCalls.jsx";
 import {usePgraph} from "../store/PGraphContext.tsx";
 
 

@@ -1,7 +1,7 @@
 import { useContext, useState, useEffect, useCallback } from "react";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { SelectionContext } from "../store/SelectionContext.jsx";
-import { executeWrangle } from "../store/serverCalls.jsx";
+import {executeWrangle, getPGraph} from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
@@ -10,11 +10,13 @@ import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
 
 export default function RepairPanel() {
+  // global contexts for this component
   const { setTableName } = useTableName();
   const { addLoader, removeLoader } = useLoading();
   const { highlightedRowIds, highlightedCols, clearHighlight } = useContext(SelectionContext);
   const { busy, setBusy, requestPreviews, registerRepairHandler, repairPanelOpenTrigger, repairPanelCloseTrigger, closeRepairPanel, onWrangleExecuted } = useRepair();
 
+  //local component state
   const [previewError, setPreviewError] = useState(null);
   const [previews, setPreviews] = useState(null);
   const [previewsGenerated, setPreviewsGenerated] = useState(false);
@@ -66,6 +68,7 @@ export default function RepairPanel() {
     addLoader();
     setPreviewError(null);
     const result = await executeWrangle(previewTableName);
+    const pGraphResult = await getPGraph();
     setBusy(false);
     removeLoader();
     if (result?.success) {

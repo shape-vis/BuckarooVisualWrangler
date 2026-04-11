@@ -2,7 +2,7 @@
 from app import app
 from app.server_utils.service_helpers import get_current_pgraph
 
-@app.get("api/routes/update_pgraph")
+@app.get("/api/routes/update_pgraph")
 def update_pgraph():
     return get_current_pgraph()
     
