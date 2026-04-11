@@ -22,14 +22,14 @@ class GraphNode:
         self.incomplete_metric = 0
         self.mismatch_metric = 0
 
-    def __json__(self):
-        return {
-            "parent_table": self.parent_table,
-            "wrangle_op": self.wrangle_op,
-            "table_name": self.table_name,
-            "error_table_name": self.error_table_name,
-            "children": self.children
-        }
+    # def __json__(self):
+    #     return {
+    #         "parent_table": self.parent_table,
+    #         "wrangle_op": self.wrangle_op,
+    #         "table_name": self.table_name,
+    #         "error_table_name": self.error_table_name,
+    #         "children": self.children
+    #     }
     def update_metrics(self, anomaly, missing, incomplete, mismatch):
 
         self.anomaly_metric = anomaly

@@ -37,7 +37,7 @@ class PGraph:
 
     def __json__(self):
         return {
-            "nodes": self.serialize_node_map(),
+            "nodes": self.serialize_nodes(),
             "edges": self.serialize_edges(),
             "current_table": self.current_node_table_name,
             "prev_table": self.prev_node_table_name,
@@ -50,24 +50,27 @@ class PGraph:
             list_of_nodes.append(
                 {
                     "id": key,
-                    "data": {"label": key},
-                    "position": ""
+                    "data": {"label": key}
                 }
             )
         return list_of_nodes
 
     def serialize_edges(self):
         list_of_edges = []
-        for k,v in self.node_map.items():
-            list_of_edges.append(
-                {
-                    "id": f"e{k+v}",
-                    "source": k,
-                    "target": v,
-                    "type": "edgeType",
-                    "animated": "true"
-                }
-            )
+        for node in self.node_map.values():
+            node_name = node.table_name
+            if len(node.children) == 0:
+                continue
+            for child in node.children:
+                list_of_edges.append(
+                    {
+                        "id": f"e{node_name+child}",
+                        "source": node_name,
+                        "target": child,
+                        "type": "edgeType",
+                        "animated": "true"
+                    }
+                )
         return list_of_edges
 
     def add_node(self, node: GraphNode):
