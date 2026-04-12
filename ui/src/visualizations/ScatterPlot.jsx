@@ -43,7 +43,7 @@ function ScatterPlot({
 
   // ── data fetch ────────────────────────────────────────────────────────────
   useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}|${errorSampleCount}|${totalSampleCount}`;
+    const cacheKey = `${table_name}|${attrX}|${attrY}`;
 
     async function fetchData() {
       // Restore cached base sample instead of re-fetching (survives unmount/remount from focus zoom).

@@ -40,7 +40,7 @@ function Heatmap({
 
   // ── data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}|10`;
+    const cacheKey = `${table_name}|${attrX}|${attrY}`;
 
     async function fetchData() {
       // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
