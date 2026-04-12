@@ -153,7 +153,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                 <HistogramBarChart
                     cellID={cellID}
                     pos={{ x: focusedXPos, y: focusedYPos }}
-                    size={{ w: clampedSize, h: clampedSize }}
+                    size={clampedSize}
                     table_name={table_name}
                     attrX={xCol}
                     errorColors={errorColors}
@@ -271,7 +271,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                             <HistogramBarChart
                                 cellID={cellID}
                                 pos={{ x: xPos, y: yPos }}
-                                size={{ w: plotSize, h: plotSize }}
+                                size={plotSize}
                                 table_name={table_name}
                                 attrX={xCol}
                                 errorColors={errorColors}
