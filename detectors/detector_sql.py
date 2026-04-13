@@ -16,18 +16,19 @@ class DetectorWranglerSQL:
         self.categorical_mixed = categorical_mixed
 
 
-    def anomaly_outliers(self, methods: list, p_threshold: list = None) -> str:
+    def anomaly_outliers(self, methods: list, p_threshold: list = None):
         """
         Creates the full SQL query to apply each selected anomaly type to each numeric column.
 
         :arg: methods     - a list of anomaly types to apply.
         :arg: p_threshold - a list of thresholds to apply for each anomaly type respectively.
-                          - Null by default automatically populates reasonable threhsolds.
+                          - Null by default automatically populates reasonable thresholds.
         :return: full SQL query to gather all anomaly values.
         """
 
+        # Nothing to perform
         if len(methods) == 0 or len(self.numeric_cols) == 0:
-            return []
+            return None
 
         if p_threshold is None:
             p_threshold = [3, 1.5, 3]
@@ -78,10 +79,17 @@ class DetectorWranglerSQL:
                    WHERE "{col}" IS NOT NULL)'''
 
 
-    def build_mad_query(self, p_threshold):
+    def build_mad_query(self, p_threshold: float) -> str:
+        """
+        Creates the query for performing MAD (Median Absolute Deviation) on a given column.
+        Assumes that nonnull_col already exists for the desired column.
+
+        :arg: p_threshold - approximately how many standard deviations a value can be away from the median
+                            (with a constant scalar factor) to determine if the value is an outlier.
+        :return: query for MAD, final return are the row_ids, column, and anomaly type once run.
+        """
+
         # Assumes nonnull_col already exists from earlier.
-        if p_threshold is None:
-            p_threshold = 3
 
         # Get the median value of the column.
         median_cte = f''',\n median_cte AS (
@@ -108,9 +116,14 @@ class DetectorWranglerSQL:
         return "".join([median_cte, absolute_deviations, mad_deviation, get_mad_errors])
 
 
-    def build_iqr_query(self, p_threshold):
-        if p_threshold is None:
-            p_threshold = 1.5
+    def build_iqr_query(self, p_threshold: float) -> str:
+        """
+        Creates the query for performing IQR (Interquartile Range) on a given column.
+        Assumes that nonnull_col already exists for the desired column.
+
+        :arg: p_threshold - the scalar factor multiplied in the quartile_fences to determine outliers.
+        :return: query for IQR, final return are the row_ids, column, and anomaly type once run.
+        """
 
         # get the 25% and 75% quartiles.
         quartiles = f''',\n quartiles AS (
@@ -137,9 +150,15 @@ class DetectorWranglerSQL:
         return "".join([quartiles, quartile_fences, get_iqr_anomalies])
 
 
-    def build_zscore_query(self, p_threshold):
-        if p_threshold is None:
-            p_threshold = 3
+    def build_zscore_query(self, p_threshold: float) -> str:
+        """
+        Creates the query for performing Z-Score on a given column.
+        Assumes that nonnull_col already exists for the desired column.
+
+        :arg: p_threshold - determines how many standard deviations a value can be from the mean to be considered an
+                            outlier.
+        :return: query for Z-Score, final return are the row_ids, column, and anomaly type once run.
+        """
 
         # Get the mean and standard deviation.
         stats = f''',\n stats AS (
