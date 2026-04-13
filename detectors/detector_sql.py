@@ -16,7 +16,7 @@ class DetectorWranglerSQL:
         self.categorical_mixed = categorical_mixed
 
 
-    def anomaly_outliers(self, methods: list, p_threshold: list = None):
+    def anomaly_outliers(self, methods: list, p_threshold: list = None) -> str:
         """
         Creates the full SQL query to apply each selected anomaly type to each numeric column.
 
@@ -28,12 +28,12 @@ class DetectorWranglerSQL:
 
         # Nothing to perform
         if len(methods) == 0 or len(self.numeric_cols) == 0:
-            return None
+            return ""
 
         if p_threshold is None:
             p_threshold = [3, 1.5, 3]
 
-        col_anomaly_queries = ["("]
+        col_anomaly_queries = []
         for col in self.numeric_cols:
             # Filter out null values.
             nonnull_col = self.cte_nonnull_col(col, "numeric")
@@ -62,8 +62,6 @@ class DetectorWranglerSQL:
 
             # Adds a formatted CTE of type (col, nonnull_col (anomaly method 1 UNION ALL method 2...))
             col_anomaly_queries.append(formatted_col_query)
-
-        col_anomaly_queries.append(")")
 
         # Formats all the anomaly queries for each column.
         return "\nUNION ALL\n".join(col_anomaly_queries)
@@ -178,6 +176,71 @@ class DetectorWranglerSQL:
                                       AND ABS((nonnull_col - mean_val) / std_val) > {p_threshold}'''
 
         return "".join([stats, gather_zscore_anomalies])
+
+
+    def detect_rarity(self, rarity_threshold: float = 0.01) -> str:
+        """
+        Creates the query to find rare values for all categorical columns.
+
+        :arg: rarity_threshold - determines what percentage of present values a value has to be to be considered rare.
+        :return: query for rarity, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        if (len(self.categorical_mixed) + len(self.pure_categorical)) == 0:
+            return ""
+
+        rarity_gathering = []
+
+        for col in self.pure_categorical:
+            rarity_gathering.append(self.get_rare_values(col, rarity_threshold))
+
+        for col in self.categorical_mixed:
+            rarity_gathering.append(self.get_rare_values(col, rarity_threshold))
+
+        return "\nUNION ALL\n".join(rarity_gathering)
+
+
+    def get_rare_values(self, col, rarity_threshold: float) -> str:
+        """
+        Creates the query to find rare values for one categorical column.
+
+        :arg: col - name of the categorical column
+        :arg: rarity_threshold - determines what percentage of present values a value has to be to be considered rare.
+        :return: query for rarity, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        # Treat column as text data, treat empty strings as nulls.
+        cleaned = f'''WITH cleaned AS (
+                      SELECT "ID"::int, NULLIF(BTRIM("{col}"::text), '') AS normalized_value
+                      FROM "{self.main_table_name}")'''
+
+        # Get the count of each distinct non-null value.
+        value_counts = f''',\n value_counts AS (
+                           SELECT normalized_value, COUNT(*) AS value_count
+                           FROM cleaned
+                           WHERE normalized_value IS NOT NULL
+                           GROUP BY normalized_value)'''
+
+        # Get the total count of all values.
+        total_count = f''',\n total_counts AS (
+                          SELECT COALESCE(SUM(value_count), 0)::numeric AS total_count
+                          FROM value_counts)'''
+
+        # Get rare values based on the rarity threshold.
+        rare_values = f''',\n rare_values AS (
+                          SELECT normalized_value
+                          FROM value_counts, total_counts
+                          WHERE total_count > 0
+                          AND (value_count / total_count) <= {rarity_threshold}
+                          )'''
+
+        # Get all associated row values that fall into rarity.
+        gather_rare_values = f'''\n SELECT "ID", current_col, 'rare_value'
+                                 FROM cleaned c 
+                                 JOIN rare_values rv ON c.normalized_value = rv.normalized_value
+                                 '''
+
+        return "".join([cleaned, value_counts, total_count, rare_values, gather_rare_values])
 
 
 
