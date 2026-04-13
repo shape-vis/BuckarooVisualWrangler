@@ -39,8 +39,9 @@ class DetectorWranglerSQL:
             nonnull_col = self.cte_nonnull_col(col, "numeric")
 
             # Each nonnull col CTE is in anomaly query scope.
-            anomaly_queries = ["(", nonnull_col]
+            final_anomaly_queries = ["(", nonnull_col]
 
+            anomaly_queries = []
             for method in methods:
                 if method.tolower() == "mad":
                     anomaly_query = f"SELECT * FROM ({self.build_mad_query(p_threshold[0])}) AS mad"
@@ -52,8 +53,12 @@ class DetectorWranglerSQL:
 
                 anomaly_queries.append(anomaly_query)
 
-            anomaly_queries.append(")")
-            formatted_col_query = "".join(anomaly_queries)
+            formatted_anomaly_types = "\nUNION ALL\n".join(anomaly_queries)
+
+            final_anomaly_queries.append(formatted_anomaly_types)
+            final_anomaly_queries.append(")")
+
+            formatted_col_query = "".join(final_anomaly_queries)
 
             # Adds a formatted CTE of type (col, nonnull_col (anomaly method 1 UNION ALL method 2...))
             col_anomaly_queries.append(formatted_col_query)
