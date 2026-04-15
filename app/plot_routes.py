@@ -53,6 +53,17 @@ def _parse_rarity_threshold_query_arg(default: float = 0.05):
         return default
     return service_helpers._normalize_rarity_threshold(raw, default=default)
 
+
+def _parse_detector_request_options(table_arg_name: str = "tablename", default_table_name: str | None = None):
+    """
+    Parse the shared detector filter request options used across plot endpoints.
+    """
+    return {
+        "request_table_name": request.args.get(table_arg_name) or default_table_name,
+        "selected_anomaly_methods": _parse_anomaly_methods_query_arg(),
+        "rarity_threshold": _parse_rarity_threshold_query_arg(default=0.05),
+    }
+
 @app.get("/api/plots/1-d-histogram")
 def get_1d_histogram():
     """
@@ -61,18 +72,14 @@ def get_1d_histogram():
     """
 
     column = request.args.get("column")
-    request_table_name = request.args.get("tablename")
     bin_count = int(request.args.get("bins", default=10))
-    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
-    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
+    detector_options = _parse_detector_request_options()
 
     try:
         histogram = db_operations.generate_filtered_one_d_histogram(
             column=column,
             bin_count=bin_count,
-            request_table_name=request_table_name,
-            selected_anomaly_methods=selected_anomaly_methods,
-            rarity_threshold=rarity_threshold,
+            **detector_options,
         )
         return {"success": True, "histogram": histogram}
     except Exception as e:
@@ -86,11 +93,9 @@ def get_2d_histogram():
     """
     column_x = request.args.get("column_x")
     column_y = request.args.get("column_y")
-    request_table_name = request.args.get("tablename")
     x_bins = int(request.args.get("x_bins", default=10))
     y_bins = int(request.args.get("y_bins", default=10))
-    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
-    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
+    detector_options = _parse_detector_request_options()
 
     try:
         histogram = db_operations.generate_filtered_two_d_histogram(
@@ -98,9 +103,7 @@ def get_2d_histogram():
             column_y=column_y,
             x_bins=x_bins,
             y_bins=y_bins,
-            request_table_name=request_table_name,
-            selected_anomaly_methods=selected_anomaly_methods,
-            rarity_threshold=rarity_threshold,
+            **detector_options,
         )
         return {"success": True, "histogram": histogram}
     except Exception as e:
@@ -114,18 +117,15 @@ def get_top_error_rows():
     Endpoint to return data to be used to construct the table of errors in the view
     :return: the data from the database in JSON format specific to what the view needs to ingest it
     """
-    table = request.args.get("tablename") or db_operations.main_table_name
     num_rows = int(request.args.get("num_rows", default=10))
-    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
-    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
+    detector_options = _parse_detector_request_options(default_table_name=db_operations.main_table_name)
+    table = detector_options["request_table_name"]
 
     try:
         service_helpers._validate_identifier(table)
         top_data_result, top_errors_result = db_operations.get_filtered_top_error_rows(
             num_rows=num_rows,
-            request_table_name=table,
-            selected_anomaly_methods=selected_anomaly_methods,
-            rarity_threshold=rarity_threshold,
+            **detector_options,
         )
 
         return {
@@ -140,15 +140,13 @@ def get_top_error_rows():
 
 @app.get("/api/plots/scatterplot")
 def get_scatterplot_data():
-    table = request.args.get("tablename")
     x_column_name = request.args.get("x_column")
     y_column_name = request.args.get("y_column")
     min_id = request.args.get("min_id", default=0)
     max_id = request.args.get("max_id", default=200)
     error_sample_count = int(request.args.get("error_sample_count", default=30))
     total_sample_count = int(request.args.get("total_sample_count", default=100))
-    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
-    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
+    detector_options = _parse_detector_request_options()
 
     try:
         scatterplot_data = db_operations.generate_filtered_scatterplot(
@@ -156,9 +154,7 @@ def get_scatterplot_data():
             y_column_name=y_column_name,
             error_sample_count=error_sample_count,
             total_sample_count=total_sample_count,
-            request_table_name=table,
-            selected_anomaly_methods=selected_anomaly_methods,
-            rarity_threshold=rarity_threshold,
+            **detector_options,
         )
         return {"success": True, "scatterplot_data": scatterplot_data}
 
@@ -272,22 +268,19 @@ def attribute_summaries():
     Populates the error attribute summaries
     :return:
     """
-    selected_anomaly_methods = _parse_anomaly_methods_query_arg()
-    rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
+    detector_options = _parse_detector_request_options(default_table_name=db_operations.main_table_name)
     cleanup_table_name = None
     try:
-        tablename = request.args.get("tablename") or db_operations.main_table_name
+        tablename = detector_options["request_table_name"]
         _, _, error_table_name, cleanup_table_name = db_operations.build_filtered_request_ops(
-            tablename,
-            selected_anomaly_methods,
-            rarity_threshold
+            **detector_options,
         )
         print(f"Generating attribute summaries for table {tablename}")
         table_attribute_summaries = generate_complete_json(
             tablename,
             error_table_name=error_table_name,
-            anomaly_methods=selected_anomaly_methods,
-            rarity_threshold=rarity_threshold,
+            anomaly_methods=detector_options["selected_anomaly_methods"],
+            rarity_threshold=detector_options["rarity_threshold"],
         )
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:

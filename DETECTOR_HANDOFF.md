@@ -239,13 +239,17 @@ For a loaded table `<table>`:
 
 ### What is temporary
 
-For non-default detector filter requests, temporary filtered error tables are materialized on demand for:
+For non-default detector filter requests, filtered error tables are still materialized in SQL, but the lifecycle is now more cached than before.
 
 - plots
 - attribute summaries
 - top error rows
 
-These are created for request-scoped filtered analysis and then dropped afterward.
+The current branch now:
+
+- reuses the persisted `errors_<table>` table directly for the default detector state (`zscore` + `0.05`)
+- caches one non-default filtered error table per active detector setting in `DBOperations`
+- reuses already-loaded table metadata instead of rebuilding `ColumnTypes` / `FilteringSQL` for each filtered request
 
 ### What is SQL-backed now
 
@@ -273,6 +277,22 @@ Main maintainability concerns that remain:
 - more detector-related orchestration could still be moved into `DBOperations`
 - SQL function setup / deployment could be made more explicit and repeatable
 
+### Architecture / optimization work completed later
+
+Additional cleanup and optimization work in `refactor-detector-port` moved the branch closer to the older `filtering_refactor` structure without reverting to the pandas detector path.
+
+This included:
+
+- moving more filtered plot/top-row/scatterplot orchestration into `DBOperations`
+- thinning `plot_routes.py` so routes behave more like request adapters
+- reusing filtered detector state across requests instead of rebuilding request-scoped state more aggressively
+- deferring `ColumnTypes` construction off the critical upload path
+- adding a background metadata prewarm after upload so first-plot latency is less severe
+- centralizing repeated detector request parsing for:
+  - table name
+  - anomaly methods
+  - rarity threshold
+
 ## 6. Important Bugs Fixed During Integration
 
 The port/integration work uncovered and fixed several issues:
@@ -286,6 +306,7 @@ The port/integration work uncovered and fixed several issues:
 - mixed-column detection using regex directly on boolean columns
 - staged SQL upload writing integer-typed values like `2017.0` into `BIGINT` columns without coercion
 - settings slider tick marks rendering inconsistently because browser-native `datalist` ticks did not align well
+- upload blocking too long on eager metadata initialization
 
 ## 7. Validation / Testing Performed
 
@@ -353,6 +374,14 @@ The SQL-backed wrangle refresh path was tested by:
 - confirming errors/rankings tables still existed afterward
 - confirming error/ranking refresh continued to work
 
+### Later optimization validation
+
+Later optimization passes were validated by checking:
+
+- upload completion felt faster on larger datasets after lazy metadata loading
+- first plot load behavior after metadata prewarm remained functional
+- filtered histogram/scatter/top-row endpoints still responded correctly after route orchestration moved further into `DBOperations`
+
 ## 8. Known Caveats / Things To Be Aware Of
 
 ### High-cardinality datasets can look visually chaotic
@@ -390,6 +419,18 @@ This happened with StackOverflow:
 - some payloads did change
 - but dominant bins/categories made the visual differences hard to notice
 
+### Upload and first-plot latency are now better balanced, not eliminated
+
+The branch now trades less upload blocking for more background metadata preparation.
+
+Current behavior:
+
+- upload avoids eager `ColumnTypes` construction
+- backend warms metadata in the background after upload
+- first plot request can still build metadata on demand if it arrives before prewarm finishes
+
+This is a safer compromise than resumable background metadata builds, but it is not the final possible optimization.
+
 ### Provenance graph was not fully validated
 
 Main and branch integration happened, and conflicts were resolved, but a dedicated provenance-graph-specific validation pass was not completed.
@@ -413,6 +454,9 @@ If someone continues this work, the highest-value cleanup would be:
 - decide on a repeatable strategy for SQL function setup/deployment
 - verify provenance graph behavior specifically
 - add/update documentation so architecture docs match the current SQL-backed runtime path
+
+- move summaries further toward SQL / `DBOperations` so they are less pandas-heavy
+- optimize `ColumnTypes.gather_mixed_cols(...)`, which is still one of the more expensive metadata steps
 
 ## 10. How To Run / Test
 
