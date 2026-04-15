@@ -153,20 +153,48 @@ class DBOperations:
         self.filtering_table = None
         self.active_hists = {}
 
-    def load_table(self, main_table_name: str, error_table_name: str = None):
+    def _ensure_table_metadata_loaded(self):
         """
-        Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new
-        table
+        Lazily initialize metadata tied to the active main table.
+        """
+        if not self.main_table_name:
+            raise ValueError("Cannot load table metadata before a main table is set.")
+
+        if self.col_types is None:
+            self.col_types = ColumnTypes(self.main_table_name, self.engine)
+
+        if self.filtering_table is None or self.filtering_table.main_table_name != self.main_table_name:
+            self.filtering_table = FilteringSQL(self.main_table_name, self.engine)
+
+    def prewarm_table_metadata(self, table_name: str, error_table_name: str | None = None):
+        """
+        Best-effort metadata warmup for the current active table.
+        Used after upload so the first plot request doesn't pay the full metadata cost.
+        """
+        if self.main_table_name != table_name:
+            return
+
+        if error_table_name is not None:
+            self.error_table_name = error_table_name
+
+        self._ensure_table_metadata_loaded()
+
+    def load_table(self, main_table_name: str, error_table_name: str = None, initialize_col_types: bool = True):
+        """
+        Loads in the main and error tables and initializes backend helpers for the new table.
         :param main_table_name: the name of the table in the database without errors detected (raw data)
         :param error_table_name: explicit errors table name; defaults to "errors_" + main_table_name
+        :param initialize_col_types: whether to eagerly build ColumnTypes now or lazily on first plot request
         """
         if self.main_table_name != main_table_name:
             self._clear_cached_filtered_error_table()
 
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
-        self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
+        self.col_types = None
+        if initialize_col_types:
+            self.col_types = ColumnTypes(main_table_name, self.engine)
         self.active_hists = {}
 
     def _clone_loaded_state(self, error_table_name: str):
@@ -257,7 +285,8 @@ class DBOperations:
         if not table_name:
             raise ValueError("No table name provided and no main table is loaded.")
 
-        if self.main_table_name == table_name and self.col_types is not None and self.filtering_table is not None:
+        if self.main_table_name == table_name:
+            self._ensure_table_metadata_loaded()
             base_ops = self
         else:
             base_ops = self.__class__(self.engine)

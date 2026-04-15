@@ -6,6 +6,7 @@ import csv
 import math
 import os
 import tempfile
+import threading
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -309,6 +310,17 @@ def _load_csv_into_postgres(csv_path: str, table_name: str, headers, column_type
         raw_connection.close()
 
 
+def _prewarm_uploaded_table_metadata(table_name: str):
+    """
+    Warm metadata for the freshly uploaded table in the background so the first
+    plot request doesn't pay the full initialization cost.
+    """
+    try:
+        db_operations.prewarm_table_metadata(table_name, error_table_name=f"errors_{table_name}")
+    except Exception as exc:
+        print(f"Metadata prewarm skipped for table '{table_name}': {exc}")
+
+
 def load_file(csv_file, filename):
     """
     Load a CSV into Postgres using a staged COPY-based flow,
@@ -354,13 +366,15 @@ def load_file(csv_file, filename):
             rarity_threshold=0.05,
         )
 
-        """
-        now we fully init the DBOperations object that was first initialized in init.py,
-        get the actual row counts since .to_sql is buggy and not right
-        """
-        db_operations.load_table(table_name)
-        rows_affected = db_operations.get_row_count(table_name)
-        detected_rows_affected = db_operations.get_row_count("errors_" + table_name)
+        # Eagerly record the active table for the session, but defer the expensive
+        # ColumnTypes scan until the first plot request actually needs it.
+        db_operations.load_table(table_name, initialize_col_types=False)
+        threading.Thread(
+            target=_prewarm_uploaded_table_metadata,
+            args=(table_name,),
+            daemon=True,
+        ).start()
+        rows_affected = analysis["row_count"]
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name}
