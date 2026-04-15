@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from .filtering_sql import FilteringSQL
 from .execute_sql import fetch_sql
+import pandas as pd
 import uuid
 from sqlalchemy import text as sa_text
 """
@@ -299,6 +300,103 @@ class DBOperations:
         request_ops = base_ops._clone_loaded_state(error_table_name=error_table_name)
         cleanup_table_name = error_table_name if should_cleanup else None
         return request_ops, table_name, error_table_name, cleanup_table_name
+
+    def generate_filtered_one_d_histogram(
+        self,
+        column: str,
+        bin_count: int = 10,
+        request_table_name: str | None = None,
+        selected_anomaly_methods=None,
+        rarity_threshold: float = 0.05,
+    ):
+        request_ops, _, _, _ = self.build_filtered_request_ops(
+            request_table_name=request_table_name,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
+        )
+        histogram = request_ops.generate_one_d_histogram_with_errors(column, bin_count)
+        self.active_hists.update(request_ops.active_hists)
+        return histogram
+
+    def generate_filtered_two_d_histogram(
+        self,
+        column_x: str,
+        column_y: str,
+        x_bins: int = 10,
+        y_bins: int = 10,
+        request_table_name: str | None = None,
+        selected_anomaly_methods=None,
+        rarity_threshold: float = 0.05,
+    ):
+        request_ops, _, _, _ = self.build_filtered_request_ops(
+            request_table_name=request_table_name,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
+        )
+        histogram = request_ops.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
+        self.active_hists.update(request_ops.active_hists)
+        return histogram
+
+    def generate_filtered_scatterplot(
+        self,
+        x_column_name: str,
+        y_column_name: str,
+        error_sample_count: int = 30,
+        total_sample_count: int = 100,
+        request_table_name: str | None = None,
+        selected_anomaly_methods=None,
+        rarity_threshold: float = 0.05,
+    ):
+        request_ops, _, _, _ = self.build_filtered_request_ops(
+            request_table_name=request_table_name,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
+        )
+        return request_ops.generate_scatterplot_with_errors(
+            x_column_name,
+            y_column_name,
+            error_sample_count,
+            total_sample_count,
+        )
+
+    def get_filtered_top_error_rows(
+        self,
+        num_rows: int = 10,
+        request_table_name: str | None = None,
+        selected_anomaly_methods=None,
+        rarity_threshold: float = 0.05,
+    ):
+        table_name = request_table_name or self.main_table_name
+        if not table_name:
+            raise ValueError("No table name provided and no main table is loaded.")
+
+        _, resolved_table_name, error_table_name, _ = self.build_filtered_request_ops(
+            request_table_name=table_name,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
+        )
+        top_errors_query = (
+            f'SELECT * FROM "{error_table_name}" '
+            f'WHERE row_id IN ('
+            f' SELECT row_id FROM "{error_table_name}"'
+            f' GROUP BY row_id'
+            f' ORDER BY COUNT(*) DESC'
+            f' LIMIT {num_rows}'
+            f' ) ORDER BY row_id;'
+        )
+        top_data_query = (
+            f'WITH top_row_ids AS ('
+            f' SELECT row_id FROM "{error_table_name}"'
+            f' GROUP BY row_id'
+            f' ORDER BY COUNT(*) DESC'
+            f' LIMIT {num_rows}'
+            f' ) '
+            f'SELECT d.* FROM "{resolved_table_name}" d '
+            f'JOIN top_row_ids t ON d."ID" = t.row_id;'
+        )
+        top_errors_result = pd.read_sql_query(top_errors_query, self.engine)
+        top_data_result = pd.read_sql_query(top_data_query, self.engine)
+        return top_data_result, top_errors_result
 
     def get_row_count(self, table_name: str) -> int:
         """

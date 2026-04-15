@@ -6,7 +6,6 @@ import pandas as pd
 import traceback
 
 from app import app, engine, service_helpers, db_operations
-from app.service_helpers import group_by_attribute, get_whole_table_query
 from app.data_attribute_summary_integration import generate_complete_json
 
 import math
@@ -54,11 +53,6 @@ def _parse_rarity_threshold_query_arg(default: float = 0.05):
         return default
     return service_helpers._normalize_rarity_threshold(raw, default=default)
 
-
-def _sync_active_hists(request_ops):
-    db_operations.active_hists.update(request_ops.active_hists)
-
-
 @app.get("/api/plots/1-d-histogram")
 def get_1d_histogram():
     """
@@ -71,21 +65,18 @@ def get_1d_histogram():
     bin_count = int(request.args.get("bins", default=10))
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
     rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
-    cleanup_table_name = None
 
     try:
-        request_ops, _, _, cleanup_table_name = db_operations.build_filtered_request_ops(
-            request_table_name,
-            selected_anomaly_methods,
-            rarity_threshold
+        histogram = db_operations.generate_filtered_one_d_histogram(
+            column=column,
+            bin_count=bin_count,
+            request_table_name=request_table_name,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
         )
-        histogram = request_ops.generate_one_d_histogram_with_errors(column, bin_count)
-        _sync_active_hists(request_ops)
         return {"success": True, "histogram": histogram}
     except Exception as e:
         return {"success": False, "error": str(e)}
-    finally:
-        db_operations.drop_error_table(cleanup_table_name)
 
 @app.get("/api/plots/2-d-histogram")
 def get_2d_histogram():
@@ -100,21 +91,20 @@ def get_2d_histogram():
     y_bins = int(request.args.get("y_bins", default=10))
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
     rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
-    cleanup_table_name = None
 
     try:
-        request_ops, _, _, cleanup_table_name = db_operations.build_filtered_request_ops(
-            request_table_name,
-            selected_anomaly_methods,
-            rarity_threshold
+        histogram = db_operations.generate_filtered_two_d_histogram(
+            column_x=column_x,
+            column_y=column_y,
+            x_bins=x_bins,
+            y_bins=y_bins,
+            request_table_name=request_table_name,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
         )
-        histogram = request_ops.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
-        _sync_active_hists(request_ops)
         return {"success": True, "histogram": histogram}
     except Exception as e:
         return {"success": False, "error": str(e)}
-    finally:
-        db_operations.drop_error_table(cleanup_table_name)
 
 
 
@@ -128,20 +118,15 @@ def get_top_error_rows():
     num_rows = int(request.args.get("num_rows", default=10))
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
     rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
-    cleanup_table_name = None
 
     try:
         service_helpers._validate_identifier(table)
-        request_ops, _, error_table_name, cleanup_table_name = db_operations.build_filtered_request_ops(
-            table,
-            selected_anomaly_methods,
-            rarity_threshold,
+        top_data_result, top_errors_result = db_operations.get_filtered_top_error_rows(
+            num_rows=num_rows,
+            request_table_name=table,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
         )
-        top_errors_query = f'SELECT * FROM "{error_table_name}" WHERE row_id IN ( SELECT row_id FROM "{error_table_name}" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} ) ORDER BY row_id;'
-        top_errors_result = pd.read_sql_query(top_errors_query, engine)
-
-        top_data_query = f'WITH top_row_ids AS ( SELECT row_id FROM "{error_table_name}" GROUP BY row_id ORDER BY COUNT(*) DESC LIMIT {num_rows} )  SELECT d.*  FROM "{table}" d JOIN top_row_ids t ON d."ID" = t.row_id;'
-        top_data_result = pd.read_sql_query(top_data_query, engine)
 
         return {
             "success": True,
@@ -151,8 +136,6 @@ def get_top_error_rows():
 
     except Exception as e:
         return {"success": False, "error": str(e)}
-    finally:
-        db_operations.drop_error_table(cleanup_table_name)
 
 
 @app.get("/api/plots/scatterplot")
@@ -166,21 +149,21 @@ def get_scatterplot_data():
     total_sample_count = int(request.args.get("total_sample_count", default=100))
     selected_anomaly_methods = _parse_anomaly_methods_query_arg()
     rarity_threshold = _parse_rarity_threshold_query_arg(default=0.05)
-    cleanup_table_name = None
 
     try:
-        request_ops, _, _, cleanup_table_name = db_operations.build_filtered_request_ops(
-            table,
-            selected_anomaly_methods,
-            rarity_threshold
+        scatterplot_data = db_operations.generate_filtered_scatterplot(
+            x_column_name=x_column_name,
+            y_column_name=y_column_name,
+            error_sample_count=error_sample_count,
+            total_sample_count=total_sample_count,
+            request_table_name=table,
+            selected_anomaly_methods=selected_anomaly_methods,
+            rarity_threshold=rarity_threshold,
         )
-        scatterplot_data = request_ops.generate_scatterplot_with_errors(x_column_name, y_column_name, error_sample_count, total_sample_count)
         return {"success": True, "scatterplot_data": scatterplot_data}
 
     except Exception as e:
         return {"success": False, "error": str(e)}
-    finally:
-        db_operations.drop_error_table(cleanup_table_name)
 
 
 @app.post("/api/plots/rows-in-bin")
