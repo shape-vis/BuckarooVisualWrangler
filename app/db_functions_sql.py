@@ -124,12 +124,29 @@ class DBOperations:
         self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
+        self._cached_filtered_error_key = None
+        self._cached_filtered_error_table = None
+
+    def _clear_cached_filtered_error_table(self):
+        """
+        Drop any cached temporary filtered error table owned by this DBOperations instance.
+        """
+        if not self._cached_filtered_error_table:
+            self._cached_filtered_error_key = None
+            return
+
+        with self.engine.begin() as conn:
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{self._cached_filtered_error_table}"'))
+
+        self._cached_filtered_error_key = None
+        self._cached_filtered_error_table = None
 
     def reset(self):
         """
         Resets the DBOperations state, clearing all loaded table references.
         Called when the user navigates back to the home page.
         """
+        self._clear_cached_filtered_error_table()
         self.main_table_name = None
         self.error_table_name = None
         self.col_types = None
@@ -143,23 +160,65 @@ class DBOperations:
         :param main_table_name: the name of the table in the database without errors detected (raw data)
         :param error_table_name: explicit errors table name; defaults to "errors_" + main_table_name
         """
+        if self.main_table_name != main_table_name:
+            self._clear_cached_filtered_error_table()
+
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
         self.active_hists = {}
 
+    def _clone_loaded_state(self, error_table_name: str):
+        """
+        Create a lightweight DBOperations view over the currently loaded main table
+        while reusing already-computed metadata such as ColumnTypes and FilteringSQL.
+        This avoids rebuilding table metadata when only the active error table changes.
+        """
+        if not self.main_table_name or self.col_types is None or self.filtering_table is None:
+            raise ValueError("Cannot clone DBOperations state before a table is loaded.")
+
+        request_ops = self.__class__(self.engine)
+        request_ops.main_table_name = self.main_table_name
+        request_ops.error_table_name = error_table_name
+        request_ops.col_types = self.col_types
+        request_ops.filtering_table = self.filtering_table
+        request_ops.active_hists = {}
+        return request_ops
+
     def create_filtered_error_table(self, selected_anomaly_methods=None, rarity_threshold: float = 0.05):
         """
-        Materialize a temporary filtered error table for the currently loaded main table.
-        Returns the filtered error table name.
+        Resolve the effective error table for the currently loaded main table.
+        Reuses the persisted default error table when possible and caches one
+        non-default filtered error table for repeated plot requests.
         """
         if not self.main_table_name:
             raise ValueError("No main table is loaded in DBOperations.")
 
         from app import service_helpers
 
-        normalized_methods = set(selected_anomaly_methods or ["zscore"])
+        normalized_methods = set(
+            service_helpers._normalize_anomaly_methods(
+                anomaly_methods=selected_anomaly_methods,
+                allow_empty=False,
+            )
+        )
+        normalized_rarity = service_helpers._normalize_rarity_threshold(rarity_threshold, default=0.05)
+
+        cache_key = (tuple(sorted(normalized_methods)), normalized_rarity)
+
+        # The persisted runtime detector state is already built for zscore + 0.05.
+        # Reuse it directly instead of creating a temporary filtered table.
+        if cache_key == (("zscore",), 0.05):
+            if self._cached_filtered_error_table:
+                self._clear_cached_filtered_error_table()
+            return f"errors_{self.main_table_name}", False
+
+        if self._cached_filtered_error_key == cache_key and self._cached_filtered_error_table:
+            return self._cached_filtered_error_table, False
+
+        self._clear_cached_filtered_error_table()
+
         filtered_table_name = service_helpers._safe_pg_name(
             f"errors_{self.main_table_name}",
             f"_filtered_{uuid.uuid4().hex[:10]}"
@@ -168,9 +227,11 @@ class DBOperations:
             self.main_table_name,
             filtered_table_name,
             anomaly_methods=list(normalized_methods),
-            rarity_threshold=rarity_threshold,
+            rarity_threshold=normalized_rarity,
         )
-        return filtered_table_name
+        self._cached_filtered_error_key = cache_key
+        self._cached_filtered_error_table = filtered_table_name
+        return filtered_table_name, False
 
     def drop_error_table(self, table_name: str | None):
         """
@@ -179,27 +240,36 @@ class DBOperations:
         if not table_name:
             return
 
+        if table_name == self._cached_filtered_error_table:
+            self._cached_filtered_error_key = None
+            self._cached_filtered_error_table = None
+
         with self.engine.begin() as conn:
             conn.execute(sa_text(f'DROP TABLE IF EXISTS "{table_name}"'))
 
     def build_filtered_request_ops(self, request_table_name=None, selected_anomaly_methods=None, rarity_threshold: float = 0.05):
         """
-        Create a request-scoped DBOperations object pointed at a filtered temporary
-        error table for the requested or currently loaded main table.
+        Create a request-scoped DBOperations object pointed at the effective
+        filtered error table for the requested or currently loaded main table.
         Returns the request ops, resolved table name, error table name, and cleanup table name.
         """
         table_name = request_table_name or self.main_table_name
         if not table_name:
             raise ValueError("No table name provided and no main table is loaded.")
 
-        request_ops = self.__class__(self.engine)
-        request_ops.load_table(table_name)
-        cleanup_table_name = request_ops.create_filtered_error_table(
+        if self.main_table_name == table_name and self.col_types is not None and self.filtering_table is not None:
+            base_ops = self
+        else:
+            base_ops = self.__class__(self.engine)
+            base_ops.load_table(table_name)
+
+        error_table_name, should_cleanup = base_ops.create_filtered_error_table(
             selected_anomaly_methods=selected_anomaly_methods,
             rarity_threshold=rarity_threshold,
         )
-        request_ops.load_table(table_name, error_table_name=cleanup_table_name)
-        return request_ops, table_name, cleanup_table_name, cleanup_table_name
+        request_ops = base_ops._clone_loaded_state(error_table_name=error_table_name)
+        cleanup_table_name = error_table_name if should_cleanup else None
+        return request_ops, table_name, error_table_name, cleanup_table_name
 
     def get_row_count(self, table_name: str) -> int:
         """
