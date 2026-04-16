@@ -62,8 +62,9 @@ export function BuckarooHeader( { onReset} ) {
             </h1>
             <TableStatus />
             <div className="navButtonContainer">
-                <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'} icon={<img src="/images/icons/plotlogo.svg" alt="" className="navButtonSvgIcon" />}>Plots</NavButton>
+                <NavButton onClick={() => setActiveView('both')} isSelected={activeView === 'both'} icon={<img src="images/icons/both.svg" alt="" className="navButtonSvgIcon" /> } >Both</NavButton>
                 <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'} icon={<img src="/images/icons/pgraphlogo.svg" alt="" className="navButtonSvgIcon" />}>Provenance Graph</NavButton>
+                <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'} icon={<img src="/images/icons/plotlogo.svg" alt="" className="navButtonSvgIcon" />}> Plots </NavButton>
             </div>
             <div className="headerActions">
                 <button

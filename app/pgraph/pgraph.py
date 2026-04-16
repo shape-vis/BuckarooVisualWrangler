@@ -62,13 +62,15 @@ class PGraph:
             if len(node.children) == 0:
                 continue
             for child in node.children:
+                child_node_obj = self.node_map[child]
                 list_of_edges.append(
                     {
                         "id": f"e{node_name+child}",
                         "source": node_name,
                         "target": child,
                         "type": "edgeType",
-                        "animated": "true"
+                        "animated": "true",
+                        "label": child_node_obj.wrangle_op
                     }
                 )
         return list_of_edges

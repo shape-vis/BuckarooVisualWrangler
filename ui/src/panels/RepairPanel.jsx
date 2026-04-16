@@ -8,6 +8,7 @@ import { useRepair } from "../store/RepairContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
+import {usePgraph} from "../store/PGraphContext.tsx";
 
 export default function RepairPanel() {
   // global contexts for this component
@@ -15,11 +16,12 @@ export default function RepairPanel() {
   const { addLoader, removeLoader } = useLoading();
   const { highlightedRowIds, highlightedCols, clearHighlight } = useContext(SelectionContext);
   const { busy, setBusy, requestPreviews, registerRepairHandler, repairPanelOpenTrigger, repairPanelCloseTrigger, closeRepairPanel, onWrangleExecuted } = useRepair();
-
+  const {getLayoutedElements, setNodes, setEdges} = usePgraph();
   //local component state
   const [previewError, setPreviewError] = useState(null);
   const [previews, setPreviews] = useState(null);
   const [previewsGenerated, setPreviewsGenerated] = useState(false);
+
 
   const hasSelection = highlightedRowIds && highlightedRowIds.length > 0;
 
@@ -67,8 +69,17 @@ export default function RepairPanel() {
     setBusy(true);
     addLoader();
     setPreviewError(null);
+
+    //execute the wrangle
     const result = await executeWrangle(previewTableName);
     const pGraphResult = await getPGraph();
+
+    //update the nodes and edges in the pgraph based on the new result
+    let layoutNodesEdges;
+    layoutNodesEdges = getLayoutedElements(pGraphResult.nodes, pGraphResult.edges)
+    setNodes(layoutNodesEdges.nodes)
+    setEdges(layoutNodesEdges.edges)
+
     setBusy(false);
     removeLoader();
     if (result?.success) {

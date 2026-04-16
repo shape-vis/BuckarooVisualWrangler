@@ -22,7 +22,7 @@ export default function Buckaroo({ onReset }) {
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const [activeView, setActiveView] = useState("plots");
+    const [activeView, setActiveView] = useState("both");
 
     const handleWrangleExecuted = useCallback(() => {
         clearScatterPlotCache();
@@ -49,20 +49,32 @@ export default function Buckaroo({ onReset }) {
 
                         <div className="main-view">
                             <div className="svg-and-toolbox">
+                                {/*Plots and Graph view*/}
+                                {activeView === "both" && (
+                                    <>
+                                        <MatrixView
+                                            selectedAttributes={selectedAttributes}
+                                        />
+                                        <PGraph />
+                                        <RepairPanel />
+                                    </>
+                                )}
+
                                 {/*Plot view*/}
                                 {activeView === "plots" && (
                                     <>
                                         <MatrixView
                                             selectedAttributes={selectedAttributes}
-                                        />
+                                            />
                                         <RepairPanel />
                                     </>
                                 )}
+
                                 {/*Graph View*/}
                                 {activeView === "graph" &&
                                     <PGraph />}
                             </div>
-                            <div className={`table-panel-wrapper ${activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
+                            <div className={`table-panel-wrapper ${activeView === "both" || activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
                                 <TablePanel
                                     sortedAttributes={sortedAttributes}
                                 />

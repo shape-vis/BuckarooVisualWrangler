@@ -1,73 +1,111 @@
-/**
- * Global context so that all components can update the pgraph based on wrangling that is done
- */
-
-import {createContext, useCallback, useContext, useState} from "react";
-import {addEdge, applyEdgeChanges, applyNodeChanges} from "@xyflow/react";
+import {createContext, useCallback, useContext} from "react";
+import {
+    addEdge,
+    ConnectionLineType,
+    useNodesState,
+    useEdgesState,
+    Panel
+} from "@xyflow/react";
 import {TextUpdaterNode} from "../graph_objects/TextUpdaterNode";
+import dagre from '@dagrejs/dagre';
 
 export const PGraphContext = createContext(null);
 
+const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+const nodeWidth = 172;
+const nodeHeight = 36;
+
 const initialNodes = [
-    {
-        id: "n1",
-        position: {x: 0, y: 0},
-        data: {label: "Node 1"},
-        type: "input",
-    },
-    {
-        id: "n2",
-        position: {x: 100, y: 100},
-        data: {label: "Node 2"},
-    },
+    {id: "n1", position: {x: 0, y: 0}, data: {label: "Node 1"}, type: "input"},
+    {id: "n2", position: {x: 100, y: 100}, data: {label: "Node 2"}},
 ];
 
 const initialEdges = [
-    {
-        id: "n1-n2",
-        source: "n1",
-        target: "n2",
-        type: "step",
-        label: "wrangler operation",
-    },
+    {id: "n1-n2", source: "n1", target: "n2", type: "step", label: "wrangler operation"},
 ];
 
 const nodeTypes = {
     textUpdater: TextUpdaterNode,
 };
 
+const getLayoutedElements = (nodes, edges, direction = 'TB') => {
+    const isHorizontal = direction === 'LR';
+    const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+
+    dagreGraph.setGraph({rankdir: direction});
+
+    nodes.forEach((node) => {
+        if (node.data.label > 20) {
+            node.data.label = node.data.label.slice(0, 3)
+        }
+        dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
+    });
+    edges.forEach((edge) => {
+        dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    const newNodes = nodes.map((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+        return {
+            ...node,
+            targetPosition: isHorizontal ? 'left' : 'top',
+            sourcePosition: isHorizontal ? 'right' : 'bottom',
+            position: {
+                x: nodeWithPosition.x - nodeWidth / 2,
+                y: nodeWithPosition.y - nodeHeight / 2,
+            },
+        };
+    });
+
+    return {nodes: newNodes, edges};
+};
+
+// Precompute initial layout once at module load
+const {nodes: layoutedNodes, edges: layoutedEdges} = getLayoutedElements(
+    initialNodes,
+    initialEdges,
+);
+
 export function PGraphProvider({children}) {
-    const [nodes, setNodes] = useState(initialNodes);
-    const [edges, setEdges] = useState(initialEdges);
+    const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
+    const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
+    const onConnect = useCallback(
+        (params) =>
+            setEdges((eds) =>
+                addEdge(
+                    {...params, type: ConnectionLineType.SmoothStep, animated: true},
+                    eds,
+                ),
+            ),
+        [setEdges],
+    );
 
-    const onNodesChange = useCallback(
-        (changes) =>
-            setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
-        [],
-    );
-    const onEdgesChange = useCallback(
-        (changes) =>
-            setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot)),
-        [],
+    const onLayout = useCallback(
+        (direction) => {
+            const {nodes: ln, edges: le} = getLayoutedElements(nodes, edges, direction);
+            setNodes([...ln]);
+            setEdges([...le]);
+        },
+        [nodes, edges, setNodes, setEdges],
     );
 
-    const onConnect = useCallback((params) =>
-            setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot)),
-        [],
-    );
 
     return (
         <PGraphContext.Provider value={{
             nodes, setNodes,
             edges, setEdges,
-            onNodesChange, onEdgesChange, onConnect
+            nodeTypes,
+            onNodesChange, onEdgesChange, onConnect, onLayout,
+            getLayoutedElements
         }}>
             {children}
         </PGraphContext.Provider>
-    )
+    );
 }
 
 export function usePgraph() {
-    return useContext(PGraphContext)
+    return useContext(PGraphContext);
 }
