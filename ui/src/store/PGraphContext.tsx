@@ -8,6 +8,8 @@ import {
 } from "@xyflow/react";
 import {TextUpdaterNode} from "../graph_objects/TextUpdaterNode";
 import dagre from '@dagrejs/dagre';
+import {useTableName} from "./TableNameContext"
+
 
 export const PGraphContext = createContext(null);
 
@@ -15,14 +17,6 @@ const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 172;
 const nodeHeight = 36;
 
-const initialNodes = [
-    {id: "n1", position: {x: 0, y: 0}, data: {label: "Node 1"}, type: "input"},
-    {id: "n2", position: {x: 100, y: 100}, data: {label: "Node 2"}},
-];
-
-const initialEdges = [
-    {id: "n1-n2", source: "n1", target: "n2", type: "step", label: "wrangler operation"},
-];
 
 const nodeTypes = {
     textUpdater: TextUpdaterNode,
@@ -35,8 +29,8 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
     dagreGraph.setGraph({rankdir: direction});
 
     nodes.forEach((node) => {
-        if (node.data.label > 20) {
-            node.data.label = node.data.label.slice(0, 3)
+        if (node.data.label.length > 20) {
+            node.data.label = node.data.label.slice(0, 2)
         }
         dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
     });
@@ -62,13 +56,23 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
     return {nodes: newNodes, edges};
 };
 
-// Precompute initial layout once at module load
-const {nodes: layoutedNodes, edges: layoutedEdges} = getLayoutedElements(
-    initialNodes,
-    initialEdges,
-);
 
 export function PGraphProvider({children}) {
+    const {tableName} = useTableName();
+    const initialNodes = [
+        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "input"}
+    ];
+
+    const initialEdges = [
+        {id: "n1-n2", source: "n1", target: "n2", type: "step", label: "wrangler operation"},
+    ];
+
+    // Precompute initial layout once at module load
+    const {nodes: layoutedNodes, edges: layoutedEdges} = getLayoutedElements(
+        initialNodes,
+        initialEdges,
+    );
+
     const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 

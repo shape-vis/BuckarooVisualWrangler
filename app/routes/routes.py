@@ -11,7 +11,7 @@ from app.server_utils.service_helpers import (
     generate_table_name,
     run_detectors,
     get_sqlalchemy_dtype_map,
-    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo,
+    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session,
 
 )
 from app.server_utils.set_id_column import set_id_column
@@ -67,6 +67,9 @@ def load_file(csv_file, filename):
         rankings = calculate_attribute_rankings(detected_data)
         rankings.to_sql("rankings_" + table_name_with_node_id, engine, if_exists='replace', index=False)
 
+        #init the pgraph
+        init_pgraph_for_session(table_name_with_node_id)
+
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name_with_node_id}
     except Exception as e:
@@ -110,18 +113,6 @@ def get_tablename():
     if name is None:
         return {"success": False, "error": "No table loaded"}, 400
     return {"success": True, "table_name": name}
-
-
-
-# def _table_exists(name):
-#     """Check if a table exists in the database."""
-#     with engine.connect() as conn:
-#         result = conn.execute(
-#             sa_text("SELECT 1 FROM information_schema.tables WHERE table_name = :t"),
-#             {"t": name}
-#         )
-#         return result.fetchone() is not None
-
 
 @app.post("/api/undo")
 def undo_wrangle():

@@ -379,7 +379,8 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     preview_table_trimmed = trim_preview_suffix(preview_table)
 
     #enter into pgraph before current or new tables are modified, return the new tables name with nodeID added
-    new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
+    # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
+    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
     app.db_operations.rename_preview_to_new(preview_table, new_table_name)
     db_operations.load_table(new_table_name, f"errors_{new_table_name}")
 
@@ -404,34 +405,12 @@ def trim_preview_suffix(name: str) -> str:
         return name[:idx]
     return name
 
-def pgraph_entry_point(table, preview_table, wrangle_executed):
-    #init the pgraph if this is the first wrangle, add root and it's child node to it
-    if not app.wrangle_occurred:
-        return first_wrangle(table, preview_table, wrangle_executed)
-
-    #pgraph is already made, add a new node to it
-    else:
-        return n_wrangle(table, preview_table, wrangle_executed)
-
-
-def first_wrangle(parent_table, child_table, wrangle_executed):
+def init_pgraph_for_session(root_table):
     app.pgraph_for_session = PGraph()
 
     # create the root node, add it to the pgraph as the root
-    root_node = GraphNode("root", "root", parent_table, f"errors_{parent_table}")
+    root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
     app.pgraph_for_session.add_root_node(root_node)
-
-    #get new table name for child -> should be n1_<....>
-    new_table_name = make_new_table_name(child_table)
-    #create the new current node
-    current_node = GraphNode(parent_table, wrangle_executed, new_table_name, f"errors_{new_table_name}")
-
-    #add the first child node to the pgraph with the parent as the root
-    app.pgraph_for_session.add_node(current_node)
-
-    app.wrangle_occurred = True
-
-    return new_table_name
 
 def n_wrangle(parent_table, child_table, wrangle_executed):
     new_table_name = make_new_table_name(child_table)

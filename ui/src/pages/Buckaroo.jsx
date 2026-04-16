@@ -17,6 +17,8 @@ import {PGraphProvider} from "../store/PGraphContext.tsx";
 
 export const ViewContext = createContext();
 
+
+
 export default function Buckaroo({ onReset }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [sortedAttributes, setSortedAttributes] = useState([]);
@@ -49,16 +51,6 @@ export default function Buckaroo({ onReset }) {
 
                         <div className="main-view">
                             <div className="svg-and-toolbox">
-                                {/*Plots and Graph view*/}
-                                {activeView === "both" && (
-                                    <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                        />
-                                        <PGraph />
-                                        <RepairPanel />
-                                    </>
-                                )}
 
                                 {/*Plot view*/}
                                 {activeView === "plots" && (
@@ -66,6 +58,17 @@ export default function Buckaroo({ onReset }) {
                                         <MatrixView
                                             selectedAttributes={selectedAttributes}
                                             />
+                                        <RepairPanel />
+                                    </>
+                                )}
+
+                                {/*Plots and Graph view*/}
+                                {activeView === "both" && (
+                                    <>
+                                        <MatrixView
+                                            selectedAttributes={selectedAttributes}
+                                        />
+                                        <PGraph />
                                         <RepairPanel />
                                     </>
                                 )}
