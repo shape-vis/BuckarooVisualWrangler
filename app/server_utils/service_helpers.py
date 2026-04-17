@@ -27,6 +27,8 @@ def get_current_pgraph():
     """
     return json.dumps(app.pgraph_for_session, default=lambda o: o.__json__() if hasattr(o, '__json__') else None)
 
+def clicked_node_access_helper(node_table_name):
+    return app.pgraph_for_session.set_clicked_node_as_current(node_table_name)
 
 def _validate_identifier(name: str) -> str:
     """

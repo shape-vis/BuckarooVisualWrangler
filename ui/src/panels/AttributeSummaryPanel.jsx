@@ -150,6 +150,7 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
 
   // Run on mount or when table changes
   useEffect(() => {
+      console.log("[AttrSummary MOUNT/table_name effect] table_name =", table_name);
     fetchSummaryData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table_name]);

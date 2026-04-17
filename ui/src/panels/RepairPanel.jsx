@@ -8,7 +8,7 @@ import { useRepair } from "../store/RepairContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
-import {usePgraph} from "../store/PGraphContext.tsx";
+import {usePgraph} from "../store/PGraphContext.jsx";
 
 export default function RepairPanel() {
   // global contexts for this component

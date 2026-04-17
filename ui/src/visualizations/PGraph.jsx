@@ -8,14 +8,13 @@ import {
 import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
 import {getPGraph} from "../utils/serverCalls.jsx";
-import {usePgraph} from "../store/PGraphContext.tsx";
+import {usePgraph} from "../store/PGraphContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
 
 
 export default function PGraph() {
 
-const { nodes, setNodes, edges, setEdges, nodeTypes,
-  onNodesChange, onEdgesChange, onConnect, onLayout} = usePgraph();
+const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick} = usePgraph();
 
 const { tableName } = useTableName();
 
@@ -46,15 +45,8 @@ const { tableName } = useTableName();
         onConnect={onConnect}
         fitView={true}
         connectionLineType={ConnectionLineType.SmoothStep}
+        onNodeDoubleClick={onNodeDoubleClick}
       >
-      {/*  <Panel position="top-right">*/}
-      {/*  <button className="xy-theme__button" onClick={() => onLayout('TB')}>*/}
-      {/*    vertical layout*/}
-      {/*  </button>*/}
-      {/*  <button className="xy-theme__button" onClick={() => onLayout('LR')}>*/}
-      {/*    horizontal layout*/}
-      {/*  </button>*/}
-      {/*</Panel>*/}
         <Background />
         <Controls />
         <MiniMap nodeStrokeWidth={3} />

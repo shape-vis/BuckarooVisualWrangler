@@ -123,3 +123,23 @@ class PGraph:
         self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
 
         return self.current_node_table_name
+
+    def set_clicked_node_as_current(self, node_table_name):
+        #get the node from the graph the user clicked in the front-end
+        current_node = self.node_map[node_table_name]
+        child_list = current_node.children
+        #check to see if it has any children for the next node pointer
+        if len(child_list) == 0:
+            #no child for next pointer
+            self.next_node_table_name = None
+
+        # set next to the last child added if there are children for this node
+        if len(child_list) > 0:
+            self.next_node_table_name = child_list[len(child_list) - 1]
+
+        #set parent as prev pointer
+        self.prev_node_table_name = current_node.parent_table
+
+        #set current table name
+        self.current_node_table_name = node_table_name
+        return self.current_node_table_name

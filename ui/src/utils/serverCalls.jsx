@@ -73,7 +73,9 @@ export async function querySample2d(tableName, xColumn, yColumn, errorSamples, t
 }
 
 export async function queryAttributeSummaries(table_name) {
+
     const params = new URLSearchParams({ tablename: table_name });
+
     try {
         const response = await fetch(`/api/plots/summaries?${params}`, { method: "GET" });
         return await response.json();
@@ -290,6 +292,19 @@ export async function undoWrangle() {
         return await response.json();
     } catch (error) {
         console.error("[undoWrangle]", error.message);
+    }
+}
+
+export async function setGraphToClickedNode(nodeId) {
+    try {
+        const response = await fetch("/api/setGraphToClickedNode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({nodeId}),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[setGraphToClickedNode]", error.message);
     }
 }
 
