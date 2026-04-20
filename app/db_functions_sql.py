@@ -3,6 +3,7 @@ from collections import defaultdict
 from .filtering_sql import FilteringSQL
 from .execute_sql import fetch_sql
 import pandas as pd
+import threading
 import uuid
 from sqlalchemy import text as sa_text
 """
@@ -127,6 +128,10 @@ class DBOperations:
         self.active_hists = {}
         self._cached_filtered_error_key = None
         self._cached_filtered_error_table = None
+        self._metadata_build_lock = threading.Lock()
+        self._metadata_build_event = None
+        self._metadata_build_table_name = None
+        self._metadata_build_error = None
 
     def _clear_cached_filtered_error_table(self):
         """
@@ -142,6 +147,17 @@ class DBOperations:
         self._cached_filtered_error_key = None
         self._cached_filtered_error_table = None
 
+    def _reset_metadata_build_state(self):
+        """
+        Clear any in-progress metadata build bookkeeping for the active table.
+        """
+        with self._metadata_build_lock:
+            if self._metadata_build_event is not None:
+                self._metadata_build_event.set()
+            self._metadata_build_event = None
+            self._metadata_build_table_name = None
+            self._metadata_build_error = None
+
     def reset(self):
         """
         Resets the DBOperations state, clearing all loaded table references.
@@ -153,6 +169,7 @@ class DBOperations:
         self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
+        self._reset_metadata_build_state()
 
     def _ensure_table_metadata_loaded(self):
         """
@@ -161,11 +178,63 @@ class DBOperations:
         if not self.main_table_name:
             raise ValueError("Cannot load table metadata before a main table is set.")
 
-        if self.col_types is None:
-            self.col_types = ColumnTypes(self.main_table_name, self.engine)
-
         if self.filtering_table is None or self.filtering_table.main_table_name != self.main_table_name:
             self.filtering_table = FilteringSQL(self.main_table_name, self.engine)
+
+        table_name = self.main_table_name
+
+        while True:
+            with self._metadata_build_lock:
+                if self.main_table_name != table_name:
+                    return
+
+                if self.col_types is not None:
+                    return
+
+                if self._metadata_build_table_name == table_name and self._metadata_build_event is not None:
+                    wait_event = self._metadata_build_event
+                    build_here = False
+                else:
+                    wait_event = threading.Event()
+                    self._metadata_build_event = wait_event
+                    self._metadata_build_table_name = table_name
+                    self._metadata_build_error = None
+                    build_here = True
+
+            if build_here:
+                try:
+                    built_col_types = ColumnTypes(table_name, self.engine)
+                except Exception as exc:
+                    with self._metadata_build_lock:
+                        if self._metadata_build_table_name == table_name and self._metadata_build_event is wait_event:
+                            self._metadata_build_error = exc
+                            self._metadata_build_table_name = None
+                            self._metadata_build_event = None
+                            wait_event.set()
+                    raise
+
+                with self._metadata_build_lock:
+                    if self.main_table_name == table_name:
+                        self.col_types = built_col_types
+                        if self.filtering_table is None or self.filtering_table.main_table_name != table_name:
+                            self.filtering_table = FilteringSQL(table_name, self.engine)
+
+                    if self._metadata_build_table_name == table_name and self._metadata_build_event is wait_event:
+                        self._metadata_build_error = None
+                        self._metadata_build_table_name = None
+                        self._metadata_build_event = None
+                        wait_event.set()
+                return
+
+            wait_event.wait()
+
+            with self._metadata_build_lock:
+                if self.main_table_name != table_name:
+                    return
+                if self._metadata_build_error is not None:
+                    raise self._metadata_build_error
+                if self.col_types is not None:
+                    return
 
     def prewarm_table_metadata(self, table_name: str, error_table_name: str | None = None):
         """
@@ -189,6 +258,7 @@ class DBOperations:
         """
         if self.main_table_name != main_table_name:
             self._clear_cached_filtered_error_table()
+            self._reset_metadata_build_state()
 
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name

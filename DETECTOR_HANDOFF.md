@@ -288,6 +288,7 @@ This included:
 - reusing filtered detector state across requests instead of rebuilding request-scoped state more aggressively
 - deferring `ColumnTypes` construction off the critical upload path
 - adding a background metadata prewarm after upload so first-plot latency is less severe
+- coordinating in-progress `ColumnTypes` loading so plot/filter requests wait on the same active metadata build instead of starting a second full build
 - centralizing repeated detector request parsing for:
   - table name
   - anomaly methods
@@ -380,6 +381,7 @@ Later optimization passes were validated by checking:
 
 - upload completion felt faster on larger datasets after lazy metadata loading
 - first plot load behavior after metadata prewarm remained functional
+- plot/filter requests no longer duplicated `ColumnTypes` work when a metadata prewarm was already in progress
 - filtered histogram/scatter/top-row endpoints still responded correctly after route orchestration moved further into `DBOperations`
 
 ## 8. Known Caveats / Things To Be Aware Of
@@ -428,8 +430,9 @@ Current behavior:
 - upload avoids eager `ColumnTypes` construction
 - backend warms metadata in the background after upload
 - first plot request can still build metadata on demand if it arrives before prewarm finishes
+- if metadata warmup is already in progress, plot/filter requests now wait on that same active build instead of kicking off a second full `ColumnTypes` calculation
 
-This is a safer compromise than resumable background metadata builds, but it is not the final possible optimization.
+This is still simpler than a fully incremental/resumable metadata builder, but it avoids duplicate work much more cleanly than the earlier prewarm-only version.
 
 ### Provenance graph was not fully validated
 
