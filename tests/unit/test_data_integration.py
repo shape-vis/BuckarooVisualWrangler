@@ -1,8 +1,7 @@
 import unittest
-import pandas as pd
 import numpy as np
 
-from app.plot_routes import *
+from app.routes.plot_routes import *
 
 
 class TestDataIntegration(unittest.TestCase):

@@ -7,8 +7,8 @@ Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.
 """
 import pandas as pd
 
-from app.execute_sql import fetch_sql
-from app.service_helpers import get_error_dist, is_categorical, _validate_identifier
+from app.db_utils.execute_sql import fetch_sql
+from app.server_utils.service_helpers import get_error_dist, is_categorical, _validate_identifier
 
 
 def get_default_attributes_from_rankings(tablename, engine):

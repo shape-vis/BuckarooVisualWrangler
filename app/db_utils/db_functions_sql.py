@@ -1,7 +1,11 @@
 from collections import defaultdict
 
-from .filtering_sql import FilteringSQL
-from .execute_sql import fetch_sql
+import pandas as pd
+
+from app.server_utils import service_helpers
+from app.db_utils.filtering_sql import FilteringSQL
+from app.db_utils.execute_sql import fetch_sql, execute_sql
+
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
 with support for data filtering and error annotation overlays on all chart types.
@@ -155,6 +159,10 @@ class DBOperations:
         """
         return fetch_sql(f'SELECT COUNT(*) FROM "{table_name}"', True, self.engine)
 
+    def update_rankings(self, new_table_name):
+        df = pd.read_sql_table(f"errors_{new_table_name}", self.engine)
+        rankings = service_helpers.calculate_attribute_rankings(df)
+        rankings.to_sql("rankings_" + new_table_name, self.engine, if_exists='replace', index=False)
 
     def add_data_filters(self, sql_filters) -> dict:
         """
@@ -163,6 +171,27 @@ class DBOperations:
         """
 
         return self.filtering_table.add_filters(sql_filters)
+
+    def drop_preview_tables(self, all_possible_previews: list, keep_table: str):
+        """
+        Drop all preview tables (and their errors_ siblings) except the one
+        being promoted. Disposes the connection pool first to release any
+        lingering locks from prior queries.
+        """
+        # self.engine.dispose()
+        for pt in all_possible_previews:
+            if pt != keep_table:
+                execute_sql(f'DROP TABLE IF EXISTS "{pt}"', self.engine)
+                execute_sql(f'DROP TABLE IF EXISTS "errors_{pt}"', self.engine)
+
+    def rename_preview_to_new(self, preview_table: str, new_table_name: str):
+        """
+        Rename a preview table (and its errors_ sibling) to the new promoted name.
+        Disposes the connection pool first to avoid lock contention.
+        """
+        # self.engine.dispose()
+        execute_sql(f'ALTER TABLE "{preview_table}" RENAME TO "{new_table_name}"', self.engine)
+        execute_sql(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{new_table_name}"', self.engine)
 
 
     def remove_data_filters(self, sql_filters) -> dict:
@@ -1030,3 +1059,9 @@ class DBOperations:
             affected_bins_list.append({"xBin": x_bin, "yBin": y_bin})
 
         return affected_bins_list
+
+    def table_exists(self, name):
+        """Check if a table exists in the database."""
+        query = f"SELECT 1 FROM information_schema.tables WHERE table_name = '{name}'"
+        result = fetch_sql(query= query, scalar= True, engine= self.engine)
+        return result is not None

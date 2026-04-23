@@ -3,70 +3,49 @@ import {
   Background,
   Controls,
   addEdge,
-  MiniMap,
+  MiniMap, ConnectionLineType, Panel,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useState, useCallback, Activity } from "react";
-import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
-import { TextUpdaterNode } from "../graph_objects/TextUpdaterNode";
-// import {SelectionContext} from "../utils/SelectionContext.jsx";
-//
-const nodeTypes = {
-  textUpdater: TextUpdaterNode,
-};
+import "../styles/PGraph.css";
+import {getPGraph} from "../utils/serverCalls.jsx";
+import {usePgraph} from "../store/PGraphContext.jsx";
+import {useTableName} from "../store/TableNameContext.jsx";
 
-const initialNodes = [
-  {
-    id: "n1",
-    position: { x: 0, y: 0 },
-    data: { label: "Node 1" },
-    type: "input",
-  },
-  {
-    id: "n2",
-    position: { x: 100, y: 100 },
-    data: { label: "Node 2" },
-  },
-];
-
-const initialEdges = [
-  {
-    id: "n1-n2",
-    source: "n1",
-    target: "n2",
-    type: "step",
-    label: "wrangler operation",
-  },
-];
 
 export default function PGraph() {
-  const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState(initialEdges);
-  const onNodesChange = useCallback(
-    (changes) =>
-      setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
-    [],
-  );
-  const onEdgesChange = useCallback(
-    (changes) =>
-      setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot)),
-    [],
-  );
 
-  const onConnect = useCallback((params) =>
-    setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot)),
-  );
+const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick} = usePgraph();
+
+const { tableName } = useTableName();
+
+  async function fetchGraph() {
+    try {
+      const response = await getPGraph();
+
+      if (!response || !response.success) {
+        console.error("[PGRAPH] API call failed:", response);
+        throw new Error(`PGraph update failed: ${response.error || "Unknown error"}`);
+      }
+
+    } catch (err) {
+      console.error(err?.message || err);
+    }
+  }
+
+
 
   return (
-    <div style={{ height: "100%", width: "100%" }}>
+    <div className="pgraph-container">
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes}
+        // nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         fitView={true}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        onNodeDoubleClick={onNodeDoubleClick}
       >
         <Background />
         <Controls />

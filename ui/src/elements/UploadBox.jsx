@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import "./UploadBox.css";
+import "../styles/UploadBox.css";
 
 export default function UploadBox({ fileUpload }) {
 
@@ -56,7 +56,7 @@ export default function UploadBox({ fileUpload }) {
               hidden
               onChange={handleFileChange}
             />
-            <p style={{ margin: 0 }}>
+            <p>
               Drag a File Here
               <br />
               or

@@ -11,27 +11,6 @@ async function uploadFileToDB(fileToSend) {
     }
 }
 
-async function getSampleData(filename, dataSize) {
-    const params = new URLSearchParams({ filename, datasize: dataSize });
-    try {
-        const response = await fetch(`/api/get-sample?${params}`, { method: "GET" });
-        if (!response.ok) throw new Error(`Response status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
-}
-
-async function getErrorData(filename, dataSize) {
-    const params = new URLSearchParams({ filename, datasize: dataSize });
-    try {
-        const response = await fetch(`/api/get-errors?${params}`, { method: "GET" });
-        if (!response.ok) throw new Error(`Response status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
-}
 
 async function queryHistogram1d(tableName, columnName, binCount) {
     const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: 0, max_id: 10000, bins: binCount });
@@ -94,7 +73,9 @@ export async function querySample2d(tableName, xColumn, yColumn, errorSamples, t
 }
 
 export async function queryAttributeSummaries(table_name) {
+
     const params = new URLSearchParams({ tablename: table_name });
+
     try {
         const response = await fetch(`/api/plots/summaries?${params}`, { method: "GET" });
         return await response.json();
@@ -103,10 +84,19 @@ export async function queryAttributeSummaries(table_name) {
     }
 }
 
-export async function queryTopErrorRows(tableName, numRows) {
-    const params = new URLSearchParams({ tablename: tableName, num_rows: numRows });
+export async function queryTopErrorRows(numRows) {
+    const params = new URLSearchParams({ num_rows: numRows });
     try {
         const response = await fetch(`/api/plots/top-error-rows?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+export async function queryTableName() {
+    try {
+        const response = await fetch("/api/tablename", { method: "GET" });
         return await response.json();
     } catch (error) {
         console.error(error.message);
@@ -227,14 +217,15 @@ export async function queryBinsForRows(params) {
  * apply wrangling to each, re-run error detection, and return the
  * two preview table names.
  *
- * { table, row_ids, cols }
+ * Backend uses db_operations.main_table_name as the source of truth.
+ * { row_ids, cols }
  */
-export async function createPreviews(table, rowIds, cols) {
+export async function createPreviews(rowIds, cols) {
     try {
         const response = await fetch("/api/wrangle/create-previews", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ table, row_ids: rowIds, cols }),
+            body: JSON.stringify({ row_ids: rowIds, cols }),
         });
         return await response.json();
     } catch (error) {
@@ -263,13 +254,14 @@ export async function queryPreviewHistogram(params) {
 /**
  * POST /api/wrangle/execute
  * Promote a preview table to be the main table, deleting all other previews.
+ * Backend uses db_operations.main_table_name as the source of truth.
  */
-export async function executeWrangle(table, previewTable) {
+export async function executeWrangle(previewTable) {
     try {
         const response = await fetch("/api/wrangle/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ table, preview_table: previewTable }),
+            body: JSON.stringify({ preview_table: previewTable }),
         });
         return await response.json();
     } catch (error) {
@@ -294,6 +286,46 @@ export async function queryPreviewScatterplot(params) {
     }
 }
 
+export async function undoWrangle() {
+    try {
+        const response = await fetch("/api/undo", { method: "POST" });
+        return await response.json();
+    } catch (error) {
+        console.error("[undoWrangle]", error.message);
+    }
+}
+
+export async function setGraphToClickedNode(nodeId) {
+    try {
+        const response = await fetch("/api/setGraphToClickedNode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({nodeId}),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[setGraphToClickedNode]", error.message);
+    }
+}
+
+export async function redoWrangle() {
+    try {
+        const response = await fetch("/api/redo", { method: "POST" });
+        return await response.json();
+    } catch (error) {
+        console.error("[redoWrangle]", error.message);
+    }
+}
+
+export async function getPGraph(){
+    try {
+        const response = await fetch("/api/routes/update_pgraph", {method: "GET"});
+        return await response.json();
+    } catch (error) {
+        console.error("[getPGraph]", error.message)
+    }
+}
+
 export async function resetApp() {
     try {
         const response = await fetch("/api/reset", { method: "POST" });
@@ -305,21 +337,18 @@ export async function resetApp() {
 
 export {
     uploadFileToDB,
-    getSampleData,
-    getErrorData,
     queryHistogram1d,
     queryHistogram2d,
 };
 
 const serverCalls = {
     uploadFileToDB,
-    getSampleData,
-    getErrorData,
     queryHistogram1d,
     queryHistogram2d,
     querySample2d,
     queryAttributeSummaries,
     queryTopErrorRows,
+    queryTableName,
     wrangleRemove,
     wrangleImpute,
     wranglePreview,

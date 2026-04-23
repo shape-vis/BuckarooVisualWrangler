@@ -13,8 +13,10 @@ This document explains all the different structures that power Buckaroo Visual W
 4. [DBOperations](#4-dboperations)
 5. [ColumnTypes](#5-columntypes)
 6. [FilteringSQL](#6-filteringsql)
-7. [Key Files](#7-key-files)
-8. [Known Gaps](#8-Things-to-be-aware-of)
+7. [Table Name State Management](#7-table-name-state-management)
+8. [Provenance Graph & Undo/Redo](#8-provenance-graph--undoredo)
+9. [Key Files](#9-key-files)
+10. [Known Gaps](#10-things-to-be-aware-of)
 ---
 
 ## 1. Detectors
@@ -60,7 +62,7 @@ For a 2D selection (two columns), four preview tables are created:
 
 Each preview table gets its own companion `errors_<preview>` — detectors are re-run on the preview data immediately after the operation so the error overlay in the preview histogram reflects the new state.
 
-**Imputation logic** (`postgres_wrangling/query.py` → `impute_by_ids()`):
+**Imputation logic** (`app/query.py` → `impute_by_ids()`):
 - Numeric columns: filled with the column mean (the column that is being imputed, so this applies to both the x and y axis in 2D charts)
 - Categorical columns: filled with the column mode (same thing as numeric if it's 2D)
 - Only rows that are selected by ID get imputed
@@ -75,43 +77,55 @@ Each preview table gets its own companion `errors_<preview>` — detectors are r
 
 A wrangle is a committed data modification — it turns a chosen preview into the new main table.
 
+All wrangle endpoints use `db_operations.main_table_name` as the source of truth for the current table — they do **not** accept a table name from the frontend.
+
 **Three endpoints** in `app/wrangler_routes_sql.py`:
 
 ### `POST /api/wrangle/create-previews`
-Creates the preview tables described above. No changes to the main table.
+Creates the preview tables described above. No changes to the main table. Body: `{ row_ids, cols }`.
 
 ### `POST /api/wrangle/execute`
-Promotes a chosen preview to the main table. The swap is atomic:
-1. All *other* preview tables (and their `errors_` companions) are dropped
-2. `ALTER TABLE "<table>" RENAME TO "<table>_old"`
-3. `ALTER TABLE "<preview>" RENAME TO "<table>"`
-4. `DROP TABLE "<table>_old"`
-5. `db_operations.load_table()` is called — this rebuilds `ColumnTypes` and `FilteringSQL` for the new table state
+Creates a new node in the provenance graph with the wrangled table. Body: `{ preview_table }`.
+1. All *other* preview tables (and their `errors_` companions) are dropped from the create-previews endpoint
+2. The chosen preview is renamed to a new node name (e.g. `n1_...`, `n2_...`)
+3. `db_operations.load_table()` is called — this rebuilds `ColumnTypes` and `FilteringSQL` for the new table state
+4. Returns `{ success: true, table: "<new_table_name>" }` — the frontend uses this to update the global table name context
 
 ### `POST /api/wrangle/delete-column`
 Drops a column in-place:
-1. `ALTER TABLE DROP COLUMN` (via `postgres_wrangling/query.py` → `delete_column()`)
+1. `ALTER TABLE DROP COLUMN` (via `app/query.py` → `delete_column()`)
 2. `update_errors_table()` — re-runs all detectors and rewrites `errors_<table>`
 3. Returns the updated column list to the frontend
 
-**Two endpoints** in `app/plot_routes_sql.py`:
-These two endpoints just fetch the wrangled tables that create-previews put in the DB by the same name
+**Two endpoints** in `app/plot_routes.py`:
+These two endpoints fetch the wrangled tables that create-previews put in the DB. They create a temporary `DBOperations` instance for the preview table so the global `db_operations` is unaffected.
 
-### `POST /api/plots/preview-histogram`
-1. Gets the table by using the tablename that create-previews put in the DB
-2. Makes a temp DBOperations object
-3. Uses the helpers to generate the JSON structure required from the view to render a histogram
+### `GET /api/plots/preview-histogram`
+1. Gets the preview table name from the `tablename` query param
+2. Makes a temp DBOperations object loaded with that preview table
+3. Uses the helpers to generate the JSON structure required from the view to render a histogram (supports `type=1d` and `type=2d` for heatmaps)
 4. Returns that JSON
-5. 
-### `POST /api/plots/preview-scatterplot`
-This isn't hooked up to any fetch calls yet
 
-1. Gets the table by using the tablename that create-previews put in the DB
-2. Makes a temp DBOperations object
+### `GET /api/plots/preview-scatterplot`
+1. Gets the preview table name from the `tablename` query param
+2. Makes a temp DBOperations object loaded with that preview table
 3. Uses the helpers to generate the JSON structure required from the view to render a scatterplot
 4. Returns that JSON
 
-**SQL primitives** all live in `postgres_wrangling/query.py`:
+Both are called by `PreviewCard.jsx` which chooses between them based on the `chartType` prop.
+
+**Additional endpoints** in `app/routes.py`:
+
+### `POST /api/undo`
+Navigates to the previous version of the table by decrementing the node ID in the table name (e.g. `n2_data` → `n1_data`). Checks that the target table exists in Postgres, then calls `db_operations.load_table()`. Returns `{ success: true, table_name }`.
+
+### `POST /api/redo`
+Navigates to the next version of the table by incrementing the node ID (e.g. `n1_data` → `n2_data`). Same existence check and load. Returns `{ success: true, table_name }`.
+
+### `GET /api/tablename`
+Returns the current `db_operations.main_table_name` — useful for the frontend to verify what the backend thinks the active table is.
+
+**SQL primitives** all live in `app/query.py`:
 - `remove_rows_by_ids(table, ids)` — `DELETE WHERE "ID" = ANY(:ids)`
 - `impute_by_ids(table, column, ids)` — `UPDATE ... SET col = :fill_val WHERE "ID" = ANY(:ids)`
 - `delete_column(table, column)` — `ALTER TABLE DROP COLUMN`
@@ -133,10 +147,11 @@ It is imported directly into `routes.py`, `plot_routes.py`, `wrangler_routes_sql
 | Attribute | Type | Purpose |
 |-----------|------|---------|
 | `engine` | SQLAlchemy engine | Persistent DB connection |
-| `main_table_name` | str | Currently loaded data table |
+| `main_table_name` | str | Currently loaded data table — **the single source of truth across all endpoints** |
 | `error_table_name` | str | Companion `errors_<table>` |
 | `col_types` | `ColumnTypes` | Column classification |
 | `filtering_table` | `FilteringSQL` | Active row filters |
+| `active_hists` | dict | Cached bin↔row mappings for currently displayed histograms/heatmaps (keyed by column name or column tuple) |
 
 **Lifecycle:**
 - `load_table(table, errors_table)` — called on upload and after every wrangle execute; instantiates fresh `ColumnTypes` and `FilteringSQL` for the new table
@@ -159,7 +174,7 @@ All three join against `errors_<table>` and, when active, the `<table>_filtering
 
 ## 5. ColumnTypes
 
-`ColumnTypes` is defined in `app/db_functions_sql.py` (line 16) and instantiated inside `DBOperations.load_table()`. It classifies every column into one of three sets:
+`ColumnTypes` is defined in `app/db_functions_sql.py` (line 22) and instantiated inside `DBOperations.load_table()`. It classifies every column into one of three sets:
 
 | Set | Attribute | Contents |
 |-----|-----------|----------|
@@ -198,7 +213,48 @@ It maintains a physical Postgres table — `<table>_filtering` — that holds on
 
 ---
 
-## 7. Key Files
+## 7. Table Name State Management
+
+The table name (e.g. `n0_data_test_b1zjPwbZ7P`) is a critical piece of state. `db_operations.main_table_name` is the **single source of truth** on the backend. All backend endpoints that operate on the main table read from `db_operations.main_table_name` directly — they do not accept a table name from the frontend for main-table operations. (Preview endpoints are the exception: they accept a preview table name since previews are separate temporary tables.)
+
+**Frontend:** A React context (`TableNameContext.jsx`) holds the table name globally. It is initialized from the upload response and updated after wrangle execute or undo/redo. All components consume it via `useTableName()` — there is no prop drilling.
+
+**Flow:**
+1. Upload → backend generates `n0_<name>`, calls `db_operations.load_table()`, returns name to frontend
+2. Frontend stores in `TableNameContext` via `<TableNameProvider initialTableName={...}>`
+3. All components use `useTableName()` to get the current name (used for cache keys and `useEffect` dependencies)
+4. After wrangle execute → backend returns the new table name → frontend calls `setTableName(result.table)` → all components re-render and re-fetch
+5. Undo/redo → same pattern: backend switches `db_operations`, returns new name, frontend updates context
+
+---
+
+## 8. Provenance Graph & Undo/Redo
+
+Every table name is prefixed with a node ID: `n0_`, `n1_`, `n2_`, etc. The original uploaded table is always `n0_`. Each wrangle operation creates a new node with an incremented ID.
+
+**PGraph** (`app/pgraph/pgraph.py`):
+- `node_map` — dict of `{ table_name: GraphNode }`
+- `wrangle_counter` — incremented on each wrangle, used to generate the next node ID
+- `wrangle_map` — maps wrangle number to operation type for metadata
+
+**GraphNode** (`app/pgraph/node.py`):
+- Stores `parent_id`, `wrangle_op`, `table_name`, `error_table_name`, `children`
+- Quality metrics: `anomaly_metric`, `missing_metric`, `incomplete_metric`, `mismatch_metric`
+
+**Session state** (in `app/__init__.py`):
+- `wrangle_occurred` — boolean, `False` until the first wrangle
+- `pgraph_for_session` — the `PGraph` instance, `None` until the first wrangle
+
+**Undo/Redo** (`POST /api/undo`, `POST /api/redo` in `app/routes.py`):
+- Parses the current table name to extract the node ID number and base name
+- Decrements (undo) or increments (redo) the node ID
+- Checks if the target table exists in Postgres
+- Calls `db_operations.load_table()` on the target
+- The old tables are never deleted — they remain in Postgres, so navigation between versions is instant
+
+---
+
+## 9. Key Files
 
 | File | Role |
 |------|------|
@@ -206,23 +262,26 @@ It maintains a physical Postgres table — `<table>_filtering` — that holds on
 | `detectors/datatype_mismatch.py` | Type mismatch detector |
 | `detectors/anomaly.py` | Statistical outlier detector |
 | `detectors/incomplete.py` | Rare-category detector |
-| `app/db_functions_sql.py` | `DBOperations` (line 109) + `ColumnTypes` (line 16) |
+| `app/db_functions_sql.py` | `DBOperations` (line 115) + `ColumnTypes` (line 22) |
 | `app/filtering_sql.py` | `FilteringSQL` class |
-| `app/__init__.py` | Global `db_operations` instantiation |
-| `app/service_helpers.py` | Preview creation, wrangle execution, detector orchestration |
-| `app/wrangler_routes_sql.py` | Wrangle API endpoints |
-| `app/routes.py` | Upload endpoint, initial detector run |
-| `app/plot_routes.py` | Histogram and scatterplot plot endpoints |
-| `postgres_wrangling/query.py` | SQL primitives: delete rows, impute, drop column |
-| `ui/src/panels/RepairPanel.jsx` | Wrangle UI — bin click → create-previews request |
-| `ui/src/panels/PreviewCard.jsx` | Renders preview histograms + execute button |
+| `app/__init__.py` | Global `db_operations` instantiation + session globals (`wrangle_occurred`, `pgraph_for_session`) |
+| `app/service_helpers.py` | Preview creation, wrangle execution, detector orchestration, pgraph entry point |
+| `app/wrangler_routes_sql.py` | Wrangle API endpoints (create-previews, execute, delete-column) |
+| `app/routes.py` | Upload, reset, undo/redo, and tablename endpoints |
+| `app/plot_routes.py` | Histogram, scatterplot, preview-histogram, and preview-scatterplot endpoints |
+| `app/query.py` | SQL primitives: delete rows, impute, drop column |
+| `app/pgraph/pgraph.py` | `PGraph` class — provenance DAG structure |
+| `app/pgraph/node.py` | `GraphNode` class — individual wrangle node |
+| `ui/src/utils/TableNameContext.jsx` | React context providing global `tableName` + `setTableName` |
+| `ui/src/utils/SelectionContext.jsx` | React context for shared row/column selection state |
+| `ui/src/utils/RowRangeContext.jsx` | React context for row range (filtering by ID range) |
+| `ui/src/panels/RepairPanel.jsx` | Wrangle UI — create-previews, execute, undo, redo |
+| `ui/src/panels/PreviewCard.jsx` | Renders preview histograms/heatmaps/scatterplots + execute button |
 | `ui/src/utils/serverCalls.jsx` | Frontend API call helpers |
 
 ---
 
-## 8. Things to be aware of
-
-- **Preview scatterplot isn't implemented.** The frontend references `GET /api/plots/preview-scatterplot` and `GET /api/plots/preview-heatmap`, but these endpoints do not exist in `plot_routes.py`. 2D preview visualizations are currently non-functional.
+## 10. Things to be aware of
 
 - **Detectors run in Python memory. - We should fix this** All four detectors operate on the full DataFrame before writing to Postgres. For large datasets this could be slow — there is no chunking or SQL-side detection.
 

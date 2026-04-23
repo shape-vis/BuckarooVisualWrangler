@@ -1,0 +1,247 @@
+from app.execute_sql import fetch_sql, execute_sql
+
+"""
+Manages detector and wrangler operations across a main dataset.
+Subset class of DBOperations.
+"""
+
+class DetectorWranglerSQL:
+
+    def __init__(self, engine, main_table_name, numeric_cols, pure_categorical, categorical_mixed):
+        self.engine = engine
+        self.main_table_name = main_table_name
+        self.numeric_cols = numeric_cols.copy()
+        self.numeric_cols.pop("ID")
+        self.pure_categorical = pure_categorical
+        self.categorical_mixed = categorical_mixed
+
+
+    def anomaly_outliers(self, methods: list, p_threshold: list = None) -> str:
+        """
+        Creates the full SQL query to apply each selected anomaly type to each numeric column.
+
+        :arg: methods     - a list of anomaly types to apply.
+        :arg: p_threshold - a list of thresholds to apply for each anomaly type respectively.
+                          - Null by default automatically populates reasonable thresholds.
+        :return: full SQL query to gather all anomaly values.
+        """
+
+        # Nothing to perform
+        if len(methods) == 0 or len(self.numeric_cols) == 0:
+            return ""
+
+        if p_threshold is None:
+            p_threshold = [3, 1.5, 3]
+
+        col_anomaly_queries = []
+        for col in self.numeric_cols:
+            # Filter out null values.
+            nonnull_col = self.cte_nonnull_col(col, "numeric")
+
+            # Each nonnull col CTE is in anomaly query scope.
+            final_anomaly_queries = ["(", nonnull_col]
+
+            anomaly_queries = []
+            for method in methods:
+                if method.tolower() == "mad":
+                    anomaly_query = f"SELECT * FROM ({self.build_mad_query(p_threshold[0])}) AS mad"
+                elif method.tolower() == "iqr":
+                    anomaly_query = f"SELECT * FROM ({self.build_iqr_query(p_threshold[1])}) AS iqr"
+                # Default to z-score if nothing else is applicable.
+                else:
+                    anomaly_query = f"SELECT * FROM ({self.build_zscore_query(p_threshold[2])}) AS zscore"
+
+                anomaly_queries.append(anomaly_query)
+
+            formatted_anomaly_types = "\nUNION ALL\n".join(anomaly_queries)
+
+            final_anomaly_queries.append(formatted_anomaly_types)
+            final_anomaly_queries.append(")")
+
+            formatted_col_query = "".join(final_anomaly_queries)
+
+            # Adds a formatted CTE of type (col, nonnull_col (anomaly method 1 UNION ALL method 2...))
+            col_anomaly_queries.append(formatted_col_query)
+
+        # Formats all the anomaly queries for each column.
+        return "\nUNION ALL\n".join(col_anomaly_queries)
+
+
+    def cte_nonnull_col(self, col: str, col_type: str) -> str:
+        """
+        Creates the CTE for all non-null values of a selected column.
+
+        :arg: col      - the col to get all non-null values.
+        :arg: col_type - the type of the column, e.g. "numeric" or "text"
+        :return: CTE query for the non-null values of a chosen column.
+        """
+
+        return f'''WITH nonnull_col AS (
+                   SELECT "ID"::int, "{col}"::{col_type} as current_col
+                   FROM "{self.main_table_name}"
+                   WHERE "{col}" IS NOT NULL)'''
+
+
+    def build_mad_query(self, p_threshold: float) -> str:
+        """
+        Creates the query for performing MAD (Median Absolute Deviation) on a given column.
+        Assumes that nonnull_col already exists for the desired column.
+
+        :arg: p_threshold - approximately how many standard deviations a value can be away from the median
+                            (with a constant scalar factor) to determine if the value is an outlier.
+        :return: query for MAD, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        # Assumes nonnull_col already exists from earlier.
+
+        # Get the median value of the column.
+        median_cte = f''',\n median_cte AS (
+                         SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY current_col) AS median_val
+                         FROM nonnull_col)'''
+
+        # Gather the absolute deviations for each numeric value.
+        absolute_deviations = f''',\n absolute_deviations AS (
+                                SELECT ABS(current_col - median_val) AS abs_dev
+                                FROM nonnull_col, median_cte)'''
+
+        # Get the median of the absolute deviations, gets the median absolute deviation (MAD).
+        mad_deviation = f''',\n mad_deviation AS (
+                             SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY abs_dev) AS mad_dev
+                             FROM absolute_deviations)'''
+
+        # Get the anomalies which satisfy MAD.
+        get_mad_errors = f'''\n SELECT "ID", current_col, 'mad_anomaly'
+                                FROM nonnull_col, median_cte, mad_deviation
+                                WHERE mad_dev IS NOT NULL
+                                AND mad_dev > 0
+                                AND ABS(0.6745 * (current_col - median_val) / mad_dev) > {p_threshold}'''
+
+        return "".join([median_cte, absolute_deviations, mad_deviation, get_mad_errors])
+
+
+    def build_iqr_query(self, p_threshold: float) -> str:
+        """
+        Creates the query for performing IQR (Interquartile Range) on a given column.
+        Assumes that nonnull_col already exists for the desired column.
+
+        :arg: p_threshold - the scalar factor multiplied in the quartile_fences to determine outliers.
+        :return: query for IQR, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        # get the 25% and 75% quartiles.
+        quartiles = f''',\n quartiles AS (
+                        SELECT PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY current_col) AS q1,
+                               PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY current_col) AS q3)
+                        FROM nonnull_col)'''
+
+
+        # calculate the quartile fences to get outliers.
+        quartile_fences = f''',\n quartile_fences AS (
+                              SELECT 
+                                (q3 - q1) AS iqr,
+                                (q1 - ({p_threshold} * (q3 - q1))) AS lower_bound,
+                                (q3 + ({p_threshold} * (q3 - q1))) AS upper_bound
+                              FROM quartiles)'''
+
+        # obtain outliers from quartile fence bounds.
+        get_iqr_anomalies = f'''\n SELECT "ID", current_col, 'iqr_anomaly'
+                                   FROM nonnull_col, quartile_fences
+                                   WHERE iqr IS NOT NULL
+                                   AND iqr > 0
+                                   AND (nonnull_col < lower_bound OR nonnull_col > upper_bound)'''
+
+        return "".join([quartiles, quartile_fences, get_iqr_anomalies])
+
+
+    def build_zscore_query(self, p_threshold: float) -> str:
+        """
+        Creates the query for performing Z-Score on a given column.
+        Assumes that nonnull_col already exists for the desired column.
+
+        :arg: p_threshold - determines how many standard deviations a value can be from the mean to be considered an
+                            outlier.
+        :return: query for Z-Score, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        # Get the mean and standard deviation.
+        stats = f''',\n stats AS (
+                    SELECT AVG(current_col) AS mean_val, STDDEV_SAMP(current_col) AS std_val
+                    FROM nonnull_col)'''
+
+        # Gather zscore anomalies by checking how many standard deviations away from the mean a value is.
+        gather_zscore_anomalies = f'''\n SELECT "ID", current_col, 'zscore_anomaly'
+                                      FROM nonnull_col, stats
+                                      WHERE std_val IS NOT NULL
+                                      AND std_val > 0
+                                      AND ABS((nonnull_col - mean_val) / std_val) > {p_threshold}'''
+
+        return "".join([stats, gather_zscore_anomalies])
+
+
+    def detect_rarity(self, rarity_threshold: float = 0.01) -> str:
+        """
+        Creates the query to find rare values for all categorical columns.
+
+        :arg: rarity_threshold - determines what percentage of present values a value has to be to be considered rare.
+        :return: query for rarity, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        if (len(self.categorical_mixed) + len(self.pure_categorical)) == 0:
+            return ""
+
+        rarity_gathering = []
+
+        for col in self.pure_categorical:
+            rarity_gathering.append(self.get_rare_values(col, rarity_threshold))
+
+        for col in self.categorical_mixed:
+            rarity_gathering.append(self.get_rare_values(col, rarity_threshold))
+
+        return "\nUNION ALL\n".join(rarity_gathering)
+
+
+    def get_rare_values(self, col, rarity_threshold: float) -> str:
+        """
+        Creates the query to find rare values for one categorical column.
+
+        :arg: col - name of the categorical column
+        :arg: rarity_threshold - determines what percentage of present values a value has to be to be considered rare.
+        :return: query for rarity, final return are the row_ids, column, and anomaly type once run.
+        """
+
+        # Treat column as text data, treat empty strings as nulls.
+        cleaned = f'''WITH cleaned AS (
+                      SELECT "ID"::int, NULLIF(BTRIM("{col}"::text), '') AS normalized_value
+                      FROM "{self.main_table_name}")'''
+
+        # Get the count of each distinct non-null value.
+        value_counts = f''',\n value_counts AS (
+                           SELECT normalized_value, COUNT(*) AS value_count
+                           FROM cleaned
+                           WHERE normalized_value IS NOT NULL
+                           GROUP BY normalized_value)'''
+
+        # Get the total count of all values.
+        total_count = f''',\n total_counts AS (
+                          SELECT COALESCE(SUM(value_count), 0)::numeric AS total_count
+                          FROM value_counts)'''
+
+        # Get rare values based on the rarity threshold.
+        rare_values = f''',\n rare_values AS (
+                          SELECT normalized_value
+                          FROM value_counts, total_counts
+                          WHERE total_count > 0
+                          AND (value_count / total_count) <= {rarity_threshold}
+                          )'''
+
+        # Get all associated row values that fall into rarity.
+        gather_rare_values = f'''\n SELECT "ID", current_col, 'rare_value'
+                                 FROM cleaned c 
+                                 JOIN rare_values rv ON c.normalized_value = rv.normalized_value
+                                 '''
+
+        return "".join([cleaned, value_counts, total_count, rare_values, gather_rare_values])
+
+
+
+

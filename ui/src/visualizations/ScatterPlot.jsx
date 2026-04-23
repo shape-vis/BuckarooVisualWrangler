@@ -2,11 +2,12 @@ import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
-import { useSelection } from "../utils/SelectionContext.jsx";
-import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useSelection } from "../store/SelectionContext.jsx";
+import { useRowRange } from "../store/RowRangeContext.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
 
 // Module-level cache so base samples survive component unmount/remount (e.g. focus zoom in/out).
-import { scatterPlotCache } from "../utils/visualizationCaches.jsx";
+import { scatterPlotCache } from "../store/visualizationCaches.jsx";
 const baseSampleCache = scatterPlotCache;
 
 function ScatterPlot({
@@ -14,13 +15,13 @@ function ScatterPlot({
   xPos,
   yPos,
   size,
-  table_name,
   attrX,
   attrY,
   errorColors,
   errorSampleCount = 300,
   totalSampleCount = 1000,
 }) {
+  const { tableName: table_name } = useTableName();
   const drawingRef = useRef(null);
   const clearSelectionRef = useRef(() => {});
   const [sampleData, setSampleData] = React.useState(null);
@@ -43,7 +44,7 @@ function ScatterPlot({
 
   // ── data fetch ────────────────────────────────────────────────────────────
   useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}|${errorSampleCount}|${totalSampleCount}`;
+    const cacheKey = `${table_name}|${attrX}|${attrY}`;
 
     async function fetchData() {
       // Restore cached base sample instead of re-fetching (survives unmount/remount from focus zoom).

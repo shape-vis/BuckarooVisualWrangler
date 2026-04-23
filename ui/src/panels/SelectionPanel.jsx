@@ -3,9 +3,11 @@ import * as d3 from "d3";
 import HeatMap from "../visualizations/HeatMap.jsx";
 import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
-import "./SelectionPanel.css";
+import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
-import { ERROR_TYPES, errorColors } from "../utils/errorColors.js";
+import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
+import { useTableName } from "../store/TableNameContext.jsx";
+import { heatMapCache, histogramCache, scatterPlotCache } from "../store/visualizationCaches.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
 function MagnifierIcon({ x, y, onClick }) {
@@ -16,7 +18,6 @@ function MagnifierIcon({ x, y, onClick }) {
         <g
             className="plot-cell-icon"
             onClick={e => { e.stopPropagation(); onClick(); }}
-            style={{ cursor: "pointer" }}
         >
             <rect x={x - 1} y={y - 1} width={16} height={16} rx={3} fill="white" fillOpacity={0.85} />
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="#444" strokeWidth={1.5} />
@@ -38,7 +39,6 @@ function MinimizeIcon({ x, y, onClick }) {
         <g
             className="plot-minimize-icon"
             onClick={e => { e.stopPropagation(); onClick(); }}
-            style={{ cursor: "pointer" }}
         >
             <rect x={x - 1} y={y - 1} width={s + 2} height={s + 2} rx={3} fill="white" fillOpacity={0.85} />
             {/* top-left corner arrows pointing inward */}
@@ -56,7 +56,8 @@ function MinimizeIcon({ x, y, onClick }) {
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, errorColors }) {
+function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
+    const { tableName: table_name } = useTableName();
     const matrixPlotAreaRef = useRef(null);
     const [plotSize, setPlotSize] = useState(180);
     const [focusedCell, setFocusedCell] = useState(null); // { i, j } or null
@@ -69,6 +70,37 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
 
     const columns = selectedAttributes || [];
     const [prevAttributes, setPrevAttributes] = useState(columns);
+
+    function clearFrontendPlotCaches(removedAttributes, activeAttributes) {
+        // clear 1D hist cache
+        removedAttributes.forEach((attr) => {
+            histogramCache.delete(`${table_name}|${attr}`);
+        });
+
+        // clear active-nonactive cache for nonactive attributes, heatmap & scatterplot.
+        removedAttributes.forEach((removedAttr) => {
+            activeAttributes.forEach((activeAttr) => {
+                heatMapCache.delete(`${table_name}|${removedAttr}|${activeAttr}`);
+                heatMapCache.delete(`${table_name}|${activeAttr}|${removedAttr}`);
+                scatterPlotCache.delete(`${table_name}|${removedAttr}|${activeAttr}`);
+                scatterPlotCache.delete(`${table_name}|${activeAttr}|${removedAttr}`);
+            });
+        });
+
+        // clear nonactive-nonactive cache if there are multiple attributes, heatmap & scatterplot.
+        if (removedAttributes.length > 1) {
+            for (let i = 0; i < removedAttributes.length; i++) {
+                for (let j = i + 1; j < removedAttributes.length; j++) {
+                    const first = removedAttributes[i];
+                    const second = removedAttributes[j];
+                    heatMapCache.delete(`${table_name}|${first}|${second}`);
+                    heatMapCache.delete(`${table_name}|${second}|${first}`);
+                    scatterPlotCache.delete(`${table_name}|${first}|${second}`);
+                    scatterPlotCache.delete(`${table_name}|${second}|${first}`);
+                }
+            }
+        }
+    }
 
     // Updates active active attributes to backend
     useEffect(() => {
@@ -104,6 +136,10 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                 }
             }
         }
+
+        // // Keep frontend cache consistent with backend.
+        // // Remove cached nonactive viewport keys when deselected.
+        clearFrontendPlotCaches(removed, columns);
 
         // send nonactive views to backend.
         updateBackendAttributes({ removed_keys: removedKeys });
@@ -154,7 +190,6 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     cellID={cellID}
                     pos={{ x: focusedXPos, y: focusedYPos }}
                     size={{ w: clampedSize, h: clampedSize }}
-                    table_name={table_name}
                     attrX={xCol}
                     errorColors={errorColors}
                 />
@@ -166,7 +201,6 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     xPos={focusedXPos}
                     yPos={focusedYPos}
                     size={clampedSize}
-                    table_name={table_name}
                     attrX={xCol}
                     attrY={yCol}
                     errorColors={errorColors}
@@ -179,7 +213,6 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                     xPos={focusedXPos}
                     yPos={focusedYPos}
                     size={clampedSize}
-                    table_name={table_name}
                     attrX={xCol}
                     attrY={yCol}
                     errorColors={errorColors}
@@ -272,7 +305,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                                 cellID={cellID}
                                 pos={{ x: xPos, y: yPos }}
                                 size={{ w: plotSize, h: plotSize }}
-                                table_name={table_name}
+
                                 attrX={xCol}
                                 errorColors={errorColors}
                             />
@@ -284,7 +317,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                                 xPos={xPos}
                                 yPos={yPos}
                                 size={plotSize}
-                                table_name={table_name}
+
                                 attrX={xCol}
                                 attrY={yCol}
                                 errorColors={errorColors}
@@ -297,7 +330,7 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
                                 xPos={xPos}
                                 yPos={yPos}
                                 size={plotSize}
-                                table_name={table_name}
+
                                 attrX={xCol}
                                 attrY={yCol}
                                 errorColors={errorColors}
@@ -335,8 +368,9 @@ function SelectionPanel({ table_name, selectedAttributes, w, h, errorTypes, erro
  * - visualizations: mapping (e.g. window.visualizations) with modules that expose .module.draw(svgModel, view, canvas, ...args)
  * - width, height (optional) - if not provided component will size SVG to parent bounding box
  */
-export default function MatrixView({ table_name, selectedAttributes }) {
+export default function MatrixView({ selectedAttributes }) {
     const svgRef = useRef(null);
+    const { tableName: table_name } = useTableName();
 
     const [w, setW] = React.useState(800);
     const [h, setH] = React.useState(600);
@@ -360,8 +394,8 @@ export default function MatrixView({ table_name, selectedAttributes }) {
     }, [table_name, selectedAttributes]);
 
     return (
-        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} style={{ display: "block" }} overflow="visible">
-            <SelectionPanel table_name={table_name} selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
+        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
+            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
         </svg>
     );
 }

@@ -1,0 +1,138 @@
+.header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 10;
+}
+
+#header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 56px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    background: #f8f9fa;
+    border-bottom: 1.5px solid #dadce0;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
+#header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 20px 17px 0 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+#header h1 {
+    cursor: pointer;
+}
+
+#header h1 img {
+    vertical-align: middle;
+}
+
+.header h1 {
+    cursor: pointer;
+}
+
+.header h1 img {
+    vertical-align: middle;
+}
+
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 16px;
+    padding-bottom: 6px;
+}
+
+/* ── Action buttons in header (undo / redo / repair) ─────────── */
+.header-action-btn {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1.5px solid #dadce0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3c4043;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    align-self: center;
+    white-space: nowrap;
+}
+
+.header-action-btn:hover:not(:disabled) {
+    background-color: #f8f9fa;
+    border-color: #c0c4c9;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.header-action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.header-action-btn .btn-icon {
+    font-size: 15px;
+    color: #5f6368;
+    line-height: 1;
+    display: inline-flex;
+}
+
+.header-action-btn .btn-svg-icon {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    filter: brightness(0) saturate(100%) invert(35%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%);
+}
+
+/* ── Table status label ──────────────────────────────────────────── */
+
+.table-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 16px;
+    padding: 3px 12px;
+    background: #fff;
+    border: 1.5px solid #a8b4c8;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    align-self: center;
+}
+
+.table-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.table-status-dot--ready {
+    background: #34c759;
+}
+
+.table-status-dot--loading {
+    background: #e53935;
+    animation: status-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

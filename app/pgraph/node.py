@@ -4,16 +4,16 @@ When the user performs a new wrangling operation, a new instance of this class i
 and put into the provenance graph
 
 """
-from app import DBOperations
+
 
 
 class GraphNode:
-    def __init__(self, engine, parent_id, wrangle_op: str, table_name: str, error_table_name: str):
+    def __init__(self, parent_table, wrangle_op: str, table_name: str, error_table_name: str):
 
-        self.parent_id = parent_id
+        self.parent_table = parent_table
         self.wrangle_op = wrangle_op
-        self.db_op = DBOperations(engine)
-        self.db_op.load_table(table_name, error_table_name)
+        self.table_name = table_name
+        self.error_table_name = error_table_name
         self.children = []
 
         """ quality metric parts """
@@ -22,6 +22,14 @@ class GraphNode:
         self.incomplete_metric = 0
         self.mismatch_metric = 0
 
+    # def __json__(self):
+    #     return {
+    #         "parent_table": self.parent_table,
+    #         "wrangle_op": self.wrangle_op,
+    #         "table_name": self.table_name,
+    #         "error_table_name": self.error_table_name,
+    #         "children": self.children
+    #     }
     def update_metrics(self, anomaly, missing, incomplete, mismatch):
 
         self.anomaly_metric = anomaly
@@ -29,7 +37,7 @@ class GraphNode:
         self.incomplete_metric = incomplete
         self.mismatch_metric = mismatch
 
-    def add_child(self, child_node: GraphNode):
+    def add_child(self, child_node: str):
         self.children.append(child_node)
 
 

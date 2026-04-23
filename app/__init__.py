@@ -6,6 +6,8 @@
 import builtins
 import logging
 import os
+import pkgutil
+
 import psycopg2
 from dotenv import load_dotenv
 from flask import Flask
@@ -29,7 +31,6 @@ _werkzeug_handler = logging.StreamHandler()
 _werkzeug_handler.setFormatter(_WhiteFormatter('%(message)s'))
 logging.getLogger('werkzeug').handlers = [_werkzeug_handler]
 
-from app.db_functions_sql import DBOperations
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 # Function to create the database if it does not exist
@@ -80,7 +81,7 @@ def load_database_info():
                 "password": password,
                 "db_name": db_name
             }
-            f.write(json.dumps(db_info, indent=4))    
+            f.write(json.dumps(db_info, indent=4))
 
     return host, port, user, password, db_name
 
@@ -116,12 +117,16 @@ create_database_if_not_exists(connection, db_name)
 print(f"Connecting to database: {db_name}")
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
+from app.db_utils.db_functions_sql import DBOperations
 db_operations = DBOperations(engine)
 
-#flag if a wrangle has happened in the session yet
+""" Global vars to use throughout session """
 wrangle_occurred = False
+app.pgraph_for_session = None
 
-from app import routes
-from app import wrangler_routes_sql as wrangler_routes
-from app import plot_routes
-#manages the different data instances of the data during the users session
+#this automatically imports any new route files added to the app/routes dir
+import app.routes as _routes_pkg
+for _, module_name, _ in pkgutil.iter_modules(_routes_pkg.__path__):
+    __import__(f"app.routes.{module_name}")
+
+

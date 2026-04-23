@@ -1,8 +1,4 @@
-#Buckaroo Project - June 1, 2025
-#This file starts the app
-
-from app import app
+from app import app as flask_app
 
 if __name__ == "__main__":
-    print("INSIDE GUARD")
-    app.run(host="127.0.0.1", port=5001, debug=True, use_reloader=False)
+    flask_app.run(host="127.0.0.1", port=5001, debug=True, use_reloader=False)

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import "./CollapsiblePanel.css";
+import { useState, useEffect } from "react";
+import "../styles/CollapsiblePanel.css";
 
 
 export default function CollapsiblePanel({
@@ -7,9 +7,19 @@ export default function CollapsiblePanel({
   collapsed = null,
   direction = "left", // "left" | "right"  | "down"
   defaultOpen = true,
-  style = {}
+  className = "",
+  openTrigger = 0,
+  closeTrigger = 0,
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    if (openTrigger > 0) setIsOpen(true);
+  }, [openTrigger]);
+
+  useEffect(() => {
+    if (closeTrigger > 0) setIsOpen(false);
+  }, [closeTrigger]);
 
   const isRight = direction === "right";
   const isDown = direction === "down";
@@ -20,20 +30,18 @@ export default function CollapsiblePanel({
     <div
       className={`panel ${isOpen ? "open" : "closed"} ${
         isRight ? "collapse-right" : isDown ? "collapse-down" : ""
-      }`}
+      } ${className}`}
       data-direction={direction}
-      style={style}
     >
       <div className="panel-content">
         {isOpen ? children : <div className="panel-collapse-text">{collapsed}</div>}
       </div>
 
       <button
-        className="panel-toggle"
+        className={`panel-toggle ${isDown ? "panel-toggle--down" : ""}`}
         onClick={() => setIsOpen((o) => !o)}
         aria-expanded={isOpen}
         aria-label={isOpen ? "Collapse panel" : "Expand panel"}
-        style={{transform: isDown ? "rotate(270deg)" : "none"}}
       >
         {icon}
       </button>

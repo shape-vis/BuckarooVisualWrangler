@@ -2,13 +2,12 @@
 # This file handles all endpoints surrounding wranglers
 
 from flask import request
-from app import app
+from app import app, db_operations
+from app.db_utils import query
 from app import engine
-from postgres_wrangling import query
 import traceback
 import pandas as pd
-from pprint import pprint
-from app.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
+from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
 from sqlalchemy import text as sa_text
 
 
@@ -92,12 +91,12 @@ def create_previews():
     """
     try:
         body = request.get_json(force=True)
-        table   = body["table"]
+        table   = db_operations.main_table_name
         row_ids = body.get("row_ids", [])
         cols    = body.get("cols", [])
 
         # extra case protection.
-        cols    = [f'{col}' for col in cols]
+        #cols    = [f'{col}' for col in cols]
 
         if not row_ids:
             return {"success": False, "error": "No rows selected"}, 400
@@ -124,10 +123,10 @@ def execute_wrangle():
     """
     try:
         body = request.get_json(force=True)
-        table         = body["table"]          # main table name
+        table         = db_operations.main_table_name
         preview_table = body["preview_table"]  # the preview to promote
 
-        return execute_wrangle_preview(table, preview_table, _safe_pg_name)
+        return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())
@@ -143,7 +142,7 @@ def wrangle_delete_column():
     """
     try:
         body = request.get_json(force=True)
-        table = body["table"]
+        table = db_operations.main_table_name
         column = body["column"]
 
         print(f"Deleting column '{column}' from table '{table}'")

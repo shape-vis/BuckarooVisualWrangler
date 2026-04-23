@@ -1,39 +1,46 @@
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect, useCallback } from "react";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
-import { SelectionContext } from "../utils/SelectionContext.jsx";
-import { createPreviews, executeWrangle } from "../utils/serverCalls.jsx";
+import { SelectionContext } from "../store/SelectionContext.jsx";
+import {executeWrangle, getPGraph} from "../utils/serverCalls.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
+import { useLoading } from "../store/LoadingContext.jsx";
+import { useRepair } from "../store/RepairContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
-import "./RepairPanel.css";
-import { errorColors as ERROR_COLORS } from "../utils/errorColors.js";
+import "../styles/RepairPanel.css";
+import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
+import {usePgraph} from "../store/PGraphContext.jsx";
 
-export default function RepairPanel({ table_name, onWrangleExecuted }) {
-  const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } = useContext(SelectionContext);
-
-  const [busy, setBusy] = useState(false);
+export default function RepairPanel() {
+  // global contexts for this component
+  const { setTableName } = useTableName();
+  const { addLoader, removeLoader } = useLoading();
+  const { highlightedRowIds, highlightedCols, clearHighlight } = useContext(SelectionContext);
+  const { busy, setBusy, requestPreviews, registerRepairHandler, repairPanelOpenTrigger, repairPanelCloseTrigger, closeRepairPanel, onWrangleExecuted } = useRepair();
+  const {getLayoutedElements, setNodes, setEdges} = usePgraph();
+  //local component state
   const [previewError, setPreviewError] = useState(null);
   const [previews, setPreviews] = useState(null);
-  // previews shape:
-  //   1D: { type: "histogram", preview_delete, preview_impute, cols }
-  //   2D: { type: "heatmap"|"scatterplot", preview_delete, preview_impute_x, preview_impute_y, cols }
+  const [previewsGenerated, setPreviewsGenerated] = useState(false);
+
 
   const hasSelection = highlightedRowIds && highlightedRowIds.length > 0;
 
-  async function handleRepairSelection() {
-    if (!hasSelection) return;
-
-    setBusy(true);
+  const handleRepairSelection = useCallback(async () => {
     setPreviewError(null);
     setPreviews(null);
+    setPreviewsGenerated(false);
 
-    const cols = highlightedCols || [];
-    const result = await createPreviews(table_name, highlightedRowIds, cols);
+    const response = await requestPreviews();
+    if (!response) return;
 
-    setBusy(false);
+    const { result, cols, selectionSource } = response;
 
     if (!result?.success) {
       setPreviewError(result?.error || "Preview generation failed.");
       return;
     }
+
+    setPreviewsGenerated(true);
 
     if (result.dims === 1) {
       setPreviews({
@@ -51,74 +58,62 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
         cols,
       });
     }
-  }
+  }, [requestPreviews]);
+
+  useEffect(() => {
+    registerRepairHandler(handleRepairSelection);
+    return () => registerRepairHandler(null);
+  }, [registerRepairHandler, handleRepairSelection]);
 
   async function handleExecuteWrangle(previewTableName) {
     setBusy(true);
+    addLoader();
     setPreviewError(null);
-    const result = await executeWrangle(table_name, previewTableName);
+
+    //execute the wrangle
+    const result = await executeWrangle(previewTableName);
+    const pGraphResult = await getPGraph();
+
+    //update the nodes and edges in the pgraph based on the new result
+    let layoutNodesEdges;
+    layoutNodesEdges = getLayoutedElements(pGraphResult.nodes, pGraphResult.edges)
+    setNodes(layoutNodesEdges.nodes)
+    setEdges(layoutNodesEdges.edges)
+
     setBusy(false);
+    removeLoader();
     if (result?.success) {
+      if (result.table) {
+        setTableName(result.table);
+      }
       setPreviews(null);
       clearHighlight();
+      closeRepairPanel();
       onWrangleExecuted?.();
     } else {
       setPreviewError(result?.error || "Execute wrangle failed.");
     }
   }
 
-  function handleClearSelection() {
-    clearHighlight();
-    setPreviews(null);
-    setPreviewError(null);
-  }
-
   return (
-    <CollapsiblePanel direction="right" collapsed={"Data Repair Panel"} defaultOpen={false} style={{ height: "100%", margin: "0px 0" }}>
+    <CollapsiblePanel direction="right" collapsed={"Data Repair Panel"} defaultOpen={false} className="panel--repair" openTrigger={repairPanelOpenTrigger} closeTrigger={repairPanelCloseTrigger}>
       <div id="toolbox">
-        <div style={{ fontWeight: "bold", marginLeft: "auto", marginRight: "auto", marginTop: "10px", marginBottom: "10px" }}>
+        <div className="repair-panel-title">
           Data Repair Panel
         </div>
 
-        {/* ── Action buttons ───────────────────────────────────────────── */}
+        {/* ── Action buttons ─────────────────────────────────────────────
         <div className="repair-tools">
           <div
-            id="repairButton"
-            className="regButton"
-            style={{
-              width: "130px",
-              opacity: hasSelection ? 1 : 0.4,
-              cursor: hasSelection ? "pointer" : "not-allowed",
-            }}
-            onClick={handleRepairSelection}
-          >
-            Repair Selection
-          </div>
-
-          <div
             id="zoomButton"
-            className="regButton"
-            style={{ width: "130px", marginLeft: "25px", marginRight: "25px" }}
+            className="regButton regButton--zoom"
           >
             Zoom Selection
           </div>
-
-          <div
-            id="undoButton"
-            className="regButton"
-            style={{ width: "65px" }}
-            onClick={handleClearSelection}
-          >
-            Undo
-          </div>
-
-          <div id="redoButton" className="regButton" style={{ width: "65px" }}>
-            Redo
-          </div>
-        </div>
+        </div> */}
 
         {/* ── Selection status ─────────────────────────────────────────── */}
-        <div style={{ fontSize: 11, color: "#555", margin: "6px 12px", minHeight: 16 }}>
+        <div className="repair-selection-status">
           {hasSelection
             ? `${highlightedRowIds.length} row(s) selected${highlightedCols?.length ? ` · cols: ${highlightedCols.join(", ")}` : ""}`
             : "No selection — click a point, bin, or bar in the plots."}
@@ -126,12 +121,20 @@ export default function RepairPanel({ table_name, onWrangleExecuted }) {
 
         {/* ── Feedback ─────────────────────────────────────────────────── */}
         {busy && (
-          <div style={{ fontSize: 12, color: "#555", margin: "8px 12px" }}>
+          <div className="repair-feedback-centered">
             Generating previews…
+            <div className="repair-loading-bar-track">
+              <div className="repair-loading-bar-fill" />
+            </div>
+          </div>
+        )}
+        {!busy && previewsGenerated && !previewError && (
+          <div className="repair-feedback-centered repair-success">
+            Previews generated
           </div>
         )}
         {previewError && (
-          <div style={{ fontSize: 12, color: "red", margin: "8px 12px" }}>
+          <div className="repair-error">
             Error: {previewError}
           </div>
         )}

@@ -3,16 +3,16 @@ import { useEffect, useState } from "react";
 import { queryTopErrorRows } from "../utils/serverCalls.jsx";
 import CollapsiblePanel from "../elements/CollapsiblePanel";
 import { truncateText } from "../utils/textUtils.js";
+import { useTableName } from "../store/TableNameContext.jsx";
+import { useLoading } from "../store/LoadingContext.jsx";
+import "../styles/TablePanel.css";
 
 function RowHeader({ columns }) {
   return (
     <thead>
       <tr>
         {columns.map(col => (
-          <th
-            key={col}
-            style={{ border: "1px solid #ddd", padding: 6, backgroundColor: "#f0f0f0", textAlign: "left" }}
-          >
+          <th key={col}>
             {col}
           </th>
         ))}
@@ -23,44 +23,31 @@ function RowHeader({ columns }) {
 
 function TableRow({tableData, rowIndex, columns, errorData}) {
 
-  // error colors / priority copied from original
-  const errorColors = {
-    mismatch: ["black", "hotpink"],
-    missing: ["white", "saddlebrown"],
-    anomaly: ["white", "red"],
-    incomplete: ["white", "gray"],
-  };  
+  // Priority order for determining which error drives the cell color
+  const errorPriority = ["mismatch", "missing", "anomaly", "incomplete"];
 
   return (
     <tr key={`row${rowIndex}`}>
     {
       columns.map((col) => {
-        // const key = col + "_" + tableData["ID"][rowIndex];
         const key = col + "_" + (tableData?.["ID"]?.[rowIndex] ?? rowIndex);
         const errors = errorData[key] ? errorData[key] : [];
         const cellValue = tableData[col][rowIndex];
 
-        let bg_color = "white";
-        let fg_color = "black";
-
-        errors.forEach( errorType => {
-          if (errorColors[errorType]) {
-            fg_color = errorColors[errorType][0];
-            bg_color = errorColors[errorType][1];
-          }
-        });
+        // Pick the highest-priority error for the data attribute
+        const primaryError = errorPriority.find(e => errors.includes(e)) || null;
 
           return (
             <td
               key={`${rowIndex}-${col}`}
-              style={{ border: "1px solid #ddd", padding: 6, backgroundColor: bg_color, color: fg_color }}
+              data-error={primaryError}
               title={cellValue}
             >
               {truncateText(cellValue, 25)}
-            </td>       
+            </td>
           );
-      }) 
-    } 
+      })
+    }
     </tr>
   )
 
@@ -87,7 +74,9 @@ function TableBody({ columns, tableData, numRows, errorData}) {
  *  - model: an object exposing getColumnErrors() and dataSource with objects() method (same expectations as original TableView)
  *  - maxRows (optional): number of top rows to show (default 10)
  */
-export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 }) {
+export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
+  const { tableName: table_name } = useTableName();
+  const { addLoader, removeLoader } = useLoading();
 
   const [tableData, setTableData] = useState(null);
   const [errorData, setErrorData] = useState(null);
@@ -97,9 +86,10 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
 
     async function fetchData(){
         setFetchError(null);
+        addLoader();
         try {
 
-          const response = await queryTopErrorRows(table_name, maxRows);
+          const response = await queryTopErrorRows(maxRows);
           console.log("[TablePanel] Response:", response);
 
           if (!response || !response.success) {
@@ -124,6 +114,8 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
         } catch (err) {
           console.error(err?.message || err);
           setFetchError(err?.message || String(err));
+        } finally {
+          removeLoader();
         }
       }
 
@@ -133,19 +125,19 @@ export default function TablePanel({ table_name, sortedAttributes, maxRows = 10 
 
 
   return (
-    <CollapsiblePanel collapsed={`Top ${maxRows} Rows with Most Errors`} direction="down" defaultOpen={true} style={{width: "100%"}}>
+    <CollapsiblePanel collapsed={`Top ${maxRows} Rows with Most Errors`} direction="down" defaultOpen={true} className="panel--table">
       <div id="table-div">
-        <div style={{ fontWeight: "bold", textAlign: "center" }}>
+        <div className="table-title">
           Top {maxRows} Rows with Most Errors
         </div>
-        
+
         <div id="table-container">
           {fetchError ? (
-            <div style={{ padding: 12, color: "red", fontSize: 12 }}>Error: {fetchError}</div>
+            <div className="table-error-message">Error: {fetchError}</div>
           ) : (!tableData || !errorData) ? (
-            <div style={{ padding: 12, color: "#888", fontSize: 12 }}>Loading…</div>
+            <div className="table-loading-message">Loading…</div>
           ) : (
-            <table id="table" style={{ borderCollapse: "collapse", width: "100%" }}>
+            <table id="table">
               <RowHeader columns={sortedAttributes}/>
               <TableBody columns={sortedAttributes} tableData={tableData} numRows={maxRows} errorData={errorData} />
             </table>

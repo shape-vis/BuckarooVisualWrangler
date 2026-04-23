@@ -2,19 +2,33 @@
 #This file helps deliver on endpoint services
 
 import hashlib
+import json
 import random
 import string
 import re
 from sqlalchemy import types as sql_types
 from sqlalchemy import text as sa_text
 import pandas as pd
-from app.set_id_column import set_id_column
+
+import app
+from app.db_utils import query
+from app.pgraph.node import GraphNode
+from app.pgraph.pgraph import PGraph
+from app.server_utils.set_id_column import set_id_column
 from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
-from postgres_wrangling import query
 
+def get_current_pgraph():
+    """
+    uses the custom json function in graph to send a json version of the graph back to the view
+    :return:
+    """
+    return json.dumps(app.pgraph_for_session, default=lambda o: o.__json__() if hasattr(o, '__json__') else None)
+
+def clicked_node_access_helper(node_table_name):
+    return app.pgraph_for_session.set_clicked_node_as_current(node_table_name)
 
 def _validate_identifier(name: str) -> str:
     """
@@ -27,6 +41,11 @@ def _validate_identifier(name: str) -> str:
         raise ValueError(f"Unsafe SQL identifier rejected: {name!r}")
     return name
 
+def get_pgraph_redo():
+    return app.pgraph_for_session.redo_pgraph()
+
+def get_pgraph_undo():
+    return app.pgraph_for_session.undo_pgraph()
 
 def _safe_pg_name(base: str, suffix: str) -> str:
     """
@@ -61,8 +80,8 @@ def generate_table_name(csv_name):
         csv_name = csv_name[0:len(csv_name)-4]
 
     clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name).lower()
-    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=10))
-    return _safe_pg_name("data_" + clean_name, "_" + random_string)
+    random_string = "".join(random.choices(string.ascii_letters + string.digits, k=5))
+    return _safe_pg_name(clean_name, "_" + random_string)
 
 
 def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name, engine):
@@ -182,7 +201,7 @@ def get_error_dist(error_df,normal_df):
     res = error_df.pivot_table("row_id", index="error_type", columns='column_id', aggfunc="count")
     res_mask = res.fillna(0)
     total_ids = normal_df['ID'].count()
-    res_mask.iloc[:, 0:] = res_mask.iloc[:, 0:].div(total_ids)
+    res_mask = res_mask.div(total_ids)
 
     # Flatten the multi-level columns
     res_mask = res_mask.reset_index()
@@ -339,17 +358,15 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
 
-def execute_wrangle_preview(table, preview_table, preview_name_fn):
+def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations):
     """
-    Promote a preview table to become the main table:
+    Promote a preview table to the new current table and make it as a new node in the pgraph
     1. Drop all other preview tables (and their errors_ siblings)
-    2. Rename the main table to <table>_old
-    3. Rename the selected preview table to <table>
-    4. Drop <table>_old
-    5. Reload db_operations for the promoted table
+    2. Rename preview to the new node table
+    3. Reload db_operations with the new node
     Returns a dict with success and table name.
     """
-    from app import engine, db_operations
+    # from app import engine, db_operations
 
     all_possible_previews = [
         preview_name_fn(table, "_preview_delete"),
@@ -358,25 +375,21 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn):
         preview_name_fn(table, "_preview_impute_y"),
     ]
 
-    with engine.begin() as conn:
-        for pt in all_possible_previews:
-            if pt != preview_table:
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{pt}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{pt}"'))
+    app.db_operations.drop_preview_tables(all_possible_previews, preview_table)
 
-        old_table = f"{table}_old"
-        conn.execute(sa_text(f'ALTER TABLE "{table}" RENAME TO "{old_table}"'))
-        conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{table}" RENAME TO "errors_{old_table}"'))
+    wrangle_executed = extract_preview_action(preview_table)
+    preview_table_trimmed = trim_preview_suffix(preview_table)
 
-        conn.execute(sa_text(f'ALTER TABLE "{preview_table}" RENAME TO "{table}"'))
-        conn.execute(sa_text(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{table}"'))
+    #enter into pgraph before current or new tables are modified, return the new tables name with nodeID added
+    # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
+    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
+    app.db_operations.rename_preview_to_new(preview_table, new_table_name)
+    db_operations.load_table(new_table_name, f"errors_{new_table_name}")
 
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{old_table}"'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{old_table}"'))
+    app.db_operations.update_rankings(new_table_name)
 
-    db_operations.load_table(table, f"errors_{table}")
 
-    return {"success": True, "table": table}
+    return {"success": True, "table": new_table_name}
 
 def _clone_table_pair(conn, source_table, dest_table, errors_source):
     """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
@@ -386,6 +399,30 @@ def _clone_table_pair(conn, source_table, dest_table, errors_source):
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
 
+def trim_preview_suffix(name: str) -> str:
+    """Remove the '_preview...' tail from a table name, if present."""
+    idx = name.find("_preview")
+    if idx != -1:
+        return name[:idx]
+    return name
+
+def init_pgraph_for_session(root_table):
+    app.pgraph_for_session = PGraph()
+
+    # create the root node, add it to the pgraph as the root
+    root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
+    app.pgraph_for_session.add_root_node(root_node)
+
+def n_wrangle(parent_table, child_table, wrangle_executed):
+    new_table_name = make_new_table_name(child_table)
+    current_node = GraphNode(parent_table,wrangle_executed, new_table_name,f"errors_{new_table_name}" )
+    app.pgraph_for_session.add_node(current_node)
+    return new_table_name
+
+def make_new_table_name(child_table):
+    node_id = app.pgraph_for_session.get_new_node_id()
+    new_table_name = f"{node_id}{child_table[2:]}"
+    return new_table_name
 def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
     """
     Drop and recreate a minimal dest table and empty error table to populate only with regard to the cols.
@@ -440,6 +477,13 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
         "dims": 1,
     }
 
+def extract_preview_action(name: str) -> str:
+    """Extract the action after '_preview_' (e.g. 'impute_y'), or '' if not found."""
+    marker = "_preview_"
+    idx = name.find(marker)
+    if idx != -1:
+        return name[idx + len(marker):]
+    return ""
 
 def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
@@ -473,3 +517,10 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
         "preview_impute_y": preview_impute_y,
         "dims": 2,
     }
+
+def _parse_node_id(table_name):
+    """Parse 'n3_rest_of_name' into (3, 'rest_of_name'). Returns None on failure."""
+    m = re.match(r'^n(\d+)_(.+)$', table_name)
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)

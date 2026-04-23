@@ -1,7 +1,7 @@
 import React from 'react';
 
 import Modal from './Modal.jsx';
-import './SpinnerModal.css'
+import '../styles/SpinnerModal.css'
 
 export default function SpinnerModal({ visible }) {
   return (

@@ -2,11 +2,12 @@ import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { queryHistogram1d, queryHistogram1dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
 import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
-import { useSelection } from "../utils/SelectionContext.jsx";
-import { useRowRange } from "../utils/RowRangeContext.jsx";
+import { useSelection } from "../store/SelectionContext.jsx";
+import { useRowRange } from "../store/RowRangeContext.jsx";
+import { useTableName } from "../store/TableNameContext.jsx";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
-import { histogramCache } from "../utils/visualizationCaches.jsx";
+import { histogramCache } from "../store/visualizationCaches.jsx";
 const baseSampleCache = histogramCache;
 
 /**
@@ -16,10 +17,10 @@ function HistogramBarChart({
     cellID,
     pos,
     size,
-    table_name,
     attrX,
     errorColors,
 }) {
+    const { tableName: table_name } = useTableName();
 
     const drawingRef = useRef(null);
     const clearSelectionRef = useRef(() => {});
@@ -42,7 +43,7 @@ function HistogramBarChart({
 
     // ── data fetch ─────────────────────────────────────────────────────────
     useEffect(() => {
-        const cacheKey = `${table_name}|${attrX}|10`;
+        const cacheKey = `${table_name}|${attrX}`;
 
         async function fetchData() {
             // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).

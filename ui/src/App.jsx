@@ -1,6 +1,8 @@
 import Home from './pages/Home'
 import Buckaroo from './pages/Buckaroo'
 import { useState } from 'react';
+import { TableNameProvider } from './store/TableNameContext.jsx';
+import { LoadingProvider } from './store/LoadingContext.jsx';
 
 export default function App() {
 
@@ -16,11 +18,15 @@ export default function App() {
     <div>
       {/* Centralized rendering logic lives here in App.jsx */}
       {uploaded ? (
-        <Buckaroo onReset={() => { 
-          setUploaded(false); 
-          sessionStorage.setItem("userUploaded", "no");
-          sessionStorage.setItem("uploadResponse", null);}}
-          uploadResponse={uploadResponse} />
+        <TableNameProvider initialTableName={uploadResponse?.table_name}>
+          <LoadingProvider>
+            <Buckaroo onReset={() => {
+              setUploaded(false);
+              sessionStorage.setItem("userUploaded", "no");
+              sessionStorage.setItem("uploadResponse", null);}}
+            />
+          </LoadingProvider>
+        </TableNameProvider>
       ) : (
         // Home only handles the upload action and calls onSuccess
         <Home onSuccess={(response) => {
