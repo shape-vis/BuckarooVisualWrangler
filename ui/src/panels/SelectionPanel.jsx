@@ -7,7 +7,7 @@ import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
 import { useTableName } from "../store/TableNameContext.jsx";
-// import { heatMapCache, histogramCache, scatterPlotCache } from "../utils/visualizationCaches.jsx";
+import { heatMapCache, histogramCache, scatterPlotCache } from "../store/visualizationCaches.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
 function MagnifierIcon({ x, y, onClick }) {
@@ -71,36 +71,36 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
     const columns = selectedAttributes || [];
     const [prevAttributes, setPrevAttributes] = useState(columns);
 
-    // function clearFrontendPlotCaches(removedAttributes, activeAttributes) {
-    //     // clear 1D hist cache
-    //     removedAttributes.forEach((attr) => {
-    //         histogramCache.delete(`${table_name}|${attr}`);
-    //     });
-    //
-    //     // clear active-nonactive cache for nonactive attributes, heatmap & scatterplot.
-    //     removedAttributes.forEach((removedAttr) => {
-    //         activeAttributes.forEach((activeAttr) => {
-    //             heatMapCache.delete(`${table_name}|${removedAttr}|${activeAttr}`);
-    //             heatMapCache.delete(`${table_name}|${activeAttr}|${removedAttr}`);
-    //             scatterPlotCache.delete(`${table_name}|${removedAttr}|${activeAttr}`);
-    //             scatterPlotCache.delete(`${table_name}|${activeAttr}|${removedAttr}`);
-    //         });
-    //     });
-    //
-    //     // clear nonactive-nonactive cache if there are multiple attributes, heatmap & scatterplot.
-    //     if (removedAttributes.length > 1) {
-    //         for (let i = 0; i < removedAttributes.length; i++) {
-    //             for (let j = i + 1; j < removedAttributes.length; j++) {
-    //                 const first = removedAttributes[i];
-    //                 const second = removedAttributes[j];
-    //                 heatMapCache.delete(`${table_name}|${first}|${second}`);
-    //                 heatMapCache.delete(`${table_name}|${second}|${first}`);
-    //                 scatterPlotCache.delete(`${table_name}|${first}|${second}`);
-    //                 scatterPlotCache.delete(`${table_name}|${second}|${first}`);
-    //             }
-    //         }
-    //     }
-    // }
+    function clearFrontendPlotCaches(removedAttributes, activeAttributes) {
+        // clear 1D hist cache
+        removedAttributes.forEach((attr) => {
+            histogramCache.delete(`${table_name}|${attr}`);
+        });
+
+        // clear active-nonactive cache for nonactive attributes, heatmap & scatterplot.
+        removedAttributes.forEach((removedAttr) => {
+            activeAttributes.forEach((activeAttr) => {
+                heatMapCache.delete(`${table_name}|${removedAttr}|${activeAttr}`);
+                heatMapCache.delete(`${table_name}|${activeAttr}|${removedAttr}`);
+                scatterPlotCache.delete(`${table_name}|${removedAttr}|${activeAttr}`);
+                scatterPlotCache.delete(`${table_name}|${activeAttr}|${removedAttr}`);
+            });
+        });
+
+        // clear nonactive-nonactive cache if there are multiple attributes, heatmap & scatterplot.
+        if (removedAttributes.length > 1) {
+            for (let i = 0; i < removedAttributes.length; i++) {
+                for (let j = i + 1; j < removedAttributes.length; j++) {
+                    const first = removedAttributes[i];
+                    const second = removedAttributes[j];
+                    heatMapCache.delete(`${table_name}|${first}|${second}`);
+                    heatMapCache.delete(`${table_name}|${second}|${first}`);
+                    scatterPlotCache.delete(`${table_name}|${first}|${second}`);
+                    scatterPlotCache.delete(`${table_name}|${second}|${first}`);
+                }
+            }
+        }
+    }
 
     // Updates active active attributes to backend
     useEffect(() => {
@@ -137,8 +137,8 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
             }
         }
 
-        // Keep frontend cache consistent with backend.
-        // Remove cached nonactive viewport keys when deselected.
+        // // Keep frontend cache consistent with backend.
+        // // Remove cached nonactive viewport keys when deselected.
         clearFrontendPlotCaches(removed, columns);
 
         // send nonactive views to backend.

@@ -87,11 +87,11 @@ function HistogramBarChart({
             ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];
         const catDomainY = catHistDataX.length === 0 ? null : catHistDataX.map(d => d);
 
-        const xScale = createHybridScales(size, numHistDataX, catHistDataX, numDomainY, catDomainY, "horizontal");
+        const xScale = createHybridScales(size.w, numHistDataX, catHistDataX, numDomainY, catDomainY, "horizontal");
 
         const yScale = d3.scaleLinear()
             .domain([0, d3.max(histogramData.histograms, d => d.count.items)]).nice()
-            .range([size, 0]);
+            .range([size.h, 0]);
 
         const colorScale = errorColors || (k => "steelblue");
         colorScaleRef.current = colorScale;
@@ -134,7 +134,7 @@ function HistogramBarChart({
 
         // Brush for range selection.
         const brush = d3.brushX()
-            .extent([[0, 0], [size, size]])
+            .extent([[0, 0], [size.w, size.h]])
             .on("brush end", (event) => {
                 if (!event.selection) {
                     bars.attr("fill", barColor);
@@ -245,7 +245,7 @@ function HistogramBarChart({
 
     return (
         <g key={cellID} transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
-            <rect width={size} height={size} fill="#ffffff00" onClick={clearSelection} />
+            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearSelection} />
             <g ref={drawingRef}></g>
         </g>
     );
