@@ -40,6 +40,28 @@ def update_errors_table(table_name: str) -> None:
         traceback.print_exc()
         raise
 
+def update_preview_error_table(table_name: str, err_table_name: str) -> None:
+    """
+    After modifying a table in-place, re-run error detection
+    and update the errors table.
+    """
+    try:
+        x = None
+
+        # df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
+        # detected_errors_df = run_detectors(df)
+        # errors_table_name = f"errors_{table_name}"
+        # # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
+        # # table names > 63 chars due to PostgreSQL identifier truncation).
+        # with engine.begin() as conn:
+        #     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
+        # detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
+        # print(f"✓ Updated errors table: {errors_table_name}")
+    except Exception as e:
+        print(f"ERROR: Could not update errors table for {table_name}: {e}")
+        traceback.print_exc()
+        raise
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Wrangling Endpoints (Supports both bin-based and ID-based selections)
 # the way it works is, create-previews does all wrangles (delete, impute x/y), 
@@ -72,6 +94,9 @@ def create_previews():
         table   = db_operations.main_table_name
         row_ids = body.get("row_ids", [])
         cols    = body.get("cols", [])
+
+        # extra case protection.
+        #cols    = [f'{col}' for col in cols]
 
         if not row_ids:
             return {"success": False, "error": "No rows selected"}, 400

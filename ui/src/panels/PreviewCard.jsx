@@ -208,10 +208,14 @@ function draw2D(canvas, histogramData, colorScale) {
 
 // ── Scatterplot renderer ───────────────────────────────────────────────────
 function drawScatter(canvas, scatterData, colorScale) {
+
   const numHistDataX = scatterData.scaleX.numeric || [];
-  const catHistDataX = scatterData.scaleX.categorical || [];
   const numHistDataY = scatterData.scaleY.numeric || [];
-  const catHistDataY = scatterData.scaleY.categorical || [];
+
+  const actualXCats = new Set((scatterData.data || []).filter(d => d.xType === "categorical").map(d => d.x));
+  const actualYCats = new Set((scatterData.data || []).filter(d => d.yType === "categorical").map(d => d.y));
+  const catHistDataX = colorScale ? (scatterData.scaleX.categorical || []).filter(v => actualXCats.has(v)) : [];
+  const catHistDataY = colorScale ? (scatterData.scaleY.categorical || []).filter(v => actualYCats.has(v)) : [];
 
   const xScale = createHybridScales(
     PLOT_SIZE, numHistDataX, catHistDataX,
