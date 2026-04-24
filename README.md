@@ -12,7 +12,8 @@ Buckaroo Visual Wrangler is a data visualization tool that enables users to visu
 
 If you want to see an early version of buckaroo (without going through any set up), you can try out an in-memory client-only version [here](https://shape-vis.github.io/BuckarooVisualWrangler/). This is the version that was documented in our [VLDB2025 demo](https://arxiv.org/abs/2507.16073) paper and has some slight differences from the current version.
 
-## 2026 - How to Start - ( very rudimentary - more needs to be added for specific postgres issues and OS variations)
+## 2026 - How to Start
+### ( very rudimentary - more needs to be added for specific postgres issues and OS variations)
 1. do ```./run.sh```
 2. now you should have a .venv built for the project to run in, and a database.json created, if this didn't work you need to set up the parameters in database.json manually in postgres, then input these values into database.json, ```__init.py__``` in ```/app``` uses database.json to connect to the DB
 3. make sure you have npm installed and it's accessible in the .venv
