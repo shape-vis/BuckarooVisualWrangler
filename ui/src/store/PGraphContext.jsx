@@ -5,14 +5,14 @@ import {
     useNodesState,
     useEdgesState
 } from "@xyflow/react";
-import {TextUpdaterNode} from "../graph_objects/TextUpdaterNode";
+import {SelectedNode} from "../graph_objects/NodeTypes.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import {SelectionContext} from "./SelectionContext.jsx";
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../store/visualizationCaches.jsx";
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode} from "../utils/serverCalls.jsx";
-
+import "../styles/Nodes.css"
 
 
 export const PGraphContext = createContext(null);
@@ -23,7 +23,7 @@ const nodeHeight = 36;
 
 
 const nodeTypes = {
-    textUpdater: TextUpdaterNode,
+    selectedNode: SelectedNode,
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -114,7 +114,7 @@ export function PGraphProvider({children}) {
             clearHistogramCache();
             clearHeatMapCache();
             viewContext.setRefreshKey(k => k + 1);
-
+            node.style
         }, [setTableName, viewContext]
     )
 

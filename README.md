@@ -14,12 +14,22 @@ If you want to see an early version of buckaroo (without going through any set u
 
 ## 2026 - How to Start
 ### ( very rudimentary - more needs to be added for specific postgres issues and OS variations)
-1. do ```./run.sh```
-2. now you should have a .venv built for the project to run in, and a database.json created, if this didn't work you need to set up the parameters in database.json manually in postgres, then input these values into database.json, ```__init.py__``` in ```/app``` uses database.json to connect to the DB
-3. make sure you have npm installed and it's accessible in the .venv
-4. run ```./start.py ``` in the venv to start the flask server
-5. open a new terminal, ```cd ui```
-6. ```npm run dev``` to start the front-end
+
+- we are assuming you will have python3, and postgreSQL installed on your machine, if you do not then make sure to install those before doing the below steps
+
+1. navigate to ``/app`` and create a new file called: ``database.json``
+2. set up a user and db in postgres you will use for this app --- (this project requires a local installation of postgreSQL)
+3. do ```./run.sh```, this will prompt the construction of your  ```database.json```
+4. now you should have a .venv built for the project to run in, and a database.json created, if this didn't work you need to set up the parameters in database.json manually 
+5. make sure you have npm installed and it's installed/accessible in the .venv
+6. if your terminal does not have (.venv) at the start of it's name then, you need to active the .venv that was just created
+7. run ```./start.py ``` in the venv to start the flask server 
+8. open a new terminal, ```cd ui```
+9. ```npm run dev``` in the to start the front-end
+
+#### other startup notes:
+
+1. A very efficient setup is to use Jetbrains Pycharm, and 
 ## Dev Notes
 
 There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. If others use this branch and change any of the main functionality found in there, please update it so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
