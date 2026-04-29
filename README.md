@@ -29,12 +29,14 @@ If you want to see an early version of buckaroo (without going through any set u
 
 #### other startup notes:
 
-1. A very efficient setup is to use Jetbrains Pycharm, and 
-## Dev Notes
+1. A very efficient setup is to use Jetbrains Pycharm, and setup a compound debug config using a Javascript Debug config, npm config, and a Python config all in one so that you can do full-stack debugging.
+2. Jetbrains Pycharm also allows for postgres integration so that you can see the tables and the state of the database while developing. 
 
-There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. If others use this branch and change any of the main functionality found in there, please update it so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
+## Dev Notes - last update: April 29, 2026
 
-Updated: 3/17/26
+There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. Definitely worth a skim at least when getting into the codebase. If others use this branch and change any of the main functionality found in there, please update it so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
+
+
 
 ## Improvements Available: 
 - Integrate refactor-detector-port into main without breaking functionality in main
