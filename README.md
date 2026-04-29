@@ -34,7 +34,7 @@ If you want to see an early version of buckaroo (without going through any set u
 
 ## Dev Notes - last update: April 29, 2026
 
-There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. Definitely worth a skim at least when getting into the codebase. If others use this branch and change any of the main functionality found in there, please update it so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
+There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. Definitely worth a skim at least when getting into the codebase. If other developers on Buckaroo change any of the core functionality in ``main``, please update this doc so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
 
 
 
