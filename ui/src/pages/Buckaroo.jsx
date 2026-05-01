@@ -24,7 +24,7 @@ export default function Buckaroo({ onReset }) {
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const [activeView, setActiveView] = useState("both");
+    const [activeView, setActiveView] = useState("plots");
 
     const handleWrangleExecuted = useCallback(() => {
         clearScatterPlotCache();
