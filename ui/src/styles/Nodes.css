@@ -1,13 +1,64 @@
 
-.react-flow__node-selectedNode{
+.react-flow__node-noteNode{
     background-color: #64ea96;
 }
-.react-flow__node-selectedNode {
+.react-flow__node-noteNode {
   background-color: #64ea96;
   border: 1px solid #1a192b;
   border-radius: 3px;
-  padding: 10px;
+  padding: 5px;
   font-size: 12px;
   text-align: center;
   min-width: 150px;
+}
+
+.react-flow__node-rootNoteNode{
+    background-color: #64ea96;
+}
+.react-flow__node-rootNoteNode {
+  background-color: #121312;
+  border: 1px solid #1a192b;
+  border-radius: 3px;
+  padding: 5px;
+  font-size: 12px;
+  text-align: center;
+  min-width: 150px;
+}
+.react-flow__node-input.selectable.selected,
+    .react-flow__node-input.selectable:focus,
+    .react-flow__node-input.selectable:focus-visible,
+    .react-flow__node-default.selectable.selected,
+    .react-flow__node-default.selectable:focus,
+    .react-flow__node-default.selectable:focus-visible,
+    .react-flow__node-output.selectable.selected,
+    .react-flow__node-output.selectable:focus,
+    .react-flow__node-output.selectable:focus-visible,
+    .react-flow__node-group.selectable.selected,
+    .react-flow__node-noteNode.selectable.selected,
+    .react-flow__node-noteNode.selectable:focus,
+    .react-flow__node-noteNode.selectable:focus-visible,
+    .react-flow__node-rootNoteNode.selectable.selected,
+    .react-flow__node-rootNoteNode.selectable:focus,
+    .react-flow__node-rootNoteNode.selectable:focus-visible,
+    .react-flow__node-group.selectable.selected,
+    .react-flow__node-group.selectable:focus,
+    .react-flow__node-group.selectable:focus-visible {
+      box-shadow: 0 0 0 3px #20a449;
+    }
+
+/*.note-node-container{*/
+/*    display: flex;*/
+/*    flex-direction: column;*/
+/*}*/
+
+.note-node-icon-container{
+    /*padding: 2px;*/
+    background-color: rgb(255 255 255);
+    display: flex;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.node-node-label{
+    padding-bottom: 2px;
 }

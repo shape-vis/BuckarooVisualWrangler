@@ -5,11 +5,11 @@ import {
     useNodesState,
     useEdgesState
 } from "@xyflow/react";
-import {SelectedNode} from "../graph_objects/NodeTypes.jsx";
+import {NoteNode, RootNoteNode} from "../graph_objects/NodeTypes.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import {SelectionContext} from "./SelectionContext.jsx";
-import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../store/visualizationCaches.jsx";
+import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "./visualizationCaches.jsx";
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode} from "../utils/serverCalls.jsx";
 import "../styles/Nodes.css"
@@ -18,12 +18,13 @@ import "../styles/Nodes.css"
 export const PGraphContext = createContext(null);
 
 const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-const nodeWidth = 172;
-const nodeHeight = 36;
+const nodeWidth = 100;
+const nodeHeight = 75;
 
 
 const nodeTypes = {
-    selectedNode: SelectedNode,
+    noteNode: NoteNode,
+    rootNoteNode:  RootNoteNode
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -36,9 +37,12 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
         if (node.data.label.length > 20) {
             node.data.label = node.data.label.slice(0, 2)
         }
-
+        node.type = "noteNode"
         dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
     });
+
+    nodes[0].type = "rootNoteNode"
+
     edges.forEach((edge) => {
         dagreGraph.setEdge(edge.source, edge.target);
     });
@@ -55,6 +59,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
                 x: nodeWithPosition.x - nodeWidth / 2,
                 y: nodeWithPosition.y - nodeHeight / 2,
             },
+
         };
     });
 
@@ -64,7 +69,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();
     const initialNodes = [
-        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "input"}
+        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "rootNoteNode"}
     ];
 
     const viewContext = useContext(ViewContext);

@@ -1,16 +1,15 @@
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  addEdge,
-  MiniMap, ConnectionLineType, Panel,
+    ReactFlow,
+    Background,
+    Controls,
+    addEdge,
+    MiniMap, ConnectionLineType, Panel, BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
-import {getPGraph} from "../utils/serverCalls.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
-import {useEffect} from "react";
+import {useEffect, useState} from "react";
 
 
 export default function PGraph() {
@@ -18,7 +17,9 @@ export default function PGraph() {
 const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, nodeTypes} = usePgraph();
 
 const { tableName } = useTableName();
+// const [showNote, setShowNote] = useState(false);
 
+// colors the double-clicked node green, and the rest white
 useEffect(() => {
     nodes.forEach((node) => {
       if (nodes.length === 1) {
@@ -49,9 +50,9 @@ useEffect(() => {
         connectionLineType={ConnectionLineType.SmoothStep}
         onNodeDoubleClick={onNodeDoubleClick}
       >
-        <Background />
+        <Background color="#ccc" variant={BackgroundVariant.Lines} />
         <Controls />
-        <MiniMap nodeStrokeWidth={3} />
+        {/*<MiniMap nodeStrokeWidth={3} />*/}
       </ReactFlow>
     </div>
   );

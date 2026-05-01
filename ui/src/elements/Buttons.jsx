@@ -45,7 +45,7 @@ export function NavButton({ children, isSelected, onClick, className = "", icon 
 export function IconButton({ children, onClick, title, className = "" }) {
   return (
       <button
-          className={`iconButton ${className}`}
+          className={`iconButton-${className}`}
           onClick={onClick}
           title={title}
       >

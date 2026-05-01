@@ -142,7 +142,7 @@
   margin-left: auto;
 }
 
-.iconButton {
+.iconButton- {
   cursor: pointer;
   padding: 6px 10px;
   margin-left: 6px;
@@ -156,7 +156,7 @@
   align-self: center;
 }
 
-.iconButton:hover {
+.iconButton-:hover {
   background-color: #dce3ef;
   border-color: #a8b4c8;
 }
@@ -180,4 +180,29 @@
   width: 8px;
   height: 34px;
   font-size: 9px;
+}
+
+.iconButton-node-sub-buttons,
+.iconButton-node-sub-button-chart{
+  cursor: pointer;
+  padding: 3px 3px;
+  /*margin-left: 6px;*/
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 12px;
+  line-height: 1;
+  color: #3a4560;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  align-self: center;
+}
+
+.iconButton-node-sub-buttons:hover,
+.iconButton-node-sub-button-chart:hover{
+  background-color: #e0e0e0;
+  border-color: #a8b4c8;
+}
+
+.iconButton-node-sub-button-chart{
+  font-size: 5px;
 }
