@@ -62,3 +62,104 @@
 .node-node-label{
     padding-bottom: 2px;
 }
+
+.note-node--embedded-active {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.note-node-embedded-matrix {
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.note-node-embedded-matrix-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+}
+
+.note-node-embedded-matrix-inner > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.iconButton-node-sub-button-chart-active {
+    background-color: #64ea96;
+}
+
+.note-node-resizer-handle {
+    width: 8px;
+    height: 8px;
+    background: #20a449;
+    border: 1px solid #fff;
+}
+
+.note-node-resizer-line {
+    border-color: #20a449;
+}
+
+.node-note-editor {
+    margin-top: 4px;
+    padding: 4px;
+    background: #fff;
+    border: 1px solid #c5c8cc;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.node-note-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px;
+    border: 1px solid #dddfe2;
+    border-radius: 3px;
+    min-height: 40px;
+}
+
+.node-note-buttons {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+
+.node-note-btn {
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid #c5c8cc;
+    border-radius: 3px;
+    background: #f5f6f7;
+    cursor: pointer;
+}
+
+.node-note-btn--save {
+    background: #64ea96;
+    border-color: #20a449;
+}
+
+.node-note-display {
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: #fff8c5;
+    border: 1px solid #e6dca0;
+    border-radius: 3px;
+    font-size: 11px;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 80px;
+    overflow-y: auto;
+}

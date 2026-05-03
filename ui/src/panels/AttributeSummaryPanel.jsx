@@ -7,6 +7,7 @@ import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
+import { useAttributeSelection } from "../store/AttributeSelectionContext.jsx";
 
 import "../styles/AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
@@ -56,9 +57,21 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
   );
 }
 
-function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, handleToggleSelect, showFilter }) {
+function DiffSpan({ a, b, formatter = (v) => v.toFixed(2), suffix = "" }) {
+  if (a == null || b == null || Number.isNaN(Number(a)) || Number.isNaN(Number(b))) return null;
+  const diff = Number(b) - Number(a);
+  if (diff === 0) return <span className="diff diff--neutral">±0{suffix}</span>;
+  const sign = diff > 0 ? "+" : "";
+  const className = diff > 0 ? "diff diff--worse" : "diff diff--better";
+  return <span className={className}>{sign}{formatter(diff)}{suffix}</span>;
+}
+
+function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, comparisonSummary, handleToggleSelect, showFilter }) {
   const columnErrors = summaryData?.columnErrors?.[attr] || {};
   const attrDist = summaryData?.attributeDistributions?.[attr] || {};
+  const cmpColumnErrors = comparisonSummary?.columnErrors?.[attr] || {};
+  const cmpAttrDist = comparisonSummary?.attributeDistributions?.[attr] || {};
+  const showDiff = !!comparisonSummary;
 
   const errorEntries = Object.entries(columnErrors);
 
@@ -83,6 +96,14 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
                   data-error-type={type}
                 >
                   {(pct * 100).toFixed(2)}%
+                  {showDiff && (
+                    <DiffSpan
+                      a={pct * 100}
+                      b={(cmpColumnErrors[type] ?? 0) * 100}
+                      formatter={(v) => v.toFixed(2)}
+                      suffix="%"
+                    />
+                  )}
               </span>
             ))
           : <span className="error-scent error-scent--ok">✓</span>
@@ -91,16 +112,38 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
 
         <div className="column-stats">
           {attrDist.numeric && (
-              <div>Num. Mean: {Number(attrDist.numeric.mean).toFixed(2)}</div>
+              <div>
+                Num. Mean: {Number(attrDist.numeric.mean).toFixed(2)}
+                {showDiff && cmpAttrDist.numeric && (
+                  <DiffSpan a={attrDist.numeric.mean} b={cmpAttrDist.numeric.mean} />
+                )}
+              </div>
           )}
           {attrDist.numeric && (
-              <div>Num. Range: {attrDist.numeric.min} - {attrDist.numeric.max}</div>
+              <div>
+                Num. Range: {attrDist.numeric.min} - {attrDist.numeric.max}
+                {showDiff && cmpAttrDist.numeric && (
+                  <>
+                    <DiffSpan a={attrDist.numeric.min} b={cmpAttrDist.numeric.min} />
+                    <DiffSpan a={attrDist.numeric.max} b={cmpAttrDist.numeric.max} />
+                  </>
+                )}
+              </div>
           )}
           {attrDist.categorical && (
               <div>Cat. Mode: <span title={attrDist.categorical.mode}>{truncateText(attrDist.categorical.mode, 13)}</span></div>
           )}
           {attrDist.categorical && (
-              <div>Cat. Count: {attrDist.categorical.categories}</div>
+              <div>
+                Cat. Count: {attrDist.categorical.categories}
+                {showDiff && cmpAttrDist.categorical && (
+                  <DiffSpan
+                    a={attrDist.categorical.categories}
+                    b={cmpAttrDist.categorical.categories}
+                    formatter={(v) => v.toString()}
+                  />
+                )}
+              </div>
           )}
         </div>
 
@@ -111,9 +154,10 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
 
 
 
-export default function AttributeSummaryView({ setSelectedAttributes, selectedAttributes, setSortedAttributes }) {
+export default function AttributeSummaryView() {
   const { tableName: table_name } = useTableName();
   const { addLoader, removeLoader } = useLoading();
+  const { selectedAttributes, setSelectedAttributes, setSortedAttributes, comparisonSummary } = useAttributeSelection();
   const [groupByAttribute, setGroupByAttribute] = useState(null);
   const [sortBy, setSortBy] = useState("total");
   const [summaryData, setSummaryData] = useState(null);
@@ -214,9 +258,29 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterAttribute, setFilterAttribute] = useState(null);
 
+  const [panelWidth, setPanelWidth] = useState(280);
+  const rootRef = useRef(null);
+
+  const handleResizeMouseDown = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = rootRef.current?.getBoundingClientRect().width ?? panelWidth;
+
+    const onMove = (ev) => {
+      const next = Math.max(220, Math.min(800, startWidth + (ev.clientX - startX)));
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   return (
     <CollapsiblePanel collapsed={"Attribute Summaries"} direction="left" defaultOpen={true} className="panel--attribute-summary">
-    <div id="attribute-summary-root">
+    <div id="attribute-summary-root" ref={rootRef} style={{ flex: `0 0 ${panelWidth}px`, width: panelWidth, position: "relative" }}>
       <div id="attribute-sorting">
         <div className="attribute-sorting-title">Sort Attributes By</div>
         <div className="attribute-sorting-controls">
@@ -241,10 +305,16 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
         <ul className="attribute-summary-list">
           {loading && <li>Loading attribute summaries…</li>}
           {!loading && summaryData && sortedAttributes.map(attr => (
-            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
+            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} comparisonSummary={comparisonSummary} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
           ))}
         </ul>
       </div>
+
+      <div
+        className="attribute-summary-resize-handle"
+        onMouseDown={handleResizeMouseDown}
+        title="Drag to resize"
+      />
     </div>
       </CollapsiblePanel>
   );

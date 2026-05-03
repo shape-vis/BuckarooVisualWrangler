@@ -5,6 +5,7 @@ import CollapsiblePanel from "../elements/CollapsiblePanel";
 import { truncateText } from "../utils/textUtils.js";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
+import { useAttributeSelection } from "../store/AttributeSelectionContext.jsx";
 import "../styles/TablePanel.css";
 
 function RowHeader({ columns }) {
@@ -74,9 +75,10 @@ function TableBody({ columns, tableData, numRows, errorData}) {
  *  - model: an object exposing getColumnErrors() and dataSource with objects() method (same expectations as original TableView)
  *  - maxRows (optional): number of top rows to show (default 10)
  */
-export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
+export default function TablePanel({ maxRows = 10 }) {
   const { tableName: table_name } = useTableName();
   const { addLoader, removeLoader } = useLoading();
+  const { sortedAttributes } = useAttributeSelection();
 
   const [tableData, setTableData] = useState(null);
   const [errorData, setErrorData] = useState(null);

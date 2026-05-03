@@ -8,7 +8,7 @@ import {
 import {NoteNode, RootNoteNode} from "../graph_objects/NodeTypes.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
-import {SelectionContext} from "./SelectionContext.jsx";
+import { useAttributeSelection } from "./AttributeSelectionContext.jsx";
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "./visualizationCaches.jsx";
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode} from "../utils/serverCalls.jsx";
@@ -17,14 +17,32 @@ import "../styles/Nodes.css"
 
 export const PGraphContext = createContext(null);
 
-const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-const nodeWidth = 100;
-const nodeHeight = 75;
+const DEFAULT_NODE_WIDTH = 100;
+const DEFAULT_NODE_HEIGHT = 75;
+export const EMBEDDED_NODE_WIDTH = 820;
+export const EMBEDDED_NODE_HEIGHT = 660;
 
 
 const nodeTypes = {
     noteNode: NoteNode,
     rootNoteNode:  RootNoteNode
+};
+
+const getNodeDims = (node) => {
+    const styleW = node.style?.width;
+    const styleH = node.style?.height;
+    const measuredW = node.measured?.width;
+    const measuredH = node.measured?.height;
+    if (node.data?.showPlots) {
+        return {
+            width: styleW || measuredW || EMBEDDED_NODE_WIDTH,
+            height: styleH || measuredH || EMBEDDED_NODE_HEIGHT,
+        };
+    }
+    return {
+        width: styleW || measuredW || DEFAULT_NODE_WIDTH,
+        height: styleH || measuredH || DEFAULT_NODE_HEIGHT,
+    };
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -38,7 +56,8 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
             node.data.label = node.data.label.slice(0, 2)
         }
         node.type = "noteNode"
-        dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
+        const {width, height} = getNodeDims(node);
+        dagreGraph.setNode(node.id, {width, height});
     });
 
     nodes[0].type = "rootNoteNode"
@@ -51,13 +70,14 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
     const newNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
+        const {width, height} = getNodeDims(node);
         return {
             ...node,
             targetPosition: isHorizontal ? 'left' : 'top',
             sourcePosition: isHorizontal ? 'right' : 'bottom',
             position: {
-                x: nodeWithPosition.x - nodeWidth / 2,
-                y: nodeWithPosition.y - nodeHeight / 2,
+                x: nodeWithPosition.x - width / 2,
+                y: nodeWithPosition.y - height / 2,
             },
 
         };
@@ -68,21 +88,20 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
 export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();
+    const { setComparisonNodeId } = useAttributeSelection();
     const initialNodes = [
-        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "rootNoteNode"}
+        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName, showPlots: false}, type: "rootNoteNode"}
     ];
 
     const viewContext = useContext(ViewContext);
-    // const setRefreshKey = viewContext.setRefreshKey();
 
     const initialEdges = [
         {id: "n1-n2", source: "n1", target: "n2", type: "step", label: "wrangler operation"},
     ];
 
-    // Precompute initial layout once at module load
     const {nodes: layoutedNodes, edges: layoutedEdges} = getLayoutedElements(
         initialNodes,
-        initialEdges
+        initialEdges,
     );
 
     const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
@@ -108,20 +127,74 @@ export function PGraphProvider({children}) {
         [nodes, edges, setNodes, setEdges],
     );
 
-    /* https://reactflow.dev/api-reference/types/node-mouse-handler - this is how you know the params */
+    const toggleNodePlots = useCallback((nodeId) => {
+        setNodes((nds) => {
+            const flipped = nds.map((n) => {
+                if (n.id !== nodeId) return n;
+                const next = !n.data?.showPlots;
+                const style = {...(n.style || {})};
+                if (next) {
+                    style.width = style.width || EMBEDDED_NODE_WIDTH;
+                    style.height = style.height || EMBEDDED_NODE_HEIGHT;
+                } else {
+                    delete style.width;
+                    delete style.height;
+                }
+                return {
+                    ...n,
+                    data: {...n.data, showPlots: next},
+                    style,
+                };
+            });
+            const {nodes: laid} = getLayoutedElements(flipped, edges);
+            return laid;
+        });
+    }, [setNodes, edges]);
+
+    const setNodeNote = useCallback((nodeId, note) => {
+        setNodes((nds) => nds.map((n) =>
+            n.id === nodeId ? { ...n, data: { ...n.data, note } } : n
+        ));
+    }, [setNodes]);
+
+    const collapseNode = useCallback((nodeId) => {
+        setNodes((nds) => {
+            const collapsed = nds.map((n) => {
+                if (n.id !== nodeId) return n;
+                const style = {...(n.style || {})};
+                delete style.width;
+                delete style.height;
+                return {
+                    ...n,
+                    data: {...n.data, showPlots: false},
+                    style,
+                };
+            });
+            const {nodes: laid} = getLayoutedElements(collapsed, edges);
+            return laid;
+        });
+    }, [setNodes, edges]);
+
     const onNodeDoubleClick = useCallback(
         async (event, node) => {
-            //setTableName is a dependency you have to list for this to work
             await setGraphToClickedNode(node.id);
             setTableName(node.id);
-            // clearHighlight();
+            setComparisonNodeId(null);
             clearScatterPlotCache();
             clearHistogramCache();
             clearHeatMapCache();
             viewContext.setRefreshKey(k => k + 1);
-            node.style
-        }, [setTableName, viewContext]
+        }, [setTableName, setComparisonNodeId, viewContext]
     )
+
+    const onNodeClick = useCallback((event, node) => {
+        if (!event?.shiftKey) return;
+        if (node.id === tableName) {
+            setComparisonNodeId(null);
+            return;
+        }
+        setComparisonNodeId((prev) => (prev === node.id ? null : node.id));
+    }, [tableName, setComparisonNodeId]);
 
     return (
         <PGraphContext.Provider value={{
@@ -129,7 +202,8 @@ export function PGraphProvider({children}) {
             edges, setEdges,
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
-            getLayoutedElements, onNodeDoubleClick
+            getLayoutedElements, onNodeDoubleClick, onNodeClick,
+            toggleNodePlots, collapseNode, setNodeNote,
         }}>
             {children}
         </PGraphContext.Provider>

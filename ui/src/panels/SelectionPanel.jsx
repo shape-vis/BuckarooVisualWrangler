@@ -7,6 +7,7 @@ import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
 import { useTableName } from "../store/TableNameContext.jsx";
+import { useAttributeSelection } from "../store/AttributeSelectionContext.jsx";
 import { heatMapCache, histogramCache, scatterPlotCache } from "../store/visualizationCaches.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
@@ -56,8 +57,9 @@ function MinimizeIcon({ x, y, onClick }) {
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
+function SelectionPanel({ w, h, errorTypes, errorColors }) {
     const { tableName: table_name } = useTableName();
+    const { selectedAttributes } = useAttributeSelection();
     const matrixPlotAreaRef = useRef(null);
     const [plotSize, setPlotSize] = useState(180);
     const [focusedCell, setFocusedCell] = useState(null); // { i, j } or null
@@ -368,9 +370,10 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
  * - visualizations: mapping (e.g. window.visualizations) with modules that expose .module.draw(svgModel, view, canvas, ...args)
  * - width, height (optional) - if not provided component will size SVG to parent bounding box
  */
-export default function MatrixView({ selectedAttributes }) {
+export default function MatrixView() {
     const svgRef = useRef(null);
     const { tableName: table_name } = useTableName();
+    const { selectedAttributes } = useAttributeSelection();
 
     const [w, setW] = React.useState(800);
     const [h, setH] = React.useState(600);
@@ -382,8 +385,8 @@ export default function MatrixView({ selectedAttributes }) {
 
         const resizeObserver = new ResizeObserver(() => {
             const bbox = svg.node().getBoundingClientRect();
-            setW(bbox.width || 800);
-            setH(bbox.height || 600);
+            if (bbox.width > 0) setW(bbox.width);
+            if (bbox.height > 0) setH(bbox.height);
         });
 
         if (svgRef.current) {
@@ -395,7 +398,7 @@ export default function MatrixView({ selectedAttributes }) {
 
     return (
         <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
-            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
+            <SelectionPanel w={w} h={h} errorColors={errorColors} />
         </svg>
     );
 }

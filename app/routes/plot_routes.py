@@ -5,9 +5,33 @@ import pandas as pd
 import traceback
 
 from app import app, engine, db_operations
+from app.db_utils.db_functions_sql import DBOperations
 from app.server_utils.data_attribute_summary_integration import generate_complete_json
 
 import math
+
+
+def _resolve_db_for_request():
+    """
+    Return (db, is_temp) for the requested tablename. If the request's tablename
+    query arg is missing or matches the active main table, returns the shared
+    db_operations (is_temp=False). Otherwise spins up a temporary DBOperations
+    loaded with the requested table; the caller is responsible for releasing it
+    by passing it to _release_temp_db().
+    """
+    requested = request.args.get("tablename")
+    if not requested or requested == db_operations.main_table_name:
+        return db_operations, False
+
+    temp_db = DBOperations(engine)
+    temp_db.load_table(requested)
+    return temp_db, True
+
+
+def _release_temp_db(db, is_temp):
+    if is_temp:
+        db.reset()
+        del db
 
 
 def replace_nan(obj):
@@ -37,11 +61,14 @@ def get_1d_histogram():
     column = request.args.get("column")
     bin_count = int(request.args.get("bins", default=10))
 
+    db, is_temp = _resolve_db_for_request()
     try:
-        histogram = db_operations.generate_one_d_histogram_with_errors(column,bin_count)
+        histogram = db.generate_one_d_histogram_with_errors(column, bin_count)
         return {"success": True, "histogram": histogram}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    finally:
+        _release_temp_db(db, is_temp)
 
 @app.get("/api/plots/2-d-histogram")
 def get_2d_histogram():
@@ -54,11 +81,14 @@ def get_2d_histogram():
     x_bins = int(request.args.get("x_bins", default=10))
     y_bins = int(request.args.get("y_bins", default=10))
 
+    db, is_temp = _resolve_db_for_request()
     try:
-        histogram = db_operations.generate_two_d_histogram_with_errors(column_x,column_y,x_bins,y_bins)
+        histogram = db.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
         return {"success": True, "histogram": histogram}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    finally:
+        _release_temp_db(db, is_temp)
 
 
 
@@ -91,12 +121,14 @@ def get_scatterplot_data():
     error_sample_count = int(request.args.get("error_sample_count", default=30))
     total_sample_count = int(request.args.get("total_sample_count", default=100))
 
+    db, is_temp = _resolve_db_for_request()
     try:
-        scatterplot_data = db_operations.generate_scatterplot_with_errors(x_column_name,y_column_name,error_sample_count,total_sample_count)
+        scatterplot_data = db.generate_scatterplot_with_errors(x_column_name, y_column_name, error_sample_count, total_sample_count)
         return {"success": True, "scatterplot_data": scatterplot_data}
-
     except Exception as e:
         return {"success": False, "error": str(e)}
+    finally:
+        _release_temp_db(db, is_temp)
 
 
 @app.post("/api/plots/rows-in-bin")
@@ -207,7 +239,7 @@ def attribute_summaries():
     """
 
     try:
-        tablename = db_operations.main_table_name
+        tablename = request.args.get("tablename") or db_operations.main_table_name
         print(f"Generating attribute summaries for table {tablename}")
         table_attribute_summaries = generate_complete_json(tablename)
         return {"success": True, "data": table_attribute_summaries}

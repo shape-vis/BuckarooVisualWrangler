@@ -7,6 +7,7 @@ import RepairPanel from "../panels/RepairPanel.jsx";
 import { SelectionProvider } from "../store/SelectionContext.jsx";
 import { RowRangeProvider } from "../store/RowRangeContext.jsx";
 import { SettingsProvider } from "../store/SettingsContext.jsx";
+import { AttributeSelectionProvider } from "../store/AttributeSelectionContext.jsx";
 
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../store/visualizationCaches.jsx";
 import "../styles/Buckaroo.css";
@@ -20,8 +21,6 @@ export const ViewContext = createContext();
 
 
 export default function Buckaroo({ onReset }) {
-    const [selectedAttributes, setSelectedAttributes] = useState([]);
-    const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
     const [activeView, setActiveView] = useState("both");
@@ -37,17 +36,14 @@ export default function Buckaroo({ onReset }) {
         <>
             <ViewContext.Provider value={{ activeView, setActiveView, refreshKey, setRefreshKey}}>
                 <SettingsProvider>
+                <AttributeSelectionProvider>
                 <PGraphProvider>
                 <RowRangeProvider>
                 <SelectionProvider>
                 <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
                     <BuckarooHeader onReset={onReset} />
                     <div key={refreshKey} className="matrix-and-dropdown-container">
-                        <AttributeSummaryPanel
-                            selectedAttributes={selectedAttributes}
-                            setSelectedAttributes={setSelectedAttributes}
-                            setSortedAttributes={setSortedAttributes}
-                        />
+                        <AttributeSummaryPanel />
 
                         <div className="main-view">
                             <div className="svg-and-toolbox">
@@ -55,9 +51,7 @@ export default function Buckaroo({ onReset }) {
                                 {/*Plot view*/}
                                 {activeView === "plots" && (
                                     <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                            />
+                                        <MatrixView />
                                         <RepairPanel />
                                     </>
                                 )}
@@ -65,9 +59,7 @@ export default function Buckaroo({ onReset }) {
                                 {/*Plots and Graph view*/}
                                 {activeView === "both" && (
                                     <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                        />
+                                        <MatrixView />
                                         <PGraph />
                                         <RepairPanel />
                                     </>
@@ -76,11 +68,17 @@ export default function Buckaroo({ onReset }) {
                                 {/*Graph View*/}
                                 {activeView === "graph" &&
                                     <PGraph />}
+
+                                {/*Embedded Plots View*/}
+                                {activeView === "embedded" && (
+                                    <>
+                                        <PGraph />
+                                        <RepairPanel />
+                                    </>
+                                )}
                             </div>
                             <div className={`table-panel-wrapper ${activeView === "both" || activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
-                                <TablePanel
-                                    sortedAttributes={sortedAttributes}
-                                />
+                                <TablePanel />
                             </div>
                         </div>
 
@@ -90,6 +88,7 @@ export default function Buckaroo({ onReset }) {
                 </SelectionProvider>
                 </RowRangeProvider>
                 </PGraphProvider>
+                </AttributeSelectionProvider>
                 </SettingsProvider>
             </ViewContext.Provider>
         </>
