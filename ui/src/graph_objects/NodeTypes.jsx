@@ -24,12 +24,15 @@ function FixedMatrix() {
 
 function NodeBody({ id, data }) {
     const { activeView } = useContext(ViewContext);
-    const { toggleNodePlots, collapseNode, setNodeNote } = usePgraph();
+    const { toggleNodePlots, collapseNode, setNodeNote, setNodeLabel } = usePgraph();
     const showPlots = !!data.showPlots;
     const showEmbedded = activeView === "embedded" && showPlots;
 
     const [editingNote, setEditingNote] = useState(false);
     const [draftNote, setDraftNote] = useState(data.note || "");
+
+    const [editingLabel, setEditingLabel] = useState(false);
+    const [draftLabel, setDraftLabel] = useState(data.label || "");
 
     const handlePlotToggle = (e) => {
         e.stopPropagation();
@@ -58,6 +61,31 @@ function NodeBody({ id, data }) {
         setEditingNote(false);
     };
 
+    const handleLabelDoubleClick = (e) => {
+        e.stopPropagation();
+        setDraftLabel(data.label || "");
+        setEditingLabel(true);
+    };
+
+    const commitLabel = () => {
+        const next = draftLabel.trim();
+        if (next && next !== data.label) {
+            setNodeLabel(id, next);
+        }
+        setEditingLabel(false);
+    };
+
+    const handleLabelKeyDown = (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+            e.preventDefault();
+            commitLabel();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            setEditingLabel(false);
+        }
+    };
+
     const stopPropagation = (e) => e.stopPropagation();
 
     return (
@@ -72,7 +100,23 @@ function NodeBody({ id, data }) {
             )}
             <div className={showEmbedded ? "note-node--embedded-active" : undefined}>
                 <div className={"node-node-label"}>
-                    <h3>{data.label}</h3>
+                    {editingLabel ? (
+                        <input
+                            className="node-label-input nodrag"
+                            value={draftLabel}
+                            onChange={(e) => setDraftLabel(e.target.value)}
+                            onBlur={commitLabel}
+                            onKeyDown={handleLabelKeyDown}
+                            onMouseDown={stopPropagation}
+                            onClick={stopPropagation}
+                            onDoubleClick={stopPropagation}
+                            autoFocus
+                        />
+                    ) : (
+                        <h3 onDoubleClick={handleLabelDoubleClick} title="Double-click to rename">
+                            {data.label}
+                        </h3>
+                    )}
                     <div className={"note-node-icon-container"}>
                         <IconButton
                             className="node-sub-buttons"

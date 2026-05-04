@@ -22,6 +22,40 @@ const DEFAULT_NODE_HEIGHT = 75;
 export const EMBEDDED_NODE_WIDTH = 820;
 export const EMBEDDED_NODE_HEIGHT = 660;
 
+const NODE_OVERRIDES_KEY = "pgraph-node-overrides";
+
+const loadNodeOverrides = () => {
+    try {
+        const raw = sessionStorage.getItem(NODE_OVERRIDES_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+};
+
+const saveNodeOverrides = (overrides) => {
+    try {
+        sessionStorage.setItem(NODE_OVERRIDES_KEY, JSON.stringify(overrides));
+    } catch {
+        // sessionStorage unavailable — overrides simply won't persist this run
+    }
+};
+
+const updateNodeOverride = (nodeId, patch) => {
+    const overrides = loadNodeOverrides();
+    overrides[nodeId] = { ...(overrides[nodeId] || {}), ...patch };
+    saveNodeOverrides(overrides);
+};
+
+const applyNodeOverrides = (nodes) => {
+    const overrides = loadNodeOverrides();
+    return nodes.map((n) => {
+        const o = overrides[n.id];
+        if (!o) return n;
+        return { ...n, data: { ...n.data, ...o } };
+    });
+};
+
 
 const nodeTypes = {
     noteNode: NoteNode,
@@ -83,7 +117,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
         };
     });
 
-    return {nodes: newNodes, edges};
+    return {nodes: applyNodeOverrides(newNodes), edges};
 };
 
 export function PGraphProvider({children}) {
@@ -152,8 +186,16 @@ export function PGraphProvider({children}) {
     }, [setNodes, edges]);
 
     const setNodeNote = useCallback((nodeId, note) => {
+        updateNodeOverride(nodeId, { note });
         setNodes((nds) => nds.map((n) =>
             n.id === nodeId ? { ...n, data: { ...n.data, note } } : n
+        ));
+    }, [setNodes]);
+
+    const setNodeLabel = useCallback((nodeId, label) => {
+        updateNodeOverride(nodeId, { label });
+        setNodes((nds) => nds.map((n) =>
+            n.id === nodeId ? { ...n, data: { ...n.data, label } } : n
         ));
     }, [setNodes]);
 
@@ -211,7 +253,7 @@ export function PGraphProvider({children}) {
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
             getLayoutedElements, onNodeDoubleClick, onNodeClick,
-            toggleNodePlots, collapseNode, setNodeNote,
+            toggleNodePlots, collapseNode, setNodeNote, setNodeLabel,
         }}>
             {children}
         </PGraphContext.Provider>
