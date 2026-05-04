@@ -16,23 +16,24 @@ export default function PGraph() {
 
     const { nodes, setNodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick, nodeTypes } = usePgraph();
     const { tableName } = useTableName();
-    const { comparisonNodeId } = useAttributeSelection();
+    const { comparisonNodeIds } = useAttributeSelection();
 
     useEffect(() => {
+        const shades = ["#a8c8ff", "#92baff", "#7fadff", "#6fa1ff"];
         setNodes((nds) =>
             nds.map((node) => {
                 const isActive = nds.length === 1 || node.id === tableName;
-                const isComparison = node.id === comparisonNodeId && !isActive;
+                const cmpIdx = !isActive ? comparisonNodeIds.indexOf(node.id) : -1;
                 let backgroundColor = "white";
                 if (isActive) backgroundColor = "#64ea96";
-                else if (isComparison) backgroundColor = "#a8c8ff";
+                else if (cmpIdx >= 0) backgroundColor = shades[cmpIdx] ?? "#a8c8ff";
                 return {
                     ...node,
                     style: { ...(node.style || {}), backgroundColor },
                 };
             })
         );
-    }, [tableName, comparisonNodeId, setNodes]);
+    }, [tableName, comparisonNodeIds, setNodes]);
 
 
     return (

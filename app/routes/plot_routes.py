@@ -240,8 +240,16 @@ def attribute_summaries():
 
     try:
         tablename = request.args.get("tablename") or db_operations.main_table_name
+
+        pgraph = getattr(app, "pgraph_for_session", None)
+        node = pgraph.node_map.get(tablename) if pgraph else None
+        if node is not None and node.get_attribute_summary() is not None:
+            return {"success": True, "data": node.get_attribute_summary()}
+
         print(f"Generating attribute summaries for table {tablename}")
         table_attribute_summaries = generate_complete_json(tablename)
+        if node is not None:
+            node.set_attribute_summary(table_attribute_summaries)
         return {"success": True, "data": table_attribute_summaries}
     except Exception as e:
         print(f"Error generating summaries for table '{tablename}': {e}")

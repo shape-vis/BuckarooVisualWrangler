@@ -22,6 +22,11 @@ class GraphNode:
         self.incomplete_metric = 0
         self.mismatch_metric = 0
 
+        # Cached output of generate_complete_json for this node's table.
+        # Populated lazily on first /api/plots/summaries hit; valid for the
+        # node's lifetime since wrangle ops produce new immutable tables.
+        self.attribute_summary = None
+
     # def __json__(self):
     #     return {
     #         "parent_table": self.parent_table,
@@ -39,6 +44,12 @@ class GraphNode:
 
     def add_child(self, child_node: str):
         self.children.append(child_node)
+
+    def get_attribute_summary(self):
+        return self.attribute_summary
+
+    def set_attribute_summary(self, summary):
+        self.attribute_summary = summary
 
 
 

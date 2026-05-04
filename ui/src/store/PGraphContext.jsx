@@ -88,7 +88,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
 export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();
-    const { setComparisonNodeId } = useAttributeSelection();
+    const { setComparisonNodeIds, comparisonMode, MAX_COMPARISONS } = useAttributeSelection();
     const initialNodes = [
         {id: tableName, position: {x: 0, y: 0}, data: {label: tableName, showPlots: false}, type: "rootNoteNode"}
     ];
@@ -179,22 +179,30 @@ export function PGraphProvider({children}) {
         async (event, node) => {
             await setGraphToClickedNode(node.id);
             setTableName(node.id);
-            setComparisonNodeId(null);
+            setComparisonNodeIds([]);
             clearScatterPlotCache();
             clearHistogramCache();
             clearHeatMapCache();
             viewContext.setRefreshKey(k => k + 1);
-        }, [setTableName, setComparisonNodeId, viewContext]
+        }, [setTableName, setComparisonNodeIds, viewContext]
     )
 
     const onNodeClick = useCallback((event, node) => {
         if (!event?.shiftKey) return;
         if (node.id === tableName) {
-            setComparisonNodeId(null);
+            setComparisonNodeIds([]);
             return;
         }
-        setComparisonNodeId((prev) => (prev === node.id ? null : node.id));
-    }, [tableName, setComparisonNodeId]);
+        if (comparisonMode === 'single') {
+            setComparisonNodeIds(prev => prev[0] === node.id ? [] : [node.id]);
+            return;
+        }
+        setComparisonNodeIds(prev => {
+            if (prev.includes(node.id)) return prev.filter(x => x !== node.id);
+            if (prev.length >= MAX_COMPARISONS) return prev;
+            return [...prev, node.id];
+        });
+    }, [tableName, setComparisonNodeIds, comparisonMode, MAX_COMPARISONS]);
 
     return (
         <PGraphContext.Provider value={{

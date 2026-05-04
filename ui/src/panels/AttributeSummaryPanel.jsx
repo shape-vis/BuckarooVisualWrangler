@@ -66,6 +66,147 @@ function DiffSpan({ a, b, formatter = (v) => v.toFixed(2), suffix = "" }) {
   return <span className={className}>{sign}{formatter(diff)}{suffix}</span>;
 }
 
+function classifyDiffs(baseValue, cmpValues) {
+  const base = Number.isFinite(baseValue) ? baseValue : 0;
+  const diffs = cmpValues.map(v => v == null ? null : v - base);
+  const decreases = diffs.filter(d => d != null && d < 0);
+  const largest = decreases.length ? Math.min(...decreases) : null;
+  return diffs.map(d => {
+    if (d == null) return 'na';
+    if (d > 0) return 'red';
+    if (d === 0) return 'neutral';
+    if (d === largest) return 'green';
+    return 'yellow';
+  });
+}
+
+function MatrixView({ summaryData, sortedAttributes, comparisonNodeIds, comparisonSummaries,
+                     comparisonLoading, showMoreInfo, groupByAttribute, setGroupByAttribute,
+                     selectedAttributes, handleToggleSelect, showFilter, mainNodeId }) {
+  return (
+    <table className="comparison-matrix">
+      <thead>
+        <tr>
+          <th className="comparison-matrix__attr">Attribute</th>
+          <th title={mainNodeId}>{truncateText(mainNodeId ?? '', 10)}</th>
+          {comparisonNodeIds.map((id, i) => (
+            <th key={id} title={id}>{truncateText(id, 10)}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {sortedAttributes.flatMap(attr => {
+          const baseErrors = summaryData?.columnErrors?.[attr] || {};
+          const errorTypes = Object.keys(baseErrors);
+          const baseDist = summaryData?.attributeDistributions?.[attr] || {};
+          const cmpDist = (id) => comparisonSummaries[id]?.attributeDistributions?.[attr] || {};
+
+          const errorRows = errorTypes.map((etype, rowIdx) => {
+            const baseVal = (baseErrors[etype] ?? 0) * 100;
+            const cmpVals = comparisonNodeIds.map(id => {
+              const summary = comparisonSummaries[id];
+              if (summary == null) return null;
+              const e = summary.columnErrors?.[attr];
+              return e == null ? 0 : (e[etype] ?? 0) * 100;
+            });
+            const colors = classifyDiffs(baseVal, cmpVals);
+            return (
+              <tr key={`${attr}-${etype}`}>
+                <td className="comparison-matrix__attr">
+                  {rowIdx === 0 && (
+                    <GroupByButton
+                      attr={attr}
+                      groupByAttribute={groupByAttribute}
+                      handleToggleGroupBy={(a) => setGroupByAttribute(prev => prev === a ? null : a)}
+                      selectedAttributes={selectedAttributes}
+                      handleToggleSelect={handleToggleSelect}
+                      showFilter={showFilter}
+                    />
+                  )}
+                  <span className="error-scent comparison-matrix__swatch" data-error-type={etype} />
+                  {rowIdx === 0
+                    ? <span title={attr} className="attribute-row-name">{truncateText(attr.toLowerCase(), 14)}</span>
+                    : <span className="comparison-matrix__etype">{etype}</span>}
+                </td>
+                <td className="cell--baseline">{baseVal.toFixed(2)}%</td>
+                {cmpVals.map((v, i) => {
+                  const id = comparisonNodeIds[i];
+                  if (comparisonLoading[id]) return <td key={i} className="cell--loading">…</td>;
+                  if (v == null) return <td key={i} className="cell--na">—</td>;
+                  const becameClean = v === 0 && baseVal > 0;
+                  const delta = v - baseVal;
+                  const deltaText = delta === 0
+                    ? '±0%'
+                    : `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)}%`;
+                  return (
+                    <td
+                      key={i}
+                      className={`cell cell--${colors[i]}${becameClean ? ' cell--clean' : ''}`}
+                      title={becameClean ? `Cleaned (was ${baseVal.toFixed(2)}%, now 0%)` : `Δ ${deltaText}`}
+                    >
+                      {becameClean && <span className="cell--clean-check">✓</span>}
+                      {becameClean ? ' ' : ''}{v.toFixed(2)}%
+                      <span className="cell--delta"> ({deltaText})</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          });
+
+          const infoRows = [];
+          if (showMoreInfo) {
+            const infoRow = (label, baseText, cmpTexts) => (
+              <tr key={`${attr}-info-${label}`} className="comparison-matrix__info">
+                <td className="comparison-matrix__attr">
+                  <span className="comparison-matrix__info-label">{label}</span>
+                </td>
+                <td className="cell--info">{baseText}</td>
+                {cmpTexts.map((t, i) => {
+                  const id = comparisonNodeIds[i];
+                  if (comparisonLoading[id]) return <td key={i} className="cell--loading">…</td>;
+                  return <td key={i} className="cell--info">{t}</td>;
+                })}
+              </tr>
+            );
+            if (baseDist.numeric) {
+              infoRows.push(infoRow("Num. Mean",
+                Number(baseDist.numeric.mean).toFixed(2),
+                comparisonNodeIds.map(id => {
+                  const d = cmpDist(id).numeric;
+                  return d ? Number(d.mean).toFixed(2) : "—";
+                })));
+              infoRows.push(infoRow("Num. Range",
+                `${baseDist.numeric.min} – ${baseDist.numeric.max}`,
+                comparisonNodeIds.map(id => {
+                  const d = cmpDist(id).numeric;
+                  return d ? `${d.min} – ${d.max}` : "—";
+                })));
+            }
+            if (baseDist.categorical) {
+              infoRows.push(infoRow("Cat. Count",
+                String(baseDist.categorical.categories),
+                comparisonNodeIds.map(id => {
+                  const d = cmpDist(id).categorical;
+                  return d ? String(d.categories) : "—";
+                })));
+              infoRows.push(infoRow("Cat. Mode",
+                truncateText(String(baseDist.categorical.mode), 13),
+                comparisonNodeIds.map(id => {
+                  const d = cmpDist(id).categorical;
+                  return d ? truncateText(String(d.mode), 13) : "—";
+                })));
+            }
+          }
+
+          if (errorRows.length === 0 && infoRows.length === 0) return [];
+          return [...errorRows, ...infoRows];
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, comparisonSummary, handleToggleSelect, showFilter }) {
   const columnErrors = summaryData?.columnErrors?.[attr] || {};
   const attrDist = summaryData?.attributeDistributions?.[attr] || {};
@@ -157,7 +298,13 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
 export default function AttributeSummaryView() {
   const { tableName: table_name } = useTableName();
   const { addLoader, removeLoader } = useLoading();
-  const { selectedAttributes, setSelectedAttributes, setSortedAttributes, comparisonSummary } = useAttributeSelection();
+  const {
+    selectedAttributes, setSelectedAttributes, setSortedAttributes,
+    comparisonSummary,
+    comparisonNodeIds, comparisonSummaries, comparisonLoading,
+    comparisonMode, setComparisonMode,
+  } = useAttributeSelection();
+  const [showMoreInfo, setShowMoreInfo] = useState(false);
   const [groupByAttribute, setGroupByAttribute] = useState(null);
   const [sortBy, setSortBy] = useState("total");
   const [summaryData, setSummaryData] = useState(null);
@@ -281,6 +428,22 @@ export default function AttributeSummaryView() {
   return (
     <CollapsiblePanel collapsed={"Attribute Summaries"} direction="left" defaultOpen={true} className="panel--attribute-summary">
     <div id="attribute-summary-root" ref={rootRef} style={{ flex: `0 0 ${panelWidth}px`, width: panelWidth, position: "relative" }}>
+      <div className="comparison-mode-toggle">
+        <span className="comparison-mode-title">Node Attribute Comparison</span>
+        <div className="comparison-mode-tabs">
+          <button
+            type="button"
+            className={`comparison-mode-tab ${comparisonMode === 'single' ? 'comparison-mode-tab--active' : ''}`}
+            onClick={() => setComparisonMode('single')}
+          >Single</button>
+          <button
+            type="button"
+            className={`comparison-mode-tab ${comparisonMode === 'multi' ? 'comparison-mode-tab--active' : ''}`}
+            onClick={() => setComparisonMode('multi')}
+          >Multi</button>
+        </div>
+      </div>
+
       <div id="attribute-sorting">
         <div className="attribute-sorting-title">Sort Attributes By</div>
         <div className="attribute-sorting-controls">
@@ -302,12 +465,41 @@ export default function AttributeSummaryView() {
       <FilterModal visible={filterVisible} attribute={filterAttribute} onClose={() => setFilterVisible(false)} onApply={() => setFilterVisible(false)} errorColors={errorColors} />
 
       <div className="attribute-list">
-        <ul className="attribute-summary-list">
-          {loading && <li>Loading attribute summaries…</li>}
-          {!loading && summaryData && sortedAttributes.map(attr => (
-            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} comparisonSummary={comparisonSummary} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
-          ))}
-        </ul>
+        {comparisonMode === 'multi' && (
+          <button
+            type="button"
+            className={`more-info-toggle ${showMoreInfo ? 'more-info-toggle--active' : ''}`}
+            onClick={() => setShowMoreInfo(v => !v)}
+          >{showMoreInfo ? '− More Info' : '+ More Info'}</button>
+        )}
+        {comparisonMode === 'single' ? (
+          <ul className="attribute-summary-list">
+            {loading && <li>Loading attribute summaries…</li>}
+            {!loading && summaryData && sortedAttributes.map(attr => (
+              <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} comparisonSummary={comparisonSummary} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
+            ))}
+          </ul>
+        ) : (
+          <>
+            {loading && <div>Loading attribute summaries…</div>}
+            {!loading && summaryData && (
+              <MatrixView
+                summaryData={summaryData}
+                sortedAttributes={sortedAttributes}
+                comparisonNodeIds={comparisonNodeIds}
+                comparisonSummaries={comparisonSummaries}
+                comparisonLoading={comparisonLoading}
+                showMoreInfo={showMoreInfo}
+                groupByAttribute={groupByAttribute}
+                setGroupByAttribute={setGroupByAttribute}
+                selectedAttributes={selectedAttributes}
+                handleToggleSelect={handleToggleSelect}
+                showFilter={(a) => { setFilterAttribute(a); setFilterVisible(true); }}
+                mainNodeId={table_name}
+              />
+            )}
+          </>
+        )}
       </div>
 
       <div

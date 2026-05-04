@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useState } from "react";
 import "../styles/Nodes.css"
 import { Handle, Position, NodeResizer } from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
@@ -8,38 +8,16 @@ import { ViewContext } from "../pages/Buckaroo.jsx";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { TableNameProvider } from "../store/TableNameContext.jsx";
 
-const NATURAL_W = 800;
-const NATURAL_H = 600;
+const PLOT_AREA_WIDTH = 800;
+const PLOT_AREA_HEIGHT = 600;
 
-function ScaledMatrix() {
-    const containerRef = useRef(null);
-    const [scale, setScale] = useState({ x: 1, y: 1 });
-
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const obs = new ResizeObserver(() => {
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) {
-                setScale({ x: r.width / NATURAL_W, y: r.height / NATURAL_H });
-            }
-        });
-        obs.observe(el);
-        return () => obs.disconnect();
-    }, []);
-
+function FixedMatrix() {
     return (
-        <div ref={containerRef} className="note-node-embedded-matrix">
-            <div
-                className="note-node-embedded-matrix-inner"
-                style={{
-                    width: NATURAL_W,
-                    height: NATURAL_H,
-                    transform: `scale(${scale.x}, ${scale.y})`,
-                }}
-            >
-                <MatrixView />
-            </div>
+        <div
+            className="note-node-embedded-matrix"
+            style={{ width: PLOT_AREA_WIDTH, height: PLOT_AREA_HEIGHT }}
+        >
+            <MatrixView />
         </div>
     );
 }
@@ -87,7 +65,7 @@ function NodeBody({ id, data }) {
             {showEmbedded && (
                 <NodeResizer
                     minWidth={320}
-                    minHeight={260}
+                    minHeight={240}
                     lineClassName="note-node-resizer-line"
                     handleClassName="note-node-resizer-handle"
                 />
@@ -148,7 +126,7 @@ function NodeBody({ id, data }) {
                 )}
                 {showEmbedded && (
                     <TableNameProvider initialTableName={id}>
-                        <ScaledMatrix />
+                        <FixedMatrix />
                     </TableNameProvider>
                 )}
             </div>
