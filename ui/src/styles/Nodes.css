@@ -172,6 +172,7 @@
 }
 
 .shadow-node {
+    position: relative;
     background: #f7f7fb;
     border: 1px dashed #8a8aff;
     border-radius: 4px;
@@ -221,6 +222,133 @@
 .shadow-node-btn--accept {
     background: #64ea96;
     border-color: #20a449;
+}
+
+.shadow-node-preview {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 0;
+    width: 440px;
+    background: #fff;
+    border: 1px solid #8a8aff;
+    border-radius: 4px;
+    padding: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    z-index: 10;
+    text-align: left;
+    font-size: 11px;
+}
+
+.shadow-node-preview-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.shadow-node-deltas {
+    margin-top: 6px;
+    border-top: 1px dashed #ccc;
+    padding-top: 4px;
+}
+
+.shadow-node-deltas-title {
+    font-weight: bold;
+    font-size: 10px;
+    color: #555;
+    margin-bottom: 2px;
+}
+
+.shadow-node-delta {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 10px;
+    padding: 1px 0;
+}
+
+.shadow-node-delta-col {
+    color: #333;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.shadow-node-delta-val {
+    color: #666;
+    white-space: nowrap;
+}
+
+.shadow-node-delta--good .shadow-node-delta-val { color: #20a449; }
+.shadow-node-delta--bad  .shadow-node-delta-val { color: #c0392b; }
+
+.plan-shadow-node {
+    border-color: #6f42c1;
+    background: #faf6ff;
+}
+
+.plan-shadow-steps {
+    margin: 4px 0;
+    padding-left: 18px;
+    text-align: left;
+    font-size: 10px;
+    color: #444;
+}
+
+.plan-shadow-steps li {
+    margin-bottom: 2px;
+}
+
+.plan-step-op {
+    font-weight: bold;
+    color: #6f42c1;
+}
+
+.plan-step-col {
+    color: #333;
+}
+
+.plan-step-name {
+    font-style: italic;
+    color: #666;
+    font-size: 10px;
+    margin-left: 2px;
+}
+
+.plan-step-accordion {
+    border-bottom: 1px dashed #ddd;
+    padding: 2px 0;
+}
+
+.plan-step-accordion-header {
+    cursor: pointer;
+    font-weight: bold;
+    padding: 2px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.plan-step-skipped {
+    font-style: italic;
+    color: #888;
+    font-weight: normal;
+    font-size: 10px;
+}
+
+.plan-step-accordion-body {
+    padding: 4px 0;
+}
+
+.plan-preview-hint {
+    margin-top: 4px;
+    font-size: 10px;
+    font-style: italic;
+    color: #6f42c1;
+}
+
+.plan-step-shadow {
+    width: 420px;
+    border-color: #6f42c1;
+    background: #fdfbff;
 }
 
 .shadow-node-error {

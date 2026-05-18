@@ -17,7 +17,7 @@ from sqlalchemy import text
 
 from app import db_operations, engine
 from app.llm.client import LLMClient, get_default_client
-from app.llm.prompts import PROPOSAL_SCHEMA, SYSTEM_PROMPT, build_user_prompt
+from app.llm.prompts import PROPOSAL_SCHEMA, SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT, build_user_prompt
 
 
 import os
@@ -165,6 +165,44 @@ def analyze(table_name: str, client: LLMClient | None = None) -> list[dict[str, 
     return proposals
 
 
+def propose_plans(table_name: str, client: LLMClient | None = None) -> list[dict[str, Any]]:
+    """Ask the LLM for multi-step wrangle plans. Pure LLM call — no deterministic
+    enumeration. Returns [] if the model can't produce a clean structured list.
+    """
+    ctx = build_table_context(table_name)
+    if not ctx.get("error_counts"):
+        return []
+    client = client or get_default_client()
+    try:
+        out = client.chat_json(
+            system=PLAN_SYSTEM_PROMPT,
+            user=build_user_prompt(ctx),
+        )
+        plans = out.get("plans", []) or []
+    except Exception as e:
+        print(f"[llm] propose_plans failed: {e}")
+        return []
+    valid_cols = set(ctx.get("schema", {}).keys())
+    cleaned: list[dict[str, Any]] = []
+    for i, plan in enumerate(plans):
+        steps = plan.get("steps") or []
+        good_steps = []
+        for s in steps:
+            op = s.get("op")
+            params = s.get("params") or {}
+            col = params.get("column")
+            if op in ("delete-column", "delete-rows", "impute-rows") and col in valid_cols:
+                good_steps.append({"op": op, "params": {"column": col}, "name": s.get("name") or op})
+        if 2 <= len(good_steps) <= 5:
+            cleaned.append({
+                "id": f"plan_{i}",
+                "name": plan.get("name") or f"Plan {i + 1}",
+                "rationale": plan.get("rationale") or "",
+                "steps": good_steps,
+            })
+    return cleaned
+
+
 def _resolve_row_ids(node_table: str, column: str, error_type: str | None) -> list[int]:
     """Look up row_ids in errors_<table> matching column (+ optional error_type)."""
     sql = f'SELECT DISTINCT row_id FROM "errors_{node_table}" WHERE column_id = :col'
@@ -175,6 +213,106 @@ def _resolve_row_ids(node_table: str, column: str, error_type: str | None) -> li
     with engine.connect() as conn:
         rows = conn.execute(text(sql), params).fetchall()
     return [int(r[0]) for r in rows]
+
+
+def _compute_deltas(source_table: str, preview_table: str) -> list[dict[str, Any]]:
+    """Per-column error count deltas between two tables' errors_<...> companions."""
+    with engine.connect() as conn:
+        before = pd.read_sql_query(
+            text(f'SELECT column_id, COUNT(DISTINCT row_id) AS n FROM "errors_{source_table}" GROUP BY column_id'),
+            conn,
+        )
+        after = pd.read_sql_query(
+            text(f'SELECT column_id, COUNT(DISTINCT row_id) AS n FROM "errors_{preview_table}" GROUP BY column_id'),
+            conn,
+        )
+    bmap = dict(zip(before["column_id"], before["n"].astype(int)))
+    amap = dict(zip(after["column_id"], after["n"].astype(int)))
+    out = []
+    for c in sorted(set(bmap) | set(amap)):
+        b = int(bmap.get(c, 0))
+        a = int(amap.get(c, 0))
+        pct = None if b == 0 else round((a - b) / b * 100, 1)
+        out.append({"column": c, "errors_before": b, "errors_after": a, "pct_change": pct})
+    return out
+
+
+def preview_plan(node_table: str, plan: dict[str, Any]) -> dict[str, Any]:
+    """Build a chain of preview tables (NOT committed) and return per-step
+    deltas. delete-column steps are reported but not chained — they break
+    the preview chain since they're in-place.
+    Note: preview tables linger in the DB; cleanup happens on next commit.
+    """
+    from app.server_utils.service_helpers import create_previews_1d, _safe_pg_name
+    from app.routes.wrangler_routes_sql import update_errors_table
+
+    steps = plan.get("steps") or []
+    current = node_table
+    out_steps: list[dict[str, Any]] = []
+    for i, step in enumerate(steps):
+        op = step.get("op")
+        col = step.get("params", {}).get("column")
+        if op == "delete-column":
+            out_steps.append({
+                "step": i, "op": op, "name": step.get("name") or op,
+                "column": col, "source_table": current, "preview_table": None,
+                "deltas": [], "note": "delete-column previews not supported; chain stops here",
+            })
+            break
+        if op not in ("delete-rows", "impute-rows"):
+            out_steps.append({"step": i, "op": op, "name": step.get("name") or op, "skipped": True})
+            continue
+        db_operations.load_table(current, f"errors_{current}")
+        row_ids = _resolve_row_ids(current, col, None)
+        if not row_ids:
+            out_steps.append({
+                "step": i, "op": op, "name": step.get("name") or op,
+                "column": col, "source_table": current, "preview_table": None,
+                "deltas": [], "note": "no dirty rows at this step",
+            })
+            continue
+        previews = create_previews_1d(current, row_ids, [col], _safe_pg_name, update_errors_table)
+        preview_table = previews["preview_delete"] if op == "delete-rows" else previews["preview_impute"]
+        deltas = _compute_deltas(current, preview_table)
+        out_steps.append({
+            "step": i, "op": op, "name": step.get("name") or op,
+            "column": col, "source_table": current, "preview_table": preview_table,
+            "deltas": deltas,
+        })
+        current = preview_table
+    return {"steps": out_steps}
+
+
+def preview(node_table: str, proposal: dict[str, Any]) -> dict[str, Any]:
+    """Build preview tables for a proposal *without* committing them.
+
+    Returns:
+      {
+        preview_table: <name>,
+        affected_column: <col>,
+        deltas: [{column, errors_before, errors_after, pct_change}, ...]
+      }
+    """
+    from app.server_utils.service_helpers import create_previews_1d, _safe_pg_name
+    from app.routes.wrangler_routes_sql import update_errors_table
+
+    op = proposal.get("op")
+    params = proposal.get("params", {})
+    if op not in ("delete-rows", "impute-rows"):
+        raise ValueError(f"preview only supports 1D ops (got {op})")
+    col = params["column"]
+
+    db_operations.load_table(node_table, f"errors_{node_table}")
+    row_ids = params.get("row_ids") or _resolve_row_ids(node_table, col, params.get("error_type"))
+    if not row_ids:
+        raise ValueError(f"{op} on column '{col}' resolved to zero rows")
+    previews = create_previews_1d(node_table, row_ids, [col], _safe_pg_name, update_errors_table)
+    preview_table = previews["preview_delete"] if op == "delete-rows" else previews["preview_impute"]
+    return {
+        "preview_table": preview_table,
+        "affected_column": col,
+        "deltas": _compute_deltas(node_table, preview_table),
+    }
 
 
 def materialize(node_table: str, proposal: dict[str, Any]) -> dict[str, Any]:
@@ -239,3 +377,26 @@ def materialize(node_table: str, proposal: dict[str, Any]) -> dict[str, Any]:
         return {"table": node_table, "in_place": True}
 
     raise ValueError(f"unknown op: {op}")
+
+
+def materialize_plan(node_table: str, plan: dict[str, Any]) -> dict[str, Any]:
+    """Run every step in plan.steps sequentially, chaining each new node into
+    the next step. Returns the chain of new tables produced (one per step).
+
+    delete-column steps are in-place (no new node) and do NOT advance the
+    chain head.
+    """
+    steps = plan.get("steps") or []
+    if not steps:
+        raise ValueError("plan has no steps")
+    current = node_table
+    chain: list[dict[str, Any]] = []
+    for i, step in enumerate(steps):
+        try:
+            result = materialize(current, step)
+        except Exception as e:
+            return {"chain": chain, "stopped_at": i, "error": str(e)}
+        chain.append({"step": i, "op": step.get("op"), "table": result.get("table"), "in_place": result.get("in_place", False)})
+        if not result.get("in_place"):
+            current = result["table"]
+    return {"chain": chain, "final_table": current}

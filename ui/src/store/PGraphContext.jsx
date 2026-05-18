@@ -7,6 +7,8 @@ import {
 } from "@xyflow/react";
 import {NoteNode, RootNoteNode} from "../graph_objects/NodeTypes.jsx";
 import {ShadowNode} from "../graph_objects/ShadowNode.jsx";
+import {PlanShadowNode} from "../graph_objects/PlanShadowNode.jsx";
+import {PlanStepShadow} from "../graph_objects/PlanStepShadow.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import { useAttributeSelection } from "./AttributeSelectionContext.jsx";
@@ -22,6 +24,8 @@ const DEFAULT_NODE_WIDTH = 100;
 const DEFAULT_NODE_HEIGHT = 75;
 const SHADOW_NODE_WIDTH = 280;
 const SHADOW_NODE_HEIGHT = 140;
+const STEP_SHADOW_NODE_WIDTH = 440;
+const STEP_SHADOW_NODE_HEIGHT = 320;
 
 const NODE_OVERRIDES_KEY = "pgraph-node-overrides";
 
@@ -62,6 +66,8 @@ const nodeTypes = {
     noteNode: NoteNode,
     rootNoteNode: RootNoteNode,
     shadowNode: ShadowNode,
+    planShadowNode: PlanShadowNode,
+    planStepShadow: PlanStepShadow,
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -77,9 +83,10 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
         if (!node.type) {
             node.type = idx === 0 ? "rootNoteNode" : "noteNode";
         }
-        const isShadow = node.type === "shadowNode" || node.data?.isShadow;
-        const w = isShadow ? SHADOW_NODE_WIDTH : DEFAULT_NODE_WIDTH;
-        const h = isShadow ? SHADOW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT;
+        const isShadow = node.type === "shadowNode" || node.type === "planShadowNode" || node.type === "planStepShadow" || node.data?.isShadow;
+        const isStepShadow = node.type === "planStepShadow";
+        const w = isStepShadow ? STEP_SHADOW_NODE_WIDTH : (isShadow ? SHADOW_NODE_WIDTH : DEFAULT_NODE_WIDTH);
+        const h = isStepShadow ? STEP_SHADOW_NODE_HEIGHT : (isShadow ? SHADOW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT);
         dagreGraph.setNode(node.id, {width: w, height: h});
     });
 
@@ -91,9 +98,10 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
     const newNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
-        const isShadow = node.type === "shadowNode" || node.data?.isShadow;
-        const w = isShadow ? SHADOW_NODE_WIDTH : DEFAULT_NODE_WIDTH;
-        const h = isShadow ? SHADOW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT;
+        const isShadow = node.type === "shadowNode" || node.type === "planShadowNode" || node.type === "planStepShadow" || node.data?.isShadow;
+        const isStepShadow = node.type === "planStepShadow";
+        const w = isStepShadow ? STEP_SHADOW_NODE_WIDTH : (isShadow ? SHADOW_NODE_WIDTH : DEFAULT_NODE_WIDTH);
+        const h = isStepShadow ? STEP_SHADOW_NODE_HEIGHT : (isShadow ? SHADOW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT);
         return {
             ...node,
             targetPosition: isHorizontal ? 'left' : 'top',

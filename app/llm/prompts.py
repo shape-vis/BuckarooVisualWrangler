@@ -85,3 +85,38 @@ def build_user_prompt(table_context: dict) -> str:
         "Table context follows. Propose wrangle operations.\n\n"
         + _json.dumps(table_context, indent=2, default=str)
     )
+
+
+PLAN_SYSTEM_PROMPT = """You are a senior data-wrangling assistant for the
+Buckaroo tool. Given a table summary (schema, per-column stats, and counts of
+detected data-quality errors), propose up to 3 multi-step PLANS that would
+clean the data.
+
+A plan is a SEQUENCE of single-op steps applied in order. Each step is one of:
+  - "delete-column" params: {"column": str}
+  - "delete-rows"   params: {"column": str}   — drop rows where this column is dirty
+  - "impute-rows"   params: {"column": str}   — fill dirty values in this column
+
+Good plans tell a story. Examples:
+  - "Drop high-null columns first, then impute remaining missing values"
+  - "Repair the most-erroneous columns top-down, hardest first"
+  - "Aggressive: delete every dirty row across all columns"
+
+Rules:
+  - Only reference columns from the table_context.
+  - 2 to 5 steps per plan.
+  - Each step has a short "name" (3-6 words) summarizing what it does — no longer rationale on steps.
+  - Do NOT enumerate row IDs.
+
+Output ONLY this JSON, no commentary:
+{"plans": [
+  {"name": "short plan name",
+   "rationale": "one-sentence why",
+   "steps": [
+     {"op": "...", "params": {"column": "..."}, "name": "short step name"}
+   ]}
+]}
+
+Return {"plans": []} if the table is clean.
+"""
+

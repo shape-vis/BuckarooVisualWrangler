@@ -16,7 +16,53 @@ def llm_analyze():
         return {"success": False, "error": "node_table is required"}, 400
     try:
         proposals = orchestrator.analyze(node_table)
-        return {"success": True, "proposals": proposals}
+        plans = orchestrator.propose_plans(node_table)
+        return {"success": True, "proposals": proposals, "plans": plans}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}, 500
+
+
+@app.post("/api/llm/materialize-plan")
+def llm_materialize_plan():
+    body = request.get_json(force=True, silent=True) or {}
+    node_table = body.get("node_table")
+    plan = body.get("plan")
+    if not node_table or not plan:
+        return {"success": False, "error": "node_table and plan are required"}, 400
+    try:
+        return {"success": True, **orchestrator.materialize_plan(node_table, plan)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}, 500
+
+
+@app.post("/api/llm/preview")
+def llm_preview():
+    body = request.get_json(force=True, silent=True) or {}
+    node_table = body.get("node_table")
+    proposal = body.get("proposal")
+    if not node_table or not proposal:
+        return {"success": False, "error": "node_table and proposal are required"}, 400
+    try:
+        return {"success": True, **orchestrator.preview(node_table, proposal)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}, 500
+
+
+@app.post("/api/llm/preview-plan")
+def llm_preview_plan():
+    body = request.get_json(force=True, silent=True) or {}
+    node_table = body.get("node_table")
+    plan = body.get("plan")
+    if not node_table or not plan:
+        return {"success": False, "error": "node_table and plan are required"}, 400
+    try:
+        return {"success": True, **orchestrator.preview_plan(node_table, plan)}
     except Exception as e:
         import traceback
         traceback.print_exc()
