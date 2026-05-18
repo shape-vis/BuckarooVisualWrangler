@@ -15,6 +15,7 @@ import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
 import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
+import {LLMOrchestratorProvider} from "../store/LLMOrchestratorContext.jsx";
 
 export const ViewContext = createContext();
 
@@ -38,6 +39,7 @@ export default function Buckaroo({ onReset }) {
                 <SettingsProvider>
                 <AttributeSelectionProvider>
                 <PGraphProvider>
+                <LLMOrchestratorProvider>
                 <RowRangeProvider>
                 <SelectionProvider>
                 <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
@@ -68,14 +70,6 @@ export default function Buckaroo({ onReset }) {
                                 {/*Graph View*/}
                                 {activeView === "graph" &&
                                     <PGraph />}
-
-                                {/*Embedded Plots View*/}
-                                {activeView === "embedded" && (
-                                    <>
-                                        <PGraph />
-                                        <RepairPanel />
-                                    </>
-                                )}
                             </div>
                             <div className={`table-panel-wrapper ${activeView === "both" || activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
                                 <TablePanel />
@@ -87,6 +81,7 @@ export default function Buckaroo({ onReset }) {
                 </RepairProvider>
                 </SelectionProvider>
                 </RowRangeProvider>
+                </LLMOrchestratorProvider>
                 </PGraphProvider>
                 </AttributeSelectionProvider>
                 </SettingsProvider>

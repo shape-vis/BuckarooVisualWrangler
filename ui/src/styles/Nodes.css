@@ -151,6 +151,91 @@
     border-color: #20a449;
 }
 
+.node-llm-action {
+    margin-top: 4px;
+    display: flex;
+    justify-content: center;
+}
+
+.node-llm-analyze-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    border: 1px solid #20a449;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.node-llm-analyze-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.shadow-node {
+    background: #f7f7fb;
+    border: 1px dashed #8a8aff;
+    border-radius: 4px;
+    padding: 6px;
+    width: 260px;
+    box-sizing: border-box;
+    font-size: 11px;
+    text-align: center;
+    opacity: 0.95;
+}
+
+.shadow-node-label {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.shadow-node-op {
+    font-style: italic;
+    color: #555;
+    margin-bottom: 4px;
+}
+
+.shadow-node-rationale {
+    text-align: left;
+    color: #333;
+    max-height: 60px;
+    overflow-y: auto;
+    margin-bottom: 4px;
+    white-space: pre-wrap;
+}
+
+.shadow-node-buttons {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+}
+
+.shadow-node-btn {
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid #c5c8cc;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.shadow-node-btn--accept {
+    background: #64ea96;
+    border-color: #20a449;
+}
+
+.shadow-node-error {
+    margin-top: 4px;
+    padding: 2px 4px;
+    background: #ffe5e5;
+    border: 1px solid #d04848;
+    border-radius: 3px;
+    font-size: 10px;
+    color: #800;
+    text-align: left;
+    max-height: 40px;
+    overflow-y: auto;
+}
+
 .node-note-display {
     margin-top: 4px;
     padding: 4px 6px;

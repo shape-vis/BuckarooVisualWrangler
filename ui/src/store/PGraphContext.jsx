@@ -6,6 +6,7 @@ import {
     useEdgesState
 } from "@xyflow/react";
 import {NoteNode, RootNoteNode} from "../graph_objects/NodeTypes.jsx";
+import {ShadowNode} from "../graph_objects/ShadowNode.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import { useAttributeSelection } from "./AttributeSelectionContext.jsx";
@@ -19,8 +20,8 @@ export const PGraphContext = createContext(null);
 
 const DEFAULT_NODE_WIDTH = 100;
 const DEFAULT_NODE_HEIGHT = 75;
-export const EMBEDDED_NODE_WIDTH = 820;
-export const EMBEDDED_NODE_HEIGHT = 660;
+const SHADOW_NODE_WIDTH = 280;
+const SHADOW_NODE_HEIGHT = 140;
 
 const NODE_OVERRIDES_KEY = "pgraph-node-overrides";
 
@@ -59,42 +60,28 @@ const applyNodeOverrides = (nodes) => {
 
 const nodeTypes = {
     noteNode: NoteNode,
-    rootNoteNode:  RootNoteNode
-};
-
-const getNodeDims = (node) => {
-    const styleW = node.style?.width;
-    const styleH = node.style?.height;
-    const measuredW = node.measured?.width;
-    const measuredH = node.measured?.height;
-    if (node.data?.showPlots) {
-        return {
-            width: styleW || measuredW || EMBEDDED_NODE_WIDTH,
-            height: styleH || measuredH || EMBEDDED_NODE_HEIGHT,
-        };
-    }
-    return {
-        width: styleW || measuredW || DEFAULT_NODE_WIDTH,
-        height: styleH || measuredH || DEFAULT_NODE_HEIGHT,
-    };
+    rootNoteNode: RootNoteNode,
+    shadowNode: ShadowNode,
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
     const isHorizontal = direction === 'LR';
     const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 
-    dagreGraph.setGraph({rankdir: direction});
+    dagreGraph.setGraph({rankdir: direction, nodesep: 40, ranksep: 60});
 
-    nodes.forEach((node) => {
+    nodes.forEach((node, idx) => {
         if (node.data.label.length > 20) {
             node.data.label = node.data.label.slice(0, 2)
         }
-        node.type = "noteNode"
-        const {width, height} = getNodeDims(node);
-        dagreGraph.setNode(node.id, {width, height});
+        if (!node.type) {
+            node.type = idx === 0 ? "rootNoteNode" : "noteNode";
+        }
+        const isShadow = node.type === "shadowNode" || node.data?.isShadow;
+        const w = isShadow ? SHADOW_NODE_WIDTH : DEFAULT_NODE_WIDTH;
+        const h = isShadow ? SHADOW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT;
+        dagreGraph.setNode(node.id, {width: w, height: h});
     });
-
-    nodes[0].type = "rootNoteNode"
 
     edges.forEach((edge) => {
         dagreGraph.setEdge(edge.source, edge.target);
@@ -104,16 +91,17 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
     const newNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
-        const {width, height} = getNodeDims(node);
+        const isShadow = node.type === "shadowNode" || node.data?.isShadow;
+        const w = isShadow ? SHADOW_NODE_WIDTH : DEFAULT_NODE_WIDTH;
+        const h = isShadow ? SHADOW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT;
         return {
             ...node,
             targetPosition: isHorizontal ? 'left' : 'top',
             sourcePosition: isHorizontal ? 'right' : 'bottom',
             position: {
-                x: nodeWithPosition.x - width / 2,
-                y: nodeWithPosition.y - height / 2,
+                x: nodeWithPosition.x - w / 2,
+                y: nodeWithPosition.y - h / 2,
             },
-
         };
     });
 
@@ -124,7 +112,7 @@ export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();
     const { setComparisonNodeIds, comparisonMode, MAX_COMPARISONS } = useAttributeSelection();
     const initialNodes = [
-        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName, showPlots: false}, type: "rootNoteNode"}
+        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "rootNoteNode"}
     ];
 
     const viewContext = useContext(ViewContext);
@@ -161,30 +149,6 @@ export function PGraphProvider({children}) {
         [nodes, edges, setNodes, setEdges],
     );
 
-    const toggleNodePlots = useCallback((nodeId) => {
-        setNodes((nds) => {
-            const flipped = nds.map((n) => {
-                if (n.id !== nodeId) return n;
-                const next = !n.data?.showPlots;
-                const style = {...(n.style || {})};
-                if (next) {
-                    style.width = style.width || EMBEDDED_NODE_WIDTH;
-                    style.height = style.height || EMBEDDED_NODE_HEIGHT;
-                } else {
-                    delete style.width;
-                    delete style.height;
-                }
-                return {
-                    ...n,
-                    data: {...n.data, showPlots: next},
-                    style,
-                };
-            });
-            const {nodes: laid} = getLayoutedElements(flipped, edges);
-            return laid;
-        });
-    }, [setNodes, edges]);
-
     const setNodeNote = useCallback((nodeId, note) => {
         updateNodeOverride(nodeId, { note });
         setNodes((nds) => nds.map((n) =>
@@ -199,26 +163,9 @@ export function PGraphProvider({children}) {
         ));
     }, [setNodes]);
 
-    const collapseNode = useCallback((nodeId) => {
-        setNodes((nds) => {
-            const collapsed = nds.map((n) => {
-                if (n.id !== nodeId) return n;
-                const style = {...(n.style || {})};
-                delete style.width;
-                delete style.height;
-                return {
-                    ...n,
-                    data: {...n.data, showPlots: false},
-                    style,
-                };
-            });
-            const {nodes: laid} = getLayoutedElements(collapsed, edges);
-            return laid;
-        });
-    }, [setNodes, edges]);
-
     const onNodeDoubleClick = useCallback(
         async (event, node) => {
+            if (node.data?.isShadow) return;
             await setGraphToClickedNode(node.id);
             setTableName(node.id);
             setComparisonNodeIds([]);
@@ -253,7 +200,7 @@ export function PGraphProvider({children}) {
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
             getLayoutedElements, onNodeDoubleClick, onNodeClick,
-            toggleNodePlots, collapseNode, setNodeNote, setNodeLabel,
+            setNodeNote, setNodeLabel,
         }}>
             {children}
         </PGraphContext.Provider>
