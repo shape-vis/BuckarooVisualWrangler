@@ -7,13 +7,16 @@ and put into the provenance graph
 
 
 
+from app.pgraph.delta import Delta
+
 class GraphNode:
-    def __init__(self, parent_table, wrangle_op: str, table_name: str, error_table_name: str):
+    def __init__(self, parent_table, wrangle_op: str, table_name: str, error_table_name: str, delta: Delta = None):
 
         self.parent_table = parent_table
         self.wrangle_op = wrangle_op
         self.table_name = table_name
         self.error_table_name = error_table_name
+        self.delta = delta
         self.children = []
 
         """ quality metric parts """
