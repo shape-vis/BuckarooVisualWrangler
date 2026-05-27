@@ -162,6 +162,21 @@ def reset_app():
     return {"success": True}
 
 
+@app.get("/api/export/pandas")
+def export_pandas():
+    """
+    Returns a Python script that replicates the current data state using Pandas.
+    """
+    current_table = db_operations.main_table_name
+    if not current_table:
+        return {"success": False, "error": "No table loaded"}, 400
+    
+    from app import pgraph_for_session
+    script = pgraph_for_session.get_script_to_node(current_table)
+    
+    return {"success": True, "script": script}
+
+
 @app.get("/")
 def home():
     return send_file("../../ui/dist/index.html")

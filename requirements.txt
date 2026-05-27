@@ -4,7 +4,6 @@ psycopg2-binary~=2.9.10
 pandas~=2.2.3
 numpy~=2.0.2
 sqlalchemy~=2.0.41
-pip~=25.1
 wheel~=0.41.2
 pytz~=2025.2
 MarkupSafe~=3.0.2

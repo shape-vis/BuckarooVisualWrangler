@@ -19,6 +19,10 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
+from app.pgraph.delta import Delta
+from app.server_utils.pandas_mapper import map_to_pandas
+
+PREVIEW_PARAMS = {}
 
 def get_current_pgraph():
     """
@@ -381,13 +385,71 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     preview_table_trimmed = trim_preview_suffix(preview_table)
 
     #enter into pgraph before current or new tables are modified, return the new tables name with nodeID added
-    # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
-    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
-    app.db_operations.rename_preview_to_new(preview_table, new_table_name)
+    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed, preview_table)
+    
+    node = app.pgraph_for_session.node_map[new_table_name]
+    params = node.delta.parameters if node.delta else {}
+    
+    from sqlalchemy import text as sa_text, inspect
+    from app import engine
+    from app.db_utils.query import _is_numeric, _compute_imputation_value
+    
+    view_created = False
+    with engine.begin() as conn:
+        if wrangle_executed == "delete" and "row_ids" in params:
+            ids = params["row_ids"]
+            if ids:
+                ids_str = ", ".join(map(str, ids))
+                sql = f'CREATE VIEW "{new_table_name}" AS SELECT * FROM "{table}" WHERE "ID" NOT IN ({ids_str})'
+                conn.execute(sa_text(sql))
+                view_created = True
+        
+        elif wrangle_executed in ("impute", "impute_x", "impute_y") and "col" in params and "row_ids" in params:
+            col = params["col"]
+            ids = params["row_ids"]
+            if ids and col:
+                # Get the fill value
+                is_num = _is_numeric(conn, col, table)
+                fill_val = _compute_imputation_value(conn, table, col, is_num)
+                
+                if fill_val is not None:
+                    # Format value for SQL
+                    if isinstance(fill_val, str):
+                        fill_val_sql = f"'{fill_val}'"
+                    else:
+                        fill_val_sql = str(fill_val)
+                    
+                    ids_str = ", ".join(map(str, ids))
+                    
+                    # Build select list
+                    inspector = inspect(engine)
+                    columns = [c['name'] for c in inspector.get_columns(table)]
+                    select_parts = []
+                    for c in columns:
+                        if c == col:
+                            # The case statement for impute
+                            select_parts.append(f'CASE WHEN "ID" IN ({ids_str}) THEN {fill_val_sql} ELSE "{c}" END AS "{c}"')
+                        else:
+                            select_parts.append(f'"{c}"')
+                            
+                    select_str = ",\n".join(select_parts)
+                    sql = f'CREATE VIEW "{new_table_name}" AS SELECT {select_str} FROM "{table}"'
+                    conn.execute(sa_text(sql))
+                    view_created = True
+                    
+        if view_created:
+            # We must promote the errors preview table to final physical errors table
+            # Because update_errors expects a physical table.
+            conn.execute(sa_text(f'ALTER TABLE "errors_{preview_table}" RENAME TO "errors_{new_table_name}"'))
+            conn.execute(sa_text(f'DROP TABLE "{preview_table}"'))
+            
+    if not view_created:
+        print(f"Fallback to physical renaming for operation {wrangle_executed}")
+        app.db_operations.rename_preview_to_new(preview_table, new_table_name)
+    
     db_operations.load_table(new_table_name, f"errors_{new_table_name}")
 
     app.db_operations.update_rankings(new_table_name)
-
 
     return {"success": True, "table": new_table_name}
 
@@ -413,10 +475,27 @@ def init_pgraph_for_session(root_table):
     root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
     app.pgraph_for_session.add_root_node(root_node)
 
-def n_wrangle(parent_table, child_table, wrangle_executed):
+def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=None, direct_params=None):
     new_table_name = make_new_table_name(child_table)
-    current_node = GraphNode(parent_table,wrangle_executed, new_table_name,f"errors_{new_table_name}" )
+    
+    # Delta Storage: Capture parameters and map to Pandas
+    params = direct_params
+    if preview_table_name in PREVIEW_PARAMS:
+        params = PREVIEW_PARAMS[preview_table_name]
+    
+    delta = None
+    if params:
+        op = params.get("operation", wrangle_executed)
+        pandas_code = map_to_pandas(op, params)
+        delta = Delta(op, params, pandas_code)
+    
+    current_node = GraphNode(parent_table, wrangle_executed, new_table_name, f"errors_{new_table_name}", delta=delta)
     app.pgraph_for_session.add_node(current_node)
+    
+    # Cleanup PREVIEW_PARAMS for this table if it was used
+    if preview_table_name in PREVIEW_PARAMS:
+        del PREVIEW_PARAMS[preview_table_name]
+        
     return new_table_name
 
 def make_new_table_name(child_table):
@@ -448,27 +527,58 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
 
 def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
-    Create delete and impute preview tables for a 1D (single-column) selection.
+    Create delete and impute preview views for a 1D (single-column) selection.
     Returns a dict with preview table names and dims=1.
     """
     from app import engine
+    from sqlalchemy import text as sa_text, inspect
+    from app.db_utils.query import _is_numeric, _compute_imputation_value
 
-    errors_src     = f"errors_{table}"
     preview_delete = preview_name_fn(table, "_preview_delete")
     preview_impute = preview_name_fn(table, "_preview_impute")
 
+    ids_str = ", ".join(map(str, row_ids))
+    
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute, errors_src)
-        #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
-        #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
-
-
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
+        # Create View for Delete
+        conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_delete}" CASCADE'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}" CASCADE'))
+        conn.execute(sa_text(f'CREATE VIEW "{preview_delete}" AS SELECT * FROM "{table}" WHERE "ID" NOT IN ({ids_str})'))
+        
+        # Create View for Impute
+        conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_impute}" CASCADE'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute}" CASCADE'))
+        
+        col = cols[0]
+        is_num = _is_numeric(conn, col, table)
+        fill_val = _compute_imputation_value(conn, table, col, is_num)
+        
+        if fill_val is not None:
+            if isinstance(fill_val, str):
+                fill_val_sql = f"'{fill_val}'"
+            else:
+                fill_val_sql = str(fill_val)
+                
+            inspector = inspect(engine)
+            columns = [c['name'] for c in inspector.get_columns(table)]
+            select_parts = []
+            for c in columns:
+                if c == col:
+                    select_parts.append(f'CASE WHEN "ID" IN ({ids_str}) THEN {fill_val_sql} ELSE "{c}" END AS "{c}"')
+                else:
+                    select_parts.append(f'"{c}"')
+                    
+            select_str = ",\n".join(select_parts)
+            conn.execute(sa_text(f'CREATE VIEW "{preview_impute}" AS SELECT {select_str} FROM "{table}"'))
 
     update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute)
+    if fill_val is not None:
+        update_errors_fn(preview_impute)
+
+    # Store preview parameters for delta storage
+    PREVIEW_PARAMS[preview_delete] = {"operation": "delete", "row_ids": row_ids}
+    if fill_val is not None:
+        PREVIEW_PARAMS[preview_impute] = {"operation": "impute", "row_ids": row_ids, "col": cols[0]}
 
     return {
         "success": True,
@@ -487,28 +597,66 @@ def extract_preview_action(name: str) -> str:
 
 def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
-    Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
+    Create delete, impute_x, and impute_y preview views for a 2D (two-column) selection.
     Returns a dict with preview table names and dims=2.
     """
     from app import engine
+    from sqlalchemy import text as sa_text, inspect
+    from app.db_utils.query import _is_numeric, _compute_imputation_value
 
-    errors_src       = f"errors_{table}"
     preview_delete   = preview_name_fn(table, "_preview_delete")
     preview_impute_x = preview_name_fn(table, "_preview_impute_x")
     preview_impute_y = preview_name_fn(table, "_preview_impute_y")
 
-    with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute_x, errors_src)
-        _clone_table_pair(conn, table, preview_impute_y, errors_src)
+    ids_str = ", ".join(map(str, row_ids))
+    success_imputes = {0: False, 1: False}
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
-    query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
+    with engine.begin() as conn:
+        # Create View for Delete
+        conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_delete}" CASCADE'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}" CASCADE'))
+        conn.execute(sa_text(f'CREATE VIEW "{preview_delete}" AS SELECT * FROM "{table}" WHERE "ID" NOT IN ({ids_str})'))
+        
+        inspector = inspect(engine)
+        columns = [c['name'] for c in inspector.get_columns(table)]
+        
+        for idx, col in enumerate(cols):
+            preview_name = preview_impute_x if idx == 0 else preview_impute_y
+            
+            conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_name}" CASCADE'))
+            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_name}" CASCADE'))
+            
+            is_num = _is_numeric(conn, col, table)
+            fill_val = _compute_imputation_value(conn, table, col, is_num)
+            
+            if fill_val is not None:
+                success_imputes[idx] = True
+                if isinstance(fill_val, str):
+                    fill_val_sql = f"'{fill_val}'"
+                else:
+                    fill_val_sql = str(fill_val)
+                    
+                select_parts = []
+                for c in columns:
+                    if c == col:
+                        select_parts.append(f'CASE WHEN "ID" IN ({ids_str}) THEN {fill_val_sql} ELSE "{c}" END AS "{c}"')
+                    else:
+                        select_parts.append(f'"{c}"')
+                        
+                select_str = ",\n".join(select_parts)
+                conn.execute(sa_text(f'CREATE VIEW "{preview_name}" AS SELECT {select_str} FROM "{table}"'))
 
     update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute_x)
-    update_errors_fn(preview_impute_y)
+    
+    PREVIEW_PARAMS[preview_delete] = {"operation": "delete", "row_ids": row_ids}
+    
+    if success_imputes[0]:
+        update_errors_fn(preview_impute_x)
+        PREVIEW_PARAMS[preview_impute_x] = {"operation": "impute_x", "row_ids": row_ids, "col": cols[0]}
+        
+    if success_imputes[1]:
+        update_errors_fn(preview_impute_y)
+        PREVIEW_PARAMS[preview_impute_y] = {"operation": "impute_y", "row_ids": row_ids, "col": cols[1]}
 
     return {
         "success": True,
