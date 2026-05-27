@@ -5,10 +5,9 @@ uses a dictionary to have parent <--> child interaction
 to traverse up and down, it access' the child's parent node
 """
 import json
-from typing import TypedDict
+from typing import TypedDict, List, Dict, Any
 
-from sqlalchemy import String
-
+import app
 from app.pgraph.node import GraphNode
 
 class PGraph:
@@ -31,8 +30,14 @@ class PGraph:
         ser_map = {}
         for key in self.node_map.keys():
             node = self.node_map[key]
-            ser_map[key] = json.dumps(node, default=lambda o: o.__json__()
-                         if hasattr(o, '__json__') else None)
+            ser_map[key] = {
+                "id": key,
+                "parent_table": node.parent_table,
+                "wrangle_op": node.wrangle_op,
+                "table_name": node.table_name,
+                "delta": node.delta.__json__() if node.delta else None,
+                "children": node.children
+            }
         return ser_map
 
     def __json__(self):
@@ -46,11 +51,15 @@ class PGraph:
 
     def serialize_nodes(self):
         list_of_nodes = []
-        for key in self.node_map.keys():
+        for key, node in self.node_map.items():
             list_of_nodes.append(
                 {
                     "id": key,
-                    "data": {"label": key}
+                    "data": {
+                        "label": key,
+                        "wrangle_op": node.wrangle_op,
+                        "delta": node.delta.__json__() if node.delta else None
+                    }
                 }
             )
         return list_of_nodes
@@ -102,7 +111,7 @@ class PGraph:
         return f"n{self.node_count}"
 
     def undo_pgraph(self):
-        if self.prev_node_table_name == "root":
+        if self.prev_node_table_name == "root" or self.prev_node_table_name is None:
             return None
         self.next_node_table_name = self.current_node_table_name
         self.current_node_table_name = self.prev_node_table_name
@@ -118,9 +127,9 @@ class PGraph:
         current_node_child_list = current_node.children
         if len(current_node_child_list) == 0:
             self.next_node_table_name = None
-            return self.current_node_table_name
-        #set next to the last child added if there are children for this node
-        self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
+        else:
+            #set next to the last child added if there are children for this node
+            self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
 
         return self.current_node_table_name
 
@@ -132,9 +141,8 @@ class PGraph:
         if len(child_list) == 0:
             #no child for next pointer
             self.next_node_table_name = None
-
-        # set next to the last child added if there are children for this node
-        if len(child_list) > 0:
+        else:
+            # set next to the last child added if there are children for this node
             self.next_node_table_name = child_list[len(child_list) - 1]
 
         #set parent as prev pointer
@@ -143,3 +151,39 @@ class PGraph:
         #set current table name
         self.current_node_table_name = node_table_name
         return self.current_node_table_name
+
+    def get_path_to_node(self, node_table_name: str) -> List[GraphNode]:
+        """Returns the list of nodes from root to the specified node."""
+        path = []
+        curr = node_table_name
+        while curr and curr != "root":
+            node = self.node_map.get(curr)
+            if not node:
+                break
+            path.append(node)
+            curr = node.parent_table
+        return path[::-1] # Reverse to get root-to-leaf
+
+    def get_script_to_node(self, node_table_name: str) -> str:
+        """Generates a complete Pandas script to reach the specified data state."""
+        path = self.get_path_to_node(node_table_name)
+        
+        # Start with initial load
+        filename = getattr(app, 'original_table_name', 'data.csv')
+        script = [
+            "import pandas as pd",
+            "",
+            f"df = pd.read_csv('{filename}')",
+            "# Ensure ID column exists as in the app",
+            "if 'ID' not in df.columns:",
+            "    df.insert(0, 'ID', range(1, len(df) + 1))",
+            ""
+        ]
+        
+        for node in path:
+            if node.delta:
+                script.append(f"# Operation: {node.wrangle_op}")
+                script.append(node.delta.pandas_code)
+                script.append("")
+        
+        return "\n".join(script)
