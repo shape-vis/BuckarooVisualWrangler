@@ -1,4 +1,6 @@
-from typing import Dict, Any, List
+from typing import Dict, Any
+
+from app.wrangle_operations import get_operation
 
 """
 Defines a delta object that represents a single wrangling operation (a delta).
@@ -12,7 +14,19 @@ class Delta:
         """
         self.operation = operation
         self.parameters = parameters
-        self.pandas_code = pandas_code
+        self.pandas_code = pandas_code or self.to_pandas_code()
+
+    def to_pandas_code(self) -> str:
+        operation = get_operation(self.operation)
+        if operation is None:
+            return f"# Unknown operation: {self.operation}"
+        return operation.pandas_code(self.parameters)
+
+    def create_view(self, conn, engine, source_table: str, target_view: str) -> bool:
+        operation = get_operation(self.operation)
+        if operation is None:
+            return False
+        return operation.create_view(conn, engine, source_table, target_view, self.parameters)
 
     def __json__(self):
         """
