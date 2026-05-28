@@ -181,7 +181,9 @@ class DBOperations:
         # self.engine.dispose()
         for pt in all_possible_previews:
             if pt != keep_table:
+                execute_sql(f'DROP VIEW IF EXISTS "{pt}" CASCADE', self.engine)
                 execute_sql(f'DROP TABLE IF EXISTS "{pt}"', self.engine)
+                execute_sql(f'DROP VIEW IF EXISTS "errors_{pt}" CASCADE', self.engine)
                 execute_sql(f'DROP TABLE IF EXISTS "errors_{pt}"', self.engine)
 
     def rename_preview_to_new(self, preview_table: str, new_table_name: str):
