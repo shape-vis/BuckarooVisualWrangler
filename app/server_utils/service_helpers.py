@@ -20,7 +20,6 @@ from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 from app.pgraph.delta import Delta
-from app.server_utils.pandas_mapper import map_to_pandas
 
 PREVIEW_PARAMS = {}
 
@@ -390,58 +389,19 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     node = app.pgraph_for_session.node_map[new_table_name]
     params = node.delta.parameters if node.delta else {}
     
-    from sqlalchemy import text as sa_text, inspect
+    from sqlalchemy import text as sa_text
     from app import engine
-    from app.db_utils.query import _is_numeric, _compute_imputation_value
     
     view_created = False
     with engine.begin() as conn:
-        if wrangle_executed == "delete" and "row_ids" in params:
-            ids = params["row_ids"]
-            if ids:
-                ids_str = ", ".join(map(str, ids))
-                sql = f'CREATE VIEW "{new_table_name}" AS SELECT * FROM "{table}" WHERE "ID" NOT IN ({ids_str})'
-                conn.execute(sa_text(sql))
-                view_created = True
-        
-        elif wrangle_executed in ("impute", "impute_x", "impute_y") and "col" in params and "row_ids" in params:
-            col = params["col"]
-            ids = params["row_ids"]
-            if ids and col:
-                # Get the fill value
-                is_num = _is_numeric(conn, col, table)
-                fill_val = _compute_imputation_value(conn, table, col, is_num)
-                
-                if fill_val is not None:
-                    # Format value for SQL
-                    if isinstance(fill_val, str):
-                        fill_val_sql = f"'{fill_val}'"
-                    else:
-                        fill_val_sql = str(fill_val)
-                    
-                    ids_str = ", ".join(map(str, ids))
-                    
-                    # Build select list
-                    inspector = inspect(engine)
-                    columns = [c['name'] for c in inspector.get_columns(table)]
-                    select_parts = []
-                    for c in columns:
-                        if c == col:
-                            # The case statement for impute
-                            select_parts.append(f'CASE WHEN "ID" IN ({ids_str}) THEN {fill_val_sql} ELSE "{c}" END AS "{c}"')
-                        else:
-                            select_parts.append(f'"{c}"')
-                            
-                    select_str = ",\n".join(select_parts)
-                    sql = f'CREATE VIEW "{new_table_name}" AS SELECT {select_str} FROM "{table}"'
-                    conn.execute(sa_text(sql))
-                    view_created = True
+        if node.delta:
+            view_created = node.delta.create_view(conn, engine, table, new_table_name)
                     
         if view_created:
             # We must promote the errors preview table to final physical errors table
             # Because update_errors expects a physical table.
             conn.execute(sa_text(f'ALTER TABLE "errors_{preview_table}" RENAME TO "errors_{new_table_name}"'))
-            conn.execute(sa_text(f'DROP TABLE "{preview_table}"'))
+            conn.execute(sa_text(f'DROP VIEW "{preview_table}"'))
             
     if not view_created:
         print(f"Fallback to physical renaming for operation {wrangle_executed}")
@@ -486,8 +446,7 @@ def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=No
     delta = None
     if params:
         op = params.get("operation", wrangle_executed)
-        pandas_code = map_to_pandas(op, params)
-        delta = Delta(op, params, pandas_code)
+        delta = Delta(op, params)
     
     current_node = GraphNode(parent_table, wrangle_executed, new_table_name, f"errors_{new_table_name}", delta=delta)
     app.pgraph_for_session.add_node(current_node)
@@ -531,54 +490,25 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     Returns a dict with preview table names and dims=1.
     """
     from app import engine
-    from sqlalchemy import text as sa_text, inspect
-    from app.db_utils.query import _is_numeric, _compute_imputation_value
 
     preview_delete = preview_name_fn(table, "_preview_delete")
     preview_impute = preview_name_fn(table, "_preview_impute")
-
-    ids_str = ", ".join(map(str, row_ids))
+    delete_delta = Delta("delete", {"operation": "delete", "row_ids": row_ids})
+    impute_delta = Delta("impute", {"operation": "impute", "row_ids": row_ids, "col": cols[0]})
+    impute_created = False
     
     with engine.begin() as conn:
-        # Create View for Delete
-        conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_delete}" CASCADE'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}" CASCADE'))
-        conn.execute(sa_text(f'CREATE VIEW "{preview_delete}" AS SELECT * FROM "{table}" WHERE "ID" NOT IN ({ids_str})'))
-        
-        # Create View for Impute
-        conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_impute}" CASCADE'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_impute}" CASCADE'))
-        
-        col = cols[0]
-        is_num = _is_numeric(conn, col, table)
-        fill_val = _compute_imputation_value(conn, table, col, is_num)
-        
-        if fill_val is not None:
-            if isinstance(fill_val, str):
-                fill_val_sql = f"'{fill_val}'"
-            else:
-                fill_val_sql = str(fill_val)
-                
-            inspector = inspect(engine)
-            columns = [c['name'] for c in inspector.get_columns(table)]
-            select_parts = []
-            for c in columns:
-                if c == col:
-                    select_parts.append(f'CASE WHEN "ID" IN ({ids_str}) THEN {fill_val_sql} ELSE "{c}" END AS "{c}"')
-                else:
-                    select_parts.append(f'"{c}"')
-                    
-            select_str = ",\n".join(select_parts)
-            conn.execute(sa_text(f'CREATE VIEW "{preview_impute}" AS SELECT {select_str} FROM "{table}"'))
+        delete_delta.create_view(conn, engine, table, preview_delete)
+        impute_created = impute_delta.create_view(conn, engine, table, preview_impute)
 
     update_errors_fn(preview_delete)
-    if fill_val is not None:
+    if impute_created:
         update_errors_fn(preview_impute)
 
     # Store preview parameters for delta storage
-    PREVIEW_PARAMS[preview_delete] = {"operation": "delete", "row_ids": row_ids}
-    if fill_val is not None:
-        PREVIEW_PARAMS[preview_impute] = {"operation": "impute", "row_ids": row_ids, "col": cols[0]}
+    PREVIEW_PARAMS[preview_delete] = delete_delta.parameters
+    if impute_created:
+        PREVIEW_PARAMS[preview_impute] = impute_delta.parameters
 
     return {
         "success": True,
@@ -601,62 +531,32 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     Returns a dict with preview table names and dims=2.
     """
     from app import engine
-    from sqlalchemy import text as sa_text, inspect
-    from app.db_utils.query import _is_numeric, _compute_imputation_value
 
     preview_delete   = preview_name_fn(table, "_preview_delete")
     preview_impute_x = preview_name_fn(table, "_preview_impute_x")
     preview_impute_y = preview_name_fn(table, "_preview_impute_y")
-
-    ids_str = ", ".join(map(str, row_ids))
-    success_imputes = {0: False, 1: False}
+    deltas_by_preview = {
+        preview_delete: Delta("delete", {"operation": "delete", "row_ids": row_ids}),
+        preview_impute_x: Delta("impute_x", {"operation": "impute_x", "row_ids": row_ids, "col": cols[0]}),
+        preview_impute_y: Delta("impute_y", {"operation": "impute_y", "row_ids": row_ids, "col": cols[1]}),
+    }
+    created_previews = {}
 
     with engine.begin() as conn:
-        # Create View for Delete
-        conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_delete}" CASCADE'))
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_delete}" CASCADE'))
-        conn.execute(sa_text(f'CREATE VIEW "{preview_delete}" AS SELECT * FROM "{table}" WHERE "ID" NOT IN ({ids_str})'))
-        
-        inspector = inspect(engine)
-        columns = [c['name'] for c in inspector.get_columns(table)]
-        
-        for idx, col in enumerate(cols):
-            preview_name = preview_impute_x if idx == 0 else preview_impute_y
-            
-            conn.execute(sa_text(f'DROP VIEW IF EXISTS "{preview_name}" CASCADE'))
-            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_name}" CASCADE'))
-            
-            is_num = _is_numeric(conn, col, table)
-            fill_val = _compute_imputation_value(conn, table, col, is_num)
-            
-            if fill_val is not None:
-                success_imputes[idx] = True
-                if isinstance(fill_val, str):
-                    fill_val_sql = f"'{fill_val}'"
-                else:
-                    fill_val_sql = str(fill_val)
-                    
-                select_parts = []
-                for c in columns:
-                    if c == col:
-                        select_parts.append(f'CASE WHEN "ID" IN ({ids_str}) THEN {fill_val_sql} ELSE "{c}" END AS "{c}"')
-                    else:
-                        select_parts.append(f'"{c}"')
-                        
-                select_str = ",\n".join(select_parts)
-                conn.execute(sa_text(f'CREATE VIEW "{preview_name}" AS SELECT {select_str} FROM "{table}"'))
+        for preview_name, delta in deltas_by_preview.items():
+            created_previews[preview_name] = delta.create_view(conn, engine, table, preview_name)
 
     update_errors_fn(preview_delete)
     
-    PREVIEW_PARAMS[preview_delete] = {"operation": "delete", "row_ids": row_ids}
+    PREVIEW_PARAMS[preview_delete] = deltas_by_preview[preview_delete].parameters
     
-    if success_imputes[0]:
+    if created_previews.get(preview_impute_x):
         update_errors_fn(preview_impute_x)
-        PREVIEW_PARAMS[preview_impute_x] = {"operation": "impute_x", "row_ids": row_ids, "col": cols[0]}
+        PREVIEW_PARAMS[preview_impute_x] = deltas_by_preview[preview_impute_x].parameters
         
-    if success_imputes[1]:
+    if created_previews.get(preview_impute_y):
         update_errors_fn(preview_impute_y)
-        PREVIEW_PARAMS[preview_impute_y] = {"operation": "impute_y", "row_ids": row_ids, "col": cols[1]}
+        PREVIEW_PARAMS[preview_impute_y] = deltas_by_preview[preview_impute_y].parameters
 
     return {
         "success": True,
