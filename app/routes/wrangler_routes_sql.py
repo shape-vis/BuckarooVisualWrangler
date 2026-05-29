@@ -146,21 +146,12 @@ def wrangle_delete_column():
         table = db_operations.main_table_name
         column = body["column"]
 
-        # For pure delta storage, create the node first and let Delta build the view.
         new_table_name = _safe_pg_name(table, "_col_del")
-        
-        from sqlalchemy import inspect
-        inspector = inspect(engine)
-        columns = [c['name'] for c in inspector.get_columns(table)]
-        columns = [c for c in columns if c != column]
-        
-        remaining_columns = len(columns)
-        
-        # Record in PGraph
         params = {"operation": "delete-column", "column": column}
         new_table_name = n_wrangle(table, new_table_name, "delete-column", direct_params=params)
 
         delta = Delta("delete-column", params)
+        result_meta = delta.operation_result(engine, table)
         with engine.begin() as conn:
             delta.create_view(conn, engine, table, new_table_name)
 
@@ -172,8 +163,8 @@ def wrangle_delete_column():
 
         return {
             "success": True,
-            "remaining_columns": remaining_columns,
-            "deleted_column": column,
+            "remaining_columns": result_meta.get("remaining_columns", 0),
+            "deleted_column": result_meta.get("deleted_column", column),
             "table_name": new_table_name
         }
     except Exception as e:

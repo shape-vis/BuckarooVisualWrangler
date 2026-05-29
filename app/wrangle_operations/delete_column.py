@@ -22,3 +22,13 @@ class DeleteColumnOperation(WrangleOperation):
         source = quote_identifier(source_table)
         recreate_view(conn, target_view, f"SELECT {select_list} FROM {source}")
         return True
+
+    def operation_result(self, engine, source_table: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        column = parameters.get("column")
+        if not column:
+            return {}
+        remaining = [name for name in table_columns(engine, source_table) if name != column]
+        return {
+            "remaining_columns": len(remaining),
+            "deleted_column": column,
+        }

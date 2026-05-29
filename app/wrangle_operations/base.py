@@ -12,3 +12,7 @@ class WrangleOperation(ABC):
     @abstractmethod
     def create_view(self, conn, engine, source_table: str, target_view: str, parameters: Dict[str, Any]) -> bool:
         pass
+
+    def operation_result(self, engine, source_table: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Optional metadata for API responses after a wrangle (e.g. remaining column count)."""
+        return {}

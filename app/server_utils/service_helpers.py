@@ -387,22 +387,17 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed, preview_table)
     
     node = app.pgraph_for_session.node_map[new_table_name]
-    params = node.delta.parameters if node.delta else {}
-    
+
     from sqlalchemy import text as sa_text
     from app import engine
     
     view_created = False
     with engine.begin() as conn:
         if node.delta:
-            view_created = node.delta.create_view(conn, engine, table, new_table_name)
-                    
-        if view_created:
-            # We must promote the errors preview table to final physical errors table
-            # Because update_errors expects a physical table.
-            conn.execute(sa_text(f'ALTER TABLE "errors_{preview_table}" RENAME TO "errors_{new_table_name}"'))
-            conn.execute(sa_text(f'DROP VIEW "{preview_table}"'))
-            
+            view_created = node.delta.promote_from_preview(
+                conn, engine, table, preview_table, new_table_name
+            )
+
     if not view_created:
         print(f"Fallback to physical renaming for operation {wrangle_executed}")
         app.db_operations.rename_preview_to_new(preview_table, new_table_name)
@@ -482,7 +477,7 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
 
     # Copy schema but leave empty.
-    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
+    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)'))
 
 def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """

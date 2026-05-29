@@ -1,6 +1,7 @@
 from typing import Dict, Any
 
 from app.wrangle_operations import get_operation
+from app.wrangle_operations.sql_utils import drop_view, promote_errors_preview
 
 """
 Defines a delta object that represents a single wrangling operation (a delta).
@@ -27,6 +28,30 @@ class Delta:
         if operation is None:
             return False
         return operation.create_view(conn, engine, source_table, target_view, self.parameters)
+
+    def operation_result(self, engine, source_table: str) -> Dict[str, Any]:
+        operation = get_operation(self.operation)
+        if operation is None:
+            return {}
+        return operation.operation_result(engine, source_table, self.parameters)
+
+    def promote_from_preview(
+        self,
+        conn,
+        engine,
+        source_table: str,
+        preview_table: str,
+        target_table: str,
+    ) -> bool:
+        """
+        Materialize the wrangle as target_table view from source_table, promote the
+        errors preview table, and drop the temporary preview view.
+        """
+        view_created = self.create_view(conn, engine, source_table, target_table)
+        if view_created:
+            promote_errors_preview(conn, preview_table, target_table)
+            drop_view(conn, preview_table)
+        return view_created
 
     def __json__(self):
         """
