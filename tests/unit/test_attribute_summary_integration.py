@@ -1,8 +1,13 @@
 import unittest
+from pathlib import Path
+
 import pandas as pd
 
-from data_management.data_attribute_summary_integration import get_categorical_stats, get_numeric_stats, \
+from app.server_utils.data_attribute_summary_integration import get_categorical_stats, get_numeric_stats, \
     build_attribute_distributions, convert_error_list_to_dict, generate_complete_json
+
+
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 
 class TestGetCategoricalStats(unittest.TestCase):
@@ -64,9 +69,9 @@ class TestGetNumericStats(unittest.TestCase):
         self.assertEqual(result["numeric"]["max"], 10.0)
 
     def test_numeric_stats_complaints_csv(self):
-        df = pd.read_csv('../../provided_datasets/complaints-2025-04-21_17_31.csv').head(400)
+        df = pd.read_csv(DATASETS_DIR / 'complaints-2025-04-21_17_31.csv').head(400)
         res = build_attribute_distributions(df)
-        self.assertEqual(True,True)
+        self.assertIn("Complaint ID", res)
 
 class TestBuildAttributeDistributions(unittest.TestCase):
 
@@ -159,7 +164,7 @@ class TestRealDataIntegration(unittest.TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.test_dataframe = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
+        self.test_dataframe = pd.read_csv(DATASETS_DIR / 'stackoverflow_db_uncleaned.csv')
 
     def test_stackoverflow_categorical_column(self):
         """Test with real stackoverflow categorical data"""

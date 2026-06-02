@@ -1,9 +1,13 @@
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
 from app.server_utils.set_id_column import set_id_column
 from detectors.datatype_mismatch import datatype_mismatch
+
+
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 
 class TestDataTypeMismatch(unittest.TestCase):
@@ -35,14 +39,14 @@ class TestDataTypeMismatch(unittest.TestCase):
         self.assertEqual(expected_data,detected_df)
 
     def test_stackoverflow(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / 'stackoverflow_db_uncleaned.csv')
         detected_df = datatype_mismatch(test_dataframe)
         error_map = {"Age": {4: "mismatch", 5: "mismatch"}}
         self.assertEqual(error_map, detected_df)
 
     #----------Should finish building these tests if full integration doesn't work down the line-------#
     def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/crimes___one_year_prior_to_present_20250421.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / '(original)crimes___one_year_prior_to_present_20250421.csv')
         detected_df = datatype_mismatch(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
   "FBI CD": {
@@ -54,7 +58,7 @@ class TestDataTypeMismatch(unittest.TestCase):
         self.assertEqual(expected_error_map, detected_df)
 
     def test_complaints_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/complaints-2025-04-21_17_31.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / 'complaints-2025-04-21_17_31.csv')
         detected_df = datatype_mismatch(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
   "ZIP code": {

@@ -40,13 +40,14 @@ class ImputeOperation(WrangleOperation):
             return False
 
         ids_sql = id_list(row_ids)
-        fill_sql = quote_literal(fill_val)
+        fill_sql = str(fill_val) if is_num else quote_literal(fill_val)
         select_parts = []
         for column in table_columns(engine, source_table):
             quoted_column = quote_identifier(column)
             if column == col:
+                existing_value_sql = f"{quoted_column}::numeric" if is_num else quoted_column
                 select_parts.append(
-                    f'CASE WHEN "ID" IN ({ids_sql}) THEN {fill_sql} ELSE {quoted_column} END AS {quoted_column}'
+                    f'CASE WHEN "ID" IN ({ids_sql}) THEN {fill_sql} ELSE {existing_value_sql} END AS {quoted_column}'
                 )
             else:
                 select_parts.append(quoted_column)

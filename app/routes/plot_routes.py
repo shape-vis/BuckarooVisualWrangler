@@ -8,6 +8,8 @@ from app import app, engine, db_operations
 from app.server_utils.data_attribute_summary_integration import generate_complete_json
 
 import math
+from collections import Counter
+from itertools import product
 
 
 def replace_nan(obj):
@@ -25,6 +27,158 @@ def replace_nan(obj):
 
     else:
         return obj
+
+
+def get_relevant_errors(error_df, columns):
+    return error_df[error_df["column_id"].isin(columns)].copy()
+
+
+def _is_numeric_column(series):
+    non_null = series.dropna()
+    if non_null.empty:
+        return False
+    return pd.to_numeric(non_null, errors="coerce").notna().all()
+
+
+def get_column_bin_assignments(main_df, column, bin_count):
+    values = main_df[column]
+
+    if values.isna().all():
+        return [0] * len(values), ["null"], "categorical"
+
+    if not _is_numeric_column(values):
+        categories = list(pd.unique(values.dropna()))
+        category_to_bin = {category: index for index, category in enumerate(categories)}
+        assignments = [
+            category_to_bin[value] if pd.notna(value) else math.nan
+            for value in values
+        ]
+        return assignments, categories, "categorical"
+
+    numeric_values = pd.to_numeric(values, errors="coerce")
+    binned = pd.cut(numeric_values, bins=bin_count)
+    categories = list(binned.cat.categories)
+    category_to_bin = {category: index for index, category in enumerate(categories)}
+    assignments = [
+        category_to_bin[value] if pd.notna(value) else math.nan
+        for value in binned
+    ]
+    return assignments, categories, "numeric"
+
+
+def create_row_to_bin_mapping(main_df, columns, all_bin_assignments):
+    mapping = {}
+    for row_index, row_id in enumerate(main_df["ID"]):
+        coordinates = []
+        for bin_assignments in all_bin_assignments:
+            bin_value = bin_assignments[row_index]
+            if pd.isna(bin_value):
+                break
+            coordinates.append(int(bin_value))
+        else:
+            mapping[int(row_id)] = tuple(coordinates)
+    return mapping
+
+
+def count_items_per_bin(row_to_bin_mapping):
+    return dict(Counter(row_to_bin_mapping.values()))
+
+
+def count_errors_per_bin(error_df, row_to_bin_mapping):
+    errors_per_bin = {}
+    if error_df.empty:
+        return errors_per_bin
+
+    for _, row in error_df.iterrows():
+        row_id = int(row["row_id"])
+        if row_id not in row_to_bin_mapping:
+            continue
+        bin_coordinates = row_to_bin_mapping[row_id]
+        errors_per_bin.setdefault(bin_coordinates, {})
+        error_type = row["error_type"]
+        errors_per_bin[bin_coordinates][error_type] = (
+            errors_per_bin[bin_coordinates].get(error_type, 0) + 1
+        )
+    return errors_per_bin
+
+
+def create_scale_info(scale_data, column_type):
+    if column_type == "categorical":
+        return {"numeric": [], "categorical": scale_data}
+
+    return {
+        "numeric": [
+            {"x0": int(interval.left), "x1": int(interval.right)}
+            for interval in scale_data
+        ],
+        "categorical": [],
+    }
+
+
+def format_error_counts(error_type_counts, total_items):
+    counts = {"items": total_items}
+    counts.update(error_type_counts)
+    return counts
+
+
+def get_bin_value_for_dimension(bin_index, scale_data, column_type):
+    if column_type == "categorical":
+        return scale_data[bin_index]
+    return bin_index
+
+
+def create_count_information(bin_coordinates, items_per_bin, errors_per_bin):
+    return format_error_counts(
+        errors_per_bin.get(bin_coordinates, {}),
+        items_per_bin.get(bin_coordinates, 0),
+    )
+
+
+def add_dimension_info_to_entry(entry, bin_coordinates, all_scale_data, all_column_types):
+    entry["xBin"] = get_bin_value_for_dimension(
+        bin_coordinates[0], all_scale_data[0], all_column_types[0]
+    )
+    entry["xType"] = all_column_types[0]
+
+    if len(bin_coordinates) > 1:
+        entry["yBin"] = get_bin_value_for_dimension(
+            bin_coordinates[1], all_scale_data[1], all_column_types[1]
+        )
+        entry["yType"] = all_column_types[1]
+
+    return entry
+
+
+def create_single_histogram_entry(
+    bin_coordinates,
+    items_per_bin,
+    errors_per_bin,
+    all_scale_data,
+    all_column_types,
+):
+    entry = {
+        "count": create_count_information(bin_coordinates, items_per_bin, errors_per_bin)
+    }
+    return add_dimension_info_to_entry(
+        entry, bin_coordinates, all_scale_data, all_column_types
+    )
+
+
+def generate_all_bin_coordinate_combinations(all_scale_data):
+    return product(*(range(len(scale_data)) for scale_data in all_scale_data))
+
+
+def build_histogram_entries(items_per_bin, errors_per_bin, scale_data, column_types):
+    return [
+        create_single_histogram_entry(
+            bin_coordinates,
+            items_per_bin,
+            errors_per_bin,
+            scale_data,
+            column_types,
+        )
+        for bin_coordinates in generate_all_bin_coordinate_combinations(scale_data)
+    ]
 
 
 @app.get("/api/plots/1-d-histogram")

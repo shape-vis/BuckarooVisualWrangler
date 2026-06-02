@@ -94,39 +94,46 @@ app = Flask(__name__,
             static_folder="../ui/dist",
             static_url_path="/")
 
-#sets the URL to the DB url specified for the local postgresql db on my local machine specified in .env
+skip_db_init = os.environ.get("BUCKAROO_SKIP_DB_INIT") == "1"
 
-host, port, user, password, db_name = load_database_info()
+if skip_db_init:
+    engine = None
+    db_operations = None
+else:
+    #sets the URL to the DB url specified for the local postgresql db on my local machine specified in .env
 
-"""
-we use psycopg2 directly for the initial connection
- but only for the one-time database creation check at startup
-"""
-connection = psycopg2.connect(host=host, port=port, user=user, password=password)
+    host, port, user, password, db_name = load_database_info()
 
-# Create the database if it does not exist
-create_database_if_not_exists(connection, db_name)
+    """
+    we use psycopg2 directly for the initial connection
+     but only for the one-time database creation check at startup
+    """
+    connection = psycopg2.connect(host=host, port=port, user=user, password=password)
+
+    # Create the database if it does not exist
+    create_database_if_not_exists(connection, db_name)
 
 
+    """
+     then we use SQLAlchemy (create_engine) for everything else
+     this is the engine that gets passed around to fetch_sql, execute_sql, 
+     pd.read_sql_query, and .to_sql() throughout routes.py, plot_routes.py, and db_operations.py
+    """
+    print(f"Connecting to database: {db_name}")
+    engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
-"""
- then we use SQLAlchemy (create_engine) for everything else
- this is the engine that gets passed around to fetch_sql, execute_sql, 
- pd.read_sql_query, and .to_sql() throughout routes.py, plot_routes.py, and db_operations.py
-"""
-print(f"Connecting to database: {db_name}")
-engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
-
-from app.db_utils.db_functions_sql import DBOperations
-db_operations = DBOperations(engine)
+    from app.db_utils.db_functions_sql import DBOperations
+    db_operations = DBOperations(engine)
 
 """ Global vars to use throughout session """
 wrangle_occurred = False
-app.pgraph_for_session = None
+pgraph_for_session = None
+original_table_name = "data.csv"
 
-#this automatically imports any new route files added to the app/routes dir
-import app.routes as _routes_pkg
-for _, module_name, _ in pkgutil.iter_modules(_routes_pkg.__path__):
-    __import__(f"app.routes.{module_name}")
+if not skip_db_init:
+    #this automatically imports any new route files added to the app/routes dir
+    import app.routes as _routes_pkg
+    for _, module_name, _ in pkgutil.iter_modules(_routes_pkg.__path__):
+        __import__(f"app.routes.{module_name}")
 
 

@@ -5,6 +5,7 @@
 import pandas as pd
 from flask import request, send_file
 import time
+import app as app_module
 from app import app
 from app import db_operations, engine
 from app.server_utils.service_helpers import (
@@ -68,6 +69,7 @@ def load_file(csv_file, filename):
         rankings.to_sql("rankings_" + table_name_with_node_id, engine, if_exists='replace', index=False)
 
         #init the pgraph
+        app_module.original_table_name = filename
         init_pgraph_for_session(table_name_with_node_id)
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
@@ -171,8 +173,10 @@ def export_pandas():
     if not current_table:
         return {"success": False, "error": "No table loaded"}, 400
     
-    from app import pgraph_for_session
-    script = pgraph_for_session.get_script_to_node(current_table)
+    if app_module.pgraph_for_session is None:
+        return {"success": False, "error": "No provenance graph loaded"}, 400
+
+    script = app_module.pgraph_for_session.get_script_to_node(current_table)
     
     return {"success": True, "script": script}
 

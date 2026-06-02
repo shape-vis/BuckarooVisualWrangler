@@ -1,10 +1,14 @@
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from app.server_utils.set_id_column import set_id_column
 from detectors.missing_value import missing_value
+
+
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 
 class TestMissing(unittest.TestCase):
@@ -42,15 +46,15 @@ class TestMissing(unittest.TestCase):
         self.assertEqual(error_map, detected_df)
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / 'stackoverflow_db_uncleaned.csv')
         detected_df = missing_value(test_dataframe.head(200))
-        expected_error_map = {"Continent":{8:"missing",9:"missing",10:"missing",12:"missing",13:"missing",14:"missing",15:"missing",
-                                           16:"missing",17:"missing"}}
+        expected_error_map = {"ConvertedSalary": {2: "missing", 4: "missing", 16: "missing", 18: "missing",
+                                                  20: "missing", 24: "missing"}}
         self.assertEqual(expected_error_map, detected_df)
 
     #----------Should finish building these tests if full integration doesn't work down the line-------#
     def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/crimes___one_year_prior_to_present_20250421.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / '(original)crimes___one_year_prior_to_present_20250421.csv')
         detected_df = missing_value(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
   "LATITUDE": {

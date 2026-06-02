@@ -178,6 +178,123 @@ def run_detectors(data_frame):
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
     return perform_melt(frames)
 
+
+DETECTOR_SCOPES = {
+    "missing": {
+        "detector": missing_value,
+        "changed_cells_valid": True,
+    },
+    "mismatch": {
+        "detector": datatype_mismatch,
+        "changed_cells_valid": False,
+    },
+    "anomaly": {
+        "detector": anomaly,
+        "changed_cells_valid": False,
+    },
+    "incomplete": {
+        "detector": incomplete,
+        "changed_cells_valid": False,
+    },
+}
+
+
+def _empty_error_df():
+    return pd.DataFrame(columns=["row_id", "column_id", "error_type"])
+
+
+def _normalize_error_df(error_df):
+    if error_df is None or error_df.empty:
+        return _empty_error_df()
+    normalized = error_df.copy()
+    for col in ["row_id", "column_id", "error_type"]:
+        if col not in normalized.columns:
+            normalized[col] = pd.Series(dtype="object")
+    return normalized[["row_id", "column_id", "error_type"]].dropna(subset=["error_type"])
+
+
+def _detector_to_error_df(data_frame, detector_fn):
+    detector_df = pd.DataFrame(detector_fn(data_frame.copy())).rename_axis("ID", axis="index").reset_index()
+    if detector_df.empty:
+        return _empty_error_df()
+    return perform_melt([detector_df])
+
+
+def _run_detector_scope(data_frame, detector_name, columns=None, row_ids=None):
+    columns = [col for col in (columns or []) if col in data_frame.columns and col != "ID"]
+    if not columns:
+        return _empty_error_df()
+
+    scoped_df = set_id_column(data_frame)
+    if row_ids is not None:
+        scoped_df = scoped_df[scoped_df["ID"].isin([int(row_id) for row_id in row_ids])]
+
+    scoped_df = scoped_df[["ID"] + columns]
+    return _detector_to_error_df(scoped_df, DETECTOR_SCOPES[detector_name]["detector"])
+
+
+def update_errors_incrementally(data_frame, previous_error_df, operation, parameters):
+    """
+    Update an errors table by invalidating and recomputing only the detector
+    scopes that can be affected by a wrangle.
+
+    Detector scope rules:
+      - missing: changed cells for impute, deleted rows for delete
+      - mismatch/anomaly/incomplete: changed attribute for impute
+      - delete rows: full recompute for column/dataset-sensitive detectors
+      - delete-column: drop errors for the removed attribute
+    """
+    df_with_id = set_id_column(data_frame)
+    existing = _normalize_error_df(previous_error_df)
+    parameters = parameters or {}
+    operation = parameters.get("operation", operation)
+
+    if operation == "delete-column":
+        column = parameters.get("column")
+        if not column:
+            return existing
+        return existing[existing["column_id"] != column].reset_index(drop=True)
+
+    if operation == "delete":
+        row_ids = [int(row_id) for row_id in parameters.get("row_ids", [])]
+        surviving_errors = existing[
+            ~(
+                existing["row_id"].isin(row_ids)
+                | existing["error_type"].isin(["mismatch", "anomaly", "incomplete"])
+            )
+        ]
+        recomputed = [
+            _detector_to_error_df(df_with_id, DETECTOR_SCOPES[name]["detector"])
+            for name in ["mismatch", "anomaly", "incomplete"]
+        ]
+        return pd.concat([surviving_errors, *recomputed], ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+    if operation in {"impute", "impute_x", "impute_y"}:
+        column = parameters.get("col")
+        row_ids = [int(row_id) for row_id in parameters.get("row_ids", [])]
+        if not column:
+            return run_detectors(df_with_id)
+
+        stale_missing = (
+            (existing["column_id"] == column)
+            & (existing["error_type"] == "missing")
+            & (existing["row_id"].isin(row_ids))
+        )
+        stale_column_scoped = (
+            (existing["column_id"] == column)
+            & (existing["error_type"].isin(["mismatch", "anomaly", "incomplete"]))
+        )
+        kept = existing[~(stale_missing | stale_column_scoped)]
+        recomputed = [
+            _run_detector_scope(df_with_id, "missing", [column], row_ids),
+            _run_detector_scope(df_with_id, "mismatch", [column]),
+            _run_detector_scope(df_with_id, "anomaly", [column]),
+            _run_detector_scope(df_with_id, "incomplete", [column]),
+        ]
+        return pd.concat([kept, *recomputed], ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+    return run_detectors(df_with_id)
+
 def calculate_attribute_rankings(error_df):
     """
     Calculate attribute rankings by total error count
@@ -496,9 +613,21 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
         delete_delta.create_view(conn, engine, table, preview_delete)
         impute_created = impute_delta.create_view(conn, engine, table, preview_impute)
 
-    update_errors_fn(preview_delete)
+    update_errors_fn(
+        preview_delete,
+        source_table_name=table,
+        source_error_table_name=f"errors_{table}",
+        operation="delete",
+        parameters=delete_delta.parameters,
+    )
     if impute_created:
-        update_errors_fn(preview_impute)
+        update_errors_fn(
+            preview_impute,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="impute",
+            parameters=impute_delta.parameters,
+        )
 
     # Store preview parameters for delta storage
     PREVIEW_PARAMS[preview_delete] = delete_delta.parameters
@@ -541,16 +670,34 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
         for preview_name, delta in deltas_by_preview.items():
             created_previews[preview_name] = delta.create_view(conn, engine, table, preview_name)
 
-    update_errors_fn(preview_delete)
+    update_errors_fn(
+        preview_delete,
+        source_table_name=table,
+        source_error_table_name=f"errors_{table}",
+        operation="delete",
+        parameters=deltas_by_preview[preview_delete].parameters,
+    )
     
     PREVIEW_PARAMS[preview_delete] = deltas_by_preview[preview_delete].parameters
     
     if created_previews.get(preview_impute_x):
-        update_errors_fn(preview_impute_x)
+        update_errors_fn(
+            preview_impute_x,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="impute_x",
+            parameters=deltas_by_preview[preview_impute_x].parameters,
+        )
         PREVIEW_PARAMS[preview_impute_x] = deltas_by_preview[preview_impute_x].parameters
         
     if created_previews.get(preview_impute_y):
-        update_errors_fn(preview_impute_y)
+        update_errors_fn(
+            preview_impute_y,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="impute_y",
+            parameters=deltas_by_preview[preview_impute_y].parameters,
+        )
         PREVIEW_PARAMS[preview_impute_y] = deltas_by_preview[preview_impute_y].parameters
 
     return {

@@ -17,6 +17,41 @@ def test_delta_generates_pandas_code_from_delete():
     assert delta.pandas_code == "df = df[~df['ID'].isin([1, 3])]"
 
 
+def test_delta_json_stores_operation_parameters_and_pandas_code():
+    delta = Delta("delete-column", {"operation": "delete-column", "column": "foo"})
+
+    data = delta.__json__()
+
+    assert data == {
+        "operation": "delete-column",
+        "parameters": {"operation": "delete-column", "column": "foo"},
+        "pandas_code": "df.drop(columns=['foo'], inplace=True)",
+    }
+
+
+def test_delta_from_dict_preserves_stored_pandas_code():
+    data = {
+        "operation": "delete",
+        "parameters": {"operation": "delete", "row_ids": [1, 2]},
+        "pandas_code": "df = custom_export(df)",
+    }
+
+    delta = Delta.from_dict(data)
+
+    assert delta.operation == "delete"
+    assert delta.parameters == {"operation": "delete", "row_ids": [1, 2]}
+    assert delta.pandas_code == "df = custom_export(df)"
+
+
+def test_delta_from_dict_generates_pandas_code_when_not_stored():
+    delta = Delta.from_dict({
+        "operation": "delete",
+        "parameters": {"operation": "delete", "row_ids": [9]},
+    })
+
+    assert delta.pandas_code == "df = df[~df['ID'].isin([9])]"
+
+
 def test_map_to_pandas_delegates_to_delta():
     code = map_to_pandas("delete", {"row_ids": [2]})
     assert code == "df = df[~df['ID'].isin([2])]"

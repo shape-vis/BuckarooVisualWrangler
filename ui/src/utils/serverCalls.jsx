@@ -335,6 +335,15 @@ export async function resetApp() {
     }
 }
 
+export async function exportPandasScript() {
+    try {
+        const response = await fetch("/api/export/pandas", { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error("[exportPandasScript]", error.message);
+    }
+}
+
 export {
     uploadFileToDB,
     queryHistogram1d,
@@ -358,6 +367,7 @@ const serverCalls = {
     queryPreviewHistogram,
     queryPreviewScatterplot,
     executeWrangle,
+    exportPandasScript,
 };
 
 export default serverCalls;
