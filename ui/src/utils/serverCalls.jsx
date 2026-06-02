@@ -337,6 +337,8 @@ export async function resetApp() {
 
 export async function exportPandasScript() {
     try {
+        // This endpoint returns {success, script}. Header.jsx turns script into
+        // a downloaded buckaroo_export.py file.
         const response = await fetch("/api/export/pandas", { method: "GET" });
         return await response.json();
     } catch (error) {

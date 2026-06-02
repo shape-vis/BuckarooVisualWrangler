@@ -181,8 +181,13 @@ class DBOperations:
         # self.engine.dispose()
         for pt in all_possible_previews:
             if pt != keep_table:
+                # Preview data objects may be SQL views or physical tables,
+                # depending on which code path created them. Drop both forms so
+                # cleanup works even after switching implementation styles.
                 execute_sql(f'DROP VIEW IF EXISTS "{pt}" CASCADE', self.engine)
                 execute_sql(f'DROP TABLE IF EXISTS "{pt}"', self.engine)
+                # Error previews are physical detector tables, but DROP VIEW is
+                # harmless and protects against older preview implementations.
                 execute_sql(f'DROP TABLE IF EXISTS "errors_{pt}"', self.engine)
                 execute_sql(f'DROP VIEW IF EXISTS "errors_{pt}" CASCADE', self.engine)
 
@@ -192,6 +197,8 @@ class DBOperations:
         Disposes the connection pool first to avoid lock contention.
         """
         # self.engine.dispose()
+        # This is the fallback path for physical preview tables. Most newer
+        # wrangles use Delta.promote_from_preview() to create SQL views instead.
         execute_sql(f'ALTER TABLE "{preview_table}" RENAME TO "{new_table_name}"', self.engine)
         execute_sql(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{new_table_name}"', self.engine)
 

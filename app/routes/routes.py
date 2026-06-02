@@ -169,13 +169,19 @@ def export_pandas():
     """
     Returns a Python script that replicates the current data state using Pandas.
     """
+    # The export is only meaningful after a dataset has been loaded. The
+    # DBOperations object tracks the current table name that the UI is viewing.
     current_table = db_operations.main_table_name
     if not current_table:
         return {"success": False, "error": "No table loaded"}, 400
     
+    # The provenance graph stores the sequence of Deltas needed to recreate
+    # that current table from the original CSV.
     if app_module.pgraph_for_session is None:
         return {"success": False, "error": "No provenance graph loaded"}, 400
 
+    # get_script_to_node walks root -> current node and concatenates the Pandas
+    # code stored in each Delta.
     script = app_module.pgraph_for_session.get_script_to_node(current_table)
     
     return {"success": True, "script": script}

@@ -1,3 +1,5 @@
+"""Tests for the attribute summary JSON shown in the left-side UI panel."""
+
 import unittest
 from pathlib import Path
 

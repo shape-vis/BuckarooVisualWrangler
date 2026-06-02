@@ -11,12 +11,16 @@ from app.wrangle_operations.sql_utils import (
 
 
 class ImputeOperation(WrangleOperation):
+    """Fill selected missing values in one column."""
+
     def pandas_code(self, parameters: Dict[str, Any]) -> str:
         col = parameters.get("col")
         row_ids = parameters.get("row_ids", [])
         if not col:
             return "# Impute operation missing column"
 
+        # Numeric columns use their mean; categorical columns use their mode.
+        # The exported code only fills values in the selected row IDs.
         return (
             f"if df['{col}'].dtype.kind in 'iufc':\n"
             f"    fill_val = df['{col}'].mean()\n"
@@ -34,6 +38,8 @@ class ImputeOperation(WrangleOperation):
         if not col or not row_ids:
             return False
 
+        # The SQL path mirrors the Pandas path: compute one fill value, then
+        # use CASE WHEN to replace only selected rows in the chosen column.
         is_num = _is_numeric(conn, col, source_table)
         fill_val = _compute_imputation_value(conn, source_table, col, is_num)
         if fill_val is None:
@@ -45,6 +51,9 @@ class ImputeOperation(WrangleOperation):
         for column in table_columns(engine, source_table):
             quoted_column = quote_identifier(column)
             if column == col:
+                # For numeric columns, both CASE branches must be numeric.
+                # Without this cast, PostgreSQL may treat the fill value as
+                # text and reject the view for bigint/float columns.
                 existing_value_sql = f"{quoted_column}::numeric" if is_num else quoted_column
                 select_parts.append(
                     f'CASE WHEN "ID" IN ({ids_sql}) THEN {fill_sql} ELSE {existing_value_sql} END AS {quoted_column}'

@@ -1,3 +1,5 @@
+"""Tests for Delta storage, SQL view generation, and Pandas export snippets."""
+
 from unittest.mock import MagicMock, patch
 
 from app.pgraph.delta import Delta
@@ -5,6 +7,8 @@ from app.server_utils.pandas_mapper import map_to_pandas
 
 
 class RecordingConnection:
+    """Tiny fake DB connection that records SQL strings instead of executing them."""
+
     def __init__(self):
         self.sql = []
 
@@ -13,11 +17,14 @@ class RecordingConnection:
 
 
 def test_delta_generates_pandas_code_from_delete():
+    # A delete Delta should immediately know how to replay itself in Pandas.
     delta = Delta("delete", {"operation": "delete", "row_ids": [1, 3]})
     assert delta.pandas_code == "df = df[~df['ID'].isin([1, 3])]"
 
 
 def test_delta_json_stores_operation_parameters_and_pandas_code():
+    # JSON serialization is what lets the provenance graph expose saved Deltas
+    # to the frontend and reload them later.
     delta = Delta("delete-column", {"operation": "delete-column", "column": "foo"})
 
     data = delta.__json__()
@@ -58,6 +65,8 @@ def test_map_to_pandas_delegates_to_delta():
 
 
 def test_delete_delta_creates_view_without_caller_knowing_sql_shape():
+    # The caller only says "delete rows"; the operation object owns the exact
+    # SQL shape needed to create the preview/current view.
     conn = RecordingConnection()
     delta = Delta("delete", {"operation": "delete", "row_ids": [1, 3]})
 
@@ -128,6 +137,8 @@ def test_delete_column_operation_result(mock_cols):
 
 
 def test_promote_from_preview_creates_view_promotes_errors_and_drops_preview():
+    # Execute should promote both sides of the data state: the data preview view
+    # and the matching errors_<preview> table.
     conn = RecordingConnection()
     delta = Delta("delete", {"operation": "delete", "row_ids": [5]})
 

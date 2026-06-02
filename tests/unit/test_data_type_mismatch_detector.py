@@ -1,3 +1,5 @@
+"""Tests for detecting values whose type disagrees with the column majority."""
+
 import unittest
 from pathlib import Path
 

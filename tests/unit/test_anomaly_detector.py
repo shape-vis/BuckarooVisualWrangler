@@ -1,3 +1,5 @@
+"""Tests for the numeric anomaly detector and its deterministic seed data."""
+
 import unittest
 from pathlib import Path
 
@@ -13,7 +15,8 @@ DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 class TestAnomalyTests(unittest.TestCase):
     def test_anomaly_all_numeric(self):
-        # Create test data with anomalies
+        # Create deterministic test data. The seed fixes the random numbers, so
+        # row IDs 10 and 8 stay the expected anomalies every test run.
         np.random.seed(12)
         test_data = {
             'ID' : range(1,13),
@@ -23,6 +26,8 @@ class TestAnomalyTests(unittest.TestCase):
         }
         df = pd.DataFrame(test_data)
         detected_df = anomaly(set_id_column(df))
+        # The detector returns {column: {row_id: error_type}}. These are row IDs
+        # from the ID column, not zero-based DataFrame indexes.
         error_map = {"normal_col":{10: "anomaly"},"anomaly_col":{8:"anomaly"}}
         self.assertEqual(error_map,detected_df)
 

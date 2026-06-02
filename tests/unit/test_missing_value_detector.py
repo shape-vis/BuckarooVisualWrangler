@@ -1,3 +1,5 @@
+"""Tests for the missing-value detector."""
+
 import unittest
 from pathlib import Path
 

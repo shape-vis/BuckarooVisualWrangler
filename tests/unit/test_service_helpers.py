@@ -1,3 +1,5 @@
+"""Tests for service helper functions, including incremental error updates."""
+
 from unittest import TestCase
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +16,9 @@ DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 
 def test_update_errors_incrementally_impute_invalidates_only_required_scopes():
+    # Impute fills selected cells. Missing-value detection can be rerun only on
+    # those cells, while anomaly/mismatch/incomplete must rerun on the changed
+    # column because their results depend on column-level context.
     df = pd.DataFrame({
         "ID": [1, 2, 3, 4],
         "score": [10, 20, 30, 40],
@@ -27,6 +32,8 @@ def test_update_errors_incrementally_impute_invalidates_only_required_scopes():
     calls = []
 
     def detector_for(error_type, row_id):
+        # Fake detectors record which columns/rows they received. That lets the
+        # test prove the helper narrowed the recomputation scope correctly.
         def _detector(scoped_df):
             calls.append((error_type, list(scoped_df.columns), scoped_df["ID"].tolist()))
             return {"score": {row_id: error_type}}
@@ -61,6 +68,8 @@ def test_update_errors_incrementally_impute_invalidates_only_required_scopes():
 
 
 def test_update_errors_incrementally_delete_column_drops_only_deleted_attribute_errors():
+    # Deleting a column should remove errors for that attribute while preserving
+    # errors from all columns that still exist.
     previous_errors = pd.DataFrame({
         "row_id": [1, 2],
         "column_id": ["unused", "kept"],

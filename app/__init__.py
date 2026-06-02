@@ -94,6 +94,8 @@ app = Flask(__name__,
             static_folder="../ui/dist",
             static_url_path="/")
 
+# Tests set BUCKAROO_SKIP_DB_INIT=1 so importing Flask routes does not require
+# a live local Postgres database. Normal app runs leave this unset.
 skip_db_init = os.environ.get("BUCKAROO_SKIP_DB_INIT") == "1"
 
 if skip_db_init:
@@ -125,9 +127,13 @@ else:
     from app.db_utils.db_functions_sql import DBOperations
     db_operations = DBOperations(engine)
 
-""" Global vars to use throughout session """
+# Global vars to use throughout one browser session.
 wrangle_occurred = False
+# pgraph_for_session is filled after upload/preloaded dataset load. It stores
+# the table-version graph used for undo/redo and Pandas export.
 pgraph_for_session = None
+# original_table_name is used by export so the generated script starts from the
+# same CSV the user loaded in the UI.
 original_table_name = "data.csv"
 
 if not skip_db_init:

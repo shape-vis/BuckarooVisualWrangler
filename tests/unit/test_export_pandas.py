@@ -1,3 +1,5 @@
+"""Tests for the /api/export/pandas endpoint used by the Export button."""
+
 from unittest.mock import MagicMock
 
 import app as app_module
@@ -9,6 +11,7 @@ from app.routes import routes
 
 
 def build_export_graph():
+    """Build a tiny graph: original sales table -> delete row 2."""
     graph = PGraph()
     root = GraphNode("root", "root", "n0_sales", "errors_n0_sales")
     delete_node = GraphNode(
@@ -25,6 +28,8 @@ def build_export_graph():
 
 
 def test_export_pandas_returns_error_when_no_table_loaded(monkeypatch):
+    # monkeypatch replaces the real DBOperations with a fake object so this unit
+    # test does not need a database or uploaded CSV.
     db_operations = MagicMock()
     db_operations.main_table_name = None
     monkeypatch.setattr(routes, "db_operations", db_operations)
@@ -36,6 +41,8 @@ def test_export_pandas_returns_error_when_no_table_loaded(monkeypatch):
 
 
 def test_export_pandas_returns_error_when_graph_missing(monkeypatch):
+    # A current table without a provenance graph cannot be exported, because
+    # the graph is where the replayable Deltas live.
     db_operations = MagicMock()
     db_operations.main_table_name = "n1_sales"
     monkeypatch.setattr(routes, "db_operations", db_operations)
@@ -51,6 +58,9 @@ def test_export_pandas_returns_error_when_graph_missing(monkeypatch):
 
 
 def test_export_pandas_returns_script_for_current_table(monkeypatch):
+    # This is the success case: the route finds the current table, walks the
+    # graph to n1_sales, and returns a script that loads sales.csv then deletes
+    # row ID 2.
     db_operations = MagicMock()
     db_operations.main_table_name = "n1_sales"
     monkeypatch.setattr(routes, "db_operations", db_operations)

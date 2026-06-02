@@ -5,8 +5,12 @@ from app.wrangle_operations.sql_utils import quote_identifier, recreate_view, ta
 
 
 class DeleteColumnOperation(WrangleOperation):
+    """Remove one attribute/column from a table version."""
+
     def pandas_code(self, parameters: Dict[str, Any]) -> str:
         column = parameters.get("column")
+        # The export script should mutate df the same way the live app mutates
+        # the current table version.
         return f"df.drop(columns=['{column}'], inplace=True)"
 
     def create_view(self, conn, engine, source_table: str, target_view: str, parameters: Dict[str, Any]) -> bool:
@@ -14,6 +18,8 @@ class DeleteColumnOperation(WrangleOperation):
         if not column:
             return False
 
+        # Instead of physically copying data, create a view that selects every
+        # column except the deleted one.
         columns = [name for name in table_columns(engine, source_table) if name != column]
         if not columns:
             return False

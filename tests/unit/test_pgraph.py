@@ -1,3 +1,5 @@
+"""Tests for provenance graph navigation and export-path generation."""
+
 import json
 import unittest
 from unittest.mock import patch
@@ -9,6 +11,8 @@ from app.pgraph.pgraph import PGraph
 
 class PGraphTests(unittest.TestCase):
     def test_json_serializes_delta_storage(self):
+        # The serialized graph should include the Delta, because the UI/export
+        # need the operation name, parameters, and generated Pandas code.
         graph = PGraph()
         root = GraphNode("none", "none", "n0", "n0_errors")
         node1 = GraphNode(
@@ -54,6 +58,7 @@ class PGraphTests(unittest.TestCase):
         self.assertEqual(graph.current_node_table_name, "n0")
 
     def test_undo_and_redo_through_two_wrangles(self):
+        # Undo/redo changes which table is current; it does not delete nodes.
         graph = PGraph()
         root = GraphNode("root", "root", "n0", "n0_errors")
         node1 = GraphNode("n0", "delete", "n1", "n1errors")
@@ -81,6 +86,8 @@ class PGraphTests(unittest.TestCase):
         self.assertIsNone(graph.redo_pgraph())
 
     def test_get_path_to_node_returns_root_to_selected_node_only(self):
+        # A graph can branch. Export must follow the selected branch only, not
+        # every node that exists in the graph.
         graph = PGraph()
         root = GraphNode("root", "root", "n0", "n0_errors")
         node1 = GraphNode("n0", "delete", "n1", "n1errors")
@@ -103,6 +110,8 @@ class PGraphTests(unittest.TestCase):
         )
 
     def test_get_script_to_node_exports_only_selected_path_deltas_in_order(self):
+        # This proves export order: load CSV first, then apply Deltas from root
+        # to the requested table. The branch node should not appear.
         graph = PGraph()
         root = GraphNode("root", "root", "n0_sales", "errors_n0_sales")
         delete_node = GraphNode(

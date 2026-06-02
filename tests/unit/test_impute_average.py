@@ -1,3 +1,5 @@
+"""Tests that exported impute Pandas code fills only the selected cells."""
+
 import numpy as np
 import pandas as pd
 
@@ -5,6 +7,7 @@ from app.pgraph.delta import Delta
 
 
 def run_delta_pandas_code(df, delta):
+    """Execute a Delta's generated Pandas code against a copy of df."""
     namespace = {"df": df.copy()}
     exec(delta.pandas_code, namespace)
     return namespace["df"]

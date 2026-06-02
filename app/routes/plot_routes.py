@@ -272,10 +272,14 @@ def get_rows_in_bin():
         dim = body.get("type", "1d")
 
         if dim == "1d":
+            # For a 1D histogram, one column plus one bin label is enough to
+            # recover the row IDs represented by the clicked bar.
             column = body["column"]
             bin_value = body["bin"]
             row_ids = db_operations.get_row_ids_in_bin(column, bin_value)
         else:
+            # For a 2D heatmap/scatter-style selection, the backend cache is
+            # keyed by the pair of columns and the pair of bin coordinates.
             col_x = body["column_x"]
             col_y = body["column_y"]
             x_bin = body["x_bin"]
@@ -338,10 +342,14 @@ def get_bins_for_rows():
         row_ids = body.get("row_ids", [])
 
         if dim == "1d":
+            # After a repair preview, this tells the frontend which 1D bars
+            # contain the selected rows so it can highlight affected bins.
             column = body["column"]
             bins = db_operations.get_1d_bins_containing_rows(column, row_ids)
             return {"success": True, "bins": bins}
         else:
+            # Same idea for 2D plots: return the heatmap coordinates affected
+            # by the selected row IDs.
             col_x = body["column_x"]
             col_y = body["column_y"]
             joint_col = (col_x, col_y)

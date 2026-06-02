@@ -1,9 +1,12 @@
+"""Tests that exported delete-row Pandas code removes only selected IDs."""
+
 import pandas as pd
 
 from app.pgraph.delta import Delta
 
 
 def run_delta_pandas_code(df, delta):
+    """Execute the generated Pandas code using a copy of the input DataFrame."""
     namespace = {"df": df.copy()}
     exec(delta.pandas_code, namespace)
     return namespace["df"]

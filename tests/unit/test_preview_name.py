@@ -1,8 +1,12 @@
+"""Tests for PostgreSQL-safe preview table name generation."""
+
 import hashlib
 
 from app.server_utils.service_helpers import _safe_pg_name
 
 
+# PostgreSQL identifiers max out at 63 characters. The app leaves space for
+# suffixes like "_filtering", so generated base names are capped at 53.
 MAX_LEN = 53  # 63 - len("_filtering")
 
 ALL_SUFFIXES = [

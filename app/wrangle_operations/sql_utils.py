@@ -3,10 +3,12 @@ from sqlalchemy import text as sa_text
 
 
 def quote_identifier(name: str) -> str:
+    """Quote a SQL table/column name safely for PostgreSQL."""
     return '"' + str(name).replace('"', '""') + '"'
 
 
 def quote_literal(value) -> str:
+    """Convert a Python value into a SQL literal."""
     if value is None:
         return "NULL"
     if isinstance(value, bool):
@@ -17,15 +19,18 @@ def quote_literal(value) -> str:
 
 
 def id_list(row_ids) -> str:
+    """Convert row IDs into a comma-separated SQL list."""
     return ", ".join(str(int(row_id)) for row_id in row_ids)
 
 
 def table_columns(engine, table_name: str):
+    """Ask SQLAlchemy for the current column order of a table/view."""
     inspector = inspect(engine)
     return [column["name"] for column in inspector.get_columns(table_name)]
 
 
 def recreate_view(conn, target_view: str, select_sql: str) -> None:
+    """Drop any old object with this name, then create the new SQL view."""
     target = quote_identifier(target_view)
     conn.execute(sa_text(f"DROP VIEW IF EXISTS {target} CASCADE"))
     conn.execute(sa_text(f"DROP TABLE IF EXISTS {target} CASCADE"))

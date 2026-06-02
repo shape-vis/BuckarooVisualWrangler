@@ -1,3 +1,5 @@
+"""Tests for the incomplete-data detector."""
+
 import unittest
 from pathlib import Path
 

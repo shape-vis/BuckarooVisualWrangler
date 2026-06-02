@@ -51,12 +51,16 @@ export function BuckarooHeader( { onReset} ) {
     };
 
     const handleExportPandas = async () => {
+        // Ask Flask for the script that replays the current provenance graph
+        // state. If the backend says no table/graph is loaded, show that error.
         const result = await exportPandasScript();
         if (!result?.success) {
             alert(result?.error || "Export pandas script failed.");
             return;
         }
 
+        // Convert the returned script text into a downloadable .py file without
+        // navigating away from the app.
         const blob = new Blob([result.script], { type: "text/x-python;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");

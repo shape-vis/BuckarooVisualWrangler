@@ -43,6 +43,8 @@ def update_errors_table(
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
         if source_error_table_name and operation:
+            # Delta-aware path: use the previous errors table plus the wrangle
+            # parameters to recompute only the detector scopes that went stale.
             previous_error_df = pd.read_sql_query(f'SELECT * FROM "{source_error_table_name}"', engine)
             detected_errors_df = update_errors_incrementally(
                 df,
@@ -51,6 +53,7 @@ def update_errors_table(
                 parameters or {},
             )
         else:
+            # Safe fallback for routes that do not tell us what changed.
             detected_errors_df = run_detectors(df)
         errors_table_name = f"errors_{table_name}"
         # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
@@ -126,8 +129,10 @@ def create_previews():
             return {"success": False, "error": "No rows selected"}, 400
 
         if len(cols) == 1:
+            # 1D selection: delete selected rows or impute the selected column.
             return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table)
         else:
+            # 2D selection: delete selected rows, impute x column, or impute y column.
             return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table)
 
     except Exception as e:
@@ -171,6 +176,8 @@ def wrangle_delete_column():
 
         new_table_name = _safe_pg_name(table, "_col_del")
         params = {"operation": "delete-column", "column": column}
+        # Direct column deletion is not a preview flow, so we pass the Delta
+        # parameters directly into n_wrangle().
         new_table_name = n_wrangle(table, new_table_name, "delete-column", direct_params=params)
 
         delta = Delta("delete-column", params)
