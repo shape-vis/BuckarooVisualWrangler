@@ -164,4 +164,4 @@ def reset_app():
 
 @app.get("/")
 def home():
-    return send_file("../../ui/dist/index.html")
+    return send_file("../ui/dist/index.html")
