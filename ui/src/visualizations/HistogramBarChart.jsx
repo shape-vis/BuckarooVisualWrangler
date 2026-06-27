@@ -19,8 +19,10 @@ function HistogramBarChart({
     size,
     attrX,
     errorColors,
+    detailMode = "focused",
 }) {
     const { tableName: table_name } = useTableName();
+    const isFocused = detailMode === "focused";
 
     const drawingRef = useRef(null);
     const clearSelectionRef = useRef(() => {});
@@ -33,7 +35,8 @@ function HistogramBarChart({
     const colorScaleRef = useRef(k => "steelblue");
     const numHistDataXRef = useRef([]);
 
-    const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
+    const { highlightedRowIds, highlightedCols, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
+    const shouldHighlightSelection = highlightedRowIds?.length > 0 && highlightedCols?.includes(attrX);
     const setHighlightedRef = useRef(setHighlightedRowIds);
     const highlightRevisionRef = useRef(highlightRevision);
     useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
@@ -113,6 +116,18 @@ function HistogramBarChart({
 
         const barColor = d => colorScale(d.name);
 
+        const applyBarEmphasis = (highlightedBins = null) => {
+            bars
+                .attr("fill", d => highlightedBins?.has(String(d.bin)) ? "gold" : barColor(d))
+                .attr("opacity", d => !highlightedBins ? 0.95 : highlightedBins.has(String(d.bin)) ? 1 : 0.22)
+                .attr("stroke", "white")
+                .attr("stroke-width", 2);
+
+            if (highlightedBins) {
+                bars.filter(d => highlightedBins.has(String(d.bin))).raise();
+            }
+        };
+
         const brushGroup = canvas.append("g").attr("class", "histogram-brush");
 
         const bars = canvas.append("g")
@@ -128,7 +143,8 @@ function HistogramBarChart({
             .attr("fill", barColor)
             .attr("stroke", "white")
             .attr("cursor", "pointer")
-            .attr("stroke-width", 2);
+            .attr("stroke-width", 2)
+            .attr("opacity", 0.95);
 
         barsRef.current = bars;
 
@@ -137,9 +153,9 @@ function HistogramBarChart({
             .extent([[0, 0], [size.w, size.h]])
             .on("brush end", (event) => {
                 if (!event.selection) {
-                    bars.attr("fill", barColor);
+                    applyBarEmphasis();
                     if (event.type === "end" && event.sourceEvent) {
-                        clearHighlight();
+                        clearHighlight("histogram_brush_empty", { source: "histogram", cols: [attrX] });
                     }
                     return;
                 }
@@ -159,7 +175,7 @@ function HistogramBarChart({
                     if (end >= x0 && start <= x1) brushedBins.add(String(d.bin));
                 });
 
-                bars.attr("fill", d => brushedBins.has(String(d.bin)) ? "gold" : barColor(d));
+                applyBarEmphasis(brushedBins);
 
                 // Async: fetch row IDs for all brushed bins and push to context.
                 if (event.type === "end" && brushedBins.size > 0) {
@@ -171,7 +187,10 @@ function HistogramBarChart({
                         if (highlightRevisionRef.current !== requestRevision) return;
                         const allIds = [];
                         results.forEach(r => { if (r?.success) allIds.push(...r.row_ids); });
-                        setHighlightedRef.current([...new Set(allIds)], [attrX], "histogram");
+                        setHighlightedRef.current([...new Set(allIds)], [attrX], "histogram", {
+                            action: "brush",
+                            bins: binsToQuery,
+                        });
                     });
                 }
             });
@@ -180,12 +199,21 @@ function HistogramBarChart({
         brushGroup.lower();
 
         clearSelectionRef.current = () => {
-            bars.attr("fill", barColor);
+            applyBarEmphasis();
             brushGroup.call(brush.move, null);
         };
 
-        if (xScale && typeof xScale.draw === "function") xScale.draw(canvas);
-        canvas.append("g").call(d3.axisLeft(yScale)).selectAll("text").attr("class", "left-axis-text");
+        if (xScale && typeof xScale.draw === "function") xScale.draw(canvas, { detailMode });
+        canvas.append("g")
+            .attr("class", isFocused ? "axis axis--focused" : "axis axis--compact")
+            .call(
+                d3.axisLeft(yScale)
+                    .ticks(isFocused ? 5 : 2)
+                    .tickFormat(d3.format(".2s"))
+                    .tickSizeOuter(0)
+            )
+            .selectAll("text")
+            .attr("class", "left-axis-text");
 
         createTooltip(bars,
             d => {
@@ -195,29 +223,37 @@ function HistogramBarChart({
                 return `<strong>Bin: </strong>${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
             },
             (d, event) => {
+                if (isFocused && d3.select(event.currentTarget).attr("fill") === "gold") {
+                    clearHighlight("histogram_selected_bin_click", { source: "histogram", cols: [attrX], bin: d.bin });
+                    return;
+                }
                 // Left click: fetch row IDs for this bin then update context.
                 const requestRevision = highlightRevisionRef.current;
                 queryRowsInBin({ type: "1d", column: attrX, bin: d.bin})
                     .then(result => {
                         if (highlightRevisionRef.current !== requestRevision) return;
                         if (result?.success) {
-                            setHighlightedRef.current(result.row_ids, [attrX], "histogram");
+                            setHighlightedRef.current(result.row_ids, [attrX], "histogram", {
+                                action: "click",
+                                bin: d.bin,
+                            });
                         }
                     });
             },
             (d) => { console.log("Right click on bar", d); },
-            (d) => { console.log("Double click on bar", d); }
+            (d) => { console.log("Double click on bar", d); },
+            { showTooltip: isFocused, hoverOpacity: isFocused ? 0.65 : null }
         );
 
         return () => { canvas.selectAll("*").remove(); };
-    }, [size, histogramData]);
+    }, [size, histogramData, detailMode]);
 
     // ── react to cross-chart highlight changes ──────────────────────────────
     useEffect(() => {
         if (!barsRef.current) return;
         const colorScale = colorScaleRef.current;
 
-        if (!highlightedRowIds || highlightedRowIds.length === 0) {
+        if (!shouldHighlightSelection) {
             clearSelectionRef.current();
             return;
         }
@@ -228,19 +264,22 @@ function HistogramBarChart({
             .then(result => {
                 if (!isActive || !result?.success || !barsRef.current) return;
                 const highlightedBins = new Set(result.bins.map(String));
-                barsRef.current.attr("fill", d =>
-                    highlightedBins.has(String(d.bin)) ? "gold" : colorScale(d.name)
-                );
+                barsRef.current
+                    .attr("fill", d => highlightedBins.has(String(d.bin)) ? "gold" : colorScale(d.name))
+                    .attr("opacity", d => highlightedBins.has(String(d.bin)) ? 1 : 0.22)
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 2);
+                barsRef.current.filter(d => highlightedBins.has(String(d.bin))).raise();
             });
 
         return () => {
             isActive = false;
         };
-    }, [highlightedRowIds, attrX, highlightRevision, histogramData]);
+    }, [highlightedRowIds, highlightedCols, shouldHighlightSelection, attrX, highlightRevision, histogramData]);
 
     function clearSelection() {
         clearSelectionRef.current();
-        clearHighlight();
+        clearHighlight("histogram_background_click", { source: "histogram", cols: [attrX] });
     }
 
     return (

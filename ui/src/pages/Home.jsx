@@ -4,12 +4,26 @@ import { useRef, useState } from "react";
 import Header from "../elements/Header.jsx";
 import SpinnerModal from "../elements/SpinnerModal.jsx";
 import UploadBox from "../elements/UploadBox.jsx";
+import { logInteractionEvent } from "../utils/interactionLogger.jsx";
 
 import '../styles/Home.css';
 
 export default function Home( { onSuccess } ) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+
+  function handleUploadSuccess(data) {
+    if (data?.timings) {
+      console.info("[Buckaroo Upload Timings]", data.timings);
+    }
+    logInteractionEvent("csv_upload_completed", {
+      table: data?.table_name,
+      rows: data?.["rows for undetected data"],
+      errorRows: data?.rows_for_detected,
+      timings: data?.timings,
+    });
+    onSuccess(data);
+  }
 
   // NOTE: ensure these files live under `public/static/data/...` so they are available at these paths
   async function loadDataset(path) {
@@ -28,7 +42,7 @@ export default function Home( { onSuccess } ) {
 
       const data = await response.json();
 
-      onSuccess(data);
+      handleUploadSuccess(data);
 
     } catch (err) {
       console.error("Upload error:", err);
@@ -57,7 +71,7 @@ export default function Home( { onSuccess } ) {
 
       const data = await response.json();
 
-      onSuccess(data);
+      handleUploadSuccess(data);
 
     } catch (err) {
       console.error("Upload error:", err);

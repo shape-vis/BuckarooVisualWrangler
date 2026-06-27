@@ -1,19 +1,19 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 
-import { queryAttributeSummaries } from "../utils/serverCalls.jsx";
+import { deleteColumn, getPGraph, queryAttributeSummaries } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
+import { useRepair } from "../store/RepairContext.jsx";
+import { usePgraph } from "../store/PGraphContext.jsx";
 
 import "../styles/AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
 
-
-
-function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAttributes, handleToggleSelect, showFilter }) {
+function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAttributes, handleToggleSelect, showFilter, onDeleteAttribute }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -49,14 +49,14 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
         <div className="popupMenu">
           <RotatedButton isSelected={groupByAttribute === attr} className="rotatedButton--popup-item" onClick={() => handleToggleGroupBy(attr)}>Group By</RotatedButton>
           <RotatedButton className="rotatedButton--popup-item" onClick={() => showFilter(attr)}>Filter</RotatedButton>
-          <RotatedButton className="rotatedButton--popup-item" onClick={() => setOpen(false)}>Delete</RotatedButton>
+          <RotatedButton className="rotatedButton--popup-item" onClick={() => { setOpen(false); onDeleteAttribute(attr); }}>Delete</RotatedButton>
         </div>
       )}
     </div>
   );
 }
 
-function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, handleToggleSelect, showFilter }) {
+function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, summaryData, handleToggleSelect, showFilter, onDeleteAttribute }) {
   const columnErrors = summaryData?.columnErrors?.[attr] || {};
   const attrDist = summaryData?.attributeDistributions?.[attr] || {};
 
@@ -68,7 +68,7 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
 
   return (
     <li className="attribute-row" key={attr}>
-      <GroupByButton attr={attr} groupByAttribute={groupByAttribute} handleToggleGroupBy={handleToggleGroupBy} selectedAttributes={selectedAttributes} handleToggleSelect={handleToggleSelect} showFilter={showFilter} />
+      <GroupByButton attr={attr} groupByAttribute={groupByAttribute} handleToggleGroupBy={handleToggleGroupBy} selectedAttributes={selectedAttributes} handleToggleSelect={handleToggleSelect} showFilter={showFilter} onDeleteAttribute={onDeleteAttribute} />
 
       <div className="attribute-row-details">
         <div className="attribute-row-header">
@@ -111,13 +111,16 @@ function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAtt
 
 
 
-export default function AttributeSummaryView({ setSelectedAttributes, selectedAttributes, setSortedAttributes }) {
-  const { tableName: table_name } = useTableName();
+export default function AttributeSummaryView({ setSelectedAttributes, selectedAttributes, setSortedAttributes, refreshKey = 0 }) {
+  const { tableName: table_name, setTableName } = useTableName();
   const { addLoader, removeLoader } = useLoading();
+  const { onWrangleExecuted } = useRepair();
+  const { getLayoutedElements, setNodes, setEdges } = usePgraph();
   const [groupByAttribute, setGroupByAttribute] = useState(null);
   const [sortBy, setSortBy] = useState("total");
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   // Fetch summary data from server
   async function fetchSummaryData() {
@@ -153,7 +156,7 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
       console.log("[AttrSummary MOUNT/table_name effect] table_name =", table_name);
     fetchSummaryData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table_name]);
+  }, [table_name, refreshKey]);
 
   
   // sortAttributes is now a pure function — no setSortedAttributes call inside.
@@ -211,6 +214,35 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
     setSortBy(errorKey);
   }
 
+  async function handleDeleteAttribute(attr) {
+    setDeleteError(null);
+    addLoader();
+    try {
+      const result = await deleteColumn(attr);
+      if (!result?.success) {
+        setDeleteError(result?.error || "Delete column failed.");
+        return;
+      }
+
+      const pGraphResult = await getPGraph();
+      if (pGraphResult?.nodes && pGraphResult?.edges) {
+        const layoutNodesEdges = getLayoutedElements(pGraphResult.nodes, pGraphResult.edges);
+        setNodes(layoutNodesEdges.nodes);
+        setEdges(layoutNodesEdges.edges);
+      }
+
+      setSelectedAttributes(prev => prev.filter(a => a !== attr));
+      if (result.table_name) {
+        setTableName(result.table_name);
+      }
+      onWrangleExecuted?.();
+    } catch (err) {
+      setDeleteError(err.message || "Delete column failed.");
+    } finally {
+      removeLoader();
+    }
+  }
+
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterAttribute, setFilterAttribute] = useState(null);
 
@@ -239,9 +271,10 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
 
       <div className="attribute-list">
         <ul className="attribute-summary-list">
+          {deleteError && <li className="attribute-delete-error">Error: {deleteError}</li>}
           {loading && <li>Loading attribute summaries…</li>}
           {!loading && summaryData && sortedAttributes.map(attr => (
-            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
+            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} summaryData={summaryData} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} onDeleteAttribute={handleDeleteAttribute} />
           ))}
         </ul>
       </div>

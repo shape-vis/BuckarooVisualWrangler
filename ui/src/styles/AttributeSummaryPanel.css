@@ -112,6 +112,11 @@
     background-color: #f0f2f5;
 }
 
+.attribute-list .attribute-delete-error {
+    color: #9f1239;
+    background-color: #fff1f2;
+}
+
 .column-stats {
     font-size: 11px;
     color: #65676b;

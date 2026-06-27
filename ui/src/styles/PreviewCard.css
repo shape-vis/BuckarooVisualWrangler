@@ -7,6 +7,24 @@
   box-sizing: border-box;
 }
 
+.preview-card--selectable {
+  cursor: pointer;
+}
+
+.preview-card--selectable:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.preview-card--selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.preview-card--selected .preview-card-label {
+  color: #1d4ed8;
+}
+
 .preview-card-chart {
   display: flex;
   flex-direction: column;

@@ -48,7 +48,7 @@ h3 {
 #table-div {
     padding: 4px;
     align-items: center;
-    height: calc(30vh - 85px);
+    height: 100%;
     border: 1px solid #dddfe2;
     border-radius: 8px;
     overflow-y: auto;

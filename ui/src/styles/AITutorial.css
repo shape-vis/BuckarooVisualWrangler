@@ -1,0 +1,148 @@
+.ai-tutorial {
+  position: fixed;
+  right: clamp(14px, 3vw, 28px);
+  bottom: clamp(14px, 3vw, 28px);
+  z-index: 2600;
+  width: min(340px, calc(100vw - 28px));
+  padding: 14px;
+  border: 1px solid #c7d2e2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2937;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.ai-tutorial--workspace {
+  left: clamp(72px, 5vw, 96px);
+  right: auto;
+  bottom: clamp(18px, 3vw, 28px);
+}
+
+.ai-tutorial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.ai-tutorial-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid #9fb2d3;
+  border-radius: 6px;
+  background: #eef6ff;
+  color: #244066;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ai-tutorial-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #c7d2e2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ai-tutorial-close:hover {
+  background: #f8fafc;
+}
+
+.ai-tutorial-step {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.ai-tutorial h2 {
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.ai-tutorial p {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ai-tutorial-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.ai-tutorial-actions button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #c7d2e2;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #243449;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-tutorial-actions button:hover {
+  background: #eef6ff;
+}
+
+[data-buckaroo-tutorial-target] [data-tutorial-target] {
+  transition: box-shadow 0.2s ease, outline-color 0.2s ease;
+}
+
+[data-buckaroo-tutorial-target="plots"] [data-tutorial-target="plots"],
+[data-buckaroo-tutorial-target="repair"] [data-tutorial-target="repair"],
+[data-buckaroo-tutorial-target="repair-workspace"] [data-tutorial-target="repair-workspace"],
+[data-buckaroo-tutorial-target="export"] [data-tutorial-target="export"] {
+  position: relative;
+  outline: 3px solid #facc15;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(250, 204, 21, 0.22), 0 0 20px rgba(15, 23, 42, 0.14);
+  animation: ai-tutorial-highlight 1.6s ease-in-out infinite;
+}
+
+[data-buckaroo-tutorial-target="repair"] [data-tutorial-target="repair"]:disabled {
+  opacity: 1;
+}
+
+@keyframes ai-tutorial-highlight {
+  0%,
+  100% {
+    outline-color: #facc15;
+    box-shadow: 0 0 0 6px rgba(250, 204, 21, 0.2), 0 0 20px rgba(15, 23, 42, 0.12);
+  }
+  50% {
+    outline-color: #fde68a;
+    box-shadow: 0 0 0 9px rgba(250, 204, 21, 0.12), 0 0 24px rgba(15, 23, 42, 0.16);
+  }
+}
+
+@media (max-width: 720px) {
+  .ai-tutorial {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    width: auto;
+  }
+
+  .ai-tutorial--workspace {
+    top: 74px;
+    bottom: auto;
+  }
+}

@@ -1,0 +1,288 @@
+.semantic-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2300;
+  background: rgba(15, 23, 42, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  box-sizing: border-box;
+}
+
+.semantic-modal {
+  width: min(1120px, calc(100vw - 56px));
+  max-height: min(760px, calc(100vh - 56px));
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.semantic-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.semantic-modal-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.semantic-modal-header p {
+  margin: 6px 0 0;
+  color: #5f6b7a;
+  font-size: 13px;
+}
+
+.semantic-modal-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.semantic-modal-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #5f6b7a;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.semantic-modal-controls select {
+  width: 144px;
+  height: 34px;
+  border: 1px solid #cfd6e2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.semantic-modal-close {
+  width: 34px;
+  height: 34px;
+  margin-top: 17px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.semantic-modal-close:hover {
+  background: #f3f4f6;
+}
+
+.semantic-modal-tool-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.semantic-modal-tool-note strong {
+  color: #1d4ed8;
+}
+
+.semantic-modal-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.semantic-modal-candidate {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  max-width: 260px;
+  padding: 4px 8px;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.semantic-modal-candidate--selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.semantic-modal-state {
+  padding: 22px 20px;
+  color: #5f6b7a;
+  font-size: 14px;
+}
+
+.semantic-modal-state--error {
+  color: #9f1239;
+  background: #fff1f2;
+}
+
+.semantic-modal-table-wrap {
+  overflow: auto;
+}
+
+.semantic-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.semantic-modal-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d8dee8;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 11px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.semantic-modal-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #eef1f5;
+  vertical-align: top;
+}
+
+.semantic-modal-row--open td {
+  background: #f8fbff;
+}
+
+.semantic-modal-row-toggle {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #cfd6e2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.semantic-modal-description-cell {
+  min-width: 360px;
+  max-width: 560px;
+}
+
+.semantic-modal-description {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.semantic-modal-subtext {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.semantic-modal-action-cell {
+  white-space: nowrap;
+}
+
+.semantic-modal-select {
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.semantic-modal-select:hover {
+  background: #eff6ff;
+}
+
+.semantic-modal-details-row td {
+  padding-top: 0;
+  background: #f8fbff;
+}
+
+.semantic-modal-details {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 12px;
+  color: #334155;
+  font-size: 12px;
+}
+
+.semantic-modal-details > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.semantic-modal-detail-label {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.semantic-modal-details ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 900px) {
+  .semantic-modal-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .semantic-modal {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+
+  .semantic-modal-header {
+    flex-direction: column;
+  }
+
+  .semantic-modal-tool-note {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .semantic-modal-candidate {
+    max-width: 100%;
+  }
+}

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import * as d3 from "d3";
 import HeatMap from "../visualizations/HeatMap.jsx";
 import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
@@ -7,6 +6,7 @@ import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
 import { useTableName } from "../store/TableNameContext.jsx";
+import { useSelection } from "../store/SelectionContext.jsx";
 import { heatMapCache, histogramCache, scatterPlotCache } from "../store/visualizationCaches.jsx";
 
 // ── Icon: magnifier (zoom-in) ─────────────────────────────────────────────────
@@ -56,20 +56,74 @@ function MinimizeIcon({ x, y, onClick }) {
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
+function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onFocusChange, setContentHeight }) {
     const { tableName: table_name } = useTableName();
+    const { highlightedRowIds, highlightedCols, selectionSource, highlightRevision, clearHighlight } = useSelection();
     const matrixPlotAreaRef = useRef(null);
-    const [plotSize, setPlotSize] = useState(180);
     const [focusedCell, setFocusedCell] = useState(null); // { i, j } or null
-
-    const view = {
-        xPadding: 85, yPadding: 70,
-        leftMargin: 30, rightMargin: 40,
-        topMargin: 50, bottomMargin: 50,
-    };
+    const [deferOffDiagonalPlots, setDeferOffDiagonalPlots] = useState(true);
 
     const columns = selectedAttributes || [];
+    const columnsKey = columns.join("|");
+    const columnCount = columns.length || 1;
+    const view = {
+        yPadding: 50,
+        leftMargin: 70,
+        rightMargin: 20,
+        topMargin: 40,
+        bottomMargin: 46,
+    };
+
+    // Horizontal gap bounds between columns: a minimum so left-axis tick
+    // labels never overlap the previous column, and a maximum so columns don't
+    // drift too far apart on wide screens.
+    const minColGap = 70;
+    const maxColGap = 130;
+    const availW = Math.max(160, w - view.leftMargin - view.rightMargin);
+    const availH = Math.max(160, h - view.topMargin - view.bottomMargin);
+
+    // Cell size fits the height (so the whole matrix is visible without
+    // scrolling), but is also capped by width on narrow screens.
+    const sizeByHeight = (availH - (columnCount - 1) * view.yPadding) / columnCount;
+    const sizeByWidth = (availW - (columnCount - 1) * minColGap) / columnCount;
+    const plotSize = Math.max(80, Math.min(sizeByHeight, sizeByWidth, 280));
+
+    // Keep a moderate gap between columns rather than stretching edge-to-edge,
+    // then center the matrix so both sides keep healthy margins.
+    const maxGapFit = columnCount > 1 ? (availW - columnCount * plotSize) / (columnCount - 1) : 0;
+    const colGap = Math.min(maxColGap, Math.max(minColGap, maxGapFit));
+    const matrixWidth = columnCount * plotSize + (columnCount - 1) * colGap;
+    const xStart = view.leftMargin + Math.max(0, (availW - matrixWidth) / 2);
+
+    const colX = (j) => xStart + j * (plotSize + colGap);
+    const rowY = (i) => view.topMargin + i * (plotSize + view.yPadding);
+
+    const matrixHeight =
+        view.topMargin + columnCount * plotSize + (columnCount - 1) * view.yPadding + view.bottomMargin;
+
     const [prevAttributes, setPrevAttributes] = useState(columns);
+
+    useEffect(() => {
+        onFocusChange?.(focusedCell !== null);
+    }, [focusedCell, onFocusChange]);
+
+    useEffect(() => {
+        setDeferOffDiagonalPlots(true);
+        const timer = setTimeout(() => {
+            setDeferOffDiagonalPlots(false);
+        }, 900);
+        return () => clearTimeout(timer);
+    }, [table_name, columnsKey]);
+
+    // Report the height the matrix needs so the container can scroll vertically
+    // instead of hiding the bottom plots behind the table.
+    useEffect(() => {
+        if (focusedCell !== null) {
+            setContentHeight?.(null);
+        } else {
+            setContentHeight?.(matrixHeight);
+        }
+    }, [focusedCell, matrixHeight, setContentHeight]);
 
     function clearFrontendPlotCaches(removedAttributes, activeAttributes) {
         // clear 1D hist cache
@@ -153,19 +207,36 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
         setFocusedCell(null);
     }, [table_name, selectedAttributes]);
 
-    useEffect(() => {
-        const n = columns.length;
-        if (n > 0) {
-            let newPlotSize = Math.min(
-                (w - view.leftMargin - view.rightMargin) / n - view.xPadding,
-                (h - view.topMargin - view.bottomMargin) / n - view.yPadding
-            );
-            newPlotSize = Math.max(40, newPlotSize);
-            setPlotSize(newPlotSize);
-        }
-    }, [table_name, selectedAttributes, w, h]);
-
     // ── Focused (expanded) view ───────────────────────────────────────────────
+    useEffect(() => {
+        if (!highlightedRowIds || highlightedRowIds.length === 0) return;
+        if (!highlightedCols || highlightedCols.length === 0) return;
+
+        let nextFocusedCell = null;
+        if (selectionSource === "histogram" && highlightedCols.length === 1) {
+            const idx = columns.indexOf(highlightedCols[0]);
+            if (idx !== -1) {
+                nextFocusedCell = { i: idx, j: idx };
+            }
+        }
+
+        if ((selectionSource === "scatterplot" || selectionSource === "heatmap") && highlightedCols.length >= 2) {
+            const j = columns.indexOf(highlightedCols[0]);
+            const i = columns.indexOf(highlightedCols[1]);
+            if (i !== -1 && j !== -1) {
+                nextFocusedCell = { i, j };
+            }
+        }
+
+        if (!nextFocusedCell) return;
+        setFocusedCell(current => {
+            if (current && current.i === nextFocusedCell.i && current.j === nextFocusedCell.j) {
+                return current;
+            }
+            return nextFocusedCell;
+        });
+    }, [highlightRevision, highlightedRowIds, highlightedCols, selectionSource, columns]);
+
     if (focusedCell !== null) {
         const { i, j } = focusedCell;
         const xCol = columns[j];
@@ -175,13 +246,23 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
         // Leave room for axis labels.
         // focusedXPos needs to accommodate D3 left-axis tick labels (up to ~80px for 10-char strings).
         // Bottom needs ~50px for D3 bottom-axis tick labels rendered below plot area.
-        const focusedXPos = 90;
-        const focusedYPos = 70;
+        const focusedXPos = 86;
+        const focusedYPos = 58;
         const focusedSize = Math.min(
-            w - focusedXPos - 40,
-            h - focusedYPos - 100
+            w - focusedXPos - 36,
+            h - focusedYPos - 78
         );
         const clampedSize = Math.max(80, focusedSize);
+        const selectedIds = Array.isArray(highlightedRowIds) ? highlightedRowIds : [];
+        const selectedIdsLabel = selectedIds.length > 0
+            ? `Selected IDs: ${selectedIds.slice(0, 10).join(", ")}${selectedIds.length > 10 ? `, +${selectedIds.length - 10} more` : ""}`
+            : "No row selected";
+        const legendEntries = Object.entries(ERROR_TYPES).filter(([key]) => key !== "total");
+        const legendWidth = 176;
+        const legendX = Math.max(focusedXPos + 8, focusedXPos + clampedSize - legendWidth - 8);
+        const legendY = focusedYPos + 24;
+        const legendHeight = 28 + legendEntries.length * 18;
+        const legendColor = typeof errorColors === "function" ? errorColors : (() => "#6b7280");
 
         let plot;
         if (i === j) {
@@ -192,6 +273,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                     size={{ w: clampedSize, h: clampedSize }}
                     attrX={xCol}
                     errorColors={errorColors}
+                    detailMode="focused"
                 />
             );
         } else if (i < j) {
@@ -204,6 +286,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                     attrX={xCol}
                     attrY={yCol}
                     errorColors={errorColors}
+                    detailMode="focused"
                 />
             );
         } else {
@@ -216,12 +299,20 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                     attrX={xCol}
                     attrY={yCol}
                     errorColors={errorColors}
+                    detailMode="focused"
                 />
             );
         }
 
         return (
-            <g ref={matrixPlotAreaRef} id="matrix-plot-area">
+            <g
+                ref={matrixPlotAreaRef}
+                id="matrix-plot-area"
+                onDoubleClick={() => {
+                    clearHighlight();
+                    setFocusedCell(null);
+                }}
+            >
                 {/* X axis label */}
                 <text
                     x={focusedXPos + clampedSize / 2}
@@ -252,6 +343,42 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                     y={focusedYPos + 2}
                     onClick={() => setFocusedCell(null)}
                 />
+                {clampedSize >= 260 && (
+                    <g className="focused-plot-legend" transform={`translate(${legendX}, ${legendY})`} pointerEvents="none">
+                        <rect
+                            width={legendWidth}
+                            height={legendHeight}
+                            rx={6}
+                            fill="white"
+                            fillOpacity={0.9}
+                            stroke="#d1d5db"
+                        />
+                        <text x={10} y={17} fontSize={11} fontWeight="700" fill="#111827">
+                            Error legend
+                        </text>
+                        {legendEntries.map(([key, label], idx) => {
+                            const displayLabel = label.length > 23 ? `${label.slice(0, 22)}...` : label;
+                            return (
+                                <g key={key} transform={`translate(10, ${30 + idx * 18})`}>
+                                    <rect width={10} height={10} rx={2} fill={legendColor(key)} stroke="#6b7280" strokeWidth={0.4} />
+                                    <text x={16} y={9} fontSize={10} fill="#374151">
+                                        {displayLabel}
+                                    </text>
+                                    <title>{label}</title>
+                                </g>
+                            );
+                        })}
+                    </g>
+                )}
+                <text
+                    x={focusedXPos}
+                    y={focusedYPos + clampedSize + 44}
+                    fontSize={12}
+                    fill={selectedIds.length > 0 ? "#111827" : "#6b7280"}
+                    fontWeight={selectedIds.length > 0 ? "600" : "400"}
+                >
+                    {selectedIdsLabel}
+                </text>
             </g>
         );
     }
@@ -260,31 +387,40 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
     // TODO: Only update views in which attributes actually change.
     return (
         <g ref={matrixPlotAreaRef} id="matrix-plot-area">
-            {/* Column (x) labels */}
-            <g>
-                {columns.map((col, i) => (
-                    <text
-                        key={`xlabel-${i}`}
-                        x={view.leftMargin + (i + 1) * view.xPadding + i * plotSize + plotSize / 2}
-                        y={view.topMargin - 10}
-                        textAnchor="middle"
-                    >
-                        {col}
-                    </text>
-                ))}
-                {columns.map((col, i) => (
-                    <text
-                        key={`ylabel-${i}`}
-                        x={view.leftMargin - 10}
-                        y={view.topMargin + i * (plotSize + view.yPadding) + plotSize / 2}
-                        transform={`rotate(-90, ${view.leftMargin - 10}, ${view.topMargin + i * (plotSize + view.yPadding) + plotSize / 2})`}
-                        textAnchor="middle"
-                    >
-                        {col}
-                    </text>
-                ))}
+            {/* Always-visible matrix labels for orientation. */}
+            <g className="plot-matrix-labels" pointerEvents="none">
+                {columns.map((col, i) => {
+                    const label = col.length > 18 ? `${col.slice(0, 17)}...` : col;
+                    return (
+                        <text
+                            key={`xlabel-${col}`}
+                            x={colX(i) + plotSize / 2}
+                            y={view.topMargin - 16}
+                            textAnchor="middle"
+                        >
+                            {label}
+                            <title>{col}</title>
+                        </text>
+                    );
+                })}
+                {columns.map((col, i) => {
+                    const label = col.length > 18 ? `${col.slice(0, 17)}...` : col;
+                    const x = Math.max(14, xStart - 80);
+                    const y = rowY(i) + plotSize / 2;
+                    return (
+                        <text
+                            key={`ylabel-${col}`}
+                            x={x}
+                            y={y}
+                            transform={`rotate(-90, ${x}, ${y})`}
+                            textAnchor="middle"
+                        >
+                            {label}
+                            <title>{col}</title>
+                        </text>
+                    );
+                })}
             </g>
-
             {/* Plot cells */}
             {columns.map((xCol, j) =>
                 columns.map((yCol, i) => {
@@ -292,8 +428,8 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                     // CHANGE #1: cell identity based on columns
                     const cellID = `cell-${xCol}-${yCol}`;
 
-                    const xPos = view.leftMargin + (j + 1) * view.xPadding + j * plotSize;
-                    const yPos = view.topMargin + i * (plotSize + view.yPadding);
+                    const xPos = colX(j);
+                    const yPos = rowY(i);
                     const iconX = xPos + plotSize - 16;
                     const iconY = yPos;
 
@@ -308,7 +444,30 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
 
                                 attrX={xCol}
                                 errorColors={errorColors}
+                                detailMode="compact"
                             />
+                        );
+                    } else if (deferOffDiagonalPlots) {
+                        plot = (
+                            <g transform={`translate(${xPos}, ${yPos})`}>
+                                <rect
+                                    width={plotSize}
+                                    height={plotSize}
+                                    rx={4}
+                                    fill="#f8fafc"
+                                    stroke="#dbe3ef"
+                                />
+                                <text
+                                    x={plotSize / 2}
+                                    y={plotSize / 2}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fontSize={11}
+                                    fill="#64748b"
+                                >
+                                    Loading plot...
+                                </text>
+                            </g>
                         );
                     } else if (i < j) {
                         plot = (
@@ -321,6 +480,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                                 attrX={xCol}
                                 attrY={yCol}
                                 errorColors={errorColors}
+                                detailMode="compact"
                             />
                         );
                     } else {
@@ -334,6 +494,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                                 attrX={xCol}
                                 attrY={yCol}
                                 errorColors={errorColors}
+                                detailMode="compact"
                             />
                         );
                     }
@@ -368,34 +529,44 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
  * - visualizations: mapping (e.g. window.visualizations) with modules that expose .module.draw(svgModel, view, canvas, ...args)
  * - width, height (optional) - if not provided component will size SVG to parent bounding box
  */
-export default function MatrixView({ selectedAttributes }) {
+export default function MatrixView({ selectedAttributes, onFocusChange }) {
     const svgRef = useRef(null);
-    const { tableName: table_name } = useTableName();
 
     const [w, setW] = React.useState(800);
     const [h, setH] = React.useState(600);
+    const [contentHeight, setContentHeight] = React.useState(null);
 
-    const errorTypes = ERROR_TYPES;
-
+    // Measure the workspace container (not the SVG itself) so setting an
+    // explicit SVG height for scrolling doesn't feed back into the measurement.
     useEffect(() => {
-        const svg = d3.select(svgRef.current);
+        const container = svgRef.current?.parentElement;
+        if (!container) return;
 
-        const resizeObserver = new ResizeObserver(() => {
-            const bbox = svg.node().getBoundingClientRect();
+        const measure = () => {
+            const bbox = container.getBoundingClientRect();
             setW(bbox.width || 800);
             setH(bbox.height || 600);
-        });
+        };
 
-        if (svgRef.current) {
-            resizeObserver.observe(svgRef.current);
-        }
+        const resizeObserver = new ResizeObserver(measure);
+        resizeObserver.observe(container);
+        measure();
 
         return () => resizeObserver.disconnect();
-    }, [table_name, selectedAttributes]);
+    }, []);
+
+    const svgHeight = contentHeight == null ? "100%" : Math.max(contentHeight, h);
 
     return (
-        <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
-            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
+        <svg ref={svgRef} id="main-svg" width={"100%"} height={svgHeight} overflow="visible">
+            <SelectionPanel
+                selectedAttributes={selectedAttributes}
+                w={w}
+                h={h}
+                errorColors={errorColors}
+                onFocusChange={onFocusChange}
+                setContentHeight={setContentHeight}
+            />
         </svg>
     );
 }

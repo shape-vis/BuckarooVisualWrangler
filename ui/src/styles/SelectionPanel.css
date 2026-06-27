@@ -18,6 +18,38 @@
     opacity: 1;
 }
 
+.plot-matrix-labels text {
+    fill: #1f2937;
+    font-size: 13px;
+    font-weight: 700;
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-linejoin: round;
+    stroke-width: 4px;
+}
+
+.axis--compact path,
+.axis--compact line {
+    stroke: #c4cbd4;
+    stroke-width: 0.75px;
+}
+
+.axis--focused path,
+.axis--focused line {
+    stroke: #374151;
+    stroke-width: 1px;
+}
+
+.focused-plot-legend text {
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-linejoin: round;
+    stroke-width: 2px;
+}
+
 #main-svg {
     display: block;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
 }

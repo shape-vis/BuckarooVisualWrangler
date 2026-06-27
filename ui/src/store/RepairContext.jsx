@@ -3,11 +3,12 @@ import { undoWrangle, redoWrangle, createPreviews } from "../utils/serverCalls.j
 import { useTableName } from "./TableNameContext.jsx";
 import { useLoading } from "./LoadingContext.jsx";
 import { SelectionContext } from "./SelectionContext.jsx";
+import { logInteractionEvent } from "../utils/interactionLogger.jsx";
 
 const RepairContext = createContext(null);
 
 export function RepairProvider({ onWrangleExecuted, children }) {
-    const { setTableName } = useTableName();
+    const { tableName, setTableName } = useTableName();
     const { addLoader, removeLoader } = useLoading();
     const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } =
         useContext(SelectionContext);
@@ -15,6 +16,7 @@ export function RepairProvider({ onWrangleExecuted, children }) {
     const [busy, setBusy] = useState(false);
     const [repairPanelOpenTrigger, setRepairPanelOpenTrigger] = useState(0);
     const [repairPanelCloseTrigger, setRepairPanelCloseTrigger] = useState(0);
+    const [repairWrangleExecutedCount, setRepairWrangleExecutedCount] = useState(0);
 
     const closeRepairPanel = useCallback(() => {
         setRepairPanelCloseTrigger(c => c + 1);
@@ -32,35 +34,48 @@ export function RepairProvider({ onWrangleExecuted, children }) {
         repairHandlerRef.current?.();
     }, []);
 
+    const notifyRepairWrangleExecuted = useCallback(() => {
+        setRepairWrangleExecutedCount(c => c + 1);
+        onWrangleExecuted?.();
+    }, [onWrangleExecuted]);
+
     const handleUndo = useCallback(async () => {
         setBusy(true);
         addLoader();
+        logInteractionEvent("wrangle_undo_requested", { table: tableName });
         const result = await undoWrangle();
         setBusy(false);
         removeLoader();
         if (result?.success) {
+            logInteractionEvent("wrangle_undo_succeeded", { table: tableName, nextTable: result.table_name });
             setTableName(result.table_name);
             clearHighlight();
             closeRepairPanel();
             onWrangleExecuted?.();
+        } else {
+            logInteractionEvent("wrangle_undo_failed", { table: tableName, error: result?.error || "Undo failed." });
         }
         return result;
-    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
+    }, [addLoader, removeLoader, tableName, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
 
     const handleRedo = useCallback(async () => {
         setBusy(true);
         addLoader();
+        logInteractionEvent("wrangle_redo_requested", { table: tableName });
         const result = await redoWrangle();
         setBusy(false);
         removeLoader();
         if (result?.success) {
+            logInteractionEvent("wrangle_redo_succeeded", { table: tableName, nextTable: result.table_name });
             setTableName(result.table_name);
             clearHighlight();
             closeRepairPanel();
             onWrangleExecuted?.();
+        } else {
+            logInteractionEvent("wrangle_redo_failed", { table: tableName, error: result?.error || "Redo failed." });
         }
         return result;
-    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
+    }, [addLoader, removeLoader, tableName, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
 
     // Returns the raw server result so RepairPanel can set local preview state
     const requestPreviews = useCallback(async () => {
@@ -68,11 +83,11 @@ export function RepairProvider({ onWrangleExecuted, children }) {
         setBusy(true);
         addLoader();
         const cols = highlightedCols || [];
-        const result = await createPreviews(highlightedRowIds, cols);
+        const result = await createPreviews(tableName, highlightedRowIds, cols);
         setBusy(false);
         removeLoader();
         return { result, cols, selectionSource };
-    }, [highlightedRowIds, highlightedCols, selectionSource, addLoader, removeLoader]);
+    }, [tableName, highlightedRowIds, highlightedCols, selectionSource, addLoader, removeLoader]);
 
     const hasSelection = !!(highlightedRowIds && highlightedRowIds.length > 0);
 
@@ -87,6 +102,8 @@ export function RepairProvider({ onWrangleExecuted, children }) {
             repairPanelCloseTrigger,
             closeRepairPanel,
             hasSelection,
+            repairWrangleExecutedCount,
+            notifyRepairWrangleExecuted,
             onWrangleExecuted,
         }}>
             {children}

@@ -18,9 +18,11 @@ function Heatmap({
   size,
   attrX,
   attrY,
-  errorColors
+  errorColors,
+  detailMode = "focused"
 }) {
   const { tableName: table_name } = useTableName();
+  const isFocused = detailMode === "focused";
   const drawingRef = useRef(null);
   const clearSelectionRef = useRef(() => {});
   const [histogramData, setHistogramData] = React.useState(null);
@@ -31,7 +33,12 @@ function Heatmap({
   const numHistDataXRef = useRef([]);
   const numHistDataYRef = useRef([]);
 
-  const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
+  const { highlightedRowIds, highlightedCols, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
+  const shouldHighlightSelection = highlightedRowIds?.length > 0 && (
+    highlightedCols?.length === 1
+      ? highlightedCols.includes(attrX) || highlightedCols.includes(attrY)
+      : highlightedCols?.includes(attrX) && highlightedCols?.includes(attrY)
+  );
   const setHighlightedRef = useRef(setHighlightedRowIds);
   const highlightRevisionRef = useRef(highlightRevision);
   useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
@@ -99,8 +106,8 @@ function Heatmap({
     const drawingGroup = d3.select(drawingRef.current);
     drawingGroup.selectAll("*").remove();
 
-    xScale.draw(drawingGroup);
-    yScale.draw(drawingGroup);
+    xScale.draw(drawingGroup, { detailMode });
+    yScale.draw(drawingGroup, { detailMode });
 
     const binsToRender = histogramData.histograms.filter(d => d.count.items > 0);
     const colorScale = errorColors || (() => "steelblue");
@@ -111,6 +118,19 @@ function Heatmap({
       if (keys.length === 0) return colorScale("none");
       if (keys.length === 1) return colorScale(keys[0]);
       return colorScale(keys[0]);
+    };
+
+    const tileKey = d => `${d.xBin}|${d.yBin}`;
+    const applyTileEmphasis = (highlightSet = null) => {
+      tiles
+        .attr("fill", d => highlightSet?.has(tileKey(d)) ? "gold" : tileFill(d))
+        .attr("opacity", d => !highlightSet ? 0.96 : highlightSet.has(tileKey(d)) ? 1 : 0.22)
+        .attr("stroke", "white")
+        .attr("stroke-width", 1);
+
+      if (highlightSet) {
+        tiles.filter(d => highlightSet.has(tileKey(d))).raise();
+      }
     };
 
     const tiles = drawingGroup.append("g")
@@ -129,7 +149,8 @@ function Heatmap({
       .attr("fill", tileFill)
       .attr("stroke", "white")
       .attr("cursor", "pointer")
-      .attr("stroke-width", 1);
+      .attr("stroke-width", 1)
+      .attr("opacity", 0.96);
 
     tilesRef.current = tiles;
 
@@ -165,9 +186,9 @@ function Heatmap({
       .on("brush end", (event) => {
         if (event.type === "end") lastBrushEnd = Date.now();
         if (!event.selection) {
-          tiles.attr("fill", tileFill);
+          applyTileEmphasis();
           if (event.type === "end" && event.sourceEvent) {
-            clearHighlight();
+            clearHighlight("heatmap_brush_empty", { source: "heatmap", cols: [attrX, attrY] });
           }
           return;
         }
@@ -178,9 +199,9 @@ function Heatmap({
           if (!pos) return;
           const { tx, ty, tw, th } = pos;
           const overlaps = tx < bx1 && tx + tw > bx0 && ty < by1 && ty + th > by0;
-          d3.select(this).attr("fill", overlaps ? "gold" : tileFill(d));
           if (overlaps) brushedBins.push(d);
         });
+        applyTileEmphasis(new Set(brushedBins.map(tileKey)));
 
         if (event.type === "end" && brushedBins.length > 0) {
           const requestRevision = highlightRevisionRef.current;
@@ -196,7 +217,10 @@ function Heatmap({
             if (highlightRevisionRef.current !== requestRevision) return;
             const allIds = [];
             results.forEach(r => { if (r?.success) allIds.push(...r.row_ids); });
-            setHighlightedRef.current([...new Set(allIds)], [attrX, attrY], "heatmap");
+            setHighlightedRef.current([...new Set(allIds)], [attrX, attrY], "heatmap", {
+              action: "brush",
+              bins: brushedBins.map(d => ({ xBin: d.xBin, yBin: d.yBin })),
+            });
           });
         }
       });
@@ -205,7 +229,7 @@ function Heatmap({
     brushGroup.lower();
 
     clearSelectionRef.current = () => {
-      tiles.attr("fill", tileFill);
+      applyTileEmphasis();
       brushGroup.call(brush.move, null);
     };
 
@@ -226,9 +250,18 @@ function Heatmap({
         if (errorList !== "") errorList = "<br><strong>Errors: </strong> " + errorList;
         return `<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`;
       },
-      (d, _event) => {
+      (d, event) => {
         // Skip click if a brush drag just ended (prevents overwriting multi-select).
         if (Date.now() - lastBrushEnd < 300) return;
+        if (isFocused && d3.select(event.currentTarget).attr("fill") === "gold") {
+          clearHighlight("heatmap_selected_tile_click", {
+            source: "heatmap",
+            cols: [attrX, attrY],
+            xBin: d.xBin,
+            yBin: d.yBin,
+          });
+          return;
+        }
         // Left click: fetch row IDs for this tile then update context.
         const requestRevision = highlightRevisionRef.current;
         queryRowsInBin({
@@ -240,16 +273,21 @@ function Heatmap({
         }).then(result => {
           if (highlightRevisionRef.current !== requestRevision) return;
           if (result?.success) {
-            setHighlightedRef.current(result.row_ids, [attrX, attrY], "heatmap");
+            setHighlightedRef.current(result.row_ids, [attrX, attrY], "heatmap", {
+              action: "click",
+              xBin: d.xBin,
+              yBin: d.yBin,
+            });
           }
         });
       },
       (d) => { console.log("Right click on heatmap bin", d); },
-      (d) => { console.log("Double click on heatmap bin", d); }
+      (d) => { console.log("Double click on heatmap bin", d); },
+      { showTooltip: isFocused, hoverOpacity: isFocused ? 0.65 : null }
     );
 
     return () => { drawingGroup.selectAll("*").remove(); };
-  }, [size, histogramData]);
+  }, [size, histogramData, detailMode]);
 
   // ── react to cross-chart highlight changes ──────────────────────────────
   useEffect(() => {
@@ -263,7 +301,7 @@ function Heatmap({
       return colorScale(keys[0]);
     };
 
-    if (!highlightedRowIds || highlightedRowIds.length === 0) {
+    if (!shouldHighlightSelection) {
       clearSelectionRef.current();
       return;
     }
@@ -279,19 +317,22 @@ function Heatmap({
       if (!isActive || !result?.success || !tilesRef.current) return;
       // Build a Set of "xBin|yBin" keys for O(1) lookup.
       const highlightSet = new Set(result.bins.map(b => `${b.xBin}|${b.yBin}`));
-      tilesRef.current.attr("fill", d =>
-        highlightSet.has(`${d.xBin}|${d.yBin}`) ? "gold" : tileFill(d)
-      );
+      tilesRef.current
+        .attr("fill", d => highlightSet.has(`${d.xBin}|${d.yBin}`) ? "gold" : tileFill(d))
+        .attr("opacity", d => highlightSet.has(`${d.xBin}|${d.yBin}`) ? 1 : 0.22)
+        .attr("stroke", "white")
+        .attr("stroke-width", 1);
+      tilesRef.current.filter(d => highlightSet.has(`${d.xBin}|${d.yBin}`)).raise();
     });
 
     return () => {
       isActive = false;
     };
-  }, [highlightedRowIds, attrX, attrY, highlightRevision, histogramData]);
+  }, [highlightedRowIds, highlightedCols, shouldHighlightSelection, attrX, attrY, highlightRevision, histogramData]);
 
   function handleBackgroundClick() {
     clearSelectionRef.current();
-    clearHighlight();
+    clearHighlight("heatmap_background_click", { source: "heatmap", cols: [attrX, attrY] });
   }
 
   return (

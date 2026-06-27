@@ -84,6 +84,25 @@ export async function queryAttributeSummaries(table_name) {
     }
 }
 
+export async function querySemanticGroups(tableName, strategy = "auto", options = {}) {
+    const params = new URLSearchParams({
+        tablename: tableName,
+        strategy,
+        limit: options.limit ?? 8,
+        sample_rows: options.sampleRows ?? 5000,
+    });
+    if (options.clusterCount) params.set("cluster_count", options.clusterCount);
+    if (options.minGroupSize) params.set("min_group_size", options.minGroupSize);
+    if (options.minErrorRows) params.set("min_error_rows", options.minErrorRows);
+
+    try {
+        const response = await fetch(`/api/plots/semantic-groups?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error("[querySemanticGroups]", error.message);
+    }
+}
+
 export async function queryTopErrorRows(numRows) {
     const params = new URLSearchParams({ num_rows: numRows });
     try {
@@ -217,15 +236,14 @@ export async function queryBinsForRows(params) {
  * apply wrangling to each, re-run error detection, and return the
  * two preview table names.
  *
- * Backend uses db_operations.main_table_name as the source of truth.
- * { row_ids, cols }
+ * { table, row_ids, cols }
  */
-export async function createPreviews(rowIds, cols) {
+export async function createPreviews(tableName, rowIds, cols) {
     try {
         const response = await fetch("/api/wrangle/create-previews", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ row_ids: rowIds, cols }),
+            body: JSON.stringify({ table: tableName, row_ids: rowIds, cols }),
         });
         return await response.json();
     } catch (error) {
@@ -270,6 +288,23 @@ export async function executeWrangle(previewTable) {
 }
 
 /**
+ * POST /api/wrangle/delete-column
+ * Delete an attribute from the current table version.
+ */
+export async function deleteColumn(column) {
+    try {
+        const response = await fetch("/api/wrangle/delete-column", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ column }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[deleteColumn]", error.message);
+    }
+}
+
+/**
  * GET /api/plots/preview-scatterplot
  * Fetch scatterplot data for a preview table.
  *
@@ -283,6 +318,23 @@ export async function queryPreviewScatterplot(params) {
         return await response.json();
     } catch (error) {
         console.error("[queryPreviewScatterplot]", error.message);
+    }
+}
+
+/**
+ * POST /api/wrangle/preview-row-diff
+ * Compare selected row values between the current table and a preview table.
+ */
+export async function queryPreviewRowDiff(params) {
+    try {
+        const response = await fetch("/api/wrangle/preview-row-diff", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[queryPreviewRowDiff]", error.message);
     }
 }
 
@@ -335,12 +387,27 @@ export async function resetApp() {
     }
 }
 
+export async function queryUploadStatus(tableName) {
+    const params = new URLSearchParams({ table_name: tableName });
+    try {
+        const response = await fetch(`/api/upload-status?${params}`, { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error("[queryUploadStatus]", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function exportPandasScript() {
     try {
-        // This endpoint returns {success, script}. Header.jsx turns script into
-        // a downloaded buckaroo_export.py file.
+        // On success this endpoint streams a zip bundle (the export script plus
+        // the helper library it imports). On failure it returns a JSON error.
+        // Header.jsx saves the zip as buckaroo_export.zip.
         const response = await fetch("/api/export/pandas", { method: "GET" });
-        return await response.json();
+        if (!response.ok) {
+            return await response.json();
+        }
+        return { success: true, blob: await response.blob() };
     } catch (error) {
         console.error("[exportPandasScript]", error.message);
     }
@@ -358,6 +425,7 @@ const serverCalls = {
     queryHistogram2d,
     querySample2d,
     queryAttributeSummaries,
+    querySemanticGroups,
     queryTopErrorRows,
     queryTableName,
     wrangleRemove,
@@ -368,7 +436,9 @@ const serverCalls = {
     createPreviews,
     queryPreviewHistogram,
     queryPreviewScatterplot,
+    queryPreviewRowDiff,
     executeWrangle,
+    deleteColumn,
     exportPandasScript,
 };
 

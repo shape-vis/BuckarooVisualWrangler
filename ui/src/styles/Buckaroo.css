@@ -1,5 +1,19 @@
 
 
+.background-loading-banner {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 8px 16px;
+    background: #fff8e1;
+    color: #5d4037;
+    border-bottom: 1px solid #ffe082;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
 .matrix-and-dropdown-container {
     display: flex;
     gap: 6px;
@@ -20,17 +34,22 @@
     display: flex;
     flex-direction: row;
     gap: 0;
-    align-items: stretch;
+    align-items: flex-start;
     width: 100%;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
-    padding-bottom: 40px;
+    padding: 8px 8px 0 8px;
     box-sizing: border-box;
 }
 
 .table-panel-wrapper {
     display: none;
+    flex: 0 0 auto;
+    max-height: 42vh;
+    overflow: auto;
+    padding: 8px 8px 8px 8px;
+    box-sizing: border-box;
 }
 
 .table-panel-wrapper--visible {

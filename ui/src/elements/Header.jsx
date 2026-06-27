@@ -1,7 +1,8 @@
 import {NavButton, IconButton} from "./Buttons.jsx";
-import {useContext, useState} from "react";
+import {useContext, useEffect, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
+import SemanticGroupsModal from "../panels/SemanticGroupsModal.jsx";
 import { exportPandasScript, resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
@@ -39,11 +40,20 @@ export default function Header( { onReset} ) {
   );
 }
 
-export function BuckarooHeader( { onReset} ) {
+export function BuckarooHeader( { onReset, onShowAiGuide } ) {
     onReset = onReset || (() => {});
-    const { activeView, setActiveView } = useContext(ViewContext);
+    onShowAiGuide = onShowAiGuide || (() => {});
+    const { activeView, setActiveView, refreshKey } = useContext(ViewContext);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [semanticGroupsOpen, setSemanticGroupsOpen] = useState(false);
+    const [exportToast, setExportToast] = useState(null);
     const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection } = useRepair();
+
+    useEffect(() => {
+        if (!exportToast) return undefined;
+        const timer = window.setTimeout(() => setExportToast(null), 3200);
+        return () => window.clearTimeout(timer);
+    }, [exportToast]);
 
     const handleBack = async () => {
         await resetApp();
@@ -51,7 +61,7 @@ export function BuckarooHeader( { onReset} ) {
     };
 
     const handleExportPandas = async () => {
-        // Ask Flask for the script that replays the current provenance graph
+        // Ask Flask for the bundle that replays the current provenance graph
         // state. If the backend says no table/graph is loaded, show that error.
         const result = await exportPandasScript();
         if (!result?.success) {
@@ -59,17 +69,23 @@ export function BuckarooHeader( { onReset} ) {
             return;
         }
 
-        // Convert the returned script text into a downloadable .py file without
-        // navigating away from the app.
-        const blob = new Blob([result.script], { type: "text/x-python;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
+        // The bundle is a zip containing buckaroo_export.py plus the helper
+        // library it imports. Save it without navigating away from the app.
+        const url = URL.createObjectURL(result.blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "buckaroo_export.py";
+        link.download = "buckaroo_export.zip";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+        setExportToast({
+            id: Date.now(),
+            message: "Export downloaded as buckaroo_export.zip.",
+        });
+        window.dispatchEvent(new CustomEvent("buckaroo:pandas-exported", {
+            detail: { fileName: "buckaroo_export.zip" },
+        }));
     };
 
     return (
@@ -84,13 +100,22 @@ export function BuckarooHeader( { onReset} ) {
             </h1>
             <TableStatus />
             <div className="navButtonContainer">
-                <NavButton onClick={() => setActiveView('both')} isSelected={activeView === 'both'} icon={<img src="images/icons/both.svg" alt="" className="navButtonSvgIcon" /> } >Both</NavButton>
                 <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'} icon={<img src="/images/icons/pgraphlogo.svg" alt="" className="navButtonSvgIcon" />}>Provenance Graph</NavButton>
                 <NavButton onClick={() => setActiveView('plots')} isSelected={activeView === 'plots'} icon={<img src="/images/icons/plotlogo.svg" alt="" className="navButtonSvgIcon" />}> Plots </NavButton>
             </div>
             <div className="headerActions">
                 <button
+                    className="header-action-btn header-action-btn--semantic"
+                    onClick={() => setSemanticGroupsOpen(true)}
+                    disabled={busy}
+                    title="Open Semantic Groups"
+                >
+                    <span className="btn-icon">S</span>
+                    Semantic
+                </button>
+                <button
                     className="header-action-btn"
+                    data-tutorial-target="repair"
                     onClick={triggerRepairSelection}
                     disabled={busy || !hasSelection}
                     title="Repair Selection"
@@ -118,6 +143,7 @@ export function BuckarooHeader( { onReset} ) {
                 </button>
                 <button
                     className="header-action-btn"
+                    data-tutorial-target="export"
                     onClick={handleExportPandas}
                     disabled={busy}
                     title="Export Pandas Script"
@@ -125,10 +151,21 @@ export function BuckarooHeader( { onReset} ) {
                     <span className="btn-icon">py</span>
                     Export
                 </button>
+                <IconButton onClick={onShowAiGuide} title="AI Guide" className="ai-guide-header-button">AI</IconButton>
                 <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>
                 <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
             </div>
+            {exportToast && (
+                <div className="export-success-toast" role="status" aria-live="polite" key={exportToast.id}>
+                    {exportToast.message}
+                </div>
+            )}
             <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            <SemanticGroupsModal
+                visible={semanticGroupsOpen}
+                onClose={() => setSemanticGroupsOpen(false)}
+                refreshKey={refreshKey}
+            />
         </div>
     );
 }
