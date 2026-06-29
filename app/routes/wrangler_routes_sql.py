@@ -35,6 +35,7 @@ def update_errors_table(table_name: str) -> None:
             conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
         detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
         print(f"✓ Updated errors table: {errors_table_name}")
+        return detected_errors_df
     except Exception as e:
         print(f"ERROR: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()
