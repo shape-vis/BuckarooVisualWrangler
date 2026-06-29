@@ -20,7 +20,9 @@ Wrangling Endpoints - In-place modification of tables
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
-def update_errors_table(table_name: str) -> None:
+# Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
+def update_errors_table(table_name: str) -> pd.DataFrame:
+    # TODO: fix this so it doesn't update the whole table after small changes to the table
     """
     After modifying a table in-place, re-run error detection
     and update the errors table.
