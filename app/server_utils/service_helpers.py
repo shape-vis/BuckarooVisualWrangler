@@ -481,7 +481,7 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
     # Copy schema but leave empty.
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
 
-def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
+def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn, update_data_profile_table_fn):
     """
     Create delete and impute preview tables for a 1D (single-column) selection.
     Returns a dict with preview table names and dims=1.
@@ -502,8 +502,10 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
     query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
 
-    update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute)
+    errors_df_delete = update_errors_fn(preview_delete)
+    errors_df_impute = update_errors_fn(preview_impute)
+    update_data_profile_table_fn(preview_delete, errors_df_delete)
+    update_data_profile_table_fn(preview_impute, errors_df_impute)
 
     return {
         "success": True,
@@ -520,7 +522,7 @@ def extract_preview_action(name: str) -> str:
         return name[idx + len(marker):]
     return ""
 
-def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
+def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn, update_data_profile_table_fn):
     """
     Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
     Returns a dict with preview table names and dims=2.
@@ -541,9 +543,13 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
     query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
 
-    update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute_x)
-    update_errors_fn(preview_impute_y)
+    errors_df_delete = update_errors_fn(preview_delete)
+    errors_df_impute_x = update_errors_fn(preview_impute_x)
+    errors_df_impute_y = update_errors_fn(preview_impute_y)
+    update_data_profile_table_fn(preview_delete, errors_df_delete)
+    update_data_profile_table_fn(preview_impute_x, errors_df_impute_x)
+    update_data_profile_table_fn(preview_impute_y, errors_df_impute_y)
+
 
     return {
         "success": True,
