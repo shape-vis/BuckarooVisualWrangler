@@ -43,6 +43,23 @@ def update_errors_table(table_name: str) -> pd.DataFrame:
         traceback.print_exc()
         raise
 
+def update_data_profile_table(table_name: str, error_df: pd.DataFrame) -> None:
+    try:
+        data_profile_df = create_data_profile_df(table_name, engine, error_df)
+        print("CALCULATED DATA PROFILE DF SUCCESSFULLY:")
+        print(data_profile_df)
+        data_profile_table_name = f"dp_{table_name}"
+        with engine.begin() as conn:
+            conn.execute(sa_text(f"DROP TABLE IF EXISTS {data_profile_table_name}"))
+            data_profile_df.to_sql(data_profile_table_name, engine, if_exists='fail', index=False)
+
+        print(f"✓ Updated data profile table: {data_profile_table_name}")
+    except Exception as e:
+        print(f"ERROR: Could not update data profile table for {table_name}: {e}")
+        traceback.print_exc()
+        raise
+
+
 def update_preview_error_table(table_name: str, err_table_name: str) -> None:
     """
     After modifying a table in-place, re-run error detection
