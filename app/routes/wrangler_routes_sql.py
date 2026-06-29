@@ -7,7 +7,8 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
+from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, \
+    execute_wrangle_preview, _safe_pg_name, create_data_profile_df
 from sqlalchemy import text as sa_text
 
 
@@ -60,6 +61,15 @@ def update_data_profile_table(table_name: str, error_df: pd.DataFrame) -> None:
         raise
 
 
+# TODO: Finish this later
+#def update_stat_to_data_profile_table(table_name: str, error_df: pd.DataFrame) -> None:
+
+
+
+
+
+
+# TODO: does this even do anything? Can I remove it?
 def update_preview_error_table(table_name: str, err_table_name: str) -> None:
     """
     After modifying a table in-place, re-run error detection
