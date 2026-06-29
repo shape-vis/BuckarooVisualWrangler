@@ -132,9 +132,9 @@ def create_previews():
             return {"success": False, "error": "No rows selected"}, 400
 
         if len(cols) == 1:
-            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table)
+            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
         else:
-            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table)
+            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
 
     except Exception as e:
         print("ERROR in create_previews")
