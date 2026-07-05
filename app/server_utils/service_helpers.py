@@ -176,16 +176,21 @@ def run_detectors(data_frame):
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
     return perform_melt(frames)
 
-# TODO: modify this so it only updates the changed columns
-def create_data_profile_df(table_name, engine, error_df, columns_to_include=None):
+# TODO: CLEAN UP THIS FUNCTION
+# TODO: Test this function!!! (Write test for it)
+def create_data_profile_df(table_name, engine, col_names=None, error_df=None, main_df=None):
+    print("CREATED DATA_PROFILE DF FOR TABLE", table_name)
 
-    data_profile = DataProfile(table_name, engine=engine, error_df=error_df)
-    if columns_to_include is None:
-        columns_to_include = data_profile.main_df.columns
+    data_profile = DataProfile(table_name, engine=engine, main_df=main_df, error_df=error_df)
 
     col_attribute_list = []
 
-    for col in columns_to_include:
+    if col_names is None:
+        col_names = data_profile.get_col_names()
+
+    for col in col_names:
+        if col not in data_profile.get_col_names():
+            continue
 
         row_dict = {'column_name': col}
         for attribute in data_profile.default_attributes:
@@ -193,11 +198,6 @@ def create_data_profile_df(table_name, engine, error_df, columns_to_include=None
                 # Attribute doesn't exist in either categorical and numeric
                 print(f"ERROR: INVALID ATTRIBUTE {attribute}")
                 print("Skipping this attribute")
-            elif (is_categorical(data_profile.main_df[col]) and attribute not in data_profile.attribute_type_assignment['categorical']) or \
-                    (not is_categorical(data_profile.main_df[col]) and attribute not in data_profile.attribute_type_assignment['numeric']):
-                row_dict[attribute] = None
-
-                # default attribute does is not compatible with column
                 continue
 
             print("CALCULATING ATTRIBUTE: ", attribute)
