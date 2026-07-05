@@ -26,7 +26,20 @@ def to_scalar(val):
     return val
 
 class DataProfile:
+    """
+    Class that handles queries to get summary stats about the main data table.
+    Should be able to work without using main_df and error_df at all.
+    This class prioritizes SQL queries and when those don't work, the table is loaded and the pd dataframe method is used
+    instead.
+    """
     def __init__(self, table_name, engine=None, main_df=None, error_df=None):
+        """
+        :param table_name: name of the main data table
+        :param engine:
+        :param main_df:the main data table as a data frame
+        :param error_df:the error data table as a data frame
+        """
+
         self.table_name = table_name
         self.data_profile_table_name = "dp" + table_name
         self.engine = engine
@@ -53,31 +66,49 @@ class DataProfile:
         }
 
     def get_error_df(self):
+        """
+        Gets the error df by loading it first (making sure it's not None) then returning it
+        :return: The error_df
+        """
         self.load_error_df()
 
         return self._error_df
 
     def get_main_df(self):
+        """
+        Gets the main df by loading it first (making sure it's not None) then returning it
+        :return: The main_df
+        """
         self.load_main_df()
 
         return self._main_df
 
 
     def load_error_df(self):
+        """
+        Loads the error_df from the table if it wasn't passed in as an argument
+        :return: None
+        """
         if self._error_df is None:
             assert self.engine is not None, f"engine cannot be None if error_df is None"
             #self.error_df = load_table_to_df(f"errors_{self.table_name}", self.engine)
             self._error_df = pd.read_sql_query(f'SELECT * FROM "{"errors_" + self.table_name}"', self.engine)
 
     def load_main_df(self):
+        """
+        Loads the main_df from the table if it wasn't passed in as an argument
+        :return: None
+        """
         if self._main_df is None:
             assert self.engine is not None, f"engine cannot be None if main_df is None"
-            #self.main_df = load_table_to_df(self.table_name, self.engine)
             self._main_df = pd.read_sql_query(f'SELECT * FROM "{self.table_name}"', self.engine)
 
-
-
-    def get_col_data(self, column_name, attribute_name):
+    def get_processed_column_data(self, column_name, attribute_name):
+        """
+        :param column_name: Name of the column to get data for
+        :param attribute_name: Name of the attribute (used to determine how to process the data)
+        :return: Processed column data
+        """
         assert (attribute_name in self.attribute_type_assignment['categorical'] or attribute_name in self.attribute_type_assignment['numeric']), f"Invalid attribute name {attribute_name}"
 
         if attribute_name in self.attribute_type_assignment['categorical']:
@@ -89,6 +120,10 @@ class DataProfile:
 
     # TODO: Make the sql query for this work
     def get_col_names(self):
+        """
+        self: DataProfile instance
+        :return: List of column names in the main data table
+        """
         try:
             query = 'SELECT column_name FROM information_schema.columns WHERE table_name = :table_name ORDER BY ordinal_position'
             params = {"table_name": self.table_name}
@@ -97,6 +132,7 @@ class DataProfile:
 
             col_names = []
             for row in result:
+                # For some reason the SQL query returns some unwanted columns so I'm taking them out
                 if row[0] not in ['index', 'level_0', ]:
                     col_names.append(row[0])
 
@@ -114,6 +150,12 @@ class DataProfile:
         return col_names
 
     def look_up_stat_from_profile(self, attribute_name, column_name):
+        """
+        Look up a summary statistic for a specific column from the data profile table.
+        :param attribute_name: Name of the attribute (e.g., 'mean', 'median', 'min', 'max', etc.)
+        :param column_name: Name of the column for which the statistic is being looked up.
+        :return: The value of the statistic if found, otherwise None.
+        """
         data_profile_table_name = "dp_" + self.table_name
         try:
             query = f'SELECT "{attribute_name}" FROM "{data_profile_table_name}" WHERE "column_name" = :column_name'
@@ -123,13 +165,26 @@ class DataProfile:
             return stat
         except Exception as e:
             print(f"Error querying attribute from data profile table: {e}")
+            return None
+
 
     def calculate_summary_stat_using_sql(self, stat_query, column_name):
+        """
+        :param stat_query: The SQL aggregate function to use (e.g., 'AVG', 'MIN', 'MAX', etc.)
+        :param column_name: Name of the column for which the statistic is being looked up.
+        :return: The value of the statistic if found, otherwise None.
+        """
         query = f'SELECT {stat_query}("{column_name}") FROM "{self.table_name}"'
         stat = fetch_sql(query, True, self.engine)
         return stat
 
     def calculate_column_attribute(self, attribute_name, column_name, look_up_stat=True):
+        """
+        :param attribute_name: Name of the attribute (e.g., 'mean', 'median', 'min', 'max')
+        :param column_name: Name of the column for which the statistic is being looked up.
+        :param look_up_stat: If True, first attempt to look up the statistic from the data profile table. If False, calculate it directly.
+        :return: The value of the statistic if found or calculated, otherwise None.
+        """
         if look_up_stat:
             look_up_value = self.look_up_stat_from_profile(attribute_name, column_name)
 
@@ -142,7 +197,12 @@ class DataProfile:
 
     # TODO: save stat off to table if newly calculated
     def _calculate_mean(self, column_name):
-        col_data = self.get_col_data(column_name, 'mean')
+        """
+        :param column_name: Name of the column for which the mean is being calculated
+        :return: The mean
+        """
+        col_data = self.get_processed_column_data(column_name, 'mean')
+        # Try get the mean from SQL first, if that fails, calculate it manually using the data frame
         try:
             avg = self.calculate_summary_stat_using_sql('AVG', column_name)
         except Exception as e:
@@ -158,8 +218,13 @@ class DataProfile:
 
 
     def _calculate_median(self, column_name):
-        col_data = self.get_col_data(column_name, 'median')
+        """
+        :param column_name: Name of the column for which the median is being calculated
+        :return: The median
+        """
+        col_data = self.get_processed_column_data(column_name, 'median')
 
+        # Try get the median from SQL first, if it fails, calculate manually using data frame
         try:
             query = f'SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY "{column_name}") FROM  "{self.table_name}"'
             median = fetch_sql(query, True, self.engine)
@@ -177,7 +242,13 @@ class DataProfile:
 
 
     def _calculate_max(self, column_name):
-        col_data = self.get_col_data(column_name, 'max')
+        """
+        :param column_name: Name of the column for which the max is being calculated
+        :return: The maximum
+        """
+
+        col_data = self.get_processed_column_data(column_name, 'max')
+        # Try using SQL query, if it fails, calculate manually using data frame
         try:
             maximum = self.calculate_summary_stat_using_sql('MAX', column_name)
         except Exception as e:
@@ -193,8 +264,13 @@ class DataProfile:
         return maximum
 
     def _calculate_min(self, column_name):
+        """
+        :param column_name: Name of the column for which the minimum is being calculated
+        :return: The minimum
+        """
+        col_data = self.get_processed_column_data(column_name, 'min')
 
-        col_data = self.get_col_data(column_name, 'min')
+        # Try using SQL query, if it fails, calculate manually using data frame
         try:
             minimum = self.calculate_summary_stat_using_sql('MIN', column_name)
         except Exception as e:
@@ -210,7 +286,13 @@ class DataProfile:
         return minimum
 
     def _calculate_num_categories(self, column_name):
-        col_data = self.get_col_data(column_name, 'n_categories')
+        """
+        :param column_name: Name of the column for which the number of categories is being calculated
+        :return: The number of categories
+        """
+        col_data = self.get_processed_column_data(column_name, 'n_categories')
+
+        # Try using SQL query, if it fails, calculate manually using data frame
         try:
             query = f'SELECT COUNT(DISTINCT "{column_name}") FROM "{self.table_name}"'
             n_categories = fetch_sql(query, True, self.engine)
@@ -230,9 +312,14 @@ class DataProfile:
 
 
     def _calculate_mode(self, column_name):
+        """
+        :param column_name: Name of the column for which the mode is being calculated
+        :return: The mode
+        """
+
         print("Calculating mode manually using data...")
         self.load_main_df()
-        col_data = self.get_col_data(column_name, 'mode')
+        col_data = self.get_processed_column_data(column_name, 'mode')
         mode = col_data.mode()
 
         return mode
@@ -240,6 +327,10 @@ class DataProfile:
     # Functions relating to error info
     # Dict mapping from error type to total error count
     def _calculate_error_count_dict(self, column_name):
+        """
+        :param column_name: Name of the column for which the error count is being calculated
+        :return: The error count dict ({"missing": 10, "mismatch": 5, ...})
+        """
         try:
             query = f'SELECT {column_name}, COUNT(*) as cnt FROM {self.table_name} GROUP BY {column_name}  ORDER BY cnt DESC'
             category_counts = dict(fetch_sql(query, True, self.engine))
@@ -262,6 +353,10 @@ class DataProfile:
     # Dict mapping from class to error types to error counts
     # TODO: Implement SQL query version
     def _calculate_class_error_count_dict(self, column_name):
+        """
+        :param column_name: Name of the column for which the class error count is being calculated
+        :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
+        """
         print("Calculating class error counts manually using data...")
 
         self.load_error_df()
