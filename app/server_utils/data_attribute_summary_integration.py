@@ -5,7 +5,6 @@ Converts the current datastate data into JSON the view can use
 """
 Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.py, execute_sql.py, filtering_sql.py 
 """
-import pandas as pd
 
 from app.db_utils.execute_sql import fetch_sql
 from app.server_utils.service_helpers import get_error_dist, is_categorical, _validate_identifier
