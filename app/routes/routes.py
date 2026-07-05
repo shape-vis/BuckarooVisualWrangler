@@ -11,8 +11,7 @@ from app.server_utils.service_helpers import (
     generate_table_name,
     run_detectors,
     get_sqlalchemy_dtype_map,
-    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session,
-
+    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
 )
 from app.server_utils.set_id_column import set_id_column
 
@@ -52,8 +51,13 @@ def load_file(csv_file, filename):
         The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
         """
-        rows_affected = table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
-        detected_rows_affected = detected_data.to_sql("errors_" + table_name_with_node_id, engine, if_exists='replace')
+        table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
+        detected_data.to_sql("errors_" + table_name_with_node_id, engine, if_exists='replace')
+
+        data_profile_df = create_data_profile_df(table_name_with_node_id, engine, error_df=detected_data, main_df=dataframe)
+
+        data_profile_df.to_sql("dp_" + table_name_with_node_id, engine, if_exists='replace')
+
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
