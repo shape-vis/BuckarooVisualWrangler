@@ -10,6 +10,7 @@ import pandas as pd
 from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, \
     execute_wrangle_preview, _safe_pg_name, create_data_profile_df
 from sqlalchemy import text as sa_text
+from sqlalchemy import inspect, text
 
 
 
