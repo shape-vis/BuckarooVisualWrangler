@@ -6,10 +6,7 @@ from pandas.core.arrays import categorical
 
 from app.db_utils.execute_sql import fetch_sql
 
-
-
-#TODO: add documentation
-
+# TODO: is this needed? this may be a duplicate
 def to_scalar(val):
     if val is None:
         return None
@@ -316,6 +313,7 @@ class DataProfile:
         :param column_name: Name of the column for which the mode is being calculated
         :return: The mode
         """
+        # TODO: add a SQL query version to calculate the mode
 
         print("Calculating mode manually using data...")
         self.load_main_df()
@@ -357,6 +355,7 @@ class DataProfile:
         :param column_name: Name of the column for which the class error count is being calculated
         :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
         """
+        # TODO: Implement SQL query version
         print("Calculating class error counts manually using data...")
 
         self.load_error_df()
