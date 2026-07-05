@@ -500,25 +500,28 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     preview_delete_table_name = safe_pg_name_fn(table, "_preview_delete")
     preview_impute_table_name = safe_pg_name_fn(table, "_preview_impute")
 
+    # Preview tables are created (error_..._preview, dp_..._preview)
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute, errors_src)
+        _clone_table_pair(conn, table, preview_delete_table_name, errors_src, dp_src)
+        _clone_table_pair(conn, table, preview_impute_table_name, errors_src, dp_src)
+
         #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
         #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
 
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
+    # Modify the preview table based on the preview type
+    query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
+    query.impute_by_ids(table=preview_impute_table_name, col=cols[0], ids=row_ids)
 
-    errors_df_delete = update_errors_fn(preview_delete)
-    errors_df_impute = update_errors_fn(preview_impute)
-    update_data_profile_table_fn(preview_delete, errors_df_delete)
-    update_data_profile_table_fn(preview_impute, errors_df_impute)
+    errors_df_delete = update_errors_fn(preview_delete_table_name, cols)
+    errors_df_impute = update_errors_fn(preview_impute_table_name, cols)
+    update_data_profile_table_fn(preview_delete_table_name, errors_df_delete, cols)
+    update_data_profile_table_fn(preview_impute_table_name, errors_df_impute, cols)
 
     return {
         "success": True,
-        "preview_delete": preview_delete,
-        "preview_impute": preview_impute,
+        "preview_delete": preview_delete_table_name,
+        "preview_impute": preview_impute_table_name,
         "dims": 1,
     }
 
@@ -544,27 +547,27 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     preview_impute_y_table_name = safe_pg_name_fn(table, "_preview_impute_y")
 
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute_x, errors_src)
-        _clone_table_pair(conn, table, preview_impute_y, errors_src)
+        _clone_table_pair(conn, table, preview_delete_table_name, errors_src, dp_src)
+        _clone_table_pair(conn, table, preview_impute_x_table_name, errors_src, dp_src)
+        _clone_table_pair(conn, table, preview_impute_y_table_name, errors_src, dp_src)
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
-    query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
+    query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
+    query.impute_by_ids(table=preview_impute_x_table_name, col=cols[0], ids=row_ids)
+    query.impute_by_ids(table=preview_impute_y_table_name, col=cols[1], ids=row_ids)
 
-    errors_df_delete = update_errors_fn(preview_delete)
-    errors_df_impute_x = update_errors_fn(preview_impute_x)
-    errors_df_impute_y = update_errors_fn(preview_impute_y)
-    update_data_profile_table_fn(preview_delete, errors_df_delete)
-    update_data_profile_table_fn(preview_impute_x, errors_df_impute_x)
-    update_data_profile_table_fn(preview_impute_y, errors_df_impute_y)
+    errors_df_delete = update_errors_fn(preview_delete_table_name, cols)
+    errors_df_impute_x = update_errors_fn(preview_impute_x_table_name, cols)
+    errors_df_impute_y = update_errors_fn(preview_impute_y_table_name, cols)
+    update_data_profile_table_fn(preview_delete_table_name, errors_df_delete, cols)
+    update_data_profile_table_fn(preview_impute_x_table_name, errors_df_impute_x, cols)
+    update_data_profile_table_fn(preview_impute_y_table_name, errors_df_impute_y, cols)
 
 
     return {
         "success": True,
-        "preview_delete": preview_delete,
-        "preview_impute_x": preview_impute_x,
-        "preview_impute_y": preview_impute_y,
+        "preview_delete": preview_delete_table_name,
+        "preview_impute_x": preview_impute_x_table_name,
+        "preview_impute_y": preview_impute_y_table_name,
         "dims": 2,
     }
 
