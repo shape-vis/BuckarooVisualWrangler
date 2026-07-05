@@ -19,7 +19,7 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
-from app.ai_utils.data_attributes import DataProfile
+from app.db_utils.data_profile import DataProfile
 
 def get_current_pgraph():
     """
