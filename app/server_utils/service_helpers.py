@@ -179,6 +179,14 @@ def run_detectors(data_frame):
 # TODO: CLEAN UP THIS FUNCTION
 # TODO: Test this function!!! (Write test for it)
 def create_data_profile_df(table_name, engine, col_names=None, error_df=None, main_df=None):
+    """
+    :param table_name: the name of the table in the database
+    :param engine: the engine to use
+    :param col_names: the column names of interest in the table
+    :param error_df: the error dataframe (optional)
+    :param main_df: the main dataframe (optional)
+    :return: a dataframe of the data profile for the table
+    """
     print("CREATED DATA_PROFILE DF FOR TABLE", table_name)
 
     data_profile = DataProfile(table_name, engine=engine, main_df=main_df, error_df=error_df)
