@@ -183,6 +183,7 @@ class DBOperations:
             if pt != keep_table:
                 execute_sql(f'DROP TABLE IF EXISTS "{pt}"', self.engine)
                 execute_sql(f'DROP TABLE IF EXISTS "errors_{pt}"', self.engine)
+                execute_sql(f'DROP TABLE IF EXISTS "dp_{pt}"', self.engine)
 
     def rename_preview_to_new(self, preview_table: str, new_table_name: str):
         """
@@ -192,6 +193,7 @@ class DBOperations:
         # self.engine.dispose()
         execute_sql(f'ALTER TABLE "{preview_table}" RENAME TO "{new_table_name}"', self.engine)
         execute_sql(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{new_table_name}"', self.engine)
+        execute_sql(f'ALTER TABLE IF EXISTS "dp_{preview_table}" RENAME TO "dp_{new_table_name}"', self.engine)
 
 
     def remove_data_filters(self, sql_filters) -> dict:
