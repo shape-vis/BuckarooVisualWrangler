@@ -427,13 +427,17 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
 
     return {"success": True, "table": new_table_name}
 
-def _clone_table_pair(conn, source_table, dest_table, errors_source):
-    """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
+def _clone_table_pair(conn, source_table, dest_table, errors_source, dp_source):
+    """Drop-and-recreate dest_table and its errors_ and dp_ sibling as copies of source tables."""
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dest_table}"'))
     conn.execute(sa_text(f'CREATE TABLE "{dest_table}" AS SELECT * FROM "{source_table}"'))
     errors_dest = f"errors_{dest_table}"
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
+
+    dp_dest = f"dp_{dest_table}"
+    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dp_dest}"'))
+    conn.execute(sa_text(f'CREATE TABLE "{dp_dest}" AS SELECT * FROM "{dp_source}"'))
 
 def trim_preview_suffix(name: str) -> str:
     """Remove the '_preview...' tail from a table name, if present."""
