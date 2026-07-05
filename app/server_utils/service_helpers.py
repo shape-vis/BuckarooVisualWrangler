@@ -463,6 +463,7 @@ def make_new_table_name(child_table):
     node_id = app.pgraph_for_session.get_new_node_id()
     new_table_name = f"{node_id}{child_table[2:]}"
     return new_table_name
+
 def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
     """
     Drop and recreate a minimal dest table and empty error table to populate only with regard to the cols.
@@ -486,16 +487,18 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
     # Copy schema but leave empty.
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
 
-def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn, update_data_profile_table_fn):
+def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, update_data_profile_table_fn):
     """
     Create delete and impute preview tables for a 1D (single-column) selection.
     Returns a dict with preview table names and dims=1.
     """
     from app import engine
 
-    errors_src     = f"errors_{table}"
-    preview_delete = preview_name_fn(table, "_preview_delete")
-    preview_impute = preview_name_fn(table, "_preview_impute")
+    errors_src = f"errors_{table}"
+    dp_src = f"dp_{table}"
+    # Creates name for the preview tables
+    preview_delete_table_name = safe_pg_name_fn(table, "_preview_delete")
+    preview_impute_table_name = safe_pg_name_fn(table, "_preview_impute")
 
     with engine.begin() as conn:
         _clone_table_pair(conn, table, preview_delete, errors_src)
@@ -527,17 +530,18 @@ def extract_preview_action(name: str) -> str:
         return name[idx + len(marker):]
     return ""
 
-def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn, update_data_profile_table_fn):
+def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, update_data_profile_table_fn):
     """
     Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
     Returns a dict with preview table names and dims=2.
     """
     from app import engine
 
-    errors_src       = f"errors_{table}"
-    preview_delete   = preview_name_fn(table, "_preview_delete")
-    preview_impute_x = preview_name_fn(table, "_preview_impute_x")
-    preview_impute_y = preview_name_fn(table, "_preview_impute_y")
+    errors_src  = f"errors_{table}"
+    dp_src = f"dp_{table}"
+    preview_delete_table_name   = safe_pg_name_fn(table, "_preview_delete")
+    preview_impute_x_table_name = safe_pg_name_fn(table, "_preview_impute_x")
+    preview_impute_y_table_name = safe_pg_name_fn(table, "_preview_impute_y")
 
     with engine.begin() as conn:
         _clone_table_pair(conn, table, preview_delete, errors_src)
