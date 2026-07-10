@@ -9,7 +9,7 @@ Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.
 from app.db_utils.execute_sql import fetch_sql
 from app.server_utils.service_helpers import get_error_dist, is_categorical, _validate_identifier
 from app.db_utils.data_profile import DataProfile
-
+import pandas as pd
 
 def get_default_attributes_from_rankings(tablename, engine):
     """
@@ -45,28 +45,30 @@ def generate_complete_json(tablename):
 
     data_profile = DataProfile(tablename, engine)
 
-    error_df = data_profile.get_error_df()
-    main_df = data_profile.get_main_df()
+    # TODO: get rid of these arguments from the get_error_dist
+    error_df = pd.read_sql_query(f'SELECT * FROM "{"errors_" + tablename}"', engine)
+    main_df = pd.read_sql_query(f'SELECT * FROM "{tablename}"', engine)
+
     error_list = get_error_dist(error_df, main_df).to_dict('records')
 
     default_attributes = get_default_attributes_from_rankings(tablename, engine)
 
-
     return {
         "columnErrors": convert_error_list_to_dict(error_list),
-        "attributes": list(data_profile._main_df.columns),
-        "attributeDistributions": build_attribute_distributions(data_profile),
+        "attributes": list(data_profile.get_col_names()),
+        "attributeDistributions": build_attribute_distributions(data_profile, main_df),
         "defaultAttributes": default_attributes
     }
 
-def get_attribute_stats(data_profile, column):
+def get_attribute_stats(data_profile, column, main_df):
     """
     Get statistics for a specific attribute in the DataFrame
     :param data_profile: Data profile class instance (used for calculating summary stats)
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the column
     """
-    if is_categorical(data_profile._main_df[column]):
+
+    if data_profile.is_categorical_col(column):
         return get_categorical_stats(data_profile, column)
     return get_numeric_stats(data_profile, column)
 
@@ -74,12 +76,13 @@ def build_attribute_distributions(data_profile):
     """
     Build distributions for each attribute in the main DataFrame
     :param data_profile: Data profile class instance (used for calculating summary stats)
+    :param main_df: The main DataFrame containing the data
     :return: dictionary containing distributions for each attribute
     """
     distributions = {}
 
     for col in data_profile.get_col_names():
-        distributions[col] = get_attribute_stats(data_profile, col)
+        distributions[col] = get_attribute_stats(data_profile, col, main_df)
     return distributions
 
 def get_categorical_stats(data_profile, column):
