@@ -125,7 +125,7 @@ class DataProfile:
     This class prioritizes SQL queries and when those don't work, the table is loaded and the pd dataframe method is used
     instead.
     """
-    def __init__(self, table_name, engine=None, main_df=None, error_df=None):
+    def __init__(self, table_name, engine):
         """
         :param table_name: name of the main data table
         :param engine:
@@ -141,7 +141,6 @@ class DataProfile:
         self.engine = engine
         # IMPORTANT: main_df and error_df are NOT guaranteed to not be None (so that they don't have to be loaded each time for efficiency)
         # Use get_main_df and get_error_df instead of accessing them directly
-        self.default_attributes = ['mean', 'median', 'min', 'max', 'n_categories', 'mode', 'error_counts', 'class_error_counts']
         self.name_to_func = {
             'mean': self._calculate_mean,
             'median': self._calculate_median,
@@ -150,13 +149,13 @@ class DataProfile:
             'n_categories': self._calculate_num_categories,
             'mode': self._calculate_mode,
             'error_counts': self._calculate_error_count_dict,
-            'class_error_counts': self._calculate_class_error_count_dict,
+            'category_counts': self._calculate_category_count_dict,
         }
 
         self.attribute_type_assignment = {
-            'numeric': ['mean', 'median', 'min', 'max', 'err', 'error_counts'],
+            'numeric': ['mean', 'median', 'min', 'max', 'error_counts'],
             'categorical': ['n_categories',
-                            'mode', 'error_counts', 'class_error_counts'],
+                            'mode', 'error_counts', 'category_counts'],
         }
 
 
@@ -198,9 +197,8 @@ class DataProfile:
         :param column_name: Name of the column for which the statistic is being looked up.
         :return: The value of the statistic if found, otherwise None.
         """
-        data_profile_table_name = "dp_" + self.table_name
         try:
-            query = f'SELECT "{attribute_name}" FROM "{data_profile_table_name}" WHERE "column_name" = :column_name'
+            query = f'SELECT "{attribute_name}" FROM "{self.data_profile_table_name}" WHERE "column_name" = :column_name'
             params = {"column_name": column_name}
             stat = fetch_sql(query, True, self.engine, params)
 
@@ -232,12 +230,14 @@ class DataProfile:
 
             if look_up_value is not None:
                 print("Successfully found col attribute in data profile table!")
+
                 return to_scalar(look_up_value)
 
         calculate_attribute_func = self.name_to_func[attribute_name]
+        # TODO: save stat off to table if newly calculated
+
         return to_scalar(calculate_attribute_func(column_name))
 
-    # TODO: save stat off to table if newly calculated
     def _calculate_mean(self, column_name):
         """
         :param column_name: Name of the column for which the mean is being calculated
