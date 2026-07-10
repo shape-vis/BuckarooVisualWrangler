@@ -7,9 +7,8 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, \
-    execute_wrangle_preview, _safe_pg_name, create_data_profile_df
-from sqlalchemy import text as sa_text
+from app.server_utils.service_helpers import create_error_df, create_previews_1d, create_previews_2d, \
+    execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map
 from sqlalchemy import inspect, text
 
 
@@ -66,10 +65,10 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
 
-        # TODO: optimize this so it doesn't load the whole table into a df first
         df = df[columns_selected_for_wrangling]
 
-        detected_errors_df = run_detectors(df)
+        # TODO: optimize this so it doesn't load the whole table into a df first
+        detected_errors_df = create_error_df(df)
         errors_table_name = f"errors_{table_name}"
 
         key_column = "column_id"

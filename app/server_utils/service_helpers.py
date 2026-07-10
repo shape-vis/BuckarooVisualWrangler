@@ -161,7 +161,8 @@ def perform_melt(dfs):
 
     return df_combined
 
-def run_detectors(data_frame):
+# Previously called run_detectors
+def create_error_df(data_frame):
     """
     Runs all 4 detectors that are implemented
     on the server, on the data, and returns a compiled dataframe of the complete errors
