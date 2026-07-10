@@ -189,7 +189,6 @@ def create_data_profile_df(table_name, engine, col_names=None, error_df=None, ma
     """
     print("CREATED DATA_PROFILE DF FOR TABLE", table_name)
 
-    data_profile = DataProfile(table_name, engine=engine, main_df=main_df, error_df=error_df)
 
     col_attribute_list = []
 

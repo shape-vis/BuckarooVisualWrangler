@@ -100,6 +100,11 @@ def update_data_profile_table(table_name: str, error_df: pd.DataFrame, columns_s
         print("COL NAMES", columns_selected_for_wrangling)
 
         updated_df = create_data_profile_df(table_name, engine, col_names=columns_selected_for_wrangling, error_df=error_df)
+        # Can't use db_operations.data_profile because this function is also used for updating preview tables,
+        # meaning that the "main_table" that this function uses may be a preview table. Using the db_operations data_profile
+        # has the table name set as the main table and it'll be calculating statistics on the wrong table. So we create a new data
+        # profile object
+        data_profile = DataProfile(table_name, engine)
 
         key_column = "column_name"
 
