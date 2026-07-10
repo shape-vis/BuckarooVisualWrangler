@@ -72,7 +72,7 @@ def get_attribute_stats(data_profile, column, main_df):
         return get_categorical_stats(data_profile, column)
     return get_numeric_stats(data_profile, column)
 
-def build_attribute_distributions(data_profile):
+def build_attribute_distributions(data_profile, main_df):
     """
     Build distributions for each attribute in the main DataFrame
     :param data_profile: Data profile class instance (used for calculating summary stats)
