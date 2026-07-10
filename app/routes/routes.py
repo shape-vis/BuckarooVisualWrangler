@@ -9,7 +9,7 @@ from app import app
 from app import db_operations, engine
 from app.server_utils.service_helpers import (
     generate_table_name,
-    run_detectors,
+    create_error_df,
     get_sqlalchemy_dtype_map,
     calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
 )
@@ -34,7 +34,7 @@ def load_file(csv_file, filename):
     # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
     start_time = time.time()
-    detected_data = run_detectors(dataframe)
+    detected_data = create_error_df(dataframe)
     time_to_detect = time.time() - start_time
     app.original_table_name = filename
     table_name = generate_table_name(filename)
