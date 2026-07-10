@@ -22,6 +22,102 @@ def to_scalar(val):
         return val.item()
     return val
 
+"""
+--- ColumnTypes ---
+Inspects a table's schema to classify each column as numeric, categorical, or mixed-type.
+"""
+
+class ColumnTypes:
+    def __init__(self, main_table_name: str, engine):
+        self.numeric_cols = set()
+        self.categorical_mixed = set()
+        self.pure_categorical = set()
+        self.engine = engine
+        self.gather_numeric_cols(main_table_name)
+        self.gather_mixed_cols(main_table_name)
+
+
+    def gather_numeric_cols(self, main_table_name: str):
+        """
+        Distinguishes the numeric columns from the categorical columns.
+        :arg: main_table_name: name of the main table.
+        """
+
+
+        fetch_col_types = f'''SELECT column_name, data_type
+                              FROM information_schema.columns
+                              WHERE table_name = '{main_table_name}';'''
+
+        fetched_rows = fetch_sql(fetch_col_types, False, self.engine)
+        if fetched_rows:
+            numeric_types = {
+                'integer', 'bigint', 'numeric',
+                'real', 'double precision', 'smallint'
+            }
+
+            for row in fetched_rows:
+                col_name = row[0]
+                data_type = row[1]
+
+                if data_type in numeric_types:
+                    self.numeric_cols.add(col_name)
+                else:
+                    self.categorical_mixed.add(col_name)
+        else:
+            raise Exception(f"No rows fetched from table: {main_table_name}")
+
+
+    def gather_mixed_cols(self, main_table_name: str):
+        """
+        Gather the columns that are labeled as categorical but contain numeric data as well.
+        :arg: main_table_name: name of the main table.
+        """
+
+        # There are no categorical columns in the dataset.
+        if len(self.categorical_mixed) == 0:
+            return
+
+        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
+
+        # Initialized in the other constructor func gather_numeric_cols. This starts as all categorical columns.
+        # Stop early if a mixed type is found, since that makes the entire column of mixed type.
+        queries = [
+            f"""(
+                SELECT '{col}' AS column_name
+                FROM "{main_table_name}"
+                WHERE "{col}" ~ {numeric_regex}
+                LIMIT 1
+            )"""
+            for col in self.categorical_mixed
+        ]
+
+        fetch_mixed_types = "\nUNION ALL\n".join(queries)
+        mixed_cols = fetch_sql(fetch_mixed_types, False, self.engine)
+
+        mixed_col_names = set(row[0] for row in mixed_cols) if mixed_cols else set()
+        self.pure_categorical = self.categorical_mixed - mixed_col_names
+        self.categorical_mixed = mixed_col_names
+
+    def is_categorical_col(self, col_name: str):
+        return col_name in self.pure_categorical
+
+    def is_numeric_col(self, col_name: str):
+            """
+            Determines whether the given column from the table used to construct this class is numeric.
+            :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+            :return: whether the given col_name is numeric.
+            """
+            return col_name in self.numeric_cols
+
+
+    def is_mixed_col(self, col_name: str):
+        """
+        Determines whether the given column from the table used to construct this class is of mixed type.
+        :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+        :return: whether the given col_name is of mixed type.
+        """
+        return col_name in self.categorical_mixed
+
 class DataProfile:
     """
     Class that handles queries to get summary stats about the main data table.
@@ -348,29 +444,50 @@ class DataProfile:
 
         return category_counts
 
-    # Dict mapping from class to error types to error counts
-    # TODO: Implement SQL query version
-    def _calculate_class_error_count_dict(self, column_name):
+    def get_col_type(self, column_name):
         """
-        :param column_name: Name of the column for which the class error count is being calculated
-        :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
+        :param column_name: Name of the column for which the type is being checked
+        :return: The type of the column in a string
         """
-        # TODO: Implement SQL query version
-        print("Calculating class error counts manually using data...")
+        if self.col_types.is_numeric_col(column_name):
+            return "numeric"
+        elif self.col_types.is_categorical_col(column_name):
+            return "categorical"
+        elif self.col_types.is_mixed_col(column_name):
+            return "mixed"
+        else:
+            return None
 
-        self.load_error_df()
+    def is_numeric_col(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: True if the column is numeric, False otherwise
+        """
+        return self.col_types.is_numeric_col(column_name)
 
-        counts_by_column = {}
-        if not self._error_df.empty:  # If error_df is empty (no errors in data selection)
-            counts_by_column = (
-                self._error_df.groupby(['column_id', 'error_type'])
-                .size()
-                .unstack(fill_value=0)
-                .to_dict(orient='index')
-            )
+    def is_categorical_col(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: True if the column is categorical, False otherwise
+        """
+        return self.col_types.is_categorical_col(column_name)
 
-        if counts_by_column is not None:
-            counts_by_column = json.dumps(counts_by_column)
+    def is_mixed_col(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: True if the column is mixed, False otherwise
+        """
+        return self.col_types.is_mixed_col(column_name)
 
 
-        return counts_by_column
+    def get_column_names(self):
+        """
+        :return: List of column names
+        """
+        # uses the sets of column names from the ColumnTypes class to get all column names
+        all_cols = [list(self.col_types.numeric_cols), list(self.col_types.pure_categorical),
+                    list(self.col_types.categorical_mixed)]
+
+
+
+
