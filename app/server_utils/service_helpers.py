@@ -170,51 +170,63 @@ def create_error_df(data_frame):
     :return: a single compiled dataframe of all the errors detected
     """
     df_with_id = set_id_column(data_frame)
+
+    # TODO: optimize these functions
     anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
-    return perform_melt(frames)
+
+    df = perform_melt(frames)
+    print("CREATE ERROR TABLE TYPE MAP", df.dtypes)
+    return df
 
 # TODO: CLEAN UP THIS FUNCTION
 # TODO: Test this function!!! (Write test for it)
-def create_data_profile_df(table_name, engine, col_names=None, error_df=None, main_df=None):
+def create_data_profile_df(data_profile, col_names=None):
     """
-    :param table_name: the name of the table in the database
-    :param engine: the engine to use
+    :param data_profile: the data profile object
     :param col_names: the column names of interest in the table
-    :param error_df: the error dataframe (optional)
-    :param main_df: the main dataframe (optional)
     :return: a dataframe of the data profile for the table
     """
-    print("CREATED DATA_PROFILE DF FOR TABLE", table_name)
+    print("CREATED DATA_PROFILE DF FOR TABLE", data_profile.table_name)
+
+    # Dict of attributes that will be in the data profile and the type that they should be
+    default_attributes = ['mean', 'median', 'min', 'max', 'n_categories',
+                  'mode', 'error_counts',
+                  'category_counts']
 
 
-    col_attribute_list = []
+    col_list = []
 
+    # If col_names is not provided (no specific columns to create a dp for), use all column names from the data profile
     if col_names is None:
         col_names = data_profile.get_col_names()
 
     for col in col_names:
-        if col not in data_profile.get_col_names():
-            continue
 
         row_dict = {'column_name': col}
-        for attribute in data_profile.default_attributes:
-            if attribute not in data_profile.attribute_type_assignment['categorical'] and attribute not in data_profile.attribute_type_assignment['numeric']:
-                # Attribute doesn't exist in either categorical and numeric
-                print(f"ERROR: INVALID ATTRIBUTE {attribute}")
-                print("Skipping this attribute")
+        for attribute in default_attributes:
+
+            # Make sure that attribute and the column type match
+
+            numeric = (data_profile.is_numeric_col(col) and attribute in data_profile.attribute_type_assignment['numeric'])
+            categorical = (data_profile.is_categorical_col(col) and attribute in data_profile.attribute_type_assignment['categorical'])
+
+            if not (numeric or categorical):
+
+                row_dict[attribute] = None
+
                 continue
 
             print("CALCULATING ATTRIBUTE: ", attribute)
             print("COLUMN: ", col)
 
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
-        col_attribute_list.append(row_dict)
+        col_list.append(row_dict)
 
-    df = pd.DataFrame(col_attribute_list)
+    df = pd.DataFrame(col_list)
 
     return df
 
@@ -428,7 +440,7 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
     new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
     app.db_operations.rename_preview_to_new(preview_table, new_table_name)
-    db_operations.load_table(new_table_name, f"errors_{new_table_name}")
+    db_operations.load_table(new_table_name, f"errors_{new_table_name}", f"dp_{new_table_name}")
 
     app.db_operations.update_rankings(new_table_name)
 
@@ -521,10 +533,10 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
     query.impute_by_ids(table=preview_impute_table_name, col=cols[0], ids=row_ids)
 
-    errors_df_delete = update_errors_fn(preview_delete_table_name, cols)
-    errors_df_impute = update_errors_fn(preview_impute_table_name, cols)
-    update_data_profile_table_fn(preview_delete_table_name, errors_df_delete, cols)
-    update_data_profile_table_fn(preview_impute_table_name, errors_df_impute, cols)
+    update_errors_fn(preview_delete_table_name, cols)
+    update_errors_fn(preview_impute_table_name, cols)
+    update_data_profile_table_fn(preview_delete_table_name, cols)
+    update_data_profile_table_fn(preview_impute_table_name, cols)
 
     return {
         "success": True,
@@ -563,12 +575,13 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     query.impute_by_ids(table=preview_impute_x_table_name, col=cols[0], ids=row_ids)
     query.impute_by_ids(table=preview_impute_y_table_name, col=cols[1], ids=row_ids)
 
-    errors_df_delete = update_errors_fn(preview_delete_table_name, cols)
-    errors_df_impute_x = update_errors_fn(preview_impute_x_table_name, cols)
-    errors_df_impute_y = update_errors_fn(preview_impute_y_table_name, cols)
-    update_data_profile_table_fn(preview_delete_table_name, errors_df_delete, cols)
-    update_data_profile_table_fn(preview_impute_x_table_name, errors_df_impute_x, cols)
-    update_data_profile_table_fn(preview_impute_y_table_name, errors_df_impute_y, cols)
+    update_errors_fn(preview_delete_table_name, cols)
+    update_errors_fn(preview_impute_x_table_name, cols)
+    update_errors_fn(preview_impute_y_table_name, cols)
+
+    update_data_profile_table_fn(preview_delete_table_name, cols)
+    update_data_profile_table_fn(preview_impute_x_table_name, cols)
+    update_data_profile_table_fn(preview_impute_y_table_name, cols)
 
 
     return {
