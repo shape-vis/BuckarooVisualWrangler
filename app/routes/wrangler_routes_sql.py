@@ -11,11 +11,18 @@ from app.server_utils.service_helpers import create_error_df, create_previews_1d
     execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map
 from sqlalchemy import inspect, text
 
-
+from app.db_utils.data_profile import DataProfile
 
 """
 Wrangling Endpoints - In-place modification of tables
 """
+
+def get_table_dtypes(target_table_name, engine):
+    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
+    inspector = inspect(engine)
+    columns = inspector.get_columns(target_table_name)
+    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
+    return {col["name"]: col["type"] for col in columns}
 
 # Where updated_df is just the data that needed to actually be updated
 # Assumes that updated_df has the same columns as the target table
@@ -27,12 +34,12 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
             {"categories": cols_to_remove}
         )
 
-    staging_table = _safe_pg_name(target_table_name, "_staging")
+    staging_table_name = _safe_pg_name(target_table_name, "_staging")
 
-    cols_to_update = updated_df.columns
+    dtype_dict = get_table_dtypes(target_table_name, engine)
 
     # 1. Push data to a temp staging table
-    updated_df.to_sql(staging_table, engine, if_exists='replace', index=False)
+    updated_df.to_sql(staging_table_name, engine, if_exists='replace', dtype=dtype_dict)
 
     # Make sure that there's a main errors table we can update
     inspector = inspect(engine)
@@ -40,16 +47,13 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 
     # 2. Set-based update, Postgres native syntax
     with engine.begin() as conn:
-        set_clause = ", ".join(f'"{c}" = staged."{c}"' for c in cols_to_update)
         conn.execute(text(f'''
-            UPDATE "{target_table_name}" target
-            SET {set_clause}
-            FROM "{staging_table}" staged
-            WHERE target."{key_col}" = staged."{key_col}"
+            INSERT INTO "{target_table_name}"
+            SELECT *
+            FROM "{staging_table_name}"
         '''))
 
-        conn.execute(text(f'DROP TABLE "{staging_table}"'))
-
+        conn.execute(text(f'DROP TABLE "{staging_table_name}"'))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: Re-run error detection after modification
