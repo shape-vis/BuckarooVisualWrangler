@@ -113,7 +113,6 @@ def update_data_profile_table(table_name: str, columns_selected_for_wrangling: l
 
         update_table(updated_df, dp_table_name, key_column, columns_selected_for_wrangling)
 
-
         print(f"✓ Updated data profile table: {dp_table_name}")
     except Exception as e:
         print(f"ERROR: Could not update data profile table for {table_name}: {e}")
@@ -232,16 +231,17 @@ def wrangle_delete_column():
     """
     try:
         body = request.get_json(force=True)
-        table = db_operations.main_table_name
+        table_name = db_operations.main_table_name
         column = body["column"]
 
-        print(f"Deleting column '{column}' from table '{table}'")
+        print(f"Deleting column '{column}' from table '{table_name}'")
 
         # Delete the column
-        remaining_columns = query.delete_column(table=table, column=column)
+        remaining_columns = query.delete_column(table=table_name, column=column)
 
         # Re-run error detection
-        update_errors_table(table)
+        update_errors_table(table_name, [column])
+        update_data_profile_table(table_name, [column])
 
         return {
             "success": True,
