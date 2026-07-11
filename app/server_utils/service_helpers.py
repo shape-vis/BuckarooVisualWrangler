@@ -414,7 +414,7 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
 
-def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations):
+def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations):
     """
     Promote a preview table to the new current table and make it as a new node in the pgraph
     1. Drop all other preview tables (and their errors_ siblings)
@@ -425,10 +425,10 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     # from app import engine, db_operations
 
     all_possible_previews = [
-        preview_name_fn(table, "_preview_delete"),
-        preview_name_fn(table, "_preview_impute"),
-        preview_name_fn(table, "_preview_impute_x"),
-        preview_name_fn(table, "_preview_impute_y"),
+        safe_pg_name_fn(table, "_preview_delete"),
+        safe_pg_name_fn(table, "_preview_impute"),
+        safe_pg_name_fn(table, "_preview_impute_x"),
+        safe_pg_name_fn(table, "_preview_impute_y"),
     ]
 
     app.db_operations.drop_preview_tables(all_possible_previews, preview_table)
