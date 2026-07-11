@@ -54,16 +54,16 @@ def load_file(csv_file, filename):
         table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
         detected_data.to_sql("errors_" + table_name_with_node_id, engine, if_exists='replace')
 
-        data_profile_df = create_data_profile_df(table_name_with_node_id, engine, error_df=detected_data, main_df=dataframe)
+        db_operations.load_table(table_name_with_node_id)
+        data_profile_df = create_data_profile_df(db_operations.data_profile)
+        dtype_map = db_operations.data_profile.dtype_dict
 
-        data_profile_df.to_sql("dp_" + table_name_with_node_id, engine, if_exists='replace')
-
+        data_profile_df.to_sql("dp_" + table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
         get the actual row counts since .to_sql is buggy and not right
         """
-        db_operations.load_table(table_name_with_node_id)
         rows_affected = db_operations.get_row_count(table_name_with_node_id)
         detected_rows_affected = db_operations.get_row_count("errors_" + table_name_with_node_id)
 
