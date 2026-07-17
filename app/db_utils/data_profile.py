@@ -239,7 +239,18 @@ class DataProfile:
         :param column_name: Name of the column for which the statistic is being looked up.
         :return: The value of the statistic if found, otherwise None.
         """
-        query = f'SELECT {stat_query}("{column_name}") FROM "{self.table_name}"'
+
+        # Casting to numeric values just in case there is a data type mismatch and the single string variable
+        # Turns an entire numeric column into text
+        query = (f'SELECT {stat_query}'
+                 f'("{column_name}"::numeric) FROM '
+                 f'"{self.table_name}"')
+
+        # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
+        # Can properly do calculations
+        if self.is_mixed_col(column_name):
+            query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
+
         stat = fetch_sql(query, True, self.engine)
         return stat
 
@@ -288,11 +299,16 @@ class DataProfile:
 
         # Try get the median from SQL first, if it fails, calculate manually using data frame
         try:
-            query = f'SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY "{column_name}") FROM  "{self.table_name}"'
+            query = f'SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY "{column_name}"::numeric) FROM  "{self.table_name}"'
+
+            # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
+            # Can properly do calculations
+            if self.is_mixed_col(column_name):
+                query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
             median = fetch_sql(query, True, self.engine)
         except Exception as e:
             print(f"Error fetching the median for table {self.table_name} at column {column_name}: {e}")
-            median = None
+            median = float('nan')
 
         return median
 
