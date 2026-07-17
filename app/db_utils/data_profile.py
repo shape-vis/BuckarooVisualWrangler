@@ -524,8 +524,8 @@ class DataProfile:
         :return: List of column names
         """
         # uses the sets of column names from the ColumnTypes class to get all column names
-        all_cols = [list(self.col_types.numeric_cols), list(self.col_types.pure_categorical),
-                    list(self.col_types.categorical_mixed)]
+        all_cols = [list(self.col_types.numeric_cols), list(self.col_types.categorical_cols),
+                    list(self.col_types.mixed_cols)]
 
         return all_cols
 
