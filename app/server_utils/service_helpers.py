@@ -182,8 +182,6 @@ def create_error_df(data_frame):
     print("CREATE ERROR TABLE TYPE MAP", df.dtypes)
     return df
 
-# TODO: CLEAN UP THIS FUNCTION
-# TODO: Test this function!!! (Write test for it)
 def create_data_profile_df(data_profile, col_names=None):
     """
     :param data_profile: the data profile object
