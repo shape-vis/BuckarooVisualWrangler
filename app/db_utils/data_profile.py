@@ -186,10 +186,6 @@ class DataProfile:
 
         self.dtype_dict = None
 
-
-
-
-    # TODO: Make the sql query for this work
     def get_col_names(self):
         """
         self: DataProfile instance
@@ -405,14 +401,17 @@ class DataProfile:
                     GROUP BY error_type
                   """
             error_counts = dict(fetch_sql(query, False, self.engine, params={'column_name': column_name}))
+
+            if error_counts is not None:
+                error_counts = json.dumps(error_counts)
+            else:
+                error_counts = json.dumps({})
         except Exception as e:
 
             print(f"Error fetching the error counts for table {self.table_name} at column {column_name}: {e}")
             error_counts = None
 
 
-        if error_counts is not None:
-            error_counts = json.dumps(error_counts)
 
         return error_counts
 
