@@ -36,7 +36,7 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 
     staging_table_name = _safe_pg_name(target_table_name, "_staging")
 
-    dtype_dict = get_table_dtypes(target_table_name, engine)
+    dtype_dict = query.get_table_dtypes(target_table_name, engine)
 
     # 1. Push data to a temp staging table
     updated_df.to_sql(staging_table_name, engine, if_exists='replace', dtype=dtype_dict)
