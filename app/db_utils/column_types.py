@@ -21,6 +21,9 @@ class ColumnTypes:
         self.gather_mixed_cols(main_table_name)
         self.categorize_mixed_cols(main_table_name)
 
+        self.pure_numeric_columns = self.numeric_cols.difference(self.mixed_cols)
+        self.pure_categorical_columns = self.categorical_cols.difference(self.mixed_cols)
+
     def get_col_type(self, column_name):
         """
         :param column_name: Name of the column for which the type is being checked
