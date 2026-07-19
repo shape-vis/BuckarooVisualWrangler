@@ -529,13 +529,5 @@ class DataProfile:
 
         return all_cols
 
-    def get_numeric_cols(self):
-        return list(self.col_types.numeric_cols)
-
-    def get_categorical_cols(self):
-            return list(self.col_types.categorical_cols)
-
-    def get_mixed_cols(self):
-            return list(self.col_types.mixed_cols)
 
 
