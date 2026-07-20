@@ -83,11 +83,10 @@ class DataProfile:
                 if row[0] not in ['index', 'level_0', ]:
                     col_names.append(row[0])
 
-            print("COL NAMES FROM QUERY: ", col_names)
 
 
         except Exception as e:
-            print(f"AHHHHHHHHHH Querying for col names unsuccessful because of error: {e}")
+            print(f"Querying for col names unsuccessful because of error: {e}")
 
         return col_names
 
@@ -233,7 +232,6 @@ class DataProfile:
             n_categories = fetch_sql(query, True, self.engine)
 
         except Exception as e:
-            print("AHHH SQL QUERY DIDN'T WORK")
             print(f"Error fetching the n_categories for table {self.table_name} at column {column_name}: {e}")
 
             n_categories = None
@@ -256,10 +254,8 @@ class DataProfile:
             """
 
             mode = fetch_sql(query, True, self.engine)
-            print("MODE FROM SQL QUERY: ", mode)
 
         except Exception as e:
-            print("AHHH SQL QUERY DIDN'T WORK")
             print(f"Error fetching the mode for table {self.table_name} at column {column_name}: {e}")
 
             mode = None
@@ -349,7 +345,6 @@ class DataProfile:
             # Put the results into a dict
             for (category, count) in rows:
                 category_counts[category] = count
-            print("CATEGORY COUNTS DICT", category_counts)
 
 
         except Exception as e:
