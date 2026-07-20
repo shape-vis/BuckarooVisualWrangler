@@ -7,6 +7,7 @@ from flask import request, send_file
 import time
 from app import app
 from app import db_operations, engine
+from app.db_utils.data_profile import DataProfile 
 from app.server_utils.service_helpers import (
     generate_table_name,
     create_error_df,
@@ -55,10 +56,10 @@ def load_file(csv_file, filename):
         """
         table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
         detected_data.to_sql(error_table_name, engine, if_exists='replace')
+        data_profile = DataProfile(table_name_with_node_id, engine)
 
-        db_operations.load_table(table_name_with_node_id, error_table_name, dp_table_name)
-        data_profile_df = create_data_profile_df(db_operations.data_profile)
-        dtype_map = db_operations.data_profile.dtype_dict
+        data_profile_df = create_data_profile_df(data_profile)
+        dtype_map = data_profile.dtype_dict
 
         data_profile_df.to_sql(dp_table_name, engine, if_exists='replace', dtype=dtype_map)
 
@@ -66,6 +67,7 @@ def load_file(csv_file, filename):
         now we fully init the DBOperations object that was first initialized in init.py,
         get the actual row counts since .to_sql is buggy and not right
         """
+        db_operations.load_table(table_name_with_node_id, error_table_name, dp_table_name)
         rows_affected = db_operations.get_row_count(table_name_with_node_id)
         detected_rows_affected = db_operations.get_row_count(error_table_name)
 
