@@ -7,8 +7,17 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
+from app.server_utils.service_helpers import (
+    run_detectors,
+    update_errors_incrementally,
+    create_previews_1d,
+    create_previews_2d,
+    execute_wrangle_preview,
+    _safe_pg_name,
+    n_wrangle,
+)
 from sqlalchemy import text as sa_text
+from app.pgraph.delta import Delta
 
 
 
@@ -20,14 +29,32 @@ Wrangling Endpoints - In-place modification of tables
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
-def update_errors_table(table_name: str) -> None:
+def update_errors_table(
+    table_name: str,
+    source_table_name: str = None,
+    source_error_table_name: str = None,
+    operation: str = None,
+    parameters: dict = None,
+) -> None:
     """
     After modifying a table in-place, re-run error detection
     and update the errors table.
     """
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
-        detected_errors_df = run_detectors(df)
+        if source_error_table_name and operation:
+            # Delta-aware path: use the previous errors table plus the wrangle
+            # parameters to recompute only the detector scopes that went stale.
+            previous_error_df = pd.read_sql_query(f'SELECT * FROM "{source_error_table_name}"', engine)
+            detected_errors_df = update_errors_incrementally(
+                df,
+                previous_error_df,
+                operation,
+                parameters or {},
+            )
+        else:
+            # Safe fallback for routes that do not tell us what changed.
+            detected_errors_df = run_detectors(df)
         errors_table_name = f"errors_{table_name}"
         # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
         # table names > 63 chars due to PostgreSQL identifier truncation).
@@ -102,8 +129,10 @@ def create_previews():
             return {"success": False, "error": "No rows selected"}, 400
 
         if len(cols) == 1:
+            # 1D selection: delete selected rows or impute the selected column.
             return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table)
         else:
+            # 2D selection: delete selected rows, impute x column, or impute y column.
             return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table)
 
     except Exception as e:
@@ -145,18 +174,34 @@ def wrangle_delete_column():
         table = db_operations.main_table_name
         column = body["column"]
 
-        print(f"Deleting column '{column}' from table '{table}'")
+        new_table_name = _safe_pg_name(table, "_col_del")
+        params = {"operation": "delete-column", "column": column}
+        # Direct column deletion is not a preview flow, so we pass the Delta
+        # parameters directly into n_wrangle().
+        new_table_name = n_wrangle(table, new_table_name, "delete-column", direct_params=params)
 
-        # Delete the column
-        remaining_columns = query.delete_column(table=table, column=column)
+        delta = Delta("delete-column", params)
+        result_meta = delta.operation_result(engine, table)
+        with engine.begin() as conn:
+            delta.create_view(conn, engine, table, new_table_name)
 
+        # Reload DBOperations
+        db_operations.load_table(new_table_name, f"errors_{new_table_name}")
+        
         # Re-run error detection
-        update_errors_table(table)
+        update_errors_table(
+            new_table_name,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="delete-column",
+            parameters=params,
+        )
 
         return {
             "success": True,
-            "remaining_columns": remaining_columns,
-            "deleted_column": column
+            "remaining_columns": result_meta.get("remaining_columns", 0),
+            "deleted_column": result_meta.get("deleted_column", column),
+            "table_name": new_table_name
         }
     except Exception as e:
         print("ERROR OCCURRED")

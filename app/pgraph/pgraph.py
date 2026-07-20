@@ -1,38 +1,44 @@
 """
-the class for the pgraph which creates the DAG structure - March 31, 2026 - Nicolas Baret
+Provenance graph for table versions.
 
-uses a dictionary to have parent <--> child interaction
-to traverse up and down, it access' the child's parent node
+The graph records how the user moved from the uploaded root table to later
+wrangled tables. Each node is one data state, and each edge is one operation
+that produced the child table from its parent. The graph is a DAG because a
+user can undo to an earlier node and then create a different child branch.
 """
 import json
-from typing import TypedDict
+from typing import TypedDict, List, Dict, Any
 
-from sqlalchemy import String
-
+import app
 from app.pgraph.node import GraphNode
 
 class PGraph:
     def __init__(self):
         self.root_node = None
-        # this will be [node_table_name, GraphNode) for easy node access
+        # Fast lookup by table name. Example: "n1_sales" -> GraphNode(...).
         self.node_map = {}
         self.node_count = 0
-        # keep track of the wrangle number and what it was for meta post-processing
+        # Keeps a simple chronological record of wrangle operations.
         self.wrangle_map = {}
-        """
-        these are referenced by table names, and then and services should load the node from the graph
-        using the table names    
-        """
+        # The UI has Undo/Redo controls, so we store table-name pointers rather
+        # than copying entire nodes around.
         self.prev_node_table_name = None
         self.next_node_table_name = None
         self.current_node_table_name = None
 
     def serialize_node_map(self):
+        """Return a JSON-friendly dictionary of every graph node."""
         ser_map = {}
         for key in self.node_map.keys():
             node = self.node_map[key]
-            ser_map[key] = json.dumps(node, default=lambda o: o.__json__()
-                         if hasattr(o, '__json__') else None)
+            ser_map[key] = {
+                "id": key,
+                "parent_table": node.parent_table,
+                "wrangle_op": node.wrangle_op,
+                "table_name": node.table_name,
+                "delta": node.delta.__json__() if node.delta else None,
+                "children": node.children
+            }
         return ser_map
 
     def __json__(self):
@@ -45,17 +51,23 @@ class PGraph:
         }
 
     def serialize_nodes(self):
+        """Build React Flow node data for the provenance graph UI."""
         list_of_nodes = []
-        for key in self.node_map.keys():
+        for key, node in self.node_map.items():
             list_of_nodes.append(
                 {
                     "id": key,
-                    "data": {"label": key}
+                    "data": {
+                        "label": key,
+                        "wrangle_op": node.wrangle_op,
+                        "delta": node.delta.__json__() if node.delta else None
+                    }
                 }
             )
         return list_of_nodes
 
     def serialize_edges(self):
+        """Build React Flow edge data by reading each node's children."""
         list_of_edges = []
         for node in self.node_map.values():
             node_name = node.table_name
@@ -76,12 +88,13 @@ class PGraph:
         return list_of_edges
 
     def add_node(self, node: GraphNode):
+        """Add a non-root node and connect it to its parent."""
         new_node_table_name = node.table_name
         self.node_map[new_node_table_name] = node
         self.node_count += 1
         self.wrangle_map[self.node_count] = node.wrangle_op
 
-        #update the children of the parent node
+        # Connect parent -> child so graph traversal and UI edges both work.
         if node.parent_table in self.node_map:
             self.node_map[node.parent_table].add_child(new_node_table_name)
 
@@ -89,6 +102,7 @@ class PGraph:
         self.current_node_table_name = new_node_table_name
 
     def add_root_node(self, node: GraphNode):
+        """Add the uploaded dataset as the root/original data state."""
         root_node_table_name = node.table_name
         self.node_map[root_node_table_name] = node
         self.node_count += 1
@@ -102,7 +116,8 @@ class PGraph:
         return f"n{self.node_count}"
 
     def undo_pgraph(self):
-        if self.prev_node_table_name == "root":
+        """Move the current pointer one step back, without deleting any node."""
+        if self.prev_node_table_name == "root" or self.prev_node_table_name is None:
             return None
         self.next_node_table_name = self.current_node_table_name
         self.current_node_table_name = self.prev_node_table_name
@@ -110,6 +125,7 @@ class PGraph:
         return self.current_node_table_name
 
     def redo_pgraph(self):
+        """Move the current pointer forward along the most recent child path."""
         if self.next_node_table_name is None:
             return None
         self.prev_node_table_name = self.current_node_table_name
@@ -118,23 +134,23 @@ class PGraph:
         current_node_child_list = current_node.children
         if len(current_node_child_list) == 0:
             self.next_node_table_name = None
-            return self.current_node_table_name
-        #set next to the last child added if there are children for this node
-        self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
+        else:
+            # If there are multiple branches, redo follows the most recent one.
+            self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
 
         return self.current_node_table_name
 
     def set_clicked_node_as_current(self, node_table_name):
-        #get the node from the graph the user clicked in the front-end
+        # When the user clicks a node in the UI graph, the backend changes the
+        # active table to that exact version.
         current_node = self.node_map[node_table_name]
         child_list = current_node.children
         #check to see if it has any children for the next node pointer
         if len(child_list) == 0:
             #no child for next pointer
             self.next_node_table_name = None
-
-        # set next to the last child added if there are children for this node
-        if len(child_list) > 0:
+        else:
+            # set next to the last child added if there are children for this node
             self.next_node_table_name = child_list[len(child_list) - 1]
 
         #set parent as prev pointer
@@ -143,3 +159,44 @@ class PGraph:
         #set current table name
         self.current_node_table_name = node_table_name
         return self.current_node_table_name
+
+    def get_path_to_node(self, node_table_name: str) -> List[GraphNode]:
+        """Return the list of nodes from root to the requested node."""
+        path = []
+        curr = node_table_name
+        while curr and curr != "root":
+            # Walk upward through parent links, then reverse at the end so the
+            # final order is root -> child -> grandchild.
+            node = self.node_map.get(curr)
+            if not node:
+                break
+            path.append(node)
+            curr = node.parent_table
+        return path[::-1] # Reverse to get root-to-leaf
+
+    def get_script_to_node(self, node_table_name: str) -> str:
+        """Generate a complete Pandas script for the requested data state."""
+        path = self.get_path_to_node(node_table_name)
+        
+        # Every exported script starts by loading the original CSV, then it
+        # applies each Delta along the path to the current node.
+        filename = getattr(app, 'original_table_name', 'data.csv')
+        script = [
+            "import pandas as pd",
+            "",
+            f"df = pd.read_csv('{filename}')",
+            "# Ensure ID column exists as in the app",
+            "if 'ID' not in df.columns:",
+            "    df.insert(0, 'ID', range(1, len(df) + 1))",
+            ""
+        ]
+        
+        for node in path:
+            if node.delta:
+                # The node stores the Delta, and the Delta stores the exact
+                # Pandas code needed to replay that wrangle.
+                script.append(f"# Operation: {node.wrangle_op}")
+                script.append(node.delta.pandas_code)
+                script.append("")
+        
+        return "\n".join(script)

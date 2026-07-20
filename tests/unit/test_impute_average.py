@@ -1,126 +1,63 @@
-import unittest
-import pandas as pd
+"""Tests that exported impute Pandas code fills only the selected cells."""
+
 import numpy as np
-from wranglers.impute_average import impute_average_on_ids
+import pandas as pd
+
+from app.pgraph.delta import Delta
 
 
-class TestImputeAverage(unittest.TestCase):
-    def setUp(self):
-        self.sample_dataframe = pd.DataFrame({
-            'ID': [1, 2, 3, 4, 5, 6, 7, 8],
-            'numeric_col': [10.0, 20.0, np.nan, 40.0, 50.0, 60.0, 70.0, 80.0],
-            'categorical_col': ['A', 'B', 'A', 'C', 'A', 'B', 'C', 'A']
-        })
-
-    def test_impute_numeric_column(self):
-        selected_ids = [1, 3, 5]
-        result = impute_average_on_ids('numeric_col', self.sample_dataframe, selected_ids)
-
-        # Should impute mean of positive values: (10+20+40+50+60+70+80)/7 = 47.1
-        expected_mean = 47.1
-        self.assertEqual(result.loc[0, 'numeric_col'], expected_mean)  # ID 1
-        self.assertEqual(result.loc[2, 'numeric_col'], expected_mean)  # ID 3 (was NaN)
-        self.assertEqual(result.loc[4, 'numeric_col'], expected_mean)  # ID 5
-
-    def test_impute_numeric_column_with_str_type(self):
-        selected_ids = ["1","3","5"]
-        result = impute_average_on_ids('numeric_col', self.sample_dataframe, selected_ids)
-
-        # Should impute mean of positive values: (10+20+40+50+60+70+80)/7 = 47.1
-        expected_mean = 47.1
-        self.assertEqual(result.loc[0, 'numeric_col'], expected_mean)  # ID 1
-        self.assertEqual(result.loc[2, 'numeric_col'], expected_mean)  # ID 3 (was NaN)
-        self.assertEqual(result.loc[4, 'numeric_col'], expected_mean)  # ID 5
-
-    def test_impute_categorical_column(self):
-        selected_ids = [2, 4, 6]
-        result = impute_average_on_ids('categorical_col', self.sample_dataframe, selected_ids)
-
-        # Mode should be 'A' (appears 4 times)
-        self.assertEqual(result.loc[1, 'categorical_col'], 'A')  # ID 2
-        self.assertEqual(result.loc[3, 'categorical_col'], 'A')  # ID 4
-        self.assertEqual(result.loc[5, 'categorical_col'], 'A')  # ID 6
-
-    def test_non_selected_ids_unchanged(self):
-        selected_ids = [1, 3]
-        result = impute_average_on_ids('numeric_col', self.sample_dataframe, selected_ids)
-
-        # Non-selected IDs should remain unchanged
-        self.assertEqual(result.loc[1, 'numeric_col'], 20.0)  # ID 2
-        self.assertEqual(result.loc[3, 'numeric_col'], 40.0)  # ID 4
-
-    def test_empty_selected_ids(self):
-        selected_ids = []
-        result = impute_average_on_ids('numeric_col', self.sample_dataframe, selected_ids)
-
-        # Should return unchanged dataframe
-        pd.testing.assert_frame_equal(result, self.sample_dataframe)
-
-    def test_all_nan_numeric_column(self):
-        df = pd.DataFrame({
-            'ID': [1, 2, 3],
-            'all_nan_col': [np.nan, np.nan, np.nan]
-        })
-        selected_ids = [1, 2]
-        result = impute_average_on_ids('all_nan_col', df, selected_ids)
-
-        # Should impute with 0 when no valid values
-        self.assertEqual(result.loc[0, 'all_nan_col'], 0)
-        self.assertEqual(result.loc[1, 'all_nan_col'], 0)
-
-    def test_negative_values_excluded(self):
-        df = pd.DataFrame({
-            'ID': [1, 2, 3, 4],
-            'mixed_col': [10.0, -5.0, 20.0, -10.0]
-        })
-        selected_ids = [1, 2]
-        result = impute_average_on_ids('mixed_col', df, selected_ids)
-
-        # Should only use positive values: (10+20)/2 = 15.0
-        self.assertEqual(result.loc[0, 'mixed_col'], 15.0)
-        self.assertEqual(result.loc[1, 'mixed_col'], 15.0)
-
-    def test_zero_values_excluded(self):
-        df = pd.DataFrame({
-            'ID': [1, 2, 3, 4],
-            'zero_col': [0.0, 10.0, 0.0, 20.0]
-        })
-        selected_ids = [1, 3]
-        result = impute_average_on_ids('zero_col', df, selected_ids)
-
-        # Should exclude zeros: (10+20)/2 = 15.0
-        self.assertEqual(result.loc[0, 'zero_col'], 15.0)
-        self.assertEqual(result.loc[2, 'zero_col'], 15.0)
-
-    def test_original_dataframe_unchanged(self):
-        original_copy = self.sample_dataframe.copy()
-        selected_ids = [1, 2, 3]
-
-        impute_average_on_ids('numeric_col', self.sample_dataframe, selected_ids)
-
-        # Original dataframe should remain unchanged
-        pd.testing.assert_frame_equal(self.sample_dataframe, original_copy)
-
-    def test_nonexistent_ids(self):
-        selected_ids = [999, 1000]  # IDs that don't exist
-        result = impute_average_on_ids('numeric_col', self.sample_dataframe, selected_ids)
-
-        # Should return unchanged dataframe
-        pd.testing.assert_frame_equal(result, self.sample_dataframe)
-
-    def test_mixed_data_types_categorical(self):
-        df = pd.DataFrame({
-            'ID': [1, 2, 3, 4],
-            'mixed_str_col': ['apple', 'banana', 'apple', 'cherry']
-        })
-        selected_ids = [1, 2]
-        result = impute_average_on_ids('mixed_str_col', df, selected_ids)
-
-        # Mode should be 'apple' (appears twice)
-        self.assertEqual(result.loc[0, 'mixed_str_col'], 'apple')
-        self.assertEqual(result.loc[1, 'mixed_str_col'], 'apple')
+def run_delta_pandas_code(df, delta):
+    """Execute a Delta's generated Pandas code against a copy of df."""
+    namespace = {"df": df.copy()}
+    exec(delta.pandas_code, namespace)
+    return namespace["df"]
 
 
-if __name__ == '__main__':
-    unittest.main()
+def test_impute_delta_pandas_code_fills_selected_numeric_nulls_with_mean():
+    df = pd.DataFrame({
+        "ID": [1, 2, 3, 4],
+        "numeric_col": [10.0, 20.0, np.nan, 40.0],
+    })
+    delta = Delta("impute", {"operation": "impute", "row_ids": [3], "col": "numeric_col"})
 
+    result = run_delta_pandas_code(df, delta)
+
+    assert result.loc[2, "numeric_col"] == 23.333333333333332
+
+
+def test_impute_delta_pandas_code_does_not_overwrite_selected_non_null_values():
+    df = pd.DataFrame({
+        "ID": [1, 2, 3],
+        "numeric_col": [10.0, np.nan, 30.0],
+    })
+    delta = Delta("impute", {"operation": "impute", "row_ids": [1, 2], "col": "numeric_col"})
+
+    result = run_delta_pandas_code(df, delta)
+
+    assert result.loc[0, "numeric_col"] == 10.0
+    assert result.loc[1, "numeric_col"] == 20.0
+
+
+def test_impute_delta_pandas_code_fills_selected_categorical_nulls_with_mode():
+    df = pd.DataFrame({
+        "ID": [1, 2, 3, 4],
+        "category": ["A", "B", "A", None],
+    })
+    delta = Delta("impute", {"operation": "impute", "row_ids": [4], "col": "category"})
+
+    result = run_delta_pandas_code(df, delta)
+
+    assert result.loc[3, "category"] == "A"
+
+
+def test_impute_delta_pandas_code_leaves_non_selected_nulls_unchanged():
+    df = pd.DataFrame({
+        "ID": [1, 2, 3],
+        "numeric_col": [10.0, np.nan, np.nan],
+    })
+    delta = Delta("impute", {"operation": "impute", "row_ids": [2], "col": "numeric_col"})
+
+    result = run_delta_pandas_code(df, delta)
+
+    assert result.loc[1, "numeric_col"] == 10.0
+    assert pd.isna(result.loc[2, "numeric_col"])

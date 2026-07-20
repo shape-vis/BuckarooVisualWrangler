@@ -19,6 +19,12 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
+from app.pgraph.delta import Delta
+
+# Temporary memory for preview -> Delta parameters.  When a preview is created
+# we store the operation details here; when the user executes that preview,
+# n_wrangle() reads these params and saves them into the permanent graph node.
+PREVIEW_PARAMS = {}
 
 def get_current_pgraph():
     """
@@ -174,6 +180,163 @@ def run_detectors(data_frame):
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
     return perform_melt(frames)
+
+
+DETECTOR_SCOPES = {
+    # Each detector has a different invalidation scope. This map is where we
+    # document those rules in code so update_errors_incrementally() can avoid
+    # recomputing more error rows than necessary.
+    "missing": {
+        "detector": missing_value,
+        # Missing-value errors can be checked only on changed cells, because
+        # filling one cell cannot create/remove missing values elsewhere.
+        "changed_cells_valid": True,
+    },
+    "mismatch": {
+        "detector": datatype_mismatch,
+        # Type mismatch compares values against the column's majority type, so
+        # changing one value can change the interpretation of the whole column.
+        "changed_cells_valid": False,
+    },
+    "anomaly": {
+        "detector": anomaly,
+        # Anomaly detection depends on the column mean/std, so one value can
+        # change the cutoff for every value in that attribute.
+        "changed_cells_valid": False,
+    },
+    "incomplete": {
+        "detector": incomplete,
+        # Incomplete detection is row/column-context-sensitive, so we treat the
+        # affected attribute as needing recomputation.
+        "changed_cells_valid": False,
+    },
+}
+
+
+def _empty_error_df():
+    """Return an empty errors table with the same columns used by detectors."""
+    return pd.DataFrame(columns=["row_id", "column_id", "error_type"])
+
+
+def _normalize_error_df(error_df):
+    """Make sure a previous errors table has the expected shape."""
+    if error_df is None or error_df.empty:
+        return _empty_error_df()
+    normalized = error_df.copy()
+    for col in ["row_id", "column_id", "error_type"]:
+        if col not in normalized.columns:
+            normalized[col] = pd.Series(dtype="object")
+    return normalized[["row_id", "column_id", "error_type"]].dropna(subset=["error_type"])
+
+
+def _detector_to_error_df(data_frame, detector_fn):
+    """
+    Run one detector and convert its nested error map into the app's standard
+    long format: row_id, column_id, error_type.
+    """
+    detector_df = pd.DataFrame(detector_fn(data_frame.copy())).rename_axis("ID", axis="index").reset_index()
+    if detector_df.empty:
+        return _empty_error_df()
+    return perform_melt([detector_df])
+
+
+def _run_detector_scope(data_frame, detector_name, columns=None, row_ids=None):
+    """
+    Run one detector on a narrowed slice of data.
+
+    columns limits the attributes considered. row_ids optionally limits the
+    rows too. This is how missing-value detection can recompute only the cells
+    actually changed by an impute operation.
+    """
+    columns = [col for col in (columns or []) if col in data_frame.columns and col != "ID"]
+    if not columns:
+        return _empty_error_df()
+
+    scoped_df = set_id_column(data_frame)
+    if row_ids is not None:
+        scoped_df = scoped_df[scoped_df["ID"].isin([int(row_id) for row_id in row_ids])]
+
+    scoped_df = scoped_df[["ID"] + columns]
+    return _detector_to_error_df(scoped_df, DETECTOR_SCOPES[detector_name]["detector"])
+
+
+def update_errors_incrementally(data_frame, previous_error_df, operation, parameters):
+    """
+    Update an errors table by invalidating and recomputing only the detector
+    scopes that can be affected by a wrangle.
+
+    Detector scope rules:
+      - missing: changed cells for impute, deleted rows for delete
+      - mismatch/anomaly/incomplete: changed attribute for impute
+      - delete rows: full recompute for column/dataset-sensitive detectors
+      - delete-column: drop errors for the removed attribute
+    """
+    df_with_id = set_id_column(data_frame)
+    existing = _normalize_error_df(previous_error_df)
+    parameters = parameters or {}
+    # Some callers pass the operation separately, and some store it inside the
+    # Delta parameters. Prefer the parameter value so replayed deltas behave the
+    # same way they did during preview.
+    operation = parameters.get("operation", operation)
+
+    if operation == "delete-column":
+        column = parameters.get("column")
+        if not column:
+            return existing
+        # If the column is gone, every error attached to that column is gone.
+        # Errors on all other columns are still valid.
+        return existing[existing["column_id"] != column].reset_index(drop=True)
+
+    if operation == "delete":
+        row_ids = [int(row_id) for row_id in parameters.get("row_ids", [])]
+        # Delete removes selected rows entirely. For row-local missing errors,
+        # we can simply drop errors for deleted row IDs. For mismatch/anomaly/
+        # incomplete, removing rows can change the column/dataset context, so
+        # those detector types are recomputed on the surviving data.
+        surviving_errors = existing[
+            ~(
+                existing["row_id"].isin(row_ids)
+                | existing["error_type"].isin(["mismatch", "anomaly", "incomplete"])
+            )
+        ]
+        recomputed = [
+            _detector_to_error_df(df_with_id, DETECTOR_SCOPES[name]["detector"])
+            for name in ["mismatch", "anomaly", "incomplete"]
+        ]
+        return pd.concat([surviving_errors, *recomputed], ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+    if operation in {"impute", "impute_x", "impute_y"}:
+        column = parameters.get("col")
+        row_ids = [int(row_id) for row_id in parameters.get("row_ids", [])]
+        if not column:
+            return run_detectors(df_with_id)
+
+        # Missing errors are stale only for the exact cells that were filled.
+        stale_missing = (
+            (existing["column_id"] == column)
+            & (existing["error_type"] == "missing")
+            & (existing["row_id"].isin(row_ids))
+        )
+        # These detector types depend on column-level context, so the whole
+        # affected attribute is stale even if only a few rows were imputed.
+        stale_column_scoped = (
+            (existing["column_id"] == column)
+            & (existing["error_type"].isin(["mismatch", "anomaly", "incomplete"]))
+        )
+        # Keep all still-valid existing errors, then append fresh detector
+        # results only for the scopes invalidated above.
+        kept = existing[~(stale_missing | stale_column_scoped)]
+        recomputed = [
+            _run_detector_scope(df_with_id, "missing", [column], row_ids),
+            _run_detector_scope(df_with_id, "mismatch", [column]),
+            _run_detector_scope(df_with_id, "anomaly", [column]),
+            _run_detector_scope(df_with_id, "incomplete", [column]),
+        ]
+        return pd.concat([kept, *recomputed], ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+    # For operations without a specific rule, fall back to the safe behavior:
+    # recompute every detector on the whole dataset.
+    return run_detectors(df_with_id)
 
 def calculate_attribute_rankings(error_df):
     """
@@ -380,14 +543,31 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     wrangle_executed = extract_preview_action(preview_table)
     preview_table_trimmed = trim_preview_suffix(preview_table)
 
-    #enter into pgraph before current or new tables are modified, return the new tables name with nodeID added
-    # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
-    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
-    app.db_operations.rename_preview_to_new(preview_table, new_table_name)
+    # Enter into pgraph before current/new tables are modified. This gives us
+    # the new node name that will become the promoted table version.
+    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed, preview_table)
+    
+    node = app.pgraph_for_session.node_map[new_table_name]
+
+    from sqlalchemy import text as sa_text
+    from app import engine
+    
+    view_created = False
+    with engine.begin() as conn:
+        if node.delta:
+            view_created = node.delta.promote_from_preview(
+                conn, engine, table, preview_table, new_table_name
+            )
+
+    if not view_created:
+        # Older operations used physical preview tables. This fallback keeps
+        # those paths working if a Delta cannot create a SQL view.
+        print(f"Fallback to physical renaming for operation {wrangle_executed}")
+        app.db_operations.rename_preview_to_new(preview_table, new_table_name)
+    
     db_operations.load_table(new_table_name, f"errors_{new_table_name}")
 
     app.db_operations.update_rankings(new_table_name)
-
 
     return {"success": True, "table": new_table_name}
 
@@ -407,19 +587,43 @@ def trim_preview_suffix(name: str) -> str:
     return name
 
 def init_pgraph_for_session(root_table):
+    """Start a new provenance graph when a dataset is first loaded."""
     app.pgraph_for_session = PGraph()
 
     # create the root node, add it to the pgraph as the root
     root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
     app.pgraph_for_session.add_root_node(root_node)
 
-def n_wrangle(parent_table, child_table, wrangle_executed):
+def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=None, direct_params=None):
+    """
+    Create the next graph node for an executed wrangle.
+
+    This is where delta storage becomes permanent: preview parameters are read,
+    converted into a Delta, and attached to the new GraphNode.
+    """
     new_table_name = make_new_table_name(child_table)
-    current_node = GraphNode(parent_table,wrangle_executed, new_table_name,f"errors_{new_table_name}" )
+    
+    # Delta Storage: capture parameters and map them to replay/export behavior.
+    params = direct_params
+    if preview_table_name in PREVIEW_PARAMS:
+        params = PREVIEW_PARAMS[preview_table_name]
+    
+    delta = None
+    if params:
+        op = params.get("operation", wrangle_executed)
+        delta = Delta(op, params)
+    
+    current_node = GraphNode(parent_table, wrangle_executed, new_table_name, f"errors_{new_table_name}", delta=delta)
     app.pgraph_for_session.add_node(current_node)
+    
+    # Cleanup PREVIEW_PARAMS for this table if it was used
+    if preview_table_name in PREVIEW_PARAMS:
+        del PREVIEW_PARAMS[preview_table_name]
+        
     return new_table_name
 
 def make_new_table_name(child_table):
+    """Prefix the table with the next graph node ID, such as n1_ or n2_."""
     node_id = app.pgraph_for_session.get_new_node_id()
     new_table_name = f"{node_id}{child_table[2:]}"
     return new_table_name
@@ -444,31 +648,48 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
 
     # Copy schema but leave empty.
-    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
+    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)'))
 
 def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
-    Create delete and impute preview tables for a 1D (single-column) selection.
+    Create delete and impute preview views for a 1D (single-column) selection.
     Returns a dict with preview table names and dims=1.
     """
     from app import engine
 
-    errors_src     = f"errors_{table}"
     preview_delete = preview_name_fn(table, "_preview_delete")
     preview_impute = preview_name_fn(table, "_preview_impute")
-
+    delete_delta = Delta("delete", {"operation": "delete", "row_ids": row_ids})
+    impute_delta = Delta("impute", {"operation": "impute", "row_ids": row_ids, "col": cols[0]})
+    impute_created = False
+    
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute, errors_src)
-        #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
-        #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
+        # Previews are SQL views generated from the same Delta objects that will
+        # later be saved in the graph if the user executes one.
+        delete_delta.create_view(conn, engine, table, preview_delete)
+        impute_created = impute_delta.create_view(conn, engine, table, preview_impute)
 
+    update_errors_fn(
+        preview_delete,
+        source_table_name=table,
+        source_error_table_name=f"errors_{table}",
+        operation="delete",
+        parameters=delete_delta.parameters,
+    )
+    if impute_created:
+        update_errors_fn(
+            preview_impute,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="impute",
+            parameters=impute_delta.parameters,
+        )
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
-
-    update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute)
+    # Store preview parameters so execute can attach the chosen Delta to the
+    # permanent provenance graph node.
+    PREVIEW_PARAMS[preview_delete] = delete_delta.parameters
+    if impute_created:
+        PREVIEW_PARAMS[preview_impute] = impute_delta.parameters
 
     return {
         "success": True,
@@ -487,28 +708,56 @@ def extract_preview_action(name: str) -> str:
 
 def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     """
-    Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
+    Create delete, impute_x, and impute_y preview views for a 2D (two-column) selection.
     Returns a dict with preview table names and dims=2.
     """
     from app import engine
 
-    errors_src       = f"errors_{table}"
     preview_delete   = preview_name_fn(table, "_preview_delete")
     preview_impute_x = preview_name_fn(table, "_preview_impute_x")
     preview_impute_y = preview_name_fn(table, "_preview_impute_y")
+    deltas_by_preview = {
+        preview_delete: Delta("delete", {"operation": "delete", "row_ids": row_ids}),
+        preview_impute_x: Delta("impute_x", {"operation": "impute_x", "row_ids": row_ids, "col": cols[0]}),
+        preview_impute_y: Delta("impute_y", {"operation": "impute_y", "row_ids": row_ids, "col": cols[1]}),
+    }
+    created_previews = {}
 
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute_x, errors_src)
-        _clone_table_pair(conn, table, preview_impute_y, errors_src)
+        for preview_name, delta in deltas_by_preview.items():
+            # Create all available repair options so the panel can show the user
+            # delete, impute-x, and impute-y previews side by side.
+            created_previews[preview_name] = delta.create_view(conn, engine, table, preview_name)
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
-    query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
-
-    update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute_x)
-    update_errors_fn(preview_impute_y)
+    update_errors_fn(
+        preview_delete,
+        source_table_name=table,
+        source_error_table_name=f"errors_{table}",
+        operation="delete",
+        parameters=deltas_by_preview[preview_delete].parameters,
+    )
+    
+    PREVIEW_PARAMS[preview_delete] = deltas_by_preview[preview_delete].parameters
+    
+    if created_previews.get(preview_impute_x):
+        update_errors_fn(
+            preview_impute_x,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="impute_x",
+            parameters=deltas_by_preview[preview_impute_x].parameters,
+        )
+        PREVIEW_PARAMS[preview_impute_x] = deltas_by_preview[preview_impute_x].parameters
+        
+    if created_previews.get(preview_impute_y):
+        update_errors_fn(
+            preview_impute_y,
+            source_table_name=table,
+            source_error_table_name=f"errors_{table}",
+            operation="impute_y",
+            parameters=deltas_by_preview[preview_impute_y].parameters,
+        )
+        PREVIEW_PARAMS[preview_impute_y] = deltas_by_preview[preview_impute_y].parameters
 
     return {
         "success": True,

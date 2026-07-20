@@ -1,14 +1,13 @@
-"""
-Unit tests for the _safe_pg_name helper in wrangler_routes_sql.py.
+"""Tests for PostgreSQL-safe preview table name generation."""
 
-Tests the logic that builds PostgreSQL-safe preview table names, ensuring
-both the preview name and its 'errors_<name>' sibling stay within the
-63-character PostgreSQL identifier limit.
-"""
 import hashlib
+
 from app.server_utils.service_helpers import _safe_pg_name
 
-MAX_LEN = 56  # 63 - len("errors_")
+
+# PostgreSQL identifiers max out at 63 characters. The app leaves space for
+# suffixes like "_filtering", so generated base names are capped at 53.
+MAX_LEN = 53  # 63 - len("_filtering")
 
 ALL_SUFFIXES = [
     "_preview_delete",
@@ -17,8 +16,6 @@ ALL_SUFFIXES = [
     "_preview_impute_y",
 ]
 
-
-# ─── Basic pass-through (name fits) ──────────────────────────────────────────
 
 def test_short_base_returns_concatenation():
     result = _safe_pg_name("mytable", "_preview_delete")
@@ -31,23 +28,21 @@ def test_result_is_base_plus_suffix_when_short():
         assert result == f"data{suffix}"
 
 
-def test_exactly_56_chars_unchanged():
-    suffix = "_preview_delete"          # 15 chars
-    base = "x" * (MAX_LEN - len(suffix))  # 41 chars → total = 56
+def test_exactly_max_chars_unchanged():
+    suffix = "_preview_delete"
+    base = "x" * (MAX_LEN - len(suffix))
+
     result = _safe_pg_name(base, suffix)
+
     assert result == base + suffix
     assert len(result) == MAX_LEN
 
-
-# ─── Truncation + hash (name exceeds limit) ──────────────────────────────────
 
 def test_long_name_is_truncated_to_max_len():
     base = "a" * 100
     for suffix in ALL_SUFFIXES:
         result = _safe_pg_name(base, suffix)
-        assert len(result) <= MAX_LEN, (
-            f"Expected ≤{MAX_LEN} chars for suffix '{suffix}', got {len(result)}"
-        )
+        assert len(result) <= MAX_LEN
 
 
 def test_long_name_contains_md5_hash():
@@ -55,9 +50,7 @@ def test_long_name_contains_md5_hash():
     expected_hash = hashlib.md5(base.encode()).hexdigest()[:8]
     for suffix in ALL_SUFFIXES:
         result = _safe_pg_name(base, suffix)
-        assert expected_hash in result, (
-            f"Expected hash '{expected_hash}' in '{result}'"
-        )
+        assert expected_hash in result
 
 
 def test_long_name_ends_with_suffix():
@@ -68,16 +61,14 @@ def test_long_name_ends_with_suffix():
 
 
 def test_one_char_over_limit_triggers_hash():
-    suffix = "_preview_delete"  # 15 chars
-    # base of 42 → candidate = 57, one over MAX_LEN (56)
-    base = "y" * 42
+    suffix = "_preview_delete"
+    base = "y" * (MAX_LEN - len(suffix) + 1)
+
     result = _safe_pg_name(base, suffix)
+
     assert len(result) <= MAX_LEN
-    h = hashlib.md5(base.encode()).hexdigest()[:8]
-    assert h in result
+    assert hashlib.md5(base.encode()).hexdigest()[:8] in result
 
-
-# ─── errors_ sibling always fits in 63 chars ─────────────────────────────────
 
 def test_errors_sibling_fits_for_short_name():
     result = _safe_pg_name("sales", "_preview_delete")
@@ -88,13 +79,15 @@ def test_errors_sibling_fits_for_long_name():
     base = "z" * 100
     for suffix in ALL_SUFFIXES:
         result = _safe_pg_name(base, suffix)
-        errors_name = f"errors_{result}"
-        assert len(errors_name) <= 63, (
-            f"errors_ sibling '{errors_name}' is {len(errors_name)} chars (max 63)"
-        )
+        assert len(f"errors_{result}") <= 63
 
 
-# ─── Determinism ─────────────────────────────────────────────────────────────
+def test_filtering_sibling_fits_for_long_name():
+    base = "z" * 100
+    for suffix in ALL_SUFFIXES:
+        result = _safe_pg_name(base, suffix)
+        assert len(f"{result}_filtering") <= 63
+
 
 def test_same_inputs_produce_same_output():
     base = "w" * 60

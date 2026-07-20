@@ -1,7 +1,14 @@
+"""Tests for plot-data helper functions used by histogram and repair flows."""
+
 import unittest
+from pathlib import Path
+
 import numpy as np
 
 from app.routes.plot_routes import *
+
+
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 
 class TestDataIntegration(unittest.TestCase):
@@ -983,8 +990,16 @@ class TestDataIntegrationIntegration(unittest.TestCase):
             self.assertIn(entry['yBin'], ['Male', 'Female'])
 
     def test_crimes(self):
-        df = pd.read_csv('../../provided_datasets/crimes___one_year_prior_to_present_20250421.csv').head(400)
-        res = generate_1d_histogram_data('IUCR',10,0,400)
-        self.assertEqual(400, 400)
+        df = pd.read_csv(DATASETS_DIR / '(original)crimes___one_year_prior_to_present_20250421.csv').head(400)
+        bin_assignments, scale_data, column_type = get_column_bin_assignments(df.assign(ID=range(1, len(df) + 1)), ' IUCR', 10)
+        row_to_bin_mapping = create_row_to_bin_mapping(
+            df.assign(ID=range(1, len(df) + 1)),
+            [' IUCR'],
+            [bin_assignments],
+        )
+        items_per_bin = count_items_per_bin(row_to_bin_mapping)
+        entries = build_histogram_entries(items_per_bin, {}, [scale_data], [column_type])
+
+        self.assertEqual(sum(entry["count"]["items"] for entry in entries), 400)
 if __name__ == '__main__':
     unittest.main()

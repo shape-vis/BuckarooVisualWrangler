@@ -1,9 +1,15 @@
+"""Tests for the incomplete-data detector."""
+
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
 from app.server_utils.set_id_column import set_id_column
 from detectors.incomplete import incomplete
+
+
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
 
 
 class TestIncompleteTesting(unittest.TestCase):
@@ -47,7 +53,7 @@ class TestIncompleteTesting(unittest.TestCase):
         self.assertEqual(expected_dictionary, detected_frame)
 
     def test_uncleaned_stackoverflow_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / 'stackoverflow_db_uncleaned.csv')
         detected_df = incomplete(test_dataframe.head(200))
         expected_error_map = {
             "Age": {3: "incomplete", 4: "incomplete", 5: "incomplete", 105: "incomplete", 159: "incomplete"},
@@ -63,7 +69,7 @@ class TestIncompleteTesting(unittest.TestCase):
 
     #----------Should finish building these tests if full integration doesn't work down the line-------#
     def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv('../../provided_datasets/crimes___one_year_prior_to_present_20250421.csv')
+        test_dataframe = pd.read_csv(DATASETS_DIR / '(original)crimes___one_year_prior_to_present_20250421.csv')
         detected_df = incomplete(set_id_column(test_dataframe.head(200)))
         expected_error_map = {
   " LOCATION DESCRIPTION": {

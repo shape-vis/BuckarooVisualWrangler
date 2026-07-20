@@ -5,6 +5,7 @@
 import pandas as pd
 from flask import request, send_file
 import time
+import app as app_module
 from app import app
 from app import db_operations, engine
 from app.server_utils.service_helpers import (
@@ -68,6 +69,7 @@ def load_file(csv_file, filename):
         rankings.to_sql("rankings_" + table_name_with_node_id, engine, if_exists='replace', index=False)
 
         #init the pgraph
+        app_module.original_table_name = filename
         init_pgraph_for_session(table_name_with_node_id)
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
@@ -160,6 +162,29 @@ def reset_app():
     """
     db_operations.reset()
     return {"success": True}
+
+
+@app.get("/api/export/pandas")
+def export_pandas():
+    """
+    Returns a Python script that replicates the current data state using Pandas.
+    """
+    # The export is only meaningful after a dataset has been loaded. The
+    # DBOperations object tracks the current table name that the UI is viewing.
+    current_table = db_operations.main_table_name
+    if not current_table:
+        return {"success": False, "error": "No table loaded"}, 400
+    
+    # The provenance graph stores the sequence of Deltas needed to recreate
+    # that current table from the original CSV.
+    if app_module.pgraph_for_session is None:
+        return {"success": False, "error": "No provenance graph loaded"}, 400
+
+    # get_script_to_node walks root -> current node and concatenates the Pandas
+    # code stored in each Delta.
+    script = app_module.pgraph_for_session.get_script_to_node(current_table)
+    
+    return {"success": True, "script": script}
 
 
 @app.get("/")

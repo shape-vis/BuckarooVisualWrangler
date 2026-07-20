@@ -2,7 +2,7 @@ import {NavButton, IconButton} from "./Buttons.jsx";
 import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
-import { resetApp } from "../utils/serverCalls.jsx";
+import { exportPandasScript, resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
@@ -50,6 +50,28 @@ export function BuckarooHeader( { onReset} ) {
         onReset();
     };
 
+    const handleExportPandas = async () => {
+        // Ask Flask for the script that replays the current provenance graph
+        // state. If the backend says no table/graph is loaded, show that error.
+        const result = await exportPandasScript();
+        if (!result?.success) {
+            alert(result?.error || "Export pandas script failed.");
+            return;
+        }
+
+        // Convert the returned script text into a downloadable .py file without
+        // navigating away from the app.
+        const blob = new Blob([result.script], { type: "text/x-python;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "buckaroo_export.py";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div id="header">
             <h1 onClick={ onReset }>
@@ -93,6 +115,15 @@ export function BuckarooHeader( { onReset} ) {
                 >
                     <span className="btn-icon">&#8618;</span>
                     Redo
+                </button>
+                <button
+                    className="header-action-btn"
+                    onClick={handleExportPandas}
+                    disabled={busy}
+                    title="Export Pandas Script"
+                >
+                    <span className="btn-icon">py</span>
+                    Export
                 </button>
                 <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>
                 <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
