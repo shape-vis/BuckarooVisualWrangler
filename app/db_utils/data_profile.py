@@ -5,6 +5,7 @@ import json
 from pandas.core.arrays import categorical
 
 from app.db_utils.execute_sql import fetch_sql
+from app.db_utils.column_types import ColumnTypes
 
 # TODO: is this needed? this may be a duplicate
 def to_scalar(val):
@@ -123,7 +124,7 @@ class DataProfile:
 
         # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
         # Can properly do calculations
-        if self.is_mixed_col(column_name):
+        if self.col_types.is_mixed_col(column_name):
             query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
 
         stat = fetch_sql(query, True, self.engine)
@@ -178,7 +179,7 @@ class DataProfile:
 
             # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
             # Can properly do calculations
-            if self.is_mixed_col(column_name):
+            if self.col_types.is_mixed_col(column_name):
                 query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
             median = fetch_sql(query, True, self.engine)
         except Exception as e:
