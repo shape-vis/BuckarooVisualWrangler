@@ -16,7 +16,7 @@ def set_selected_node():
         body = request.get_json(force=True)
         clicked_node_id = body['nodeId']
         current_table_name = clicked_node_access_helper(clicked_node_id)
-        db_operations.load_table(current_table_name, f"errors_{current_table_name}")
+        db_operations.load_table(current_table_name, f"errors_{current_table_name}", f"dp_{current_table_name}")
         return {
             "success": True,
             "current_table_name": current_table_name

@@ -240,8 +240,9 @@ def get_preview_histogram():
 
     try:
         errors_table = f"errors_{table}"
+        dp_table = f"dp_{table}"
         preview_ops = DBOperations(engine)
-        preview_ops.load_table(table, error_table_name=errors_table)
+        preview_ops.load_table(table, errors_table, dp_table)
 
         if type_ == "1d":
             column    = request.args.get("column")
@@ -283,8 +284,9 @@ def get_preview_scatterplot():
 
     try:
         errors_table = f"errors_{table}"
+        dp_table = f"dp_{table}"
         preview_ops = DBOperations(engine)
-        preview_ops.load_table(table, error_table_name=errors_table)
+        preview_ops.load_table(table, errors_table, dp_table)
         scatterplot_data = preview_ops.generate_scatterplot_with_errors(x_column, y_column, error_sample_count, total_sample_count)
         return {"success": True, "scatterplot_data": scatterplot_data}
     except Exception as e:

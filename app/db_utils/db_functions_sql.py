@@ -5,18 +5,20 @@ import pandas as pd
 from app.server_utils import service_helpers
 from app.db_utils.filtering_sql import FilteringSQL
 from app.db_utils.execute_sql import fetch_sql, execute_sql
-from app.db_utils.data_profile import DataProfile
+from app.db_utils.column_types import ColumnTypes
 
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
 with support for data filtering and error annotation overlays on all chart types.
+
+--- ColumnTypes ---
+Inspects a table's schema to classify each column as numeric, categorical, or mixed-type.
 
 --- DBOperations ---
 Wraps all core DB operations for a single primary table. Builds and executes multi-step
 CTE SQL queries that produce JSON payloads for 1D histograms, 2D histograms, and scatterplots,
 each annotated with per-bin/per-point error breakdowns. Also manages row-level data filters.
 """
-
 
 # Wraps up all Core DBOperations into one class using a primary main_table.
 class DBOperations:
@@ -30,8 +32,8 @@ class DBOperations:
         self.engine = engine
         self.main_table_name = None
         self.error_table_name = None
-        self.data_profile_table_name = None
-        self.data_profile = None
+        self.dp_table_name = None
+        self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
 
@@ -42,12 +44,12 @@ class DBOperations:
         """
         self.main_table_name = None
         self.error_table_name = None
-        self.data_profile_table_name = None
-        self.data_profile = None
+        self.dp_table_name = None
+        self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
 
-    def load_table(self, main_table_name: str, error_table_name: str = None, data_profile_table_name: str = None):
+    def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None):
         """
         Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new
         table
@@ -56,8 +58,8 @@ class DBOperations:
         """
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
-        self.data_profile_table_name = data_profile_table_name if data_profile_table_name is not None else "dp_" + main_table_name
-        self.data_profile = DataProfile(main_table_name, self.engine)
+        self.dp_table_name = dp_table_name if dp_table_name is not None else "dp_" + main_table_name
+        self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
         self.active_hists = {}
 
@@ -209,7 +211,7 @@ class DBOperations:
         :return: the query for the binning.
         """
 
-        if self.data_profile.is_numeric_col(axis_column):
+        if self.col_types.is_numeric_col(axis_column):
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
             bin_logic = f'''CASE
                                 WHEN d.value::text ~ {numeric_regex} THEN
@@ -297,7 +299,7 @@ class DBOperations:
         :return: the query for the numeric scaling data.
         """
 
-        if not self.data_profile.is_numeric_col(axis_column):
+        if not self.col_types.is_numeric_col(axis_column):
             return ""
         else:
             return f''', range_data AS (
@@ -332,7 +334,7 @@ class DBOperations:
         binned_data = '''SELECT (SELECT json_agg(json_build_array("ID", bin)) FROM binned_data),'''
 
 
-        if self.data_profile.is_numeric_col(axis_column):
+        if self.col_types.is_numeric_col(axis_column):
             return f'''{binned_data} (SELECT json_build_object(
                 'histograms',
                     -- For numeric: handle mixed bins (numeric and "null") - keep bins as text
@@ -430,7 +432,7 @@ class DBOperations:
         :return: the query to generate the bound tables.
         """
 
-        if self.data_profile.is_numeric_col(axis_column):
+        if self.col_types.is_numeric_col(axis_column):
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
             return f''', {bound_table_name} AS (
                     SELECT
@@ -464,7 +466,7 @@ class DBOperations:
         for axis_column, bin_count, axis_alias, bounding_table in axis_info:
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
 
-            if self.data_profile.is_numeric_col(axis_column):
+            if self.col_types.is_numeric_col(axis_column):
                 bin_logic = f'''CASE
                                     WHEN d.{axis_alias}::text ~ {numeric_regex} THEN
                                         -- Clamp bin number to 0..(bin_count-1) range
@@ -564,7 +566,7 @@ class DBOperations:
         :return: the query for the numeric scaling data.
         """
 
-        if self.data_profile.is_numeric_col(axis_column):
+        if self.col_types.is_numeric_col(axis_column):
             return f''', {scale_table_name}_range_data AS (
                 SELECT
                     min_val,
@@ -597,7 +599,7 @@ class DBOperations:
         empty_set = r"'{}'"
 
         # Handles mixed types in x-axis.
-        if self.data_profile.is_numeric_col(x_axis_column):
+        if self.col_types.is_numeric_col(x_axis_column):
             json_x_type = f'''CASE WHEN x_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
             json_order_by_x = f'''CASE WHEN x_bin ~ {numeric_regex} THEN lpad(x_bin, 10, '0') ELSE x_bin END'''
         else:
@@ -605,7 +607,7 @@ class DBOperations:
             json_order_by_x = "x_bin"
 
         # Handles mixed types in y-axis.
-        if self.data_profile.is_numeric_col(y_axis_column):
+        if self.col_types.is_numeric_col(y_axis_column):
             json_y_type = f'''CASE WHEN y_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
             json_order_by_y = f'''CASE WHEN y_bin ~ {numeric_regex} THEN lpad(y_bin, 10, '0') ELSE y_bin END'''
         else:
@@ -634,7 +636,7 @@ class DBOperations:
 
         for i in range(len(json_scale_data)):
             scale_label, axis_column, scale_table_name, axis_bin = json_scale_data[i]
-            if self.data_profile.is_numeric_col(axis_column):
+            if self.col_types.is_numeric_col(axis_column):
                 axis_numeric_info = f'''(SELECT COALESCE(json_agg(json_build_object('x0', x0, 'x1', x1) ORDER BY bin_num),
                                         '[]'::json) FROM {scale_table_name})'''
             else:
@@ -781,7 +783,7 @@ class DBOperations:
         :return: the query for aggregating scatterplot error data w/ sampled points.
         """
 
-        if self.data_profile.is_numeric_col(axis_column):
+        if self.col_types.is_numeric_col(axis_column):
             return f''',
                 {bound_table_name} AS (
                     SELECT
@@ -810,9 +812,9 @@ class DBOperations:
 
         # Helper function to determine axis type
         def determine_axis_type(axis_column: str, col_alias: str) -> str:
-            if self.data_profile.is_numeric_col(axis_column):
+            if self.col_types.is_numeric_col(axis_column):
                 return "ELSE 'numeric'"
-            elif self.data_profile.is_mixed_col(axis_column):
+            elif self.col_types.is_mixed_col(axis_column):
                 return f"WHEN ({col_alias}::text ~ {numeric_regex}) THEN 'numeric' ELSE 'categorical'"
             else:
                 return "ELSE 'categorical'"
@@ -820,9 +822,9 @@ class DBOperations:
 
         # Helper function to determine JSON axis type
         def determine_json_axis_type(axis_column: str, col_alias: str) -> str:
-            if self.data_profile.is_numeric_col(axis_column):
+            if self.col_types.is_numeric_col(axis_column):
                 return f"ELSE to_json({col_alias}::numeric)"
-            elif self.data_profile.is_mixed_col(axis_column):
+            elif self.col_types.is_mixed_col(axis_column):
                 return f"WHEN ({col_alias}::text ~ {numeric_regex}) THEN to_json({col_alias}::numeric) ELSE to_json({col_alias}::text)"
             else:
                 return f"ELSE to_json({col_alias}::text)"
@@ -868,12 +870,12 @@ class DBOperations:
         for i in range(len(json_scale_data)):
             scale_label, axis_column, bounding_table, axis_alias = json_scale_data[i]
 
-            if self.data_profile.is_numeric_col(axis_column):
+            if self.col_types.is_numeric_col(axis_column):
                 axis_numeric_info = f'''json_build_array(
                     (SELECT min_val FROM {bounding_table}),
                     (SELECT max_val + 1 FROM {bounding_table})
                 )'''
-            elif self.data_profile.is_mixed_col(axis_column):
+            elif self.col_types.is_mixed_col(axis_column):
                 axis_numeric_info = f'''json_build_array(
                             (SELECT COALESCE(MIN({axis_alias}::numeric), 0) FROM sampled_data
                              WHERE {axis_alias}::text ~ {numeric_regex}),
