@@ -7,16 +7,22 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, \
-    execute_wrangle_preview, _safe_pg_name, create_data_profile_df
-from sqlalchemy import text as sa_text
+from app.server_utils.service_helpers import create_error_df, create_previews_1d, create_previews_2d, \
+    execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map
 from sqlalchemy import inspect, text
 
-
+from app.db_utils.data_profile import DataProfile
 
 """
 Wrangling Endpoints - In-place modification of tables
 """
+
+def get_table_dtypes(target_table_name, engine):
+    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
+    inspector = inspect(engine)
+    columns = inspector.get_columns(target_table_name)
+    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
+    return {col["name"]: col["type"] for col in columns}
 
 # Where updated_df is just the data that needed to actually be updated
 # Assumes that updated_df has the same columns as the target table
@@ -28,12 +34,12 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
             {"categories": cols_to_remove}
         )
 
-    staging_table = _safe_pg_name(target_table_name, "_staging")
+    staging_table_name = _safe_pg_name(target_table_name, "_staging")
 
-    cols_to_update = updated_df.columns
+    dtype_dict = query.get_table_dtypes(target_table_name, engine)
 
     # 1. Push data to a temp staging table
-    updated_df.to_sql(staging_table, engine, if_exists='replace', index=False)
+    updated_df.to_sql(staging_table_name, engine, if_exists='replace', dtype=dtype_dict)
 
     # Make sure that there's a main errors table we can update
     inspector = inspect(engine)
@@ -41,16 +47,13 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 
     # 2. Set-based update, Postgres native syntax
     with engine.begin() as conn:
-        set_clause = ", ".join(f'"{c}" = staged."{c}"' for c in cols_to_update)
         conn.execute(text(f'''
-            UPDATE "{target_table_name}" target
-            SET {set_clause}
-            FROM "{staging_table}" staged
-            WHERE target."{key_col}" = staged."{key_col}"
+            INSERT INTO "{target_table_name}"
+            SELECT *
+            FROM "{staging_table_name}"
         '''))
 
-        conn.execute(text(f'DROP TABLE "{staging_table}"'))
-
+        conn.execute(text(f'DROP TABLE "{staging_table_name}"'))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: Re-run error detection after modification
@@ -66,10 +69,10 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
 
-        # TODO: optimize this so it doesn't load the whole table into a df first
         df = df[columns_selected_for_wrangling]
 
-        detected_errors_df = run_detectors(df)
+        # TODO: optimize this so it doesn't load the whole table into a df first
+        detected_errors_df = create_error_df(df)
         errors_table_name = f"errors_{table_name}"
 
         key_column = "column_id"
@@ -92,20 +95,23 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
 
 # TODO: Make update_data_profile_table and update_errors_table more similar
 # TODO: Re-implement with "dirty flags"
-def update_data_profile_table(table_name: str, error_df: pd.DataFrame, columns_selected_for_wrangling: list) -> None:
+# TODO:optimize this so it doesn't load the whole table into a df first
+def update_data_profile_table(table_name: str, columns_selected_for_wrangling: list) -> None:
     try:
 
-        # TODO: optimize this so it doesn't load the whole table into a df first
         dp_table_name = f"dp_{table_name}"
-        print("COL NAMES", columns_selected_for_wrangling)
 
-        updated_df = create_data_profile_df(table_name, engine, col_names=columns_selected_for_wrangling, error_df=error_df)
+        # Can't use db_operations.data_profile because this function is also used for updating preview tables,
+        # meaning that the "main_table" that this function uses may be a preview table. Using the db_operations data_profile
+        # has the table name set as the main table and it'll be calculating statistics on the wrong table. So we create a new data
+        # profile object
+        data_profile = DataProfile(table_name, engine)
+
+        updated_df = create_data_profile_df(data_profile, col_names=columns_selected_for_wrangling)
 
         key_column = "column_name"
 
         update_table(updated_df, dp_table_name, key_column, columns_selected_for_wrangling)
-
-
 
         print(f"✓ Updated data profile table: {dp_table_name}")
     except Exception as e:
@@ -225,16 +231,17 @@ def wrangle_delete_column():
     """
     try:
         body = request.get_json(force=True)
-        table = db_operations.main_table_name
+        table_name = db_operations.main_table_name
         column = body["column"]
 
-        print(f"Deleting column '{column}' from table '{table}'")
+        print(f"Deleting column '{column}' from table '{table_name}'")
 
         # Delete the column
-        remaining_columns = query.delete_column(table=table, column=column)
+        remaining_columns = query.delete_column(table=table_name, column=column)
 
         # Re-run error detection
-        update_errors_table(table)
+        update_errors_table(table_name, [column])
+        update_data_profile_table(table_name, [column])
 
         return {
             "success": True,

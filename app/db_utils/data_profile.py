@@ -22,6 +22,127 @@ def to_scalar(val):
         return val.item()
     return val
 
+"""
+--- ColumnTypes ---
+Inspects a table's schema to classify each column as numeric, categorical, or mixed-type.
+"""
+
+class ColumnTypes:
+    def __init__(self, main_table_name: str, engine):
+        # Cols where majority of the rows are numeric
+        self.numeric_cols = set()
+        self.mixed_cols = set()
+        # Cols where majority of the rows are categorical
+        self.categorical_cols = set()
+        self.engine = engine
+
+        self.numeric_types = [
+            'integer', 'bigint', 'numeric',
+            'real', 'double precision', 'smallint'
+        ]
+        self.gather_numeric_cols(main_table_name)
+        self.gather_mixed_cols(main_table_name)
+        self.categorize_mixed_cols(main_table_name)
+
+    def gather_numeric_cols(self, main_table_name: str):
+        """
+        Distinguishes the numeric columns from the categorical columns.
+        :arg: main_table_name: name of the main table.
+        """
+
+        fetch_col_types = f'''SELECT column_name, data_type
+                              FROM information_schema.columns
+                              WHERE table_name = '{main_table_name}';'''
+
+        fetched_rows = fetch_sql(fetch_col_types, False, self.engine)
+        if fetched_rows:
+
+            for row in fetched_rows:
+                col_name = row[0]
+                # This datatype will only be numeric if the whole column is numeric
+                data_type = row[1]
+
+                if data_type in self.numeric_types:
+                    self.numeric_cols.add(col_name)
+                else:
+                    self.mixed_cols.add(col_name)
+        else:
+            raise Exception(f"No rows fetched from table: {main_table_name}")
+
+
+    def gather_mixed_cols(self, main_table_name: str):
+        """
+        Gather the columns that are labeled as categorical but contain numeric data as well.
+        :arg: main_table_name: name of the main table.
+        """
+
+        # There are no categorical columns in the dataset.
+        if len(self.mixed_cols) == 0:
+            return
+
+        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
+
+        # Initialized in the other constructor func gather_numeric_cols. This starts as all categorical columns.
+        # Stop early if a mixed type is found, since that makes the entire column of mixed type.
+        queries = [
+            f"""(
+                    SELECT '{col}' AS column_name
+                    FROM "{main_table_name}"
+                    WHERE pg_input_is_valid("{col}", 'numeric')
+                    LIMIT 1
+            )"""
+            for col in self.mixed_cols
+        ]
+
+        fetch_mixed_types = "\nUNION ALL\n".join(queries)
+        mixed_cols = fetch_sql(fetch_mixed_types, False, self.engine)
+
+        mixed_col_names = set(row[0] for row in mixed_cols) if mixed_cols else set()
+        self.categorical_cols = self.mixed_cols - mixed_col_names
+        self.mixed_cols = mixed_col_names
+
+    def categorize_mixed_cols(self, main_table_name: str):
+        """
+        Categorizes the mixed columns into numeric and categorical based on the majority of their values.
+        :arg: main_table_name: name of the main table.
+        """
+        for col in self.mixed_cols:
+            query = f"""
+                SELECT
+                    SUM(CASE WHEN pg_input_is_valid("{col}", \'numeric\' )THEN 1 ELSE 0 END) AS numeric_count,
+                    COUNT(*) AS total_count
+                FROM "{main_table_name}";
+            """
+            result = fetch_sql(query, False, self.engine)
+            if result:
+                numeric_count, total_count = result[0]
+                if numeric_count > total_count / 2:
+                    self.numeric_cols.add(col)
+                else:
+                    self.categorical_cols.add(col)
+            else:
+                raise Exception(f"No rows fetched for column: {col} in table: {main_table_name}")
+
+    def is_categorical_col(self, col_name: str):
+        return col_name in self.categorical_cols
+
+    def is_numeric_col(self, col_name: str):
+            """
+            Determines whether the given column from the table used to construct this class is numeric.
+            :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+            :return: whether the given col_name is numeric.
+            """
+            return col_name in self.numeric_cols
+
+
+    def is_mixed_col(self, col_name: str):
+        """
+        Determines whether the given column from the table used to construct this class is of mixed type.
+        :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+        :return: whether the given col_name is of mixed type.
+        """
+        return col_name in self.mixed_cols
+
 class DataProfile:
     """
     Class that handles queries to get summary stats about the main data table.
@@ -29,22 +150,22 @@ class DataProfile:
     This class prioritizes SQL queries and when those don't work, the table is loaded and the pd dataframe method is used
     instead.
     """
-    def __init__(self, table_name, engine=None, main_df=None, error_df=None):
+    def __init__(self, table_name, engine):
         """
         :param table_name: name of the main data table
         :param engine:
         :param main_df:the main data table as a data frame
         :param error_df:the error data table as a data frame
         """
-
         self.table_name = table_name
-        self.data_profile_table_name = "dp" + table_name
+        self.data_profile_table_name = "dp_" + table_name
+        self.error_table_name = "errors_" + table_name
+        self.col_types = ColumnTypes(table_name, engine)
+
+
         self.engine = engine
         # IMPORTANT: main_df and error_df are NOT guaranteed to not be None (so that they don't have to be loaded each time for efficiency)
         # Use get_main_df and get_error_df instead of accessing them directly
-        self._main_df = main_df
-        self._error_df = error_df
-        self.default_attributes = ['mean', 'median', 'min', 'max', 'n_categories', 'mode', 'error_counts', 'class_error_counts']
         self.name_to_func = {
             'mean': self._calculate_mean,
             'median': self._calculate_median,
@@ -53,69 +174,18 @@ class DataProfile:
             'n_categories': self._calculate_num_categories,
             'mode': self._calculate_mode,
             'error_counts': self._calculate_error_count_dict,
-            'class_error_counts': self._calculate_class_error_count_dict,
+            'category_counts': self._calculate_category_count_dict,
         }
 
         self.attribute_type_assignment = {
-            'numeric': ['mean', 'median', 'min', 'max', 'err', 'error_counts'],
+            'numeric': ['mean', 'median', 'min', 'max', 'error_counts'],
             'categorical': ['n_categories',
-                            'mode', 'error_counts', 'class_error_counts'],
+                            'mode', 'error_counts', 'category_counts'],
         }
 
-    def get_error_df(self):
-        """
-        Gets the error df by loading it first (making sure it's not None) then returning it
-        :return: The error_df
-        """
-        self.load_error_df()
 
-        return self._error_df
+        self.dtype_dict = None
 
-    def get_main_df(self):
-        """
-        Gets the main df by loading it first (making sure it's not None) then returning it
-        :return: The main_df
-        """
-        self.load_main_df()
-
-        return self._main_df
-
-
-    def load_error_df(self):
-        """
-        Loads the error_df from the table if it wasn't passed in as an argument
-        :return: None
-        """
-        if self._error_df is None:
-            assert self.engine is not None, f"engine cannot be None if error_df is None"
-            #self.error_df = load_table_to_df(f"errors_{self.table_name}", self.engine)
-            self._error_df = pd.read_sql_query(f'SELECT * FROM "{"errors_" + self.table_name}"', self.engine)
-
-    def load_main_df(self):
-        """
-        Loads the main_df from the table if it wasn't passed in as an argument
-        :return: None
-        """
-        if self._main_df is None:
-            assert self.engine is not None, f"engine cannot be None if main_df is None"
-            self._main_df = pd.read_sql_query(f'SELECT * FROM "{self.table_name}"', self.engine)
-
-    def get_processed_column_data(self, column_name, attribute_name):
-        """
-        :param column_name: Name of the column to get data for
-        :param attribute_name: Name of the attribute (used to determine how to process the data)
-        :return: Processed column data
-        """
-        assert (attribute_name in self.attribute_type_assignment['categorical'] or attribute_name in self.attribute_type_assignment['numeric']), f"Invalid attribute name {attribute_name}"
-
-        if attribute_name in self.attribute_type_assignment['categorical']:
-            col_data = self._main_df[column_name].fillna('N/A')
-        if attribute_name in self.attribute_type_assignment['numeric']:
-            col_data = pd.to_numeric(self._main_df[column_name], errors='coerce').dropna()
-
-        return col_data
-
-    # TODO: Make the sql query for this work
     def get_col_names(self):
         """
         self: DataProfile instance
@@ -138,11 +208,6 @@ class DataProfile:
 
         except Exception as e:
             print(f"AHHHHHHHHHH Querying for col names unsuccessful because of error: {e}")
-            print("Getting col names from Data frame instead")
-        self.load_main_df()
-        print("COL NAMES FROM main_df.columns:", self._main_df.columns)
-
-        col_names = self._main_df.columns
 
         return col_names
 
@@ -153,9 +218,8 @@ class DataProfile:
         :param column_name: Name of the column for which the statistic is being looked up.
         :return: The value of the statistic if found, otherwise None.
         """
-        data_profile_table_name = "dp_" + self.table_name
         try:
-            query = f'SELECT "{attribute_name}" FROM "{data_profile_table_name}" WHERE "column_name" = :column_name'
+            query = f'SELECT "{attribute_name}" FROM "{self.data_profile_table_name}" WHERE "column_name" = :column_name'
             params = {"column_name": column_name}
             stat = fetch_sql(query, True, self.engine, params)
 
@@ -171,7 +235,18 @@ class DataProfile:
         :param column_name: Name of the column for which the statistic is being looked up.
         :return: The value of the statistic if found, otherwise None.
         """
-        query = f'SELECT {stat_query}("{column_name}") FROM "{self.table_name}"'
+
+        # Casting to numeric values just in case there is a data type mismatch and the single string variable
+        # Turns an entire numeric column into text
+        query = (f'SELECT {stat_query}'
+                 f'("{column_name}"::numeric) FROM '
+                 f'"{self.table_name}"')
+
+        # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
+        # Can properly do calculations
+        if self.is_mixed_col(column_name):
+            query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
+
         stat = fetch_sql(query, True, self.engine)
         return stat
 
@@ -187,29 +262,27 @@ class DataProfile:
 
             if look_up_value is not None:
                 print("Successfully found col attribute in data profile table!")
+
                 return to_scalar(look_up_value)
 
         calculate_attribute_func = self.name_to_func[attribute_name]
+        # TODO: save stat off to table if newly calculated
+
         return to_scalar(calculate_attribute_func(column_name))
 
-    # TODO: save stat off to table if newly calculated
     def _calculate_mean(self, column_name):
         """
         :param column_name: Name of the column for which the mean is being calculated
         :return: The mean
         """
-        col_data = self.get_processed_column_data(column_name, 'mean')
+
         # Try get the mean from SQL first, if that fails, calculate it manually using the data frame
         try:
             avg = self.calculate_summary_stat_using_sql('AVG', column_name)
         except Exception as e:
             print(f"Error fetching the mean for table {self.table_name} at column {column_name}: {e}")
+            avg = None
 
-            print("Calculating mean manually using data...")
-            self.load_main_df()
-
-            avg = col_data.mean()
-            print(f"Updating mean value for column {column_name} in data profile")
 
         return avg
 
@@ -219,21 +292,19 @@ class DataProfile:
         :param column_name: Name of the column for which the median is being calculated
         :return: The median
         """
-        col_data = self.get_processed_column_data(column_name, 'median')
 
         # Try get the median from SQL first, if it fails, calculate manually using data frame
         try:
-            query = f'SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY "{column_name}") FROM  "{self.table_name}"'
+            query = f'SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY "{column_name}"::numeric) FROM  "{self.table_name}"'
+
+            # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
+            # Can properly do calculations
+            if self.is_mixed_col(column_name):
+                query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
             median = fetch_sql(query, True, self.engine)
         except Exception as e:
-            self.load_main_df()
             print(f"Error fetching the median for table {self.table_name} at column {column_name}: {e}")
-
-            print("Calculating median manually using data...")
-
-            median = col_data.median()
-
-            print(f"Updating median value for column {column_name} in data profile")
+            median = float('nan')
 
         return median
 
@@ -244,19 +315,13 @@ class DataProfile:
         :return: The maximum
         """
 
-        col_data = self.get_processed_column_data(column_name, 'max')
         # Try using SQL query, if it fails, calculate manually using data frame
         try:
             maximum = self.calculate_summary_stat_using_sql('MAX', column_name)
         except Exception as e:
             print(f"Error fetching the maximum for table {self.table_name} at column {column_name}: {e}")
 
-            print("Calculating maximum manually using data...")
-            self.load_main_df()
-
-            maximum = col_data.max()
-
-            print(f"Updating maximum value for column {column_name} in data profile")
+            maximum = None
 
         return maximum
 
@@ -265,7 +330,6 @@ class DataProfile:
         :param column_name: Name of the column for which the minimum is being calculated
         :return: The minimum
         """
-        col_data = self.get_processed_column_data(column_name, 'min')
 
         # Try using SQL query, if it fails, calculate manually using data frame
         try:
@@ -273,12 +337,7 @@ class DataProfile:
         except Exception as e:
             print(f"Error fetching the minimum for table {self.table_name} at column {column_name}: {e}")
 
-            print("Calculating minimum manually using data...")
-            self.load_main_df()
-
-            minimum = col_data.min()
-
-            print(f"Updating minimum value for column {column_name} in data profile")
+            minimum = None
 
         return minimum
 
@@ -287,7 +346,6 @@ class DataProfile:
         :param column_name: Name of the column for which the number of categories is being calculated
         :return: The number of categories
         """
-        col_data = self.get_processed_column_data(column_name, 'n_categories')
 
         # Try using SQL query, if it fails, calculate manually using data frame
         try:
@@ -298,12 +356,7 @@ class DataProfile:
             print("AHHH SQL QUERY DIDN'T WORK")
             print(f"Error fetching the n_categories for table {self.table_name} at column {column_name}: {e}")
 
-            print("Calculating n_categories manually using data...")
-            self.load_main_df()
-
-            n_categories = col_data.nunique()
-
-            print(f"Updating n_categories value for column {column_name} in data profile")
+            n_categories = None
 
         return n_categories
 
@@ -313,12 +366,23 @@ class DataProfile:
         :param column_name: Name of the column for which the mode is being calculated
         :return: The mode
         """
-        # TODO: add a SQL query version to calculate the mode
+        try:
+            query = f"""
+            SELECT "{column_name}" FROM "{self.table_name}"
+            WHERE "{column_name}" IS NOT NULL
+            GROUP BY "{column_name}"
+            ORDER BY COUNT(*) DESC
+            LIMIT 1;
+            """
 
-        print("Calculating mode manually using data...")
-        self.load_main_df()
-        col_data = self.get_processed_column_data(column_name, 'mode')
-        mode = col_data.mode()
+            mode = fetch_sql(query, True, self.engine)
+            print("MODE FROM SQL QUERY: ", mode)
+
+        except Exception as e:
+            print("AHHH SQL QUERY DIDN'T WORK")
+            print(f"Error fetching the mode for table {self.table_name} at column {column_name}: {e}")
+
+            mode = None
 
         return mode
 
@@ -330,47 +394,148 @@ class DataProfile:
         :return: The error count dict ({"missing": 10, "mismatch": 5, ...})
         """
         try:
-            query = f'SELECT {column_name}, COUNT(*) as cnt FROM {self.table_name} GROUP BY {column_name}  ORDER BY cnt DESC'
-            category_counts = dict(fetch_sql(query, True, self.engine))
+            query = f"""
+                    SELECT error_type, COUNT(*) 
+                    FROM "{self.error_table_name}" 
+                    WHERE column_id = :column_name
+                    GROUP BY error_type
+                  """
+            error_counts = dict(fetch_sql(query, False, self.engine, params={'column_name': column_name}))
+
+            if error_counts is not None:
+                error_counts = json.dumps(error_counts)
+            else:
+                error_counts = json.dumps({})
         except Exception as e:
 
             print(f"Error fetching the error counts for table {self.table_name} at column {column_name}: {e}")
+            error_counts = None
 
-            print("Calculating error counts manually using data...")
-            self.load_error_df()
 
-            category_counts = {}
-            if not self._error_df.empty: # If error_df is empty (no errors in data selection)
-                category_counts = self._error_df["error_type"].value_counts().to_dict()
 
-        if category_counts is not None:
-            category_counts = json.dumps(category_counts)
+        return error_counts
 
-        return category_counts
+    # TODO: implement this later
+    # # Dict mapping from class to error types to error counts
+    # def _calculate_class_error_count_dict(self, column_name):
+    #     """
+    #     :param column_name: Name of the column for which the class error count is being calculated
+    #     :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
+    #     """
+    #
+    #     try:
+    #         # TODO: check if this works
+    #         ry:
+    #         query = f'''
+    #                     SELECT "column_id", "error_type", COUNT(*) AS error_count
+    #                     FROM "{self.error_table_name}"
+    #                     WHERE "column_id" = :column_name
+    #                     GROUP BY "column_id", "error_type"
+    #                 '''
+    #
+    #         rows = fetch_sql(query, True, self.engine, params={"column_name": column_name})
+    #
+    #         counts_by_column = {}
+    #         for r in (rows or []):
+    #             row = dict(r)
+    #             category = row[category_col]
+    #             error_type = row["error_type"]
+    #             count = row["error_count"]
+    #             counts_by_column.setdefault(category, {})[error_type] = count
+    #
+    #     except Exception as e:
+    #         print(f"Error fetching the error counts for table {self.table_name} at column {column_name}: {e}")
+    #         counts_by_column = None
+    #     if counts_by_column is not None:
+    #         counts_by_column = json.dumps(counts_by_column)
+    #
+    #     return counts_by_column
 
-    # Dict mapping from class to error types to error counts
-    # TODO: Implement SQL query version
-    def _calculate_class_error_count_dict(self, column_name):
+    def _calculate_category_count_dict(self, column_name):
         """
         :param column_name: Name of the column for which the class error count is being calculated
         :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
         """
-        # TODO: Implement SQL query version
-        print("Calculating class error counts manually using data...")
 
-        self.load_error_df()
+        try:
+            query = f"""
+                    SELECT "{column_name}", COUNT(*) 
+                    FROM "{self.table_name}" 
+                    GROUP BY "{column_name}"
+                  """
 
-        counts_by_column = {}
-        if not self._error_df.empty:  # If error_df is empty (no errors in data selection)
-            counts_by_column = (
-                self._error_df.groupby(['column_id', 'error_type'])
-                .size()
-                .unstack(fill_value=0)
-                .to_dict(orient='index')
-            )
-
-        if counts_by_column is not None:
-            counts_by_column = json.dumps(counts_by_column)
+            rows = fetch_sql(query, False ,self.engine)
+            category_counts = {}
+            # Put the results into a dict
+            for (category, count) in rows:
+                category_counts[category] = count
+            print("CATEGORY COUNTS DICT", category_counts)
 
 
-        return counts_by_column
+        except Exception as e:
+
+            print(f"Error fetching the category counts for table {self.table_name} at column {column_name}: {e}")
+            category_counts = None
+
+        if category_counts is not None:
+            # Put the dict into a string so we can actually put it into a SQL table
+            category_counts = json.dumps(category_counts)
+
+        return category_counts
+
+    def get_col_type(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: The type of the column in a string
+        """
+        if self.col_types.is_numeric_col(column_name):
+            return "numeric"
+        elif self.col_types.is_categorical_col(column_name):
+            return "categorical"
+        elif self.col_types.is_mixed_col(column_name):
+            return "mixed"
+        else:
+            return None
+
+    def is_numeric_col(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: True if the column is numeric, False otherwise
+        """
+        return self.col_types.is_numeric_col(column_name)
+
+    def is_categorical_col(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: True if the column is categorical, False otherwise
+        """
+        return self.col_types.is_categorical_col(column_name)
+
+    def is_mixed_col(self, column_name):
+        """
+        :param column_name: Name of the column for which the type is being checked
+        :return: True if the column is mixed, False otherwise
+        """
+        return self.col_types.is_mixed_col(column_name)
+
+
+    def get_column_names(self):
+        """
+        :return: List of column names
+        """
+        # uses the sets of column names from the ColumnTypes class to get all column names
+        all_cols = [list(self.col_types.numeric_cols), list(self.col_types.categorical_cols),
+                    list(self.col_types.mixed_cols)]
+
+        return all_cols
+
+    def get_numeric_cols(self):
+        return list(self.col_types.numeric_cols)
+
+    def get_categorical_cols(self):
+            return list(self.col_types.categorical_cols)
+
+    def get_mixed_cols(self):
+            return list(self.col_types.mixed_cols)
+
+
