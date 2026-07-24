@@ -62,6 +62,7 @@ class DBOperations:
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
         self.active_hists = {}
+        print("LOADED TABLE!!!")
 
     def get_row_count(self, table_name: str) -> int:
         """
