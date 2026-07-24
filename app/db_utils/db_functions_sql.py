@@ -152,6 +152,10 @@ class DBOperations:
 
         rows_to_bins = {}
         bins_to_rows = defaultdict(list)
+        if binned_data is None:
+            # Will happen if all of the data happens to be deleted (all values are Null in a column, etc.)
+            # Setting to empty list so it won't show error when it tries to loop through a None
+            binned_data = []
 
         if one_dim:
             for row_id, row_bin in binned_data:
