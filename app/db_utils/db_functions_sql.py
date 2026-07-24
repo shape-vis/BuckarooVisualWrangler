@@ -30,6 +30,7 @@ class DBOperations:
         :param engine: SQLAlchemy engine
         """
         self.engine = engine
+        self.base_table_name = None
         self.main_table_name = None
         self.error_table_name = None
         self.dp_table_name = None
@@ -42,6 +43,7 @@ class DBOperations:
         Resets the DBOperations state, clearing all loaded table references.
         Called when the user navigates back to the home page.
         """
+        self.base_table_name = None
         self.main_table_name = None
         self.error_table_name = None
         self.dp_table_name = None
@@ -49,20 +51,27 @@ class DBOperations:
         self.filtering_table = None
         self.active_hists = {}
 
-    def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None):
+    def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None, base_table_name: str = None):
         """
         Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new
         table
         :param main_table_name: the name of the table in the database without errors detected (raw data)
         :param error_table_name: explicit errors table name; defaults to "errors_" + main_table_name
         """
+
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
         self.dp_table_name = dp_table_name if dp_table_name is not None else "dp_" + main_table_name
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
+        assert self.filtering_table is not None
         self.active_hists = {}
         print("LOADED TABLE!!!")
+
+        if base_table_name is not None:
+            self.base_table_name = base_table_name
+
+        print("FINISHED LOADING TABLE")
 
     def get_row_count(self, table_name: str) -> int:
         """

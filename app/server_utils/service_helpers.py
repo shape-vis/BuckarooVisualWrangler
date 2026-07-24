@@ -70,7 +70,7 @@ def _safe_pg_name(base: str, suffix: str) -> str:
     return f"{base[:max_base]}_{h}{suffix}"
 
 
-def generate_table_name(csv_name):
+def generate_base_table_name(csv_name):
     """
     Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
     - Remove file extension (.csv), replace spaces/special chars with underscores, ensure it starts with a letter (SQL requirement)
