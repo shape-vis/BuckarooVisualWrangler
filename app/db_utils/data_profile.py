@@ -338,18 +338,30 @@ class DataProfile:
         """
 
         try:
-            query = f"""
-                    SELECT "{column_name}", COUNT(*) 
-                    FROM "{self.table_name}" 
-                    GROUP BY "{column_name}"
-                  """
 
-            rows = fetch_sql(query, False ,self.engine)
-            category_counts = {}
-            # Put the results into a dict
-            for (category, count) in rows:
-                category_counts[category] = count
-            print("CATEGORY COUNTS DICT", category_counts)
+            n_categories = self.calculate_column_attribute("n_categories", column_name, True)
+            n_rows_query = f"""
+                            SELECT "{column_name}", COUNT(*) FROM "{self.table_name}"
+                            """
+
+            n_rows = fetch_sql(n_rows_query, True, self.engine)
+
+            # Don't wanna calculate category counts if each "category" is unique
+            if not n_categories == n_rows:
+
+                query = f"""
+                        SELECT "{column_name}", COUNT(*) 
+                        FROM "{self.table_name}" 
+                        GROUP BY "{column_name}"
+                      """
+
+                rows = fetch_sql(query, False ,self.engine)
+                category_counts = {}
+                # Put the results into a dict
+                for (category, count) in rows:
+                    category_counts[category] = count
+            else:
+                category_counts = None
 
 
         except Exception as e:
