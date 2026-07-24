@@ -19,7 +19,7 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
-from app.db_utils.data_profile import DataProfile
+from app.server_utils.logger_utils import update_action_log
 
 def get_current_pgraph():
     """
@@ -218,8 +218,6 @@ def create_data_profile_df(data_profile, col_names=None):
 
                 continue
 
-            print("CALCULATING ATTRIBUTE: ", attribute)
-            print("COLUMN: ", col)
 
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
         col_list.append(row_dict)
@@ -420,7 +418,6 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     3. Reload db_operations with the new node
     Returns a dict with success and table name.
     """
-    # from app import engine, db_operations
 
     all_possible_previews = [
         safe_pg_name_fn(table, "_preview_delete"),
@@ -441,6 +438,9 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     db_operations.load_table(new_table_name, f"errors_{new_table_name}", f"dp_{new_table_name}")
 
     app.db_operations.update_rankings(new_table_name)
+
+    update_action_log(dataset_id=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
+                      action_details={}, engine=db_operations.engine)
 
 
     return {"success": True, "table": new_table_name}
@@ -536,6 +536,9 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     update_data_profile_table_fn(preview_delete_table_name, cols)
     update_data_profile_table_fn(preview_impute_table_name, cols)
 
+    update_action_log(dataset_id=table, action_name="create_previews",
+                      action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine)
+
     return {
         "success": True,
         "preview_delete": preview_delete_table_name,
@@ -580,6 +583,9 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     update_data_profile_table_fn(preview_delete_table_name, cols)
     update_data_profile_table_fn(preview_impute_x_table_name, cols)
     update_data_profile_table_fn(preview_impute_y_table_name, cols)
+
+    update_action_log(dataset_id=table, action_name="create_previews",
+                      action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine)
 
 
     return {
