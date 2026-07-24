@@ -2,9 +2,8 @@
 # This file handles all endpoints surrounding wranglers
 
 from flask import request
-from app import app, db_operations
 from app.db_utils import query
-from app import engine
+from app import app, engine, db_operations
 import traceback
 import pandas as pd
 from app.server_utils.service_helpers import create_error_df, create_previews_1d, create_previews_2d, \
@@ -12,17 +11,12 @@ from app.server_utils.service_helpers import create_error_df, create_previews_1d
 from sqlalchemy import inspect, text
 
 from app.db_utils.data_profile import DataProfile
+from server_utils.logger_utils import update_action_log
 
 """
 Wrangling Endpoints - In-place modification of tables
 """
 
-def get_table_dtypes(target_table_name, engine):
-    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
-    inspector = inspect(engine)
-    columns = inspector.get_columns(target_table_name)
-    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
-    return {col["name"]: col["type"] for col in columns}
 
 # Where updated_df is just the data that needed to actually be updated
 # Assumes that updated_df has the same columns as the target table
@@ -59,6 +53,17 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
+#def mark_dirty_rows_data_profile(table_name, col_names):
+
+
+#def mark_dirty_rows_errors_table(table_name, col_names):
+
+
+# TODO: Finish this later
+#def update_table_rows(table_name, col_names: list) -> None:
+
+
+
 # Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
 def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
     # TODO: fix this so it doesn't update the whole table after small changes to the table
@@ -87,7 +92,6 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
         # detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
 
         print(f"✓ Updated errors table: {errors_table_name}")
-        return detected_errors_df
     except Exception as e:
         print(f"ERROR: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()
@@ -120,15 +124,6 @@ def update_data_profile_table(table_name: str, columns_selected_for_wrangling: l
         raise
 
 
-# TODO: Finish this later
-#def update_stat_to_data_profile_table(table_name: str, error_df: pd.DataFrame) -> None:
-
-
-
-
-
-
-# TODO: does this even do anything? Can I remove it?
 def update_preview_error_table(table_name: str, err_table_name: str) -> None:
     """
     After modifying a table in-place, re-run error detection
@@ -195,6 +190,7 @@ def create_previews():
         else:
             return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
 
+
     except Exception as e:
         print("ERROR in create_previews")
         print(traceback.format_exc())
@@ -222,8 +218,10 @@ def execute_wrangle():
         return {"success": False, "error": str(e)}, 400
 
 
+# TODO: check if the column delete functionality actually even works
 @app.post("/api/wrangle/delete-column")
 def wrangle_delete_column():
+    # TODO: why doesn't this have versioning? What if the user wants to undo this action?
     """
     Delete a column from the table in-place.
 
@@ -242,6 +240,7 @@ def wrangle_delete_column():
         # Re-run error detection
         update_errors_table(table_name, [column])
         update_data_profile_table(table_name, [column])
+        update_action_log(dataset_id=db_operations.base_table_name,action_name="delete_column", action_details={"column": column}, engine=engine)
 
         return {
             "success": True,
