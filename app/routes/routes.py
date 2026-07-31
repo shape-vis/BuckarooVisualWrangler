@@ -14,8 +14,9 @@ from app.server_utils.service_helpers import (
     get_sqlalchemy_dtype_map,
     calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
 )
+from datetime import datetime, timezone
 from app.server_utils.set_id_column import set_id_column
-from app.server_utils.logger_utils import update_action_log, initialize_action_log
+from app.server_utils.logger_utils import update_action_log, initialize_action_log, initialize_preview_log_table
 
 
 def load_file(csv_file, filename):
@@ -31,6 +32,7 @@ def load_file(csv_file, filename):
     :param filename: the name of the csv_file
     :return: json object
     """
+    timestamp = datetime.now(timezone.utc)
     dataframe = pd.read_csv(csv_file)
 
     # run the detectors on the uploaded file for the starting data state
@@ -42,7 +44,8 @@ def load_file(csv_file, filename):
     base_table_name = generate_base_table_name(filename)
 
     initialize_action_log(engine)
-    update_action_log(dataset_id=base_table_name, action_name="load_dataset", action_details=None, engine=engine)
+    initialize_preview_log_table(engine)
+
 
     table_name_with_node_id = f"n0_{base_table_name}"
     # Build dtype map from actual column values before pushing to DB
@@ -83,13 +86,20 @@ def load_file(csv_file, filename):
 
         #init the pgraph
         init_pgraph_for_session(table_name_with_node_id)
+        action_duration = datetime.now(timezone.utc) - timestamp
 
+        update_action_log(dataset_id=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
+                          timestamp=timestamp, action_duration=action_duration, action_successful=True)
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name_with_node_id}
     except Exception as e:
         print(f"Error in upload: {e}")
         import traceback
         traceback.print_exc()
+
+        update_action_log(dataset_id=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
+                          timestamp=timestamp, action_successful=False,
+                          action_error_message=e)
         return {"success": False, "error": str(e)}
 
 
