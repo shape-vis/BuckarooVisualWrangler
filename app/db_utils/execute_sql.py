@@ -33,3 +33,17 @@ def fetch_sql(query: str, scalar: bool, engine, params=None):
 
         return None
 
+def copy_table_to_csv(table_name: str, csv_file_path: str, engine):
+    """
+    Copies the contents of a PostgreSQL table to a CSV file.
+    :arg: table_name: name of the table to copy.
+    :arg: csv_file_path: path to the CSV file to write to.
+    """
+    print("table_name", table_name)
+    print("csv_file_path", csv_file_path)
+    query = f'COPY "{table_name}" TO STDOUT WITH CSV HEADER'
+    with engine.raw_connection() as conn:
+        with open(csv_file_path, 'w') as f:
+            cursor = conn.cursor()
+            cursor.copy_expert(query, f)
+            cursor.close()
