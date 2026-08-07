@@ -3,6 +3,7 @@ import pandas as pd
 import json
 
 from pandas.core.arrays import categorical
+from app import db_operations, logger
 
 from app.db_utils.execute_sql import fetch_sql
 from app.db_utils.column_types import ColumnTypes
@@ -83,11 +84,8 @@ class DataProfile:
                 if row[0] not in ['index', 'level_0', ]:
                     col_names.append(row[0])
 
-            print("COL NAMES FROM QUERY: ", col_names)
-
-
         except Exception as e:
-            print(f"AHHHHHHHHHH Querying for col names unsuccessful because of error: {e}")
+            logger.exception("Error when querying for col names")
 
         return col_names
 
@@ -105,7 +103,7 @@ class DataProfile:
 
             return stat
         except Exception as e:
-            print(f"Error querying attribute from data profile table: {e}")
+            logger.exception(f"Error querying attribute from data profile table")
             return None
 
 
@@ -160,7 +158,7 @@ class DataProfile:
         try:
             avg = self.calculate_summary_stat_using_sql('AVG', column_name)
         except Exception as e:
-            print(f"Error fetching the mean for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the mean for table {self.table_name} at column {column_name}")
             avg = None
 
 
@@ -183,7 +181,7 @@ class DataProfile:
                 query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
             median = fetch_sql(query, True, self.engine)
         except Exception as e:
-            print(f"Error fetching the median for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the median for table {self.table_name} at column {column_name}")
             median = float('nan')
 
         return median
@@ -199,7 +197,7 @@ class DataProfile:
         try:
             maximum = self.calculate_summary_stat_using_sql('MAX', column_name)
         except Exception as e:
-            print(f"Error fetching the maximum for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the maximum for table {self.table_name} at column {column_name}")
 
             maximum = None
 
@@ -215,7 +213,7 @@ class DataProfile:
         try:
             minimum = self.calculate_summary_stat_using_sql('MIN', column_name)
         except Exception as e:
-            print(f"Error fetching the minimum for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the minimum for table {self.table_name} at column {column_name}")
 
             minimum = None
 
@@ -233,8 +231,8 @@ class DataProfile:
             n_categories = fetch_sql(query, True, self.engine)
 
         except Exception as e:
-            print("AHHH SQL QUERY DIDN'T WORK")
-            print(f"Error fetching the n_categories for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the n_categories for table {self.table_name} at column {column_name}")
+
 
             n_categories = None
 
@@ -259,8 +257,7 @@ class DataProfile:
             print("MODE FROM SQL QUERY: ", mode)
 
         except Exception as e:
-            print("AHHH SQL QUERY DIDN'T WORK")
-            print(f"Error fetching the mode for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the mode for table {self.table_name} at column {column_name}")
 
             mode = None
 
@@ -288,7 +285,7 @@ class DataProfile:
                 error_counts = json.dumps({})
         except Exception as e:
 
-            print(f"Error fetching the error counts for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the error counts for table {self.table_name} at column {column_name}")
             error_counts = None
 
 
@@ -365,8 +362,7 @@ class DataProfile:
 
 
         except Exception as e:
-
-            print(f"Error fetching the category counts for table {self.table_name} at column {column_name}: {e}")
+            logger.exception(f"Error fetching the category counts for table {self.table_name} at column {column_name}")
             category_counts = None
 
         if category_counts is not None:
@@ -400,4 +396,6 @@ class DataProfile:
             counts_by_column = json.dumps(counts_by_column)
 
 
-        return counts_by_column
+            return counts_by_column
+        except Exception as e:
+            logger.exception(f"Error fetching the class error counts for table {self.table_name}")

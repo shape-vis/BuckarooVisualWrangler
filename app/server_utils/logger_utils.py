@@ -6,12 +6,12 @@ import traceback
 from datetime import datetime, timezone
 from sqlalchemy import Text, TIMESTAMP, Boolean, Float
 from sqlalchemy.dialects.postgresql import UUID  # if using Postgres
-import logging
+from app import logger
 import json
 
 from app.db_utils.execute_sql import fetch_sql
 
-logger = logging.getLogger(__name__)
+
 
 ACTION_LOG_TABLE_NAME = "action_log"
 PREVIEW_LOG_TABLE_NAME = "preview_log"
@@ -45,7 +45,7 @@ def update_action_log(dataset_id, action_name, action_details, engine, timestamp
         new_action_entry.to_sql(ACTION_LOG_TABLE_NAME, engine, if_exists='append', index=False)
         print("UPDATED ACTION LOG TABLE")
     except Exception:
-        logger.error("Error updating action log.", exc_info=True)
+        logger.exception("Error updating action log.")
 
 
 
@@ -71,7 +71,7 @@ def initialize_action_log(engine, reset_log=False):
         else:
             empty_log_df.to_sql(ACTION_LOG_TABLE_NAME, engine, if_exists='append', index=False, dtype=dtype_map)
     except Exception:
-        logger.error("Error initializing action log.", exc_info=True)
+        logger.exception("Error initializing action log.")
 
 def initialize_preview_log_table(engine, reset_log=False):
     print("INITIALIZING PREVIEW LOG TABLE")
@@ -90,7 +90,7 @@ def initialize_preview_log_table(engine, reset_log=False):
             empty_log_df.to_sql(PREVIEW_LOG_TABLE_NAME, engine, if_exists='append', index=False, dtype=dtype_map)
         print("INITIALIZED PREVIEW LOG TABLE")
     except Exception:
-        logger.error("Error initializing preview log table.", exc_info=True)
+        logger.exception("Error initializing preview log table.")
 
 
 def update_preview_log(preview_table_name, action_name, action_details, engine):
@@ -103,7 +103,7 @@ def update_preview_log(preview_table_name, action_name, action_details, engine):
         new_action_entry.to_sql(PREVIEW_LOG_TABLE_NAME, engine, if_exists='append', index=False)
         print("UPDATED PREVIEW LOG TABLE")
     except Exception:
-        logger.error("Error updating preview log table.", exc_info=True)
+        logger.exception("Error updating preview log table.")
 
 def get_action_details_from_preview_log(preview_table_name, engine):
     try:
@@ -117,7 +117,7 @@ def get_action_details_from_preview_log(preview_table_name, engine):
         result = fetch_sql(query, params={"id": preview_table_name},scalar=True, engine=engine)
         return result
     except Exception:
-        logger.error(f"Error retrieving action details from {preview_table_name} from preview log.", exc_info=True)
+        logger.exception(f"Error retrieving action details from {preview_table_name} from preview log.")
         result = None
         return result
 
