@@ -16,7 +16,7 @@ from app.db_utils.execute_sql import fetch_sql
 ACTION_LOG_TABLE_NAME = "action_log"
 PREVIEW_LOG_TABLE_NAME = "preview_log"
 
-# TODO: switch all of the sql table creation functions to not use pandas because apparently it's very slow
+# TODO: make it so initialization of log is combined with updating the log
 def create_empty_user_action_log_df():
     empty_df = pd.DataFrame(columns=['action_id', 'dataset_id', 'action_name', 'action_details', 'timestamp', 'action_duration', 'action_successful', 'action_error_message'])
     return empty_df
