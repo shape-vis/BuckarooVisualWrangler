@@ -148,6 +148,17 @@ def update_preview_error_table(table_name: str, err_table_name: str) -> None:
         traceback.print_exc()
         raise
 
+def execute_wrangle_logic(preview_table, table):
+    action_details_dict = get_action_details_from_preview_log(preview_table, engine)
+
+    wrangle_executed = extract_preview_action(preview_table)
+
+    new_table_name = execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
+
+    return (new_table_name, action_details_dict, wrangle_executed)
+
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Wrangling Endpoints (Supports both bin-based and ID-based selections)
 # the way it works is, create-previews does all wrangles (delete, impute x/y), 
