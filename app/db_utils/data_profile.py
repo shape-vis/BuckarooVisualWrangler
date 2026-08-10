@@ -135,7 +135,7 @@ class DataProfile:
         :param look_up_stat: If True, first attempt to look up the statistic from the data profile table. If False, calculate it directly.
         :return: The value of the statistic if found or calculated, otherwise None.
         """
-        if look_up_stat:
+        if look_up_stat and db_operations.table_exists(self.data_profile_table_name):
             look_up_value = self.look_up_stat_from_profile(attribute_name, column_name)
 
             if look_up_value is not None:
