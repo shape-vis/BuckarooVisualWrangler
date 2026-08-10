@@ -381,19 +381,18 @@ class DataProfile:
         # TODO: Implement SQL query version
         print("Calculating class error counts manually using data...")
 
-        self.load_error_df()
+        try:
+            counts_by_column = {}
+            if not self._error_df.empty:  # If error_df is empty (no errors in data selection)
+                counts_by_column = (
+                    self._error_df.groupby(['column_id', 'error_type'])
+                    .size()
+                    .unstack(fill_value=0)
+                    .to_dict(orient='index')
+                )
 
-        counts_by_column = {}
-        if not self._error_df.empty:  # If error_df is empty (no errors in data selection)
-            counts_by_column = (
-                self._error_df.groupby(['column_id', 'error_type'])
-                .size()
-                .unstack(fill_value=0)
-                .to_dict(orient='index')
-            )
-
-        if counts_by_column is not None:
-            counts_by_column = json.dumps(counts_by_column)
+            if counts_by_column is not None:
+                counts_by_column = json.dumps(counts_by_column)
 
 
             return counts_by_column
