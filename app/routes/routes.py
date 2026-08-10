@@ -86,7 +86,7 @@ def load_file(csv_file, filename):
 
         #init the pgraph
         init_pgraph_for_session(table_name_with_node_id)
-        action_duration = datetime.now(timezone.utc) - timestamp
+        action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
 
         update_action_log(dataset_id=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
                           timestamp=timestamp, action_duration=action_duration, action_successful=True)

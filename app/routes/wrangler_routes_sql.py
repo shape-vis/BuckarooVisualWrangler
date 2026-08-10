@@ -225,13 +225,12 @@ def create_previews():
                 "dims": 2,
             }
 
-        action_duration = datetime.now(timezone.utc) - timestamp
-        action_duration_seconds = action_duration.total_seconds()
+        action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
 
 
         update_action_log(dataset_id=table, action_name="create_previews",
                           action_details=json.dumps(action_details_dict), engine=engine,
-                          timestamp=timestamp, action_duration= action_duration_seconds,action_successful=True)
+                          timestamp=timestamp, action_duration= action_duration,action_successful=True)
 
         assert result_dict is not None
 
@@ -262,17 +261,12 @@ def execute_wrangle():
         body = request.get_json(force=True)
         table         = db_operations.main_table_name
         preview_table = body["preview_table"]  # the preview to promote
-        action_details_dict = get_action_details_from_preview_log(preview_table, engine)
-
-        wrangle_executed = extract_preview_action(preview_table)
-
-        new_table_name = execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
-
         # TODO: incorporate action details from preview log table into this
-        action_duration = datetime.now(timezone.utc) - timestamp
-        action_duration_seconds = action_duration.total_seconds()
+        (new_table_name, action_details_dict, wrangle_executed) = execute_wrangle_logic(preview_table, table)
+
+        action_duration =  (datetime.now(timezone.utc) - timestamp).total_seconds()
         update_action_log(dataset_id=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
-                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= action_duration_seconds,action_successful=True)
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= action_duration,action_successful=True)
 
         return {"success": True, "table": new_table_name}
     except Exception as e:
@@ -308,10 +302,9 @@ def wrangle_delete_column():
         # Re-run error detection
         update_errors_table(table_name, [column])
         update_data_profile_table(table_name, [column])
-        action_duration = datetime.now(timezone.utc) - timestamp
-        action_duration_seconds = action_duration.total_seconds()
+        action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
         update_action_log(dataset_id=db_operations.base_table_name, action_name="delete_column",
-                          action_details={"column": column}, engine=engine, timestamp=timestamp, action_duration= action_duration_seconds,
+                          action_details={"column": column}, engine=engine, timestamp=timestamp, action_duration= action_duration,
                           action_successful=True)
 
 
