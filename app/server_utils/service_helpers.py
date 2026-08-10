@@ -211,8 +211,8 @@ def create_data_profile_df(data_profile, col_names=None):
 
             # Make sure that attribute and the column type match
 
-            numeric = ((data_profile.col_types.is_numeric_mixed_col(col) or data_profile.col_types.is_numeric_col  )and attribute in data_profile.attribute_type_assignment['numeric'])
-            categorical = ((data_profile.col_types.is_categorical_mixed_col(col) or data_profile.col_types.is_categorical_col)and attribute in data_profile.attribute_type_assignment['categorical'])
+            numeric = ((data_profile.col_types.is_numeric_mixed_col(col) or data_profile.col_types.is_numeric_col(col)  )and attribute in data_profile.attribute_type_assignment['numeric'])
+            categorical = ((data_profile.col_types.is_categorical_mixed_col(col) or data_profile.col_types.is_categorical_col(col))and attribute in data_profile.attribute_type_assignment['categorical'])
 
             if not (numeric or categorical):
 
