@@ -47,9 +47,9 @@ if __name__ == "__main__":
     ablation_configs = [
         variant("baseline"),
         variant("no_error_log", include_error_log=False),
-        variant("no_data_profile", include_error_log=False),
-        variant("no_action_log", include_error_log=False),
-        variant("no_full_dataset", include_error_log=False),
+        variant("no_data_profile", include_data_profile=False),
+        variant("no_action_log", include_action_log=False),
+        variant("no_full_dataset", include_full_dataset=False),
         variant("no_action_log_limit", action_log_limit=None) # Includes full action log
     ]
 
@@ -77,6 +77,7 @@ if __name__ == "__main__":
             # reset your stateful class instance
             db_operations.reset()
             for dataset in datasets_paths:
+                print(f"Running config {config} wth model {model} and dataset {dataset}")
                 initialize_action_log(engine, reset_log=True)
 
                 with open(dataset, 'rb') as f:
