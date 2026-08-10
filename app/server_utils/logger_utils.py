@@ -25,6 +25,9 @@ def create_empty_preview_log_df():
     empty_df = pd.DataFrame(columns=['preview_table_name', 'action_name', 'action_details'])
     return empty_df
 
+def create_empty_settings_df():
+    empty_df = pd.DataFrame(columns=['model'])
+    return empty_df
 
 # TODO: update documentation
 def update_action_log(dataset_id, action_name, action_details, engine, timestamp, action_successful,
