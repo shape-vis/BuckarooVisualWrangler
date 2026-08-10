@@ -19,7 +19,9 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
-from app.db_utils.data_profile import DataProfile
+from app.server_utils.logger_utils import update_action_log
+from datetime import datetime, timezone
+import logging
 
 def get_current_pgraph():
     """
@@ -70,7 +72,7 @@ def _safe_pg_name(base: str, suffix: str) -> str:
     return f"{base[:max_base]}_{h}{suffix}"
 
 
-def generate_table_name(csv_name):
+def generate_base_table_name(csv_name):
     """
     Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
     - Remove file extension (.csv), replace spaces/special chars with underscores, ensure it starts with a letter (SQL requirement)
@@ -218,8 +220,6 @@ def create_data_profile_df(data_profile, col_names=None):
 
                 continue
 
-            print("CALCULATING ATTRIBUTE: ", attribute)
-            print("COLUMN: ", col)
 
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
         col_list.append(row_dict)
@@ -420,7 +420,6 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     3. Reload db_operations with the new node
     Returns a dict with success and table name.
     """
-    # from app import engine, db_operations
 
     all_possible_previews = [
         safe_pg_name_fn(table, "_preview_delete"),
@@ -443,7 +442,8 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     app.db_operations.update_rankings(new_table_name)
 
 
-    return {"success": True, "table": new_table_name}
+    return new_table_name
+
 
 def _clone_table_pair(conn, source_table, dest_table, errors_source, dp_source):
     """Drop-and-recreate dest_table and its errors_ and dp_ sibling as copies of source tables."""
@@ -536,12 +536,8 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     update_data_profile_table_fn(preview_delete_table_name, cols)
     update_data_profile_table_fn(preview_impute_table_name, cols)
 
-    return {
-        "success": True,
-        "preview_delete": preview_delete_table_name,
-        "preview_impute": preview_impute_table_name,
-        "dims": 1,
-    }
+    return (preview_delete_table_name, preview_impute_table_name)
+
 
 def extract_preview_action(name: str) -> str:
     """Extract the action after '_preview_' (e.g. 'impute_y'), or '' if not found."""
@@ -581,14 +577,9 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     update_data_profile_table_fn(preview_impute_x_table_name, cols)
     update_data_profile_table_fn(preview_impute_y_table_name, cols)
 
+    return (preview_delete_table_name, preview_impute_x_table_name, preview_impute_y_table_name)
 
-    return {
-        "success": True,
-        "preview_delete": preview_delete_table_name,
-        "preview_impute_x": preview_impute_x_table_name,
-        "preview_impute_y": preview_impute_y_table_name,
-        "dims": 2,
-    }
+
 
 def _parse_node_id(table_name):
     """Parse 'n3_rest_of_name' into (3, 'rest_of_name'). Returns None on failure."""

@@ -2,27 +2,23 @@
 # This file handles all endpoints surrounding wranglers
 
 from flask import request
-from app import app, db_operations
 from app.db_utils import query
-from app import engine
+from app import app, engine, db_operations
 import traceback
 import pandas as pd
 from app.server_utils.service_helpers import create_error_df, create_previews_1d, create_previews_2d, \
-    execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map
+    execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map, extract_preview_action
 from sqlalchemy import inspect, text
 
 from app.db_utils.data_profile import DataProfile
+from datetime import datetime, timezone
+from app.server_utils.logger_utils import update_action_log, update_preview_log, get_action_details_from_preview_log
+import json
 
 """
 Wrangling Endpoints - In-place modification of tables
 """
 
-def get_table_dtypes(target_table_name, engine):
-    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
-    inspector = inspect(engine)
-    columns = inspector.get_columns(target_table_name)
-    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
-    return {col["name"]: col["type"] for col in columns}
 
 # Where updated_df is just the data that needed to actually be updated
 # Assumes that updated_df has the same columns as the target table
@@ -59,6 +55,17 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
+#def mark_dirty_rows_data_profile(table_name, col_names):
+
+
+#def mark_dirty_rows_errors_table(table_name, col_names):
+
+
+# TODO: Finish this later
+#def update_table_rows(table_name, col_names: list) -> None:
+
+
+
 # Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
 def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
     # TODO: fix this so it doesn't update the whole table after small changes to the table
@@ -87,7 +94,6 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
         # detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
 
         print(f"✓ Updated errors table: {errors_table_name}")
-        return detected_errors_df
     except Exception as e:
         print(f"ERROR: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()
@@ -120,15 +126,6 @@ def update_data_profile_table(table_name: str, columns_selected_for_wrangling: l
         raise
 
 
-# TODO: Finish this later
-#def update_stat_to_data_profile_table(table_name: str, error_df: pd.DataFrame) -> None:
-
-
-
-
-
-
-# TODO: does this even do anything? Can I remove it?
 def update_preview_error_table(table_name: str, err_table_name: str) -> None:
     """
     After modifying a table in-place, re-run error detection
@@ -178,24 +175,74 @@ def create_previews():
       row_ids  – list of integer row IDs to operate on
       cols     – list of column names involved in the selection (for imputation)
     """
+
+    timestamp = datetime.now(timezone.utc)
     try:
         body = request.get_json(force=True)
         table   = db_operations.main_table_name
         row_ids = body.get("row_ids", [])
         cols    = body.get("cols", [])
 
+
         # extra case protection.
         #cols    = [f'{col}' for col in cols]
 
         if not row_ids:
+            update_action_log(dataset_id=table, action_name="create_previews",
+                              action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine,
+                              timestamp=timestamp, action_successful=False, action_error_message="Row IDs list is empty")
+
             return {"success": False, "error": "No rows selected"}, 400
 
+
+        action_details_dict = {"row_ids": row_ids, "cols": cols}
+
         if len(cols) == 1:
-            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
+
+            (preview_delete_table_name, preview_impute_table_name) = create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
+
+            update_preview_log(preview_delete_table_name, "delete_wrangle", action_details_dict, engine)
+            update_preview_log(preview_impute_table_name, "impute_wrangle", action_details_dict, engine)
+
+            result_dict = {
+                "success": True,
+                "preview_delete": preview_delete_table_name,
+                "preview_impute": preview_impute_table_name,
+                "dims": 1,
+            }
         else:
-            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
+            (preview_delete_table_name, preview_impute_x_table_name, preview_impute_y_table_name) = create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
+
+            update_preview_log(preview_delete_table_name, "delete_wrangle", action_details_dict, engine)
+            update_preview_log(preview_impute_x_table_name, "impute_x_wrangle", action_details_dict, engine)
+            update_preview_log(preview_impute_y_table_name, "impute_y_wrangle", action_details_dict, engine)
+
+            result_dict = {
+                "success": True,
+                "preview_delete": preview_delete_table_name,
+                "preview_impute_x": preview_impute_x_table_name,
+                "preview_impute_y": preview_impute_y_table_name,
+                "dims": 2,
+            }
+
+        action_duration = datetime.now(timezone.utc) - timestamp
+        action_duration_seconds = action_duration.total_seconds()
+
+
+        update_action_log(dataset_id=table, action_name="create_previews",
+                          action_details=json.dumps(action_details_dict), engine=engine,
+                          timestamp=timestamp, action_duration= action_duration_seconds,action_successful=True)
+
+        assert result_dict is not None
+
+        return result_dict
 
     except Exception as e:
+
+        update_action_log(dataset_id=table, action_name="create_previews",
+                          action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine,
+                          timestamp=timestamp, action_successful=False, action_error_message=e)
+
         print("ERROR in create_previews")
         print(traceback.format_exc())
         return {"success": False, "error": str(e)}, 400
@@ -210,25 +257,44 @@ def execute_wrangle():
     3. Rename the selected preview table to <table>
     4. Delete <table>_old
     """
+    timestamp = datetime.now(timezone.utc)
     try:
         body = request.get_json(force=True)
         table         = db_operations.main_table_name
         preview_table = body["preview_table"]  # the preview to promote
+        action_details_dict = get_action_details_from_preview_log(preview_table, engine)
 
-        return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
+        wrangle_executed = extract_preview_action(preview_table)
+
+        new_table_name = execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
+
+        # TODO: incorporate action details from preview log table into this
+        action_duration = datetime.now(timezone.utc) - timestamp
+        action_duration_seconds = action_duration.total_seconds()
+        update_action_log(dataset_id=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= action_duration_seconds,action_successful=True)
+
+        return {"success": True, "table": new_table_name}
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())
+
+        update_action_log(dataset_id=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= None,action_successful=False, action_error_message=e)
         return {"success": False, "error": str(e)}, 400
 
 
+# TODO: check if the column delete functionality actually even works
 @app.post("/api/wrangle/delete-column")
 def wrangle_delete_column():
+    # TODO: why doesn't this have versioning? What if the user wants to undo this action?
     """
     Delete a column from the table in-place.
 
     Modifies the table directly - no versioning.
     """
+
+    timestamp = datetime.now(timezone.utc)
     try:
         body = request.get_json(force=True)
         table_name = db_operations.main_table_name
@@ -242,6 +308,12 @@ def wrangle_delete_column():
         # Re-run error detection
         update_errors_table(table_name, [column])
         update_data_profile_table(table_name, [column])
+        action_duration = datetime.now(timezone.utc) - timestamp
+        action_duration_seconds = action_duration.total_seconds()
+        update_action_log(dataset_id=db_operations.base_table_name, action_name="delete_column",
+                          action_details={"column": column}, engine=engine, timestamp=timestamp, action_duration= action_duration_seconds,
+                          action_successful=True)
+
 
         return {
             "success": True,
@@ -251,4 +323,8 @@ def wrangle_delete_column():
     except Exception as e:
         print("ERROR OCCURRED")
         print(traceback.format_exc())
+
+        update_action_log(dataset_id=db_operations.base_table_name, action_name=f"delete_column",
+                          action_details={"column": column}, engine=db_operations.engine, timestamp=timestamp, action_duration= None,action_successful=False, action_error_message=e)
+
         return {"success": False, "error": str(e)}, 400
