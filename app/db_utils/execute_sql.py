@@ -4,13 +4,13 @@ from sqlalchemy import text
 Thin wrapper around SQLAlchemy for executing and fetching results from a PostgreSQL database.
 """
 
-def execute_sql(query: str, engine):
+def execute_sql(query: str, engine, params=None):
     """
     Executes given SQL query to the postgres database.
     """
 
     with engine.begin() as conn:
-        conn.execute(text(query))
+        conn.execute(text(query), params)
 
 def fetch_sql(query: str, scalar: bool, engine, params=None):
     """
