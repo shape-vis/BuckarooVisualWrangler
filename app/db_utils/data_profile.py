@@ -145,7 +145,6 @@ class DataProfile:
                 return to_scalar(look_up_value)
 
         calculate_attribute_func = self.name_to_func[attribute_name]
-        # TODO: save stat off to table if newly calculated
 
         return to_scalar(calculate_attribute_func(column_name))
 
