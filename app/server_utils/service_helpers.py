@@ -208,15 +208,14 @@ def create_data_profile_df(data_profile, col_names=None):
 
             # Make sure that attribute and the column type match
 
-            numeric = ((data_profile.col_types.is_numeric_mixed_col(col) or data_profile.col_types.is_numeric_col(col)  )and attribute in data_profile.attribute_type_assignment['numeric'])
-            categorical = ((data_profile.col_types.is_categorical_mixed_col(col) or data_profile.col_types.is_categorical_col(col))and attribute in data_profile.attribute_type_assignment['categorical'])
+            numeric = ((data_profile.col_types.is_mixed_numeric_col(col) or data_profile.col_types.is_pure_numeric_col(col)  )and attribute in data_profile.attribute_type_assignment['numeric'])
+            categorical = ((data_profile.col_types.is_mixed_categorical_col(col) or data_profile.col_types.is_pure_categorical_col(col)) and attribute in data_profile.attribute_type_assignment['categorical'])
+
 
             if not (numeric or categorical):
-
                 row_dict[attribute] = None
 
                 continue
-
 
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
         col_list.append(row_dict)
