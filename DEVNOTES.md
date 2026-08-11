@@ -200,20 +200,28 @@ All three join against `errors_<table>` and, when active, the `<table>_filtering
 
 ## 5. ColumnTypes
 
-`ColumnTypes` is defined in `app/db_utils/db_functions_sql.py` (line 22) and instantiated inside `DBOperations.load_table()`. It classifies every column into one of three sets:
+`ColumnTypes` is defined in `app/db_utils/column_types.py`. Instantiated inside `DBOperations.load_table()` and `DataProfile.__init__()`
 
-| Set | Attribute | Contents |
-|-----|-----------|----------|
-| Numeric | `numeric_cols` | Columns with a PostgreSQL numeric type (`integer`, `bigint`, `numeric`, `real`, `double precision`, `smallint`) |
-| Pure categorical | `pure_categorical` | Non-numeric columns whose values contain no numeric-looking strings |
-| Mixed | `categorical_mixed` | Non-numeric columns that contain some values matching `^\s*-?\d+(\.\d+)?\s*$` |
+It classifies every column into one of five sets: pure numeric, pure categorical, mixed numeric, mixed categorical.
+This classification is used not only to determine how to bin the data for histograms, to determine how to impute missing values in previews,
+and also determine how summary stats should be calculated for each column. The classification is based on the declared Postgres type and the actual values in the column.
+
+| Set               | Attribute                | Contents                                                                                                                                                                  |
+|-------------------|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Numeric           | `pure_numeric_cols`      | Columns with a PostgreSQL numeric type (`integer`, `bigint`, `numeric`, `real`, `double precision`, `smallint`) or with a value that can be converted into a numeric type |
+| Pure categorical  | `pure_categorical_cols`  | Non-numeric columns whose values contain no numeric-looking strings                                                                                                       |
+| Mixed categorical | `categorical_mixed_cols` | Non-numeric columns that contain some values matching `^\s*-?\d+(\.\d+)?\s*$` but are __majority__ categorical                                                            |
+| Mixed numeric     | `numeric_mixed_cols`     | Numeric columns that contain __majority__ numeric values                                                                                                                  |
+| Mixed             | `mixed_cols`             | All columns that have mixed values (categorical_mixed_cols and numeric_mixed_cols combined)                                                                               |
 
 **How classification works:**
 1. Queries `information_schema.columns` for the column's declared Postgres type — these types are originally detected and set in Postgres during the initial upload in `app/routes/routes.py`. The function `load_file()` calls `get_sqlalchemy_dtype_map()` (in `service_helpers.py`), the helper which inspects each column's actual values to pick `BigInteger` / `Float` / `Text`.
-2. For all non-numeric columns, runs a regex check against the actual values in the table
-3. Splits into `pure_categorical` vs. `categorical_mixed` based on whether any numeric-looking values exist
+2. Categorizes into `pure_categorical_cols`, `pure_numeric_cols`, or `mixed_cols` based on the declared type
+3. For all `mixed_cols`, runs a regex check against the actual values in the table and splits them into `numeric_mixed_cols` vs. `categorical_mixed_cols` based on whether the majority of values are numeric-looking or not
 
-**Where it's used:** everywhere inside `DBOperations` that builds SQL. The classification controls whether a column gets numeric `width_bucket` binning or categorical label-group binning in the CTE queries. Helper methods — `is_numeric_col()`, `is_categorical_col()`, `is_mixed_col()` — are called throughout.
+**Where it's used:** 
+- Everywhere inside `DBOperations` that builds SQL. The classification controls whether a column gets numeric `width_bucket` binning or categorical label-group binning in the CTE queries. Helper methods — `is_numeric_col()`, `is_categorical_col()`, `is_mixed_col()` — are called throughout.
+- `DataProfile` uses it to determine which summary stats to compute for each column. `DataProfile` doesnT use the column types of `DBOperations` because a preview might be modified in such a way that the column types do not match anymore.
 
 ---
 
