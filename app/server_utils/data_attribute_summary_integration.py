@@ -68,9 +68,12 @@ def get_attribute_stats(data_profile, column, main_df):
     :return: dictionary containing statistics for the column
     """
 
-    if data_profile.col_types.is_categorical_mixed_col(column):
+    if data_profile.col_types.is_mixed_categorical_col(column) or data_profile.col_types.is_pure_categorical_col(column):
         return get_categorical_stats(data_profile, column)
-    return get_numeric_stats(data_profile, column)
+    elif data_profile.col_types.is_mixed_numeric_col(column) or data_profile.col_types.is_pure_numeric_col(column):
+        return get_numeric_stats(data_profile, column)
+    else:
+        print(f"Error, this should not be happening", data_profile.col_types.get_col_type(column), "col_name", column)
 
 def build_attribute_distributions(data_profile, main_df):
     """
