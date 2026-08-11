@@ -12,7 +12,20 @@ class ColumnTypes:
         self.categorize_mixed_cols(main_table_name)
 
 
-    def gather_numeric_cols(self, main_table_name: str):
+    def get_col_type(self, col_name):
+        if col_name in self.pure_numeric_cols:
+            return "pure_numeric"
+        elif col_name in self.pure_categorical_cols:
+            return "pure_categorical"
+        elif col_name in self.mixed_categorical_cols:
+            return "mixed_categorical"
+        elif col_name in self.mixed_numeric_cols:
+            return "mixed_numeric"
+        elif col_name in self.mixed_cols:
+            return "mixed"
+        else:
+            return "unknown"
+
     def gather_pure_numeric_cols(self, main_table_name: str):
 
         from app.db_utils.execute_sql import fetch_sql
