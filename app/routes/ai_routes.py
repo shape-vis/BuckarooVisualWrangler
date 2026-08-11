@@ -21,6 +21,17 @@ valid_actions = ["delete_wrangle", "impute_wrangle", "delete_column", "plan_end"
 
 def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path, action_log_csv_path,
                                    data_profile_csv_path, full_dataset_csv_path, action_limit=5):
+    """
+    Queries LLM to generate a text action plan after given context
+    :param model: name of the model
+    :param provider: name of the model provider
+    :param api_key: API key
+    :param error_log_csv_path: path to the error log
+    :param action_log_csv_path: path to the action log
+    :param data_profile_csv_path: path to the data profile
+    :param full_dataset_csv_path: path to the full dataset csv
+    :param action_limit: maximum number of actions to generate
+    """
     system_prompt = f"You are data scientist. Create an action plan of the top {action_limit} steps the user could do that efficiently cleans this dataset."
 
     csv_text = {}
@@ -83,6 +94,14 @@ def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path,
 
 
 def query_llm_for_action_plan_translation(model, provider, api_key, text_action_plan):
+    """
+    Queries LLM to translate from a text plan to JSON
+    :param model: name of the model
+    :param provider: name of the model provider
+    :param api_key: API key
+    :param text_action_plan: Plan to be translated to JSON
+    :return: JSON of the action plan
+    """
     system_prompt = "You are a translator that translates actions from natural language text to JSON where each row is an action.  Translate this action plan from text to JSON."
 
     llm_translated_plan_rules = '''
@@ -124,7 +143,17 @@ def query_llm_for_action_plan_translation(model, provider, api_key, text_action_
     return json_action_plan
 
 
+# This actually isn't being used yet but will hopefully be used in the future
 def query_llm_for_dataset_context(model, api_key, column_names, user_provided_dataset_context, dataset_name):
+    """
+    Queries LLM to generate context about the dataset (dataset description, column descriptions)
+    :param model: name of the model
+    :param api_key: API key
+    :param column_names: list of column names
+    :param user_provided_dataset_context: context provided by the user
+    :param dataset_name: name of the dataset
+    :return: JSON of the dataset context
+    """
     system_prompt = ("You are a data scientist that is given a dataset. "
                      "You are to provide context about the dataset. You are to give a description of the dataset as well"
                      "as a brief description of each column. If you do not know what a column is, you can have the"
@@ -155,6 +184,11 @@ def query_llm_for_dataset_context(model, api_key, column_names, user_provided_da
 
 @app.post('/api/ai_helper/perform_llm_action')
 def perform_llm_action():
+    """
+    Perform action using action json from LLM
+    :param action_dict: Dictionary containing action details
+    :return: JSON response indicating success or failure
+    """
     from app import db_operations
     from app.db_utils.query import remove_rows_by_ids, impute_by_ids
     action_dict = request.get_json()
@@ -188,6 +222,10 @@ def perform_llm_action():
 
 @app.post('/api/ai_helper/get_action_plan')
 def get_llm_json_action_plan():
+    """
+    Combines LLM text action plan with translation to generate JSON action plan
+    :return: Dict indicating success or failure and the json action plan
+    """
     from app import db_operations, engine
     from app.server_utils.logger_utils import ACTION_LOG_TABLE_NAME
     try:
@@ -225,6 +263,11 @@ def get_llm_json_action_plan():
 
 @app.post('/api/ai_helper/update_settings_table')
 def update_settings_table():
+    """
+    Updates the settings table which contains the model the user chose and the model provider
+    :param model_name: Name of the model
+    :param provider: Provider of the model
+    """
     data = request.get_json()
     model_name = data.get("model_name")
     provider = data.get("provider")
@@ -272,6 +315,10 @@ def update_settings_table():
         return {"success": False}
 
 def get_settings_dict(engine):
+    """
+    Retrieves the model name and provider from the settings table.
+    :return: Dictionary containing model name and provider, or None if not found
+    """
     try:
         result = fetch_sql(f"SELECT model_name, provider FROM {AI_SETTINGS_TABLE_NAME} WHERE id = :id", False, engine, {"id": 1})
         row = result[0]
