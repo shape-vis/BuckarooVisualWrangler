@@ -11,6 +11,14 @@ import time
 # Overwriting the csv every time the LLM needs it to be updated; we don't really need to save the old ones
 
 def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, full_dataset_name):
+    """
+    Updates the csv files for the LLM to access the error log, data profile, action log, and full dataset tables.
+    :param error_table_name: the name of the error table
+    :param data_profile_name: the name of the profile table
+    :param action_log_name: the name of the action log table
+    :param full_dataset_name: the name of the full dataset table
+    :return: Tuple of csv paths (error log, data profile, action log, full dataset table)
+    """
     action_log_csv_path = "action_log.csv"
     error_log_csv_path = "error_log.csv"
     data_profile_csv_path = "data_profile.csv"
@@ -37,6 +45,11 @@ def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, fu
 
 
 def write_tables_to_csv(table_name_tuple_list):
+    """
+    Writes tables to a csv file (so that the LLM can access them) and overwrites the csv file if it already exists
+    :param table_name_tuple_list: a list of tuples of the form (action_log_name, action_log_csv_path),
+    :return: None
+    """
     from app import engine
     for (table_name, csv_path) in table_name_tuple_list:
 
@@ -48,6 +61,9 @@ def write_tables_to_csv(table_name_tuple_list):
 
 
 def parse_json_response(llm_json_response):
+    """
+    Tries to parse json response from llm
+    """
     try:
         return json.loads(llm_json_response)
     except json.JSONDecodeError:
@@ -55,9 +71,17 @@ def parse_json_response(llm_json_response):
             return ast.literal_eval(llm_json_response)
         except (ValueError, SyntaxError) as e:
             logger.exception(f"Could not parse response as dict or JSON")
+            raise
 
 
 def call_with_retry(function, func_args, max_tries=5):
+    """
+    Retry function call until max tries is reached or the function call succeeds.
+    :param function: the function to call
+    :param func_args: the function arguments
+    :param max_tries: the maximum number of retries
+    :return: the result of the function call
+    """
     for attempt in range(max_tries):
         try:
             result = function(*func_args)
@@ -76,6 +100,11 @@ def call_with_retry(function, func_args, max_tries=5):
 
 
 def get_api_key(provider):
+    """
+    Retrieves the API key for the specified provider.
+    :param provider: The provider for which to retrieve the API key
+    :return: The API key for the specified provider
+    """
     key_map = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
