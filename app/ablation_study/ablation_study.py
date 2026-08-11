@@ -43,7 +43,6 @@ def is_stop_action(action_name):
 if __name__ == "__main__":
     load_dotenv()
 
-    # TODO: double check this
     ablation_configs = [
         variant("baseline"),
         variant("no_error_log", include_error_log=False),

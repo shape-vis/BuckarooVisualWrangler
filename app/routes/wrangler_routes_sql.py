@@ -22,7 +22,6 @@ Wrangling Endpoints - In-place modification of tables
 
 # Where updated_df is just the data that needed to actually be updated
 # Assumes that updated_df has the same columns as the target table
-# TODO: reimplement with "dirty flags"
 def update_table(updated_df, target_table_name, key_col, cols_to_remove):
     with engine.begin() as conn:
         result = conn.execute(
@@ -55,20 +54,10 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
-#def mark_dirty_rows_data_profile(table_name, col_names):
-
-
-#def mark_dirty_rows_errors_table(table_name, col_names):
-
-
-# TODO: Finish this later
-#def update_table_rows(table_name, col_names: list) -> None:
-
 
 
 # Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
 def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
-    # TODO: fix this so it doesn't update the whole table after small changes to the table
     """
     After modifying a table in-place, re-run error detection
     and update the errors table.
@@ -99,8 +88,6 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
         traceback.print_exc()
         raise
 
-# TODO: Make update_data_profile_table and update_errors_table more similar
-# TODO: Re-implement with "dirty flags"
 # TODO:optimize this so it doesn't load the whole table into a df first
 def update_data_profile_table(table_name: str, columns_selected_for_wrangling: list) -> None:
     try:
@@ -272,6 +259,7 @@ def execute_wrangle():
         body = request.get_json(force=True)
         table         = db_operations.main_table_name
         preview_table = body["preview_table"]  # the preview to promote
+
         # TODO: incorporate action details from preview log table into this
         (new_table_name, action_details_dict, wrangle_executed) = execute_wrangle_logic(preview_table, table)
 

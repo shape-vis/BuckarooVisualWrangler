@@ -19,10 +19,6 @@ valid_actions = ["delete_wrangle", "impute_wrangle", "delete_column", "plan_end"
     - 
 '''
 
-
-
-# TODO: either put this back to action_details or apply rows and columns to the rest of the logs
-
 def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path, action_log_csv_path,
                                    data_profile_csv_path, full_dataset_csv_path, action_limit=5):
     system_prompt = f"You are data scientist. Create an action plan of the top {action_limit} steps the user could do that efficiently cleans this dataset."
@@ -184,7 +180,6 @@ def perform_llm_action():
             "success": True
         }
 
-
     except Exception as e:
         logger.exception("Error performing LLM action")
         return {
@@ -230,11 +225,9 @@ def get_llm_json_action_plan():
 
 @app.post('/api/ai_helper/update_settings_table')
 def update_settings_table():
-    print("UPDATING SETTINGS TABLE")
     data = request.get_json()
     model_name = data.get("model_name")
     provider = data.get("provider")
-    print("MODEL NAME", model_name, "PROVIDER", provider)
 
     try:
         execute_sql(f"""
@@ -272,14 +265,12 @@ def update_settings_table():
                 engine, {"id": 1, "model_name": model_name, "provider": provider}
             )
 
-        print("MODEL NAME", model_name, "PROVIDER", provider)
         return {"success": True}
     except Exception as e:
         logger.exception("Error updating settings table.")
 
         return {"success": False}
 
-# TODO: what do i do if get_settings_dict is None?
 def get_settings_dict(engine):
     try:
         result = fetch_sql(f"SELECT model_name, provider FROM {AI_SETTINGS_TABLE_NAME} WHERE id = :id", False, engine, {"id": 1})
@@ -289,7 +280,6 @@ def get_settings_dict(engine):
             model_name = row.model_name  # or row[0]
             provider = row.provider
             print("MODEL NAME", model_name, "PROVIDER", provider)
-        # TODO: maybe don't return a dict
             settings_dict = {"model_name": model_name, "provider": provider}
         else:
             settings_dict = None

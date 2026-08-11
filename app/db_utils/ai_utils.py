@@ -11,8 +11,6 @@ import time
 # Overwriting the csv every time the LLM needs it to be updated; we don't really need to save the old ones
 
 def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, full_dataset_name):
-    print(f"UPDATE CSVS FOR LLM PATHS error_table_name: {error_table_name}, data_profile_name: {data_profile_name} action_log_name: {action_log_name}")
-
     action_log_csv_path = "action_log.csv"
     error_log_csv_path = "error_log.csv"
     data_profile_csv_path = "data_profile.csv"
@@ -66,11 +64,11 @@ def call_with_retry(function, func_args, max_tries=5):
 
             return result
         except Exception:
-            logger.exception("Error occurred while calling LLM function")
+            logger.exception(f"Error occurred while calling call_with_retry. Num retries: {attempt}")
             if attempt == max_tries - 1:
                 raise
 
-            # TODO: is this okay
+            # TODO: make sure this is enough delay
             delay = 10
             delay *= random.uniform(0.5, 1.5)  # jitter
             time.sleep(delay)

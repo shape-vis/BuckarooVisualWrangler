@@ -8,7 +8,8 @@ from app import db_operations, logger
 from app.db_utils.execute_sql import fetch_sql
 from app.db_utils.column_types import ColumnTypes
 
-# TODO: is this needed? this may be a duplicate
+from sqlalchemy import text
+
 def to_scalar(val):
     if val is None:
         return None
@@ -51,7 +52,7 @@ class DataProfile:
             'mean': self._calculate_mean,
             'median': self._calculate_median,
             'min': self._calculate_min,
-            'max': self._calculate_max, #TODO: add more,
+            'max': self._calculate_max,
             'n_categories': self._calculate_num_categories,
             'mode': self._calculate_mode,
             'error_counts': self._calculate_error_count_dict,
@@ -292,42 +293,6 @@ class DataProfile:
 
         return error_counts
 
-    # TODO: implement this later
-    # # Dict mapping from class to error types to error counts
-    # def _calculate_class_error_count_dict(self, column_name):
-    #     """
-    #     :param column_name: Name of the column for which the class error count is being calculated
-    #     :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
-    #     """
-    #
-    #     try:
-    #         # TODO: check if this works
-    #         ry:
-    #         query = f'''
-    #                     SELECT "column_id", "error_type", COUNT(*) AS error_count
-    #                     FROM "{self.error_table_name}"
-    #                     WHERE "column_id" = :column_name
-    #                     GROUP BY "column_id", "error_type"
-    #                 '''
-    #
-    #         rows = fetch_sql(query, True, self.engine, params={"column_name": column_name})
-    #
-    #         counts_by_column = {}
-    #         for r in (rows or []):
-    #             row = dict(r)
-    #             category = row[category_col]
-    #             error_type = row["error_type"]
-    #             count = row["error_count"]
-    #             counts_by_column.setdefault(category, {})[error_type] = count
-    #
-    #     except Exception as e:
-    #         print(f"Error fetching the error counts for table {self.table_name} at column {column_name}: {e}")
-    #         counts_by_column = None
-    #     if counts_by_column is not None:
-    #         counts_by_column = json.dumps(counts_by_column)
-    #
-    #     return counts_by_column
-
     def _calculate_category_count_dict(self, column_name):
         """
         :param column_name: Name of the column for which the class error count is being calculated
@@ -378,22 +343,26 @@ class DataProfile:
         :param column_name: Name of the column for which the class error count is being calculated
         :return: The class error count dict ({"Male": {"missing": 10, "mismatch": 5, ...}, "Female": {"missing": 10, "mismatch": 5, ...}})
         """
-        # TODO: Implement SQL query version
         print("Calculating class error counts manually using data...")
+
 
         try:
             counts_by_column = {}
-            if not self._error_df.empty:  # If error_df is empty (no errors in data selection)
-                counts_by_column = (
-                    self._error_df.groupby(['column_id', 'error_type'])
-                    .size()
-                    .unstack(fill_value=0)
-                    .to_dict(orient='index')
-                )
+
+            query = text("""
+                         SELECT column_id, error_type, COUNT(*) as count
+                         FROM error_table
+                         GROUP BY column_id, error_type
+                         """)
+
+            results = fetch_sql(query, False, self.engine)
+
+            if results is not None:
+                for row in results:
+                    counts_by_column.setdefault(row.column_id, {})[row.error_type] = row.count
 
             if counts_by_column is not None:
                 counts_by_column = json.dumps(counts_by_column)
-
 
             return counts_by_column
         except Exception as e:

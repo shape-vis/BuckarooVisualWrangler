@@ -173,7 +173,6 @@ def create_error_df(data_frame):
     """
     df_with_id = set_id_column(data_frame)
 
-    # TODO: optimize these functions
     anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
@@ -181,7 +180,6 @@ def create_error_df(data_frame):
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
 
     df = perform_melt(frames)
-    print("CREATE ERROR TABLE TYPE MAP", df.dtypes)
     return df
 
 def create_data_profile_df(data_profile, col_names=None):
@@ -190,7 +188,6 @@ def create_data_profile_df(data_profile, col_names=None):
     :param col_names: the column names of interest in the table
     :return: a dataframe of the data profile for the table
     """
-    print("CREATED DATA_PROFILE DF FOR TABLE", data_profile.table_name)
 
     # Dict of attributes that will be in the data profile and the type that they should be
     default_attributes = ['mean', 'median', 'min', 'max', 'n_categories',
