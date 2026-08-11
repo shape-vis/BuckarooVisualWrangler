@@ -302,7 +302,7 @@ class DataProfile:
 
             n_categories = self.calculate_column_attribute("n_categories", column_name, True)
             n_rows_query = f"""
-                            SELECT "{column_name}", COUNT(*) FROM "{self.table_name}"
+                            SELECT COUNT(*) FROM "{self.table_name}"
                             """
 
             n_rows = fetch_sql(n_rows_query, True, self.engine)
