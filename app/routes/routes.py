@@ -16,7 +16,7 @@ from app.server_utils.service_helpers import (
 )
 from datetime import datetime, timezone
 from app.server_utils.set_id_column import set_id_column
-from app.server_utils.logger_utils import update_action_log, initialize_action_log, initialize_preview_log_table
+from app.server_utils.logger_utils import update_action_log
 
 
 def load_file(csv_file, filename):
@@ -42,10 +42,6 @@ def load_file(csv_file, filename):
     time_to_detect = time.time() - start_time
     app.original_table_name = filename
     base_table_name = generate_base_table_name(filename)
-
-    initialize_action_log(engine)
-    initialize_preview_log_table(engine)
-
 
     table_name_with_node_id = f"n0_{base_table_name}"
     # Build dtype map from actual column values before pushing to DB

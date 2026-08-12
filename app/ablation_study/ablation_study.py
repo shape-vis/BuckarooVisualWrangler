@@ -10,7 +10,6 @@ from app import db_operations, engine
 import json
 
 from app.db_utils.ai_utils import parse_json_response
-from app.server_utils.logger_utils import initialize_action_log
 
 datasets_paths = ['provided_datasets/mari_dataset.csv']
 #models = [{"model": "qwen/qwen3.6-27b", "provider": "groq"}]
@@ -77,7 +76,6 @@ if __name__ == "__main__":
             db_operations.reset()
             for dataset in datasets_paths:
                 print(f"Running config {config} wth model {model} and dataset {dataset}")
-                initialize_action_log(engine, reset_log=True)
 
                 with open(dataset, 'rb') as f:
                     upload_result = client.post('/api/upload',  data={'file': (f, dataset)},

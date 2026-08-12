@@ -1,109 +1,102 @@
-import uuid
-from flask import request
-import pandas as pd
-import traceback
 
-from datetime import datetime, timezone
-from sqlalchemy import Text, TIMESTAMP, Boolean, Float
-from sqlalchemy.dialects.postgresql import UUID  # if using Postgres
 from app import logger
 import json
 
-from app.db_utils.execute_sql import fetch_sql
-
+from app.db_utils.execute_sql import fetch_sql, execute_sql
 
 
 ACTION_LOG_TABLE_NAME = "action_log"
 PREVIEW_LOG_TABLE_NAME = "preview_log"
 
-# TODO: make it so initialization of log is combined with updating the log
-def create_empty_user_action_log_df():
-    empty_df = pd.DataFrame(columns=['action_id', 'dataset_id', 'action_name', 'action_details', 'timestamp', 'action_duration', 'action_successful', 'action_error_message'])
-    return empty_df
-
-def create_empty_preview_log_df():
-    empty_df = pd.DataFrame(columns=['preview_table_name', 'action_name', 'action_details'])
-    return empty_df
-
-def create_empty_settings_df():
-    empty_df = pd.DataFrame(columns=['model'])
-    return empty_df
-
 # TODO: update documentation
 def update_action_log(dataset_id, action_name, action_details, engine, timestamp, action_successful,
-                      action_duration=None, action_error_message=None):
+                      action_duration=None, action_error_message=None, reset_log=False):
+
+
     try:
 
         if action_details is not None:
             action_details = json.dumps(action_details)
 
-        # Create an action id
-        action_id = uuid.uuid4()
-        print("ACTION DURATION TYPE:", type(action_duration))
+        if reset_log:
+            execute_sql(f"DROP TABLE IF EXISTS {ACTION_LOG_TABLE_NAME}", engine)
 
-        new_action_entry = pd.DataFrame([{"action_id": action_id, "dataset_id": dataset_id, "action_name": action_name,
-                                          "action_details": action_details, "timestamp": timestamp, "action_duration": action_duration,
-                                          "action_successful": action_successful, 'action_error_message': action_error_message}])
+        execute_sql(f"""
+                               CREATE TABLE IF NOT EXISTS {ACTION_LOG_TABLE_NAME}
+                               (
+                                    action_id
+                                   SERIAL
+                                   PRIMARY
+                                   KEY
+                                   ,
+                                   dataset_id
+                                   TEXT
+                                   NOT
+                                   NULL,
+                                   action_name
+                                   TEXT
+                                   NOT
+                                   NULL,
+                                   action_details
+                                   TEXT,
+                                   "timestamp"
+                                    TIMESTAMP,
+                                    action_duration
+                                    FLOAT
+                                    NOT NULL,
+                                    action_successful
+                                    BOOLEAN
+                                    NOT NULL,
+                                    action_error_message
+                                    TEXT
+                               )
+                               """, engine)
 
-        new_action_entry.to_sql(ACTION_LOG_TABLE_NAME, engine, if_exists='append', index=False)
+        execute_sql(
+            f"INSERT INTO {ACTION_LOG_TABLE_NAME} (dataset_id, action_name, action_details, timestamp, action_duration, action_successful, action_error_message) VALUES (:dataset_id, :action_name, :action_details, :timestamp, :action_duration, :action_successful, :action_error_message)",
+            engine, {"dataset_id": dataset_id, "action_name": action_name, "action_details": action_details, "timestamp": timestamp, "action_duration": action_duration, "action_successful": action_successful, "action_error_message": action_error_message}
+        )
+
+
         print("UPDATED ACTION LOG TABLE")
-    except Exception:
-        logger.exception("Error updating action log.")
+    except Exception as e:
+        logger.exception("Error updating action log table.")
 
 
 
-def initialize_action_log(engine, reset_log=False):
-    print("INITIALIZING ACTION LOG")
-    dtype_map = {
-        'action_id': UUID(as_uuid=True),
-        'dataset_id': Text,
-        'action_name': Text,
-        'action_details': Text,
-        'timestamp': TIMESTAMP,
-        'action_duration': Float,
-        'action_successful': Boolean,
-        'action_error_message': Text
-    }
 
-    try:
-        empty_log_df = create_empty_user_action_log_df()
-
-        # When we actually can support multiple users, make this name to be user / session specific
-        if reset_log:
-            empty_log_df.to_sql(ACTION_LOG_TABLE_NAME, engine, if_exists='replace', index=False, dtype=dtype_map)
-        else:
-            empty_log_df.to_sql(ACTION_LOG_TABLE_NAME, engine, if_exists='append', index=False, dtype=dtype_map)
-    except Exception:
-        logger.exception("Error initializing action log.")
-
-def initialize_preview_log_table(engine, reset_log=False):
-    print("INITIALIZING PREVIEW LOG TABLE")
-    dtype_map = {
-        'preview_table_name':Text,
-        'action_name': Text,
-        'action_details': Text
-    }
-
-    try:
-        empty_log_df = create_empty_preview_log_df()
-
-        if reset_log:
-            empty_log_df.to_sql(PREVIEW_LOG_TABLE_NAME, engine, if_exists='replace', index=False, dtype=dtype_map)
-        else:
-            empty_log_df.to_sql(PREVIEW_LOG_TABLE_NAME, engine, if_exists='append', index=False, dtype=dtype_map)
-        print("INITIALIZED PREVIEW LOG TABLE")
-    except Exception:
-        logger.exception("Error initializing preview log table.")
-
-
-def update_preview_log(preview_table_name, action_name, action_details, engine):
+def update_preview_log(preview_table_name, action_name, action_details, engine, reset_log=False):
     try:
 
         if action_details is not None:
             action_details = json.dumps(action_details)
 
-        new_action_entry = pd.DataFrame([{"preview_table_name": preview_table_name, "action_name": action_name, "action_details": action_details}])
-        new_action_entry.to_sql(PREVIEW_LOG_TABLE_NAME, engine, if_exists='append', index=False)
+        if reset_log:
+            execute_sql(f"DROP TABLE IF EXISTS {PREVIEW_LOG_TABLE_NAME}", engine)
+
+
+        execute_sql(f"""
+                                      CREATE TABLE IF NOT EXISTS {PREVIEW_LOG_TABLE_NAME}
+                                      (
+                                           preview_table_name
+                                          TEXT
+                                          PRIMARY
+                                          KEY,
+                                          action_name
+                                          TEXT
+                                          NOT
+                                          NULL,
+                                          action_details
+                                          TEXT
+                                      )
+                                      """, engine)
+
+        execute_sql(
+            f"INSERT INTO {PREVIEW_LOG_TABLE_NAME} (preview_table_name, action_name, action_details) VALUES (:preview_table_name, :action_name, :action_details)"
+            f"ON CONFLICT (preview_table_name) DO UPDATE SET action_name = EXCLUDED.action_name, action_details = EXCLUDED.action_details",
+            engine, {"preview_table_name": preview_table_name, "action_name": action_name, "action_details": action_details}
+        )
+
         print("UPDATED PREVIEW LOG TABLE")
     except Exception:
         logger.exception("Error updating preview log table.")
