@@ -11,6 +11,19 @@ PREVIEW_LOG_TABLE_NAME = "preview_log"
 # TODO: update documentation
 def update_action_log(dataset_id, action_name, action_details, engine, timestamp, action_successful,
                       action_duration=None, action_error_message=None, reset_log=False):
+    """
+    Updates the action log table
+    :param dataset_id: the name of the dataset that the action was performed on
+    :param action_name: the name of the action that was performed
+    :param action_details: a dictionary of details about the action that was performed
+    :param engine: the database engine
+    :param timestamp: the timestamp of when the action was performed
+    :param action_successful: whether the action was successful
+    :param action_duration: the duration of the action in seconds
+    :param action_error_message: the error message if the action was not successful
+    :param reset_log: whether to reset the action log table
+    :return: None
+    """
 
 
     try:
@@ -66,6 +79,15 @@ def update_action_log(dataset_id, action_name, action_details, engine, timestamp
 
 
 def update_preview_log(preview_table_name, action_name, action_details, engine, reset_log=False):
+    """
+    Updates the preview log table
+    :param preview_table_name: the name of the preview table
+    :param action_name: the name of the action that was performed
+    :param action_details: a dictionary of details about the action that was performed
+    :param engine: the database engine
+    :param reset_log: whether to reset the action log table
+    :return: None
+    """
     try:
 
         if action_details is not None:
@@ -102,6 +124,11 @@ def update_preview_log(preview_table_name, action_name, action_details, engine, 
         logger.exception("Error updating preview log table.")
 
 def get_action_details_from_preview_log(preview_table_name, engine):
+    """
+    Gets the action details of the preview_table from the preview log table
+    :param preview_table_name: the name of the preview table
+    :param engine: the database engine
+    """
     try:
 
         query = f"""
