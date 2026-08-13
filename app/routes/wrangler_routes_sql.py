@@ -56,7 +56,6 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 
 
 
-# Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
 def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
     """
     After modifying a table in-place, re-run error detection
