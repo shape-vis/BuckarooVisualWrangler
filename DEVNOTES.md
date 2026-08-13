@@ -225,6 +225,106 @@ and also determine how summary stats should be calculated for each column. The c
 
 ---
 
+## 6. DataProfile
+`DataProfile` is defined in `app/server_utils/data_profile.py`.
+It is instantiated inside `load_file()` in routes.py, in `update_data_profile_table()` in wrangle_routes_sql.py, and in `execute_wrangle_preview()` in service_helpers.py. 
+It is used to compute summary statistics for each column in the current table. These summary statistics are primarily used to give
+the AI assistant additional information about the current state of the data, which can help it make better suggestions for data wrangling operations.
+The summary statistics are calculated using SQL instead of pandas functions to avoid loading the entire dataset into memory, which can be inefficient for large datasets.
+
+There are multiple instances of `DataProfile` in the codebase because a new instance is created every time a table is updated.
+The summary statistics are stored in a Postgres table called `dp_<table_name>`, where `<table_name>` is the name of the main
+table for which the statistics are computed. 
+
+The summary statistics include:
+
+| Attribute      | Description                                              | Type of data          |
+|----------------|----------------------------------------------------------|-----------------------|
+| `mean`         | The mean of the column                                   | Numeric               |
+| `median`       | The median of the column                                 | Numeric               |
+| `min`          | The minimum value of the column                          | Numeric               |
+| `max`          | The maximum value of the column                          | Numeric               |
+| `n_categories` | The number of unique categories in the column            | Categorical           |
+| `mode`         | The most common value in the column                      | Categorical           |
+| `category_counts` | The number of occurrences of each category in the column | Categorical           |
+| `error_counts` | Counts of each error in the column                       | Numeric & Categorical |
+
+## 7. Logs
+There are several logs within Buckaroo that are used to track the state of the application and to help with debugging. 
+Each of these logs is stored in a Postgres table and is updated whenever a relevant event occurs. 
+The logs include:
+
+| Log Name    | Table Name  | Description             | Purpose                                                                                                                                                |
+|-------------|-------------|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `action_log` | "action_log" | Log of all user actions | Keeps track of user actions so they can be given to LLM                                                                                                |
+| `preview_log` | "preview_log" | Log of all preview actions | Used for keeping track of which action is associated with the preview dataset so we know what columns & rows were selected when user chooses an action |
+
+### Action Log
+The `action_log` table is used to keep track of all user actions within the application.
+The action log is kept the same regardless of the user session, so all user sessions get logged in the same log without a reset.
+
+Here are the following actions that are tracked in the action log:
+
+| Action Name                  | Description          |
+|------------------------------|----------------------|
+| `load_dataset`               | User loads a dataset |
+| `<wrangle_executed>_wrangle` | User performs a wrangle |
+| `delete_column`              | User deletes a column |
+
+Here is the additional information that is tracked for each action in the action log:
+
+| Attribute Name        | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
+| `action_id`           | Unique identifier for the action, autoincrements by 1 for each action       |
+| `dataset_id`          | Base table name that is being wrangled                                      |
+| `action_name`         | Name of the action being performed                                          |
+| `action_details`      | JSON string of details of the action performed (rows & cols being wrangled) |
+| `timestamp`           | Timestamp of when the action was performed                                  |
+| `action_duration`     | Duration of the action in seconds                                           |
+| `action_successful`   | Whether or not the attempted action was performed successfully              |
+| `action_error_message` | Error message if the action failed                                          |
+
+
+## Preview Log
+The `preview_log` table is used to keep track of all preview actions within the application.
+
+Here are the columns of the preview log table:
+
+| Column Name          | Description               |
+|----------------------|---------------------------|
+| `preview_table_name` | Name of the preview table |
+| `action_name`         | Name of the action being previewed |
+| `action_details`      | JSON string of details of the action being previewed (rows & cols being wrangled) |
+
+
+## 8. AI Action Planning
+
+The addition of the AI assistant to Buckaroo is a major new feature that allows users to get suggestions for data wrangling operations based on the current state of the dataset. 
+The AI assistant uses a large language model (LLM) to analyze the dataset and provide recommendations for cleaning and transforming the data.
+
+The main purpose of the AI assistant is to _guide_ users through the data wrangling process rather than replace them.
+It guides the user by giving what it believes to be the best n actions given the current state of the dataset and allowing the user to act upon these suggestions, if they feel they are appropriate.
+
+The action planning process is as follows:
+1. The LLM is queried for the best n actions in _text form_ given the current state of the dataset. It is given the following information as context:
+- The full, current dataset
+- The full DataProfile for the current dataset
+- The error log for the current dataset
+- The action log for the current dataset
+- The preview log for the current dataset
+
+2. The LLM is then queried to convert the text form of the actions into _structured JSON_ that can be used to provide suggestions to the user.
+
+### Settings Table
+
+The settings table is used for keeping track of the settings for the AI assistant. Only one row of this table should be being used at the moment, but when we expand the system to support multiple users, we will need to have a row for each user.
+Here are the columns of the settings table:
+
+| Column Name  | Description                                                                          |
+|--------------|--------------------------------------------------------------------------------------|
+| `model_name` | Name of the model to query                                                           | 
+| `provider`    | Provider of the model. This value is used to get the provider API key stored in .env |
+
 ## 6. FilteringSQL
 
 `FilteringSQL` is defined in `app/db_utils/filtering_sql.py` and instantiated inside `DBOperations.load_table()`.
