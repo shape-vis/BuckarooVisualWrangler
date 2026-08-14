@@ -30,6 +30,7 @@ class _WhiteFormatter(logging.Formatter):
 _werkzeug_handler = logging.StreamHandler()
 _werkzeug_handler.setFormatter(_WhiteFormatter('%(message)s'))
 logging.getLogger('werkzeug').handlers = [_werkzeug_handler]
+logger = logging.getLogger('werkzeug')
 
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
@@ -106,8 +107,6 @@ connection = psycopg2.connect(host=host, port=port, user=user, password=password
 
 # Create the database if it does not exist
 create_database_if_not_exists(connection, db_name)
-
-
 
 """
  then we use SQLAlchemy (create_engine) for everything else

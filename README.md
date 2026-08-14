@@ -32,11 +32,8 @@ If you want to see an early version of buckaroo (without going through any set u
 1. A very efficient setup is to use Jetbrains Pycharm, and setup a compound debug config using a Javascript Debug config, npm config, and a Python config all in one so that you can do full-stack debugging.
 2. Jetbrains Pycharm also allows for postgres integration so that you can see the tables and the state of the database while developing. 
 
-## Dev Notes - last update: April 29, 2026
-
+## Dev Notes - last update: August 13, 2026
 There is a doc called DEVNOTES.md which can be helpful to understand the arch of the app, and how things flow. This isn't comprehensive, but explains a lot. Definitely worth a skim at least when getting into the codebase. If other developers on Buckaroo change any of the core functionality in ``main``, please update this doc so that future students or others doing development on Buckaroo can continue to reference the DEVNOTES.md in the future :). 
-
-
 
 ## Improvements Available: 
 - Integrate refactor-detector-port into main without breaking functionality in main
@@ -44,4 +41,6 @@ There is a doc called DEVNOTES.md which can be helpful to understand the arch of
 - The tool currently bins numerical values, however, it does not bin string values. Thus, any strings like dates, unique IDs etc. will all receive their own tick mark on the axis, resulting in a crowded and often unreadable plot. Future work on this project should handle dates in a more sophisticated way, such as binning by month or year. We discussed even binning all clean data into one bin and then leaving any data with errors unbinned so it can easily be spotted. Could also select a subset of the clean data to show and then keep all the dirty data to repair. Could also bin by error type.
 - Make dirty row table headers clickable to sort by. So if a user clicks on "Age" for example, the table will show the top 10 rows with an error in the Age column.
 - Python Script export non-existent - needs to be re-implemented
+- Inconsistent functions for telling whether a column is numeric or categorical. There are functions in column_types.py and also is_categorical service_helpers.py and  _is_numeric in query.py. These should be consolidated into one function that is used throughout the codebase. This is a bit of a hard task because all of them are implemented slightly differently so consolidating will break stuff
+- There may be an overuse of the DataProfile class. It can be optimized.
 

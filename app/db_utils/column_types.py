@@ -1,18 +1,33 @@
 
 class ColumnTypes:
     def __init__(self, main_table_name: str, engine):
-        self.numeric_cols = set()
+        self.pure_numeric_cols = set()
         self.mixed_cols = set()
-        self.categorical_mixed_cols = set()
-        self.numeric_mixed_cols = set()
-        self.pure_categorical = set()
+        self.mixed_categorical_cols = set()
+        self.mixed_numeric_cols = set()
+        self.pure_categorical_cols = set()
         self.engine = engine
-        self.gather_numeric_cols(main_table_name)
-        self.gather_mixed_cols(main_table_name)
+        self.gather_pure_numeric_cols(main_table_name)
+        self.gather_pure_categorical_cols(main_table_name)
         self.categorize_mixed_cols(main_table_name)
 
 
-    def gather_numeric_cols(self, main_table_name: str):
+    def get_col_type(self, col_name):
+        if col_name in self.pure_numeric_cols:
+            return "pure_numeric"
+        elif col_name in self.pure_categorical_cols:
+            return "pure_categorical"
+        elif col_name in self.mixed_categorical_cols:
+            return "mixed_categorical"
+        elif col_name in self.mixed_numeric_cols:
+            return "mixed_numeric"
+        elif col_name in self.mixed_cols:
+            return "mixed"
+        else:
+            return "unknown"
+
+    def gather_pure_numeric_cols(self, main_table_name: str):
+
         from app.db_utils.execute_sql import fetch_sql
         """
         Distinguishes the numeric columns from the categorical columns.
@@ -36,14 +51,14 @@ class ColumnTypes:
                 data_type = row[1]
 
                 if data_type in numeric_types:
-                    self.numeric_cols.add(col_name)
+                    self.pure_numeric_cols.add(col_name)
                 else:
                     self.mixed_cols.add(col_name)
         else:
             raise Exception(f"No rows fetched from table: {main_table_name}")
 
 
-    def gather_mixed_cols(self, main_table_name: str):
+    def gather_pure_categorical_cols(self, main_table_name: str):
         from app.db_utils.execute_sql import fetch_sql
         """
         Gather the columns that are labeled as categorical but contain numeric data as well.
@@ -72,7 +87,7 @@ class ColumnTypes:
         mixed_cols = fetch_sql(fetch_mixed_types, False, self.engine)
 
         mixed_col_names = set(row[0] for row in mixed_cols) if mixed_cols else set()
-        self.pure_categorical = self.mixed_cols - mixed_col_names
+        self.pure_categorical_cols = self.mixed_cols - mixed_col_names
         self.mixed_cols = mixed_col_names
 
     def categorize_mixed_cols(self, main_table_name: str):
@@ -93,22 +108,22 @@ class ColumnTypes:
             if result:
                 numeric_count, total_count = result[0]
                 if numeric_count > total_count / 2:
-                    self.numeric_mixed_cols.add(col)
+                    self.mixed_numeric_cols.add(col)
                 else:
-                    self.categorical_mixed_cols.add(col)
+                    self.mixed_categorical_cols.add(col)
             else:
                 raise Exception(f"No rows fetched for column: {col} in table: {main_table_name}")
 
-    def is_categorical_col(self, col_name: str):
-        return col_name in self.pure_categorical
+    def is_pure_categorical_col(self, col_name: str):
+        return col_name in self.pure_categorical_cols
 
-    def is_numeric_col(self, col_name: str):
+    def is_pure_numeric_col(self, col_name: str):
             """
             Determines whether the given column from the table used to construct this class is numeric.
             :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
             :return: whether the given col_name is numeric.
             """
-            return col_name in self.numeric_cols
+            return col_name in self.pure_numeric_cols
 
 
     def is_mixed_col(self, col_name: str):
@@ -120,18 +135,18 @@ class ColumnTypes:
         return col_name in self.mixed_cols
 
 
-    def is_numeric_mixed_col(self, col_name: str):
+    def is_mixed_numeric_col(self, col_name: str):
         """
         Determines whether the given column from the table used to construct this class is numeric among mixed types.
         :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
         :return: whether the given col_name is majority numeric among mixed types.
         """
-        return col_name in self.numeric_mixed_cols
+        return col_name in self.mixed_numeric_cols
 
-    def is_categorical_mixed_col(self, col_name: str):
+    def is_mixed_categorical_col(self, col_name: str):
         """
         Determines whether the given column from the table used to construct this class is categorical among mixed types.
         :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
         :return: whether the given col_name is majority categorical among mixed types.
         """
-        return col_name in self.categorical_mixed_cols
+        return col_name in self.mixed_categorical_cols

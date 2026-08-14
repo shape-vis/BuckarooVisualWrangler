@@ -255,6 +255,7 @@ def get_preview_histogram():
             x_bins   = int(request.args.get("x_bins", 10))
             y_bins   = int(request.args.get("y_bins", 10))
             histogram = preview_ops.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
+            print("PREVIEW OPS FILTERING TABLE!!!!", preview_ops.filtering_table)
             return {"success": True, "histogram": histogram}
 
     except Exception as e:

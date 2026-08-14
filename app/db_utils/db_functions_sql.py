@@ -30,6 +30,7 @@ class DBOperations:
         :param engine: SQLAlchemy engine
         """
         self.engine = engine
+        self.base_table_name = None
         self.main_table_name = None
         self.error_table_name = None
         self.dp_table_name = None
@@ -42,6 +43,7 @@ class DBOperations:
         Resets the DBOperations state, clearing all loaded table references.
         Called when the user navigates back to the home page.
         """
+        self.base_table_name = None
         self.main_table_name = None
         self.error_table_name = None
         self.dp_table_name = None
@@ -49,19 +51,27 @@ class DBOperations:
         self.filtering_table = None
         self.active_hists = {}
 
-    def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None):
+    def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None, base_table_name: str = None):
         """
         Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new
         table
         :param main_table_name: the name of the table in the database without errors detected (raw data)
         :param error_table_name: explicit errors table name; defaults to "errors_" + main_table_name
         """
+
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
         self.dp_table_name = dp_table_name if dp_table_name is not None else "dp_" + main_table_name
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
+        assert self.filtering_table is not None
         self.active_hists = {}
+        print("LOADED TABLE!!!")
+
+        if base_table_name is not None:
+            self.base_table_name = base_table_name
+
+        print("FINISHED LOADING TABLE")
 
     def get_row_count(self, table_name: str) -> int:
         """
@@ -152,6 +162,10 @@ class DBOperations:
 
         rows_to_bins = {}
         bins_to_rows = defaultdict(list)
+        if binned_data is None:
+            # Will happen if all of the data happens to be deleted (all values are Null in a column, etc.)
+            # Setting to empty list so it won't show error when it tries to loop through a None
+            binned_data = []
 
         if one_dim:
             for row_id, row_bin in binned_data:
@@ -211,7 +225,7 @@ class DBOperations:
         :return: the query for the binning.
         """
 
-        if self.col_types.is_numeric_col(axis_column):
+        if self.col_types.is_pure_numeric_col(axis_column):
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
             bin_logic = f'''CASE
                                 WHEN d.value::text ~ {numeric_regex} THEN
@@ -299,7 +313,7 @@ class DBOperations:
         :return: the query for the numeric scaling data.
         """
 
-        if not self.col_types.is_numeric_col(axis_column):
+        if not self.col_types.is_pure_numeric_col(axis_column):
             return ""
         else:
             return f''', range_data AS (
@@ -334,7 +348,7 @@ class DBOperations:
         binned_data = '''SELECT (SELECT json_agg(json_build_array("ID", bin)) FROM binned_data),'''
 
 
-        if self.col_types.is_numeric_col(axis_column):
+        if self.col_types.is_pure_numeric_col(axis_column):
             return f'''{binned_data} (SELECT json_build_object(
                 'histograms',
                     -- For numeric: handle mixed bins (numeric and "null") - keep bins as text
@@ -432,7 +446,7 @@ class DBOperations:
         :return: the query to generate the bound tables.
         """
 
-        if self.col_types.is_numeric_col(axis_column):
+        if self.col_types.is_pure_numeric_col(axis_column):
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
             return f''', {bound_table_name} AS (
                     SELECT
@@ -466,7 +480,7 @@ class DBOperations:
         for axis_column, bin_count, axis_alias, bounding_table in axis_info:
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
 
-            if self.col_types.is_numeric_col(axis_column):
+            if self.col_types.is_pure_numeric_col(axis_column):
                 bin_logic = f'''CASE
                                     WHEN d.{axis_alias}::text ~ {numeric_regex} THEN
                                         -- Clamp bin number to 0..(bin_count-1) range
@@ -566,7 +580,7 @@ class DBOperations:
         :return: the query for the numeric scaling data.
         """
 
-        if self.col_types.is_numeric_col(axis_column):
+        if self.col_types.is_pure_numeric_col(axis_column):
             return f''', {scale_table_name}_range_data AS (
                 SELECT
                     min_val,
@@ -599,7 +613,7 @@ class DBOperations:
         empty_set = r"'{}'"
 
         # Handles mixed types in x-axis.
-        if self.col_types.is_numeric_col(x_axis_column):
+        if self.col_types.is_pure_numeric_col(x_axis_column):
             json_x_type = f'''CASE WHEN x_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
             json_order_by_x = f'''CASE WHEN x_bin ~ {numeric_regex} THEN lpad(x_bin, 10, '0') ELSE x_bin END'''
         else:
@@ -607,7 +621,7 @@ class DBOperations:
             json_order_by_x = "x_bin"
 
         # Handles mixed types in y-axis.
-        if self.col_types.is_numeric_col(y_axis_column):
+        if self.col_types.is_pure_numeric_col(y_axis_column):
             json_y_type = f'''CASE WHEN y_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
             json_order_by_y = f'''CASE WHEN y_bin ~ {numeric_regex} THEN lpad(y_bin, 10, '0') ELSE y_bin END'''
         else:
@@ -636,7 +650,7 @@ class DBOperations:
 
         for i in range(len(json_scale_data)):
             scale_label, axis_column, scale_table_name, axis_bin = json_scale_data[i]
-            if self.col_types.is_numeric_col(axis_column):
+            if self.col_types.is_pure_numeric_col(axis_column):
                 axis_numeric_info = f'''(SELECT COALESCE(json_agg(json_build_object('x0', x0, 'x1', x1) ORDER BY bin_num),
                                         '[]'::json) FROM {scale_table_name})'''
             else:
@@ -783,7 +797,7 @@ class DBOperations:
         :return: the query for aggregating scatterplot error data w/ sampled points.
         """
 
-        if self.col_types.is_numeric_col(axis_column):
+        if self.col_types.is_pure_numeric_col(axis_column):
             return f''',
                 {bound_table_name} AS (
                     SELECT
@@ -812,7 +826,7 @@ class DBOperations:
 
         # Helper function to determine axis type
         def determine_axis_type(axis_column: str, col_alias: str) -> str:
-            if self.col_types.is_numeric_col(axis_column):
+            if self.col_types.is_pure_numeric_col(axis_column):
                 return "ELSE 'numeric'"
             elif self.col_types.is_mixed_col(axis_column):
                 return f"WHEN ({col_alias}::text ~ {numeric_regex}) THEN 'numeric' ELSE 'categorical'"
@@ -822,7 +836,7 @@ class DBOperations:
 
         # Helper function to determine JSON axis type
         def determine_json_axis_type(axis_column: str, col_alias: str) -> str:
-            if self.col_types.is_numeric_col(axis_column):
+            if self.col_types.is_pure_numeric_col(axis_column):
                 return f"ELSE to_json({col_alias}::numeric)"
             elif self.col_types.is_mixed_col(axis_column):
                 return f"WHEN ({col_alias}::text ~ {numeric_regex}) THEN to_json({col_alias}::numeric) ELSE to_json({col_alias}::text)"
@@ -870,7 +884,7 @@ class DBOperations:
         for i in range(len(json_scale_data)):
             scale_label, axis_column, bounding_table, axis_alias = json_scale_data[i]
 
-            if self.col_types.is_numeric_col(axis_column):
+            if self.col_types.is_pure_numeric_col(axis_column):
                 axis_numeric_info = f'''json_build_array(
                     (SELECT min_val FROM {bounding_table}),
                     (SELECT max_val + 1 FROM {bounding_table})

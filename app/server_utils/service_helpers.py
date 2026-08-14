@@ -19,7 +19,9 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
-from app.db_utils.data_profile import DataProfile
+from app.server_utils.logger_utils import update_action_log
+from datetime import datetime, timezone
+import logging
 
 def get_current_pgraph():
     """
@@ -70,7 +72,7 @@ def _safe_pg_name(base: str, suffix: str) -> str:
     return f"{base[:max_base]}_{h}{suffix}"
 
 
-def generate_table_name(csv_name):
+def generate_base_table_name(csv_name):
     """
     Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
     - Remove file extension (.csv), replace spaces/special chars with underscores, ensure it starts with a letter (SQL requirement)
@@ -171,7 +173,6 @@ def create_error_df(data_frame):
     """
     df_with_id = set_id_column(data_frame)
 
-    # TODO: optimize these functions
     anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
@@ -179,7 +180,6 @@ def create_error_df(data_frame):
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
 
     df = perform_melt(frames)
-    print("CREATE ERROR TABLE TYPE MAP", df.dtypes)
     return df
 
 def create_data_profile_df(data_profile, col_names=None):
@@ -188,7 +188,6 @@ def create_data_profile_df(data_profile, col_names=None):
     :param col_names: the column names of interest in the table
     :return: a dataframe of the data profile for the table
     """
-    print("CREATED DATA_PROFILE DF FOR TABLE", data_profile.table_name)
 
     # Dict of attributes that will be in the data profile and the type that they should be
     default_attributes = ['mean', 'median', 'min', 'max', 'n_categories',
@@ -209,17 +208,14 @@ def create_data_profile_df(data_profile, col_names=None):
 
             # Make sure that attribute and the column type match
 
-            numeric = ((data_profile.col_types.is_numeric_mixed_col(col) or data_profile.col_types.is_numeric_col  )and attribute in data_profile.attribute_type_assignment['numeric'])
-            categorical = ((data_profile.col_types.is_categorical_mixed_col(col) or data_profile.col_types.is_categorical_col)and attribute in data_profile.attribute_type_assignment['categorical'])
+            numeric = ((data_profile.col_types.is_mixed_numeric_col(col) or data_profile.col_types.is_pure_numeric_col(col)  )and attribute in data_profile.attribute_type_assignment['numeric'])
+            categorical = ((data_profile.col_types.is_mixed_categorical_col(col) or data_profile.col_types.is_pure_categorical_col(col)) and attribute in data_profile.attribute_type_assignment['categorical'])
+
 
             if not (numeric or categorical):
-
                 row_dict[attribute] = None
 
                 continue
-
-            print("CALCULATING ATTRIBUTE: ", attribute)
-            print("COLUMN: ", col)
 
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
         col_list.append(row_dict)
@@ -420,7 +416,6 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     3. Reload db_operations with the new node
     Returns a dict with success and table name.
     """
-    # from app import engine, db_operations
 
     all_possible_previews = [
         safe_pg_name_fn(table, "_preview_delete"),
@@ -443,7 +438,8 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     app.db_operations.update_rankings(new_table_name)
 
 
-    return {"success": True, "table": new_table_name}
+    return new_table_name
+
 
 def _clone_table_pair(conn, source_table, dest_table, errors_source, dp_source):
     """Drop-and-recreate dest_table and its errors_ and dp_ sibling as copies of source tables."""
@@ -536,12 +532,8 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     update_data_profile_table_fn(preview_delete_table_name, cols)
     update_data_profile_table_fn(preview_impute_table_name, cols)
 
-    return {
-        "success": True,
-        "preview_delete": preview_delete_table_name,
-        "preview_impute": preview_impute_table_name,
-        "dims": 1,
-    }
+    return (preview_delete_table_name, preview_impute_table_name)
+
 
 def extract_preview_action(name: str) -> str:
     """Extract the action after '_preview_' (e.g. 'impute_y'), or '' if not found."""
@@ -581,14 +573,9 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     update_data_profile_table_fn(preview_impute_x_table_name, cols)
     update_data_profile_table_fn(preview_impute_y_table_name, cols)
 
+    return (preview_delete_table_name, preview_impute_x_table_name, preview_impute_y_table_name)
 
-    return {
-        "success": True,
-        "preview_delete": preview_delete_table_name,
-        "preview_impute_x": preview_impute_x_table_name,
-        "preview_impute_y": preview_impute_y_table_name,
-        "dims": 2,
-    }
+
 
 def _parse_node_id(table_name):
     """Parse 'n3_rest_of_name' into (3, 'rest_of_name'). Returns None on failure."""

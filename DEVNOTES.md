@@ -200,24 +200,132 @@ All three join against `errors_<table>` and, when active, the `<table>_filtering
 
 ## 5. ColumnTypes
 
-`ColumnTypes` is defined in `app/db_utils/db_functions_sql.py` (line 22) and instantiated inside `DBOperations.load_table()`. It classifies every column into one of three sets:
+`ColumnTypes` is defined in `app/db_utils/column_types.py`. Instantiated inside `DBOperations.load_table()` and `DataProfile.__init__()`
 
-| Set | Attribute | Contents |
-|-----|-----------|----------|
-| Numeric | `numeric_cols` | Columns with a PostgreSQL numeric type (`integer`, `bigint`, `numeric`, `real`, `double precision`, `smallint`) |
-| Pure categorical | `pure_categorical` | Non-numeric columns whose values contain no numeric-looking strings |
-| Mixed | `categorical_mixed` | Non-numeric columns that contain some values matching `^\s*-?\d+(\.\d+)?\s*$` |
+It classifies every column into one of five sets: pure numeric, pure categorical, mixed numeric, mixed categorical.
+This classification is used not only to determine how to bin the data for histograms, to determine how to impute missing values in previews,
+and also determine how summary stats should be calculated for each column. The classification is based on the declared Postgres type and the actual values in the column.
+
+| Set               | Attribute                | Contents                                                                                                                                                                  |
+|-------------------|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Numeric           | `pure_numeric_cols`      | Columns with a PostgreSQL numeric type (`integer`, `bigint`, `numeric`, `real`, `double precision`, `smallint`) or with a value that can be converted into a numeric type |
+| Pure categorical  | `pure_categorical_cols`  | Non-numeric columns whose values contain no numeric-looking strings                                                                                                       |
+| Mixed categorical | `categorical_mixed_cols` | Non-numeric columns that contain some values matching `^\s*-?\d+(\.\d+)?\s*$` but are __majority__ categorical                                                            |
+| Mixed numeric     | `numeric_mixed_cols`     | Numeric columns that contain __majority__ numeric values                                                                                                                  |
+| Mixed             | `mixed_cols`             | All columns that have mixed values (categorical_mixed_cols and numeric_mixed_cols combined)                                                                               |
 
 **How classification works:**
 1. Queries `information_schema.columns` for the column's declared Postgres type — these types are originally detected and set in Postgres during the initial upload in `app/routes/routes.py`. The function `load_file()` calls `get_sqlalchemy_dtype_map()` (in `service_helpers.py`), the helper which inspects each column's actual values to pick `BigInteger` / `Float` / `Text`.
-2. For all non-numeric columns, runs a regex check against the actual values in the table
-3. Splits into `pure_categorical` vs. `categorical_mixed` based on whether any numeric-looking values exist
+2. Categorizes into `pure_categorical_cols`, `pure_numeric_cols`, or `mixed_cols` based on the declared type
+3. For all `mixed_cols`, runs a regex check against the actual values in the table and splits them into `numeric_mixed_cols` vs. `categorical_mixed_cols` based on whether the majority of values are numeric-looking or not
 
-**Where it's used:** everywhere inside `DBOperations` that builds SQL. The classification controls whether a column gets numeric `width_bucket` binning or categorical label-group binning in the CTE queries. Helper methods — `is_numeric_col()`, `is_categorical_col()`, `is_mixed_col()` — are called throughout.
+**Where it's used:** 
+- Everywhere inside `DBOperations` that builds SQL. The classification controls whether a column gets numeric `width_bucket` binning or categorical label-group binning in the CTE queries. Helper methods — `is_numeric_col()`, `is_categorical_col()`, `is_mixed_col()` — are called throughout.
+- `DataProfile` uses it to determine which summary stats to compute for each column. `DataProfile` doesnT use the column types of `DBOperations` because a preview might be modified in such a way that the column types do not match anymore.
 
 ---
 
-## 6. FilteringSQL
+## 6. DataProfile
+`DataProfile` is defined in `app/server_utils/data_profile.py`.
+It is instantiated inside `load_file()` in routes.py, in `update_data_profile_table()` in wrangle_routes_sql.py, and in `execute_wrangle_preview()` in service_helpers.py. 
+It is used to compute summary statistics for each column in the current table. These summary statistics are primarily used to give
+the AI assistant additional information about the current state of the data, which can help it make better suggestions for data wrangling operations.
+The summary statistics are calculated using SQL instead of pandas functions to avoid loading the entire dataset into memory, which can be inefficient for large datasets.
+
+There are multiple instances of `DataProfile` in the codebase because a new instance is created every time a table is updated.
+The summary statistics are stored in a Postgres table called `dp_<table_name>`, where `<table_name>` is the name of the main
+table for which the statistics are computed. 
+
+The summary statistics include:
+
+| Attribute      | Description                                              | Type of data          |
+|----------------|----------------------------------------------------------|-----------------------|
+| `mean`         | The mean of the column                                   | Numeric               |
+| `median`       | The median of the column                                 | Numeric               |
+| `min`          | The minimum value of the column                          | Numeric               |
+| `max`          | The maximum value of the column                          | Numeric               |
+| `n_categories` | The number of unique categories in the column            | Categorical           |
+| `mode`         | The most common value in the column                      | Categorical           |
+| `category_counts` | The number of occurrences of each category in the column | Categorical           |
+| `error_counts` | Counts of each error in the column                       | Numeric & Categorical |
+
+## 7. Logs
+There are several logs within Buckaroo that are used to track the state of the application and to help with debugging. 
+Each of these logs is stored in a Postgres table and is updated whenever a relevant event occurs. 
+The logs include:
+
+| Log Name    | Table Name  | Description             | Purpose                                                                                                                                                |
+|-------------|-------------|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `action_log` | "action_log" | Log of all user actions | Keeps track of user actions so they can be given to LLM                                                                                                |
+| `preview_log` | "preview_log" | Log of all preview actions | Used for keeping track of which action is associated with the preview dataset so we know what columns & rows were selected when user chooses an action |
+
+### Action Log
+The `action_log` table is used to keep track of all user actions within the application.
+The action log is kept the same regardless of the user session, so all user sessions get logged in the same log without a reset.
+
+Here are the following actions that are tracked in the action log:
+
+| Action Name                  | Description          |
+|------------------------------|----------------------|
+| `load_dataset`               | User loads a dataset |
+| `<wrangle_executed>_wrangle` | User performs a wrangle |
+| `delete_column`              | User deletes a column |
+
+Here is the additional information that is tracked for each action in the action log:
+
+| Attribute Name        | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
+| `action_id`           | Unique identifier for the action, autoincrements by 1 for each action       |
+| `dataset_id`          | Base table name that is being wrangled                                      |
+| `action_name`         | Name of the action being performed                                          |
+| `action_details`      | JSON string of details of the action performed (rows & cols being wrangled) |
+| `timestamp`           | Timestamp of when the action was performed                                  |
+| `action_duration`     | Duration of the action in seconds                                           |
+| `action_successful`   | Whether or not the attempted action was performed successfully              |
+| `action_error_message` | Error message if the action failed                                          |
+
+
+## Preview Log
+The `preview_log` table is used to keep track of all preview actions within the application.
+
+Here are the columns of the preview log table:
+
+| Column Name          | Description               |
+|----------------------|---------------------------|
+| `preview_table_name` | Name of the preview table |
+| `action_name`         | Name of the action being previewed |
+| `action_details`      | JSON string of details of the action being previewed (rows & cols being wrangled) |
+
+
+## 8. AI Action Planning
+
+The addition of the AI assistant to Buckaroo is a major new feature that allows users to get suggestions for data wrangling operations based on the current state of the dataset. 
+The AI assistant uses a large language model (LLM) to analyze the dataset and provide recommendations for cleaning and transforming the data.
+
+The main purpose of the AI assistant is to _guide_ users through the data wrangling process rather than replace them.
+It guides the user by giving what it believes to be the best n actions given the current state of the dataset and allowing the user to act upon these suggestions, if they feel they are appropriate.
+
+The action planning process is as follows:
+1. The LLM is queried for the best n actions in _text form_ given the current state of the dataset. It is given the following information as context:
+- The full, current dataset
+- The full DataProfile for the current dataset
+- The error log for the current dataset
+- The action log for the current dataset
+- The preview log for the current dataset
+
+2. The LLM is then queried to convert the text form of the actions into _structured JSON_ that can be used to provide suggestions to the user.
+
+### Settings Table
+
+The settings table is used for keeping track of the settings for the AI assistant. Only one row of this table should be being used at the moment, but when we expand the system to support multiple users, we will need to have a row for each user.
+Here are the columns of the settings table:
+
+| Column Name  | Description                                                                          |
+|--------------|--------------------------------------------------------------------------------------|
+| `model_name` | Name of the model to query                                                           | 
+| `provider`    | Provider of the model. This value is used to get the provider API key stored in .env |
+
+## 9. FilteringSQL
 
 `FilteringSQL` is defined in `app/db_utils/filtering_sql.py` and instantiated inside `DBOperations.load_table()`.
 
@@ -239,7 +347,7 @@ It maintains a physical Postgres table — `<table>_filtering` — that holds on
 
 ---
 
-## 7. Table Name State Management
+## 10. Table Name State Management
 
 The table name (e.g. `n0_data_test_b1zjPwbZ7P`) is a critical piece of state. `db_operations.main_table_name` is the **single source of truth** on the backend. All backend endpoints that operate on the main table read from `db_operations.main_table_name` directly — they do not accept a table name from the frontend for main-table operations. (Preview endpoints are the exception: they accept a preview table name since previews are separate temporary tables.)
 
@@ -254,7 +362,7 @@ The table name (e.g. `n0_data_test_b1zjPwbZ7P`) is a critical piece of state. `d
 6. User double clicks a table: backend switches `db_operations`, returns new name, frontend updates context
 ---
 
-## 8. Provenance Graph & Undo/Redo
+## 11. Provenance Graph & Undo/Redo
 
 Every table name is prefixed with a node ID: `n0_`, `n1_`, `n2_`, etc. The original uploaded table is always `n0_`. Each wrangle operation creates a new node with an incremented ID. Users can double click on a node in the React Flow visualization to load that node's table from the database.
 
@@ -324,7 +432,7 @@ The `wrangle_op` string is extracted from the chosen preview's suffix via `extra
 
 ---
 
-## 9. Rankings Table
+## 12. Rankings Table
 
 For every loaded data table there is a companion `rankings_<table>` with columns `attribute, total_errors, rank` — attributes ordered by total error count.
 
@@ -336,7 +444,7 @@ It is the third sibling family next to `errors_` and `<name>_filtering`, which i
 
 ---
 
-## 10. Frontend Contexts & View Modes
+## 13. Frontend Contexts & View Modes
 
 The upload flow lives in `ui/src/App.jsx`. Once the user uploads, `App` wraps `Buckaroo` in `TableNameProvider` and `LoadingProvider`. `Buckaroo.jsx` then layers the rest of the providers (order matters because `RepairProvider` consumes `SelectionContext` and `LoadingContext`):
 
@@ -372,7 +480,7 @@ The header also renders `TableStatus` (active-table label `n# - <basename>` plus
 
 ---
 
-## 11. Backend Package Layout
+## 14. Backend Package Layout
 
 The backend was reorganized into subpackages so adding new endpoints / SQL helpers / detectors doesn't pollute the top-level `app/`.
 
@@ -407,7 +515,7 @@ When adding a new endpoint, drop a new file in `app/routes/` — `app/__init__.p
 
 ---
 
-## 12. Key Files
+## 15. Key Files
 
 | File | Role |
 |------|------|
@@ -451,7 +559,7 @@ When adding a new endpoint, drop a new file in `app/routes/` — `app/__init__.p
 
 ---
 
-## 13. Things to be aware of
+## 16. Things to be aware of
 
 - **Detectors run in Python memory. - We should fix this** All four detectors operate on the full DataFrame before writing to Postgres. For large datasets this could be slow — there is no chunking or SQL-side detection.
 - **`update_preview_error_table` is a stub.** In `app/routes/wrangler_routes_sql.py` the function is defined but its body is commented out. Previews currently rely on the real `update_errors_table` re-running detectors on the cloned preview tables in `create_previews_1d/2d`.
