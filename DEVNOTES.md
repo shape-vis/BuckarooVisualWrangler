@@ -325,7 +325,7 @@ Here are the columns of the settings table:
 | `model_name` | Name of the model to query                                                           | 
 | `provider`    | Provider of the model. This value is used to get the provider API key stored in .env |
 
-## 6. FilteringSQL
+## 9. FilteringSQL
 
 `FilteringSQL` is defined in `app/db_utils/filtering_sql.py` and instantiated inside `DBOperations.load_table()`.
 
@@ -347,7 +347,7 @@ It maintains a physical Postgres table — `<table>_filtering` — that holds on
 
 ---
 
-## 7. Table Name State Management
+## 10. Table Name State Management
 
 The table name (e.g. `n0_data_test_b1zjPwbZ7P`) is a critical piece of state. `db_operations.main_table_name` is the **single source of truth** on the backend. All backend endpoints that operate on the main table read from `db_operations.main_table_name` directly — they do not accept a table name from the frontend for main-table operations. (Preview endpoints are the exception: they accept a preview table name since previews are separate temporary tables.)
 
@@ -362,7 +362,7 @@ The table name (e.g. `n0_data_test_b1zjPwbZ7P`) is a critical piece of state. `d
 6. User double clicks a table: backend switches `db_operations`, returns new name, frontend updates context
 ---
 
-## 8. Provenance Graph & Undo/Redo
+## 11. Provenance Graph & Undo/Redo
 
 Every table name is prefixed with a node ID: `n0_`, `n1_`, `n2_`, etc. The original uploaded table is always `n0_`. Each wrangle operation creates a new node with an incremented ID. Users can double click on a node in the React Flow visualization to load that node's table from the database.
 
@@ -432,7 +432,7 @@ The `wrangle_op` string is extracted from the chosen preview's suffix via `extra
 
 ---
 
-## 9. Rankings Table
+## 12. Rankings Table
 
 For every loaded data table there is a companion `rankings_<table>` with columns `attribute, total_errors, rank` — attributes ordered by total error count.
 
@@ -444,7 +444,7 @@ It is the third sibling family next to `errors_` and `<name>_filtering`, which i
 
 ---
 
-## 10. Frontend Contexts & View Modes
+## 13. Frontend Contexts & View Modes
 
 The upload flow lives in `ui/src/App.jsx`. Once the user uploads, `App` wraps `Buckaroo` in `TableNameProvider` and `LoadingProvider`. `Buckaroo.jsx` then layers the rest of the providers (order matters because `RepairProvider` consumes `SelectionContext` and `LoadingContext`):
 
@@ -480,7 +480,7 @@ The header also renders `TableStatus` (active-table label `n# - <basename>` plus
 
 ---
 
-## 11. Backend Package Layout
+## 14. Backend Package Layout
 
 The backend was reorganized into subpackages so adding new endpoints / SQL helpers / detectors doesn't pollute the top-level `app/`.
 
@@ -515,7 +515,7 @@ When adding a new endpoint, drop a new file in `app/routes/` — `app/__init__.p
 
 ---
 
-## 12. Key Files
+## 15. Key Files
 
 | File | Role |
 |------|------|
@@ -559,7 +559,7 @@ When adding a new endpoint, drop a new file in `app/routes/` — `app/__init__.p
 
 ---
 
-## 13. Things to be aware of
+## 16. Things to be aware of
 
 - **Detectors run in Python memory. - We should fix this** All four detectors operate on the full DataFrame before writing to Postgres. For large datasets this could be slow — there is no chunking or SQL-side detection.
 - **`update_preview_error_table` is a stub.** In `app/routes/wrangler_routes_sql.py` the function is defined but its body is commented out. Previews currently rely on the real `update_errors_table` re-running detectors on the cloned preview tables in `create_previews_1d/2d`.
