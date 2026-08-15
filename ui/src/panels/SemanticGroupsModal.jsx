@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { querySemanticGroups } from "../utils/serverCalls.jsx";
 import { useSelection } from "../store/SelectionContext.jsx";
@@ -6,322 +7,233 @@ import { useTableName } from "../store/TableNameContext.jsx";
 
 import "../styles/SemanticGroupsModal.css";
 
-// These are the strategy options shown in the Semantic Groups dropdown.
-// `value` is the internal API name. `label` is the user-facing text.
-const SEMANTIC_STRATEGIES = [
-  { value: "meta", label: "Meta" },
-  { value: "auto", label: "Auto" },
-  { value: "cluster_first", label: "All Rows" },
-  { value: "error_first", label: "Errors" },
-  { value: "exact_slices", label: "Slices" },
-];
-
-// Short explanations shown beside the selected strategy.
-// They are written for users, not developers, so they avoid implementation details.
-const STRATEGY_DESCRIPTIONS = {
-  meta: "Scores multiple candidate groupings and shows the strongest result.",
-  auto: "Chooses Buckaroo's default semantic strategy for the current dataset.",
-  cluster_first: "Clusters all rows first, then ranks clusters by error concentration.",
-  error_first: "Clusters only rows that already have detector errors into diagnostic themes.",
-  exact_slices: "Finds exact value/bin slices, then ranks them by error concentration.",
-};
-
-// The Meta strategy is a small selector: it runs several concrete strategies,
-// scores each result, rejects obviously weak outputs, and shows the best result.
-// `clusterCount` is the `k` value for clustering. Higher k creates more groups,
-// which can be more specific but can also split related rows too aggressively.
-const META_SELECTOR_CANDIDATES = [
-  { id: "cluster_first_k4", label: "All Rows k=4", strategy: "cluster_first", options: { clusterCount: 4 } },
-  { id: "cluster_first_k8", label: "All Rows k=8", strategy: "cluster_first", options: { clusterCount: 8 } },
-  { id: "error_first_k4", label: "Errors k=4", strategy: "error_first", options: { clusterCount: 4 } },
-  { id: "error_first_k8", label: "Errors k=8", strategy: "error_first", options: { clusterCount: 8 } },
-  { id: "exact_slices", label: "Slices", strategy: "exact_slices", options: {} },
-];
-
-// The selector uses a sample so the UI stays responsive on large datasets.
-const META_SELECTOR_SAMPLE_ROWS = 1500;
-
-// Convert a decimal like 0.271 into a display value like "27.1%".
-function formatPercent(value) {
-  return `${(Number(value || 0) * 100).toFixed(1)}%`;
+function formatPercent(value, digits = 0) {
+  return `${(Number(value || 0) * 100).toFixed(digits)}%`;
 }
 
-// Convert a lift value like 3.687 into a display value like "3.69x".
-function formatLift(value) {
-  return `${Number(value || 0).toFixed(2)}x`;
+function titleCase(value) {
+  return String(value || "").replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
-// Turn detector issue keys into readable text.
-// Example: "missing:workclass" becomes "missing in workclass".
-function formatIssue(issue) {
-  if (!issue || issue === "none") return "No dominant issue";
-  return issue.replace(":", " in ");
-}
-
-// Small helper for averaging numeric values. Empty lists return 0 so scoring
-// does not crash when a strategy returns no groups.
-function average(values) {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length;
-}
-
-// Score one Meta candidate. The candidate is one strategy/settings pair, such as
-// "All Rows k=8". The response is what the backend returned for that candidate.
-// The result of this function lets all candidates be compared on one scale.
-function scoreMetaCandidate(candidate, response, durationMs) {
-  // If the backend failed or returned no data, keep a record of the failure and
-  // assign a very low score so this candidate cannot win.
-  if (!response?.success || !response?.data) {
-    return {
-      candidate,
-      response,
-      durationMs,
-      accepted: false,
-      selectorScore: -1000000,
-      rejectionReason: response?.error || "Request failed",
-    };
-  }
-
-  const data = response.data;
-  const groups = data.groups || [];
-
-  // The backend returns groups sorted from strongest to weakest. Scoring uses
-  // the top few groups so one lucky group does not decide the whole strategy.
-  const topGroups = groups.slice(0, 5);
-  const top = groups[0];
-  const rejectionReasons = [];
-  const sampledRows = Number(data.sampleRows || 0);
-
-  // A useful grouping should not be one huge group containing almost every row.
-  // This fraction measures how much of the sample is covered by the top group.
-  const largestReturnedFraction = sampledRows && top ? Number(top.rows || 0) / sampledRows : 0;
-
-  // Mean top score asks: are the best few groups strong overall?
-  const meanTopScore = average(topGroups.map(group => group.score));
-
-  // Lift asks: are errors more concentrated in these groups than in the table
-  // overall? A lift near 1.0 means the group is not much better than random.
-  const meanTopLift = average(topGroups.map(group => group.lift));
-
-  // Coverage asks: how much of the table's detected error mass is explained by
-  // the best groups? High lift with tiny coverage can still be unhelpful.
-  const top5Coverage = topGroups.reduce((sum, group) => sum + Number(group.errorCoverage || 0), 0);
-
-  // Slow strategies are still allowed to win, but they lose a small amount of
-  // score so the UI prefers faster strategies when quality is similar.
-  const runtimePenalty = Math.min(Number(durationMs || 0) / 30000, 1.5) * 0.25;
-
-  // Penalize overly broad top groups. The penalty starts after 55% of the sample
-  // because broad groups are usually harder for users to interpret.
-  const dominancePenalty = Math.max(0, largestReturnedFraction - 0.55) * 1.4;
-
-  // If the whole table is not already mostly errors, weak lift should count
-  // against the candidate. When baseline errors are near 100%, lift is less
-  // meaningful because every group naturally has lift close to 1.
-  const lowLiftPenalty = data.baselineErrorRate < 0.95 ? Math.max(0, 1.05 - meanTopLift) * 1.2 : 0;
-
-  // Hard rejection rules remove outputs that are technically valid but not
-  // useful enough to show as the selected Meta result.
-  if (!groups.length) rejectionReasons.push("No groups");
-  if (top && Number(top.errorRows || 0) < 2) rejectionReasons.push("Too few error rows");
-  if (largestReturnedFraction >= 0.9) rejectionReasons.push("Dominant group");
-
-  const accepted = rejectionReasons.length === 0;
-
-  // Accepted candidates get a positive quality score. Rejected candidates keep
-  // their mean score for debugging, but the -1000 offset keeps them below any
-  // accepted candidate unless every candidate is rejected.
-  const selectorScore = accepted
-    ? meanTopScore
-      + (Number(top?.score || 0) * 0.25)
-      + (Math.max(0, meanTopLift - 1) * 1.4)
-      + (Math.min(top5Coverage, 1.5) * 2.0)
-      - dominancePenalty
-      - lowLiftPenalty
-      - runtimePenalty
-    : -1000 + meanTopScore;
-
-  // Return both the final score and the supporting metrics so the UI can show
-  // why a candidate won or why it was rejected.
-  return {
-    candidate,
-    response,
-    durationMs,
-    accepted,
-    selectorScore,
-    rejectionReason: accepted ? "accepted" : rejectionReasons.join(", "),
-    meanTopScore,
-    meanTopLift,
-    top5Coverage,
-    largestReturnedFraction,
-    groupCount: groups.length,
-    topDescription: top?.description || "No group",
-  };
-}
-
-// Run all Meta candidates in parallel, score them, and return the selected
-// candidate's backend data plus selector metadata for debugging/explanation.
-async function queryMetaSemanticGroups(tableName) {
-  const results = await Promise.all(
-    META_SELECTOR_CANDIDATES.map(async (candidate) => {
-      const started = performance.now();
-      const response = await querySemanticGroups(tableName, candidate.strategy, {
-        limit: 8,
-        sampleRows: META_SELECTOR_SAMPLE_ROWS,
-        minGroupSize: 12,
-        minErrorRows: 2,
-        ...candidate.options,
-      });
-      return scoreMetaCandidate(candidate, response, performance.now() - started);
-    })
-  );
-
-  // If every backend request failed, the Meta selector itself fails.
-  const successful = results.filter(result => result.response?.success && result.response?.data);
-  if (!successful.length) {
-    return {
-      success: false,
-      error: results.find(result => result.rejectionReason)?.rejectionReason || "Meta selector failed.",
-    };
-  }
-
-  // Prefer accepted candidates. If all candidates were rejected, fall back to
-  // the best successful candidate so the user still gets a diagnostic result.
-  const accepted = successful.filter(result => result.accepted);
-  const pool = accepted.length ? accepted : successful;
-  const selected = [...pool].sort((a, b) => b.selectorScore - a.selectorScore)[0];
-  const ranked = [...results].sort((a, b) => b.selectorScore - a.selectorScore);
-  const selectedData = selected.response.data;
-
-  // Preserve the selected strategy's normal response, then attach Meta metadata
-  // so the modal can explain which candidate was chosen.
-  return {
-    success: true,
-    data: {
-      ...selectedData,
-      strategy: "meta",
-      effectiveStrategy: selectedData.effectiveStrategy,
-      metaSelector: {
-        selectedCandidateId: selected.candidate.id,
-        selectedCandidateLabel: selected.candidate.label,
-        selectedStrategy: selected.candidate.strategy,
-        selectedClusterCount: selected.candidate.options.clusterCount || null,
-        selectorScore: selected.selectorScore,
-        acceptedCount: accepted.length,
-        candidateCount: results.length,
-        selectionBasis: accepted.length ? "accepted" : "fallback",
-        candidates: ranked.map((result, index) => ({
-          id: result.candidate.id,
-          label: result.candidate.label,
-          rank: index + 1,
-          accepted: result.accepted,
-          selectorScore: result.selectorScore,
-          groups: result.groupCount || 0,
-          meanTopLift: result.meanTopLift || 0,
-          top5Coverage: result.top5Coverage || 0,
-          rejectionReason: result.rejectionReason,
-        })),
-      },
-    },
-  };
-}
-
-function SemanticGroupRow({ group, selected, onToggle, onSelectRows }) {
+function ExampleRows({ groupId, examples, boundary = false }) {
+  if (!examples?.length) return null;
   return (
-    <>
-      <tr className={selected ? "semantic-modal-row semantic-modal-row--open" : "semantic-modal-row"}>
-        <td>
+    <div className={boundary ? "semantic-example-list semantic-example-list--boundary" : "semantic-example-list"}>
+      {examples.map((example, index) => (
+        <div className="semantic-example-row" key={`${groupId}-example-${example.rowId}-${index}`}>
+          <div className="semantic-example-row-heading">
+            <strong>Row {example.rowId}</strong>
+            <span>{example.reason}</span>
+          </div>
+          <dl>
+            {Object.entries(example.values || {}).map(([column, value]) => (
+              <div key={`${groupId}-${example.rowId}-${column}`}>
+                <dt>{column}</dt>
+                <dd title={String(value)}>{String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Metric({ label, value, title }) {
+  return (
+    <div className="semantic-group-metric" title={title}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function GroupCard({ group, expanded, onToggle, onSelectRows }) {
+  return (
+    <article className="semantic-group-card">
+      <div className="semantic-group-card-main">
+        <div className="semantic-group-card-copy">
+          <div className="semantic-group-eyebrow">
+            <span className={`semantic-view-badge semantic-view-badge--${group.view}`}>
+              {group.viewLabel}
+            </span>
+            <span>{group.rows.toLocaleString()} rows in this group</span>
+            <span>{formatPercent(group.coverage, 1)} of sample</span>
+            {group.errorRows > 0 && (
+              <span
+                className="semantic-group-error-count"
+                title="How many of this group's rows have at least one detected data-quality issue — not the same number as the group's total row count."
+              >
+                {group.errorRows.toLocaleString()} with a detected issue
+              </span>
+            )}
+          </div>
+          <h3>{group.semanticCohort || group.description}</h3>
+          <p className="semantic-group-quality-summary">
+            <strong>Quality pattern:</strong> {group.qualityPattern || "No unusual concentration of data-quality issues in this group."}
+          </p>
+        </div>
+        <div className="semantic-group-card-actions">
           <button
             type="button"
-            className="semantic-modal-row-toggle"
-            onClick={onToggle}
-            title={selected ? "Hide group details" : "Show group details"}
-          >
-            {selected ? "v" : ">"}
-          </button>
-        </td>
-        <td className="semantic-modal-description-cell">
-          <div className="semantic-modal-description">{group.description}</div>
-          <div className="semantic-modal-subtext">{formatIssue(group.mainIssue)}</div>
-        </td>
-        <td>{group.errorRows}/{group.rows}</td>
-        <td>{formatPercent(group.errorRate)}</td>
-        <td>{formatLift(group.lift)}</td>
-        <td>{formatPercent(group.errorCoverage)}</td>
-        <td className="semantic-modal-action-cell">
-          <button
-            type="button"
-            className="semantic-modal-select"
+            className="semantic-group-select"
             onClick={() => onSelectRows(group)}
           >
-            Select Rows
+            Select rows
           </button>
-        </td>
-      </tr>
-      {selected && (
-        <tr className="semantic-modal-details-row">
-          <td />
-          <td colSpan={6}>
-            <div className="semantic-modal-details">
-              <div>
-                <span className="semantic-modal-detail-label">Group ID</span>
-                <span>{group.group}</span>
-              </div>
-              <div>
-                <span className="semantic-modal-detail-label">Main columns</span>
-                <span>{(group.mainErrorColumns || []).join(", ") || "None"}</span>
-              </div>
-              {(group.featureHighlights || []).length > 0 && (
-                <div>
-                  <span className="semantic-modal-detail-label">Why grouped</span>
-                  <ul>
-                    {group.featureHighlights.map((feature, index) => (
-                      <li key={`${group.id}-feature-${index}`}>{feature}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+          <button
+            type="button"
+            className="semantic-group-details-toggle"
+            onClick={onToggle}
+            aria-expanded={expanded}
+          >
+            {expanded ? "Hide details" : "View details"}
+          </button>
+        </div>
+      </div>
+
+      <div className="semantic-group-metrics" aria-label="Group evidence">
+        <Metric
+          label="Semantic rank"
+          value={formatPercent(group.semanticScore)}
+          title="How specific and meaningful this group's description is, paired with whether it also carries a real quality issue. This is the primary sort key across all groups — a rank, not a probability of correctness."
+        />
+        <Metric
+          label="Stable"
+          value={formatPercent(group.stability)}
+          title="How closely this group matched a repeated clustering run."
+        />
+        <Metric
+          label="Cohesive"
+          value={formatPercent(group.coherence)}
+          title="How similar the rows are inside this group."
+        />
+        <Metric
+          label="Profile confidence"
+          value={formatPercent(group.profileConfidence)}
+          title="Average profiler confidence for the columns used in this view."
+        />
+      </div>
+
+      {expanded && (
+        <div className="semantic-group-details">
+          <section className="semantic-group-explanation-summary">
+            <div>
+              <h4>Semantic cohort</h4>
+              <p>{group.semanticCohort || group.description}</p>
             </div>
-          </td>
-        </tr>
+            <div>
+              <h4>Quality pattern</h4>
+              <p>{group.qualityPattern || "No unusual concentration of data-quality issues in this group."}</p>
+            </div>
+          </section>
+
+          {(group.supportingFields || []).length > 0 && (
+            <section className="semantic-group-support">
+              <h4>Important supporting fields</h4>
+              <div className="semantic-group-support-list">
+                {group.supportingFields.map((field, index) => (
+                  <div key={`${group.id}-support-${field.kind}-${field.column}-${index}`}>
+                    <span>{titleCase(field.kind)}</span>
+                    <strong>{field.column}</strong>
+                    <p>{field.evidence}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {(group.representativeExamples || []).length > 0 && (
+            <section className="semantic-group-examples">
+              <h4>Typical rows from this group</h4>
+              <p className="semantic-group-section-help">
+                These sampled rows are nearest to the group center and best illustrate the description.
+              </p>
+              <ExampleRows groupId={group.id} examples={group.representativeExamples} />
+            </section>
+          )}
+
+          {(group.contradictoryExamples || []).length > 0 && (
+            <section className="semantic-group-examples semantic-group-examples--boundary">
+              <h4>Boundary rows worth checking</h4>
+              <p className="semantic-group-section-help">
+                These rows still belong to the group, but fit its center least closely. They show where the summary may be too broad.
+              </p>
+              <ExampleRows groupId={group.id} examples={group.contradictoryExamples} boundary />
+            </section>
+          )}
+
+          <section>
+            <h4>Columns used in similarity</h4>
+            <div className="semantic-group-column-list">
+              {(group.columnsUsed || []).map(column => <span key={`${group.id}-${column}`}>{column}</span>)}
+            </div>
+          </section>
+
+          {(group.featureHighlights || []).length > 0 && (
+            <section>
+              <h4>Additional rule evidence</h4>
+              <ul className="semantic-group-highlight-list">
+                {group.featureHighlights.map((highlight, index) => (
+                  <li key={`${group.id}-highlight-${index}`}>{highlight}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {(group.caveats || []).length > 0 && (
+            <section className="semantic-group-caveats">
+              <h4>Check before acting</h4>
+              <ul>
+                {group.caveats.map((caveat, index) => (
+                  <li key={`${group.id}-caveat-${index}`}>{caveat}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="semantic-group-method">
+            <h4>Method details</h4>
+            <p>
+              {group.algorithm}. Distinctiveness {formatPercent(group.distinctiveness)};
+              explainability {formatPercent(group.explainability)}.
+            </p>
+            <p>{group.whyUseful}</p>
+          </section>
+        </div>
       )}
-    </>
+    </article>
   );
 }
 
 export default function SemanticGroupsModal({ visible, onClose, refreshKey = 0 }) {
   const { tableName } = useTableName();
   const { setHighlightedRowIds } = useSelection();
-  const [strategy, setStrategy] = useState("meta");
   const [semanticData, setSemanticData] = useState(null);
   const [openGroupId, setOpenGroupId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState("Finding semantic groups...");
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!visible || !tableName) return undefined;
-
     let cancelled = false;
-    async function fetchSemanticGroups() {
+
+    async function discoverGroups() {
       setLoading(true);
-      setLoadingText(strategy === "meta" ? "Running meta selector..." : "Finding semantic groups...");
       setError(null);
       try {
-        const response = strategy === "meta"
-          ? await queryMetaSemanticGroups(tableName)
-          : await querySemanticGroups(tableName, strategy);
+        const response = await querySemanticGroups(tableName, "semantic_quality", {
+          limit: 18,
+        });
         if (cancelled) return;
         if (!response?.success) {
-          setError(response?.error || "Semantic grouping failed.");
-          setSemanticData(null);
-          return;
+          throw new Error(response?.error || "Buckaroo could not discover useful groups.");
         }
         setSemanticData(response.data);
-        setOpenGroupId(response.data?.groups?.[0]?.id || null);
-      } catch (err) {
+        setOpenGroupId(null);
+      } catch (requestError) {
         if (!cancelled) {
-          setError(err.message || "Semantic grouping failed.");
+          setError(requestError.message || "Buckaroo could not discover useful groups.");
           setSemanticData(null);
         }
       } finally {
@@ -329,134 +241,122 @@ export default function SemanticGroupsModal({ visible, onClose, refreshKey = 0 }
       }
     }
 
-    fetchSemanticGroups();
+    discoverGroups();
     return () => {
       cancelled = true;
     };
-  }, [visible, tableName, strategy, refreshKey]);
+  }, [visible, tableName, refreshKey]);
 
   useEffect(() => {
     if (!visible) return undefined;
-    const onKeyDown = (event) => {
+    const onKeyDown = event => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [visible, onClose]);
 
+  const groups = semanticData?.groups || [];
+  const visibleGroups = groups;
+  const adaptivePolicy = semanticData?.adaptivePolicy;
+  const representation = semanticData?.representation;
+  const sampleDescription = semanticData
+    ? semanticData.sampleRows === semanticData.totalRows
+      ? `all ${semanticData.sampleRows.toLocaleString()} rows`
+      : `${semanticData.sampleRows.toLocaleString()} randomly sampled rows from ${semanticData.totalRows.toLocaleString()}`
+    : "";
+
   if (!visible) return null;
 
   function handleSelectRows(group) {
-    setHighlightedRowIds(group.rowIds || [], group.mainErrorColumns || [], "semantic_group", {
-      action: "semantic_group_select",
-      group: group.group,
-      strategy: group.strategy,
+    setHighlightedRowIds(group.rowIds || [], group.columnsUsed || [], "semantic_group", {
+      action: "profiler_guided_group_select",
+      group: group.id,
+      view: group.view,
+      algorithm: group.algorithm,
       rowIdsTruncated: group.rowIdsTruncated,
     });
+    onClose();
   }
 
-  const groups = semanticData?.groups || [];
-  const metaSelector = semanticData?.metaSelector;
-  const sampledLabel = semanticData
-    ? `${semanticData.sampleRows.toLocaleString()} sampled rows`
-    : "No sample loaded";
-
-  return (
+  return createPortal((
     <div className="semantic-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
         className="semantic-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="semantic-modal-title"
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={event => event.stopPropagation()}
       >
         <header className="semantic-modal-header">
           <div>
-            <h2 id="semantic-modal-title">Semantic Groups</h2>
+            <span className="semantic-modal-kicker">Profiler-guided discovery</span>
+            <h2 id="semantic-modal-title">Useful row groups</h2>
             <p>
               {semanticData
-                ? `${semanticData.errorRows.toLocaleString()} error rows, baseline ${formatPercent(semanticData.baselineErrorRate)}, ${sampledLabel}`
-                : sampledLabel}
+                ? `${groups.length} groups, ranked by semantic meaningfulness, based on ${sampleDescription}.`
+                : "Buckaroo is combining profiler-guided semantic and quality evidence."}
             </p>
           </div>
-          <div className="semantic-modal-controls">
-            <label>
-              <span>Strategy</span>
-              <select value={strategy} onChange={(event) => setStrategy(event.target.value)}>
-                {SEMANTIC_STRATEGIES.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            <button type="button" className="semantic-modal-close" onClick={onClose} aria-label="Close semantic groups">
-              x
-            </button>
-          </div>
+          <button type="button" className="semantic-modal-close" onClick={onClose} aria-label="Close useful groups">
+            x
+          </button>
         </header>
 
-        <div className="semantic-modal-tool-note">
-          <strong>{SEMANTIC_STRATEGIES.find(item => item.value === strategy)?.label}</strong>
-          <span>{STRATEGY_DESCRIPTIONS[strategy]}</span>
-          {metaSelector && (
+        {semanticData && (
+          <div className="semantic-modal-profile-note">
+            <strong>Profiler guardrails</strong>
             <span>
-              Selected {metaSelector.selectedCandidateLabel} from {metaSelector.candidateCount} candidates
-              {" "}({metaSelector.acceptedCount} accepted).
+              {(semanticData.profileSummary?.excludedIdentifierColumns || []).length} identifier columns excluded
+              {"; "}{(semanticData.profileSummary?.excludedLowConfidenceColumns || []).length} low-confidence columns held back.
             </span>
-          )}
-          {semanticData?.similarityDescription && <span>{semanticData.similarityDescription}</span>}
-        </div>
-
-        {metaSelector && (
-          <div className="semantic-modal-meta-strip">
-            {metaSelector.candidates.slice(0, 5).map(candidate => (
-              <span
-                key={candidate.id}
-                className={candidate.id === metaSelector.selectedCandidateId
-                  ? "semantic-modal-candidate semantic-modal-candidate--selected"
-                  : "semantic-modal-candidate"}
-                title={candidate.rejectionReason}
-              >
-                {candidate.rank}. {candidate.label} · {formatLift(candidate.meanTopLift)}
+            {adaptivePolicy && (
+              <span title={adaptivePolicy.confidence_source}>
+                Profile-confidence gate: {formatPercent(adaptivePolicy.profile_confidence_cutoff)} from this dataset.
               </span>
-            ))}
+            )}
+            {adaptivePolicy && (
+              <span title={adaptivePolicy.min_group_source}>
+                Repeated-group support: {adaptivePolicy.min_group_size.toLocaleString()} rows from observed frequencies.
+              </span>
+            )}
+            {representation?.activeBlocks?.length > 0 && (
+              <span title="Each block is normalized before all blocks enter one clustering matrix.">
+                Combined evidence: {representation.activeBlocks.map(titleCase).join(", ")}.
+              </span>
+            )}
+            <span>All active evidence blocks feed one clustering decision; algorithms and cluster counts are compared using repeated-run evidence.</span>
           </div>
         )}
 
-        {loading && <div className="semantic-modal-state">{loadingText}</div>}
-        {error && <div className="semantic-modal-state semantic-modal-state--error">Error: {error}</div>}
-        {!loading && !error && groups.length === 0 && (
-          <div className="semantic-modal-state">No concentrated semantic groups found.</div>
+        {loading && (
+          <div className="semantic-modal-state">
+            <strong>Discovering useful groups...</strong>
+            <span>Transforming semantic fields, adding quality evidence, and checking partition stability.</span>
+          </div>
+        )}
+        {error && <div className="semantic-modal-state semantic-modal-state--error">{error}</div>}
+        {!loading && !error && visibleGroups.length === 0 && (
+          <div className="semantic-modal-state">
+            <strong>No useful groups passed the safeguards for this sample.</strong>
+            <span>Buckaroo suppresses tiny, unstable, dominant, or identifier-driven results.</span>
+          </div>
         )}
 
-        {!loading && !error && groups.length > 0 && (
-          <div className="semantic-modal-table-wrap">
-            <table className="semantic-modal-table">
-              <thead>
-                <tr>
-                  <th aria-label="Details" />
-                  <th>Group</th>
-                  <th>Error Rows</th>
-                  <th>Error Rate</th>
-                  <th>Lift</th>
-                  <th>Coverage</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map(group => (
-                  <SemanticGroupRow
-                    key={group.id}
-                    group={group}
-                    selected={openGroupId === group.id}
-                    onToggle={() => setOpenGroupId(openGroupId === group.id ? null : group.id)}
-                    onSelectRows={handleSelectRows}
-                  />
-                ))}
-              </tbody>
-            </table>
+        {!loading && !error && visibleGroups.length > 0 && (
+          <div className="semantic-group-list">
+            {visibleGroups.map(group => (
+              <GroupCard
+                key={group.id}
+                group={group}
+                expanded={openGroupId === group.id}
+                onToggle={() => setOpenGroupId(openGroupId === group.id ? null : group.id)}
+                onSelectRows={handleSelectRows}
+              />
+            ))}
           </div>
         )}
       </section>
     </div>
-  );
+  ), document.body);
 }

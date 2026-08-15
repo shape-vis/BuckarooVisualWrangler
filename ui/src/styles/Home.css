@@ -53,6 +53,14 @@
   color: darkslategrey;
 }
 
+.mascot-image {
+  display: block;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 8px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.18));
+}
+
 .placeholder-subtitle {
   font-size: 24px;
   margin-top: 10px;

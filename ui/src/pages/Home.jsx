@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import Header from "../elements/Header.jsx";
 import SpinnerModal from "../elements/SpinnerModal.jsx";
@@ -90,6 +90,11 @@ export default function Home( { onSuccess } ) {
       <Header />
       <div className="ui-nav-box">
         <div id="placeholder-message">
+          <img
+            src="/images/favicon/web-app-manifest-512x512.png"
+            alt="Buckaroo mascot riding a horse with a lasso"
+            className="mascot-image"
+          />
           <div>Welcome to Buckaroo!</div>
           <div className="placeholder-subtitle">
             <p>Start by uploading your own or selecting a sample dataset:</p>
@@ -107,7 +112,7 @@ export default function Home( { onSuccess } ) {
             <div className="dataset-button-row">
               <div
                 className="dataset-button"
-                onClick={() => loadDataset("stackoverflow_db_uncleaned_original.csv")}
+                onClick={() => loadDataset("stackoverflow_db_uncleaned.csv")}
                 role="button"
                 tabIndex={0}
               >
@@ -119,7 +124,7 @@ export default function Home( { onSuccess } ) {
               <div
                 className="dataset-button"
                 onClick={() =>
-                  loadDataset("Crimes_-_One_year_prior_to_present_20250421.csv")
+                  loadDataset("crimes.csv")
                 }
                 role="button"
                 tabIndex={0}

@@ -17,6 +17,7 @@ const SVG_W      = PLOT_SIZE + LEFT_M  + RIGHT_M;
 const SVG_H      = PLOT_SIZE + TOP_M   + BOTTOM_M;
 const HIGHLIGHT_COLOR = "#facc15";
 const HIGHLIGHT_STROKE = "#1f2937";
+const DEFAULT_COLOR_SCALE = () => "steelblue";
 const PREVIEW_AXIS_OPTIONS = {
   detailMode: "compact",
   collapseCategoricalThreshold: 4,
@@ -34,17 +35,21 @@ export default function PreviewCard({
   onExecuteWrangle,
   selectedRowIds = [],
   animationType = null,
+  sharedCountDomainMax = null,
+  impact = null,
+  isDestructive = false,
   isSelected = false,
   onSelect = null,
 }) {
   const svgRef      = useRef(null);
   const [data, setData]       = useState(null);
+  const [comparisonData, setComparisonData] = useState(null);
   const [sourceScatterData, setSourceScatterData] = useState(null);
   const [highlightBins, setHighlightBins] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
 
-  const colorScale = errorColors || (() => "steelblue");
+  const colorScale = errorColors || DEFAULT_COLOR_SCALE;
   const colsKey = (cols || []).join(",");
   const selectedRowsKey = (selectedRowIds || []).map(String).join(",");
 
@@ -55,31 +60,64 @@ export default function PreviewCard({
     // Guard: histogram needs >= 1 col, heatmap/scatterplot need >= 2
     if ((chartType === "heatmap" || chartType === "scatterplot") && cols.length < 2) return;
 
-    setLoading(true);
-    setError(null);
-    setData(null);
-    setHighlightBins(null);
+    let isActive = true;
+    queueMicrotask(() => {
+      if (!isActive) return;
+      setLoading(true);
+      setError(null);
+      setData(null);
+      setComparisonData(null);
+      setHighlightBins(null);
+    });
 
     if (chartType === "histogram") {
-      queryPreviewHistogram({ type: "1d", tablename: tableName, column: cols[0], bins: 10 })
-        .then(result => {
-          if (result?.success) {
-            setData(result.histogram);
-          } else {
-            setError(result?.error || "Failed to load preview");
-          }
-          setLoading(false);
-        });
+      const params = { type: "1d", tablename: tableName, column: cols[0], bins: 10 };
+      if (sourceTableName) params.reference_table = sourceTableName;
+      const comparisonParams = sourceTableName
+        ? { type: "1d", tablename: sourceTableName, column: cols[0], bins: 10, reference_table: sourceTableName }
+        : null;
+
+      Promise.all([
+        queryPreviewHistogram(params),
+        comparisonParams && sourceTableName !== tableName
+          ? queryPreviewHistogram(comparisonParams)
+          : Promise.resolve(null),
+      ]).then(([result, comparisonResult]) => {
+        if (!isActive) return;
+        if (result?.success) {
+          setData(result.histogram);
+          setComparisonData(
+            comparisonResult?.success ? comparisonResult.histogram : result.histogram
+          );
+        } else {
+          setError(result?.error || "Failed to load preview");
+        }
+        setLoading(false);
+      });
     } else if (chartType === "heatmap") {
-      queryPreviewHistogram({ type: "2d", tablename: tableName, column_x: cols[0], column_y: cols[1], x_bins: 10, y_bins: 10 })
-        .then(result => {
-          if (result?.success) {
-            setData(result.histogram);
-          } else {
-            setError(result?.error || "Failed to load preview");
-          }
-          setLoading(false);
-        });
+      const params = { type: "2d", tablename: tableName, column_x: cols[0], column_y: cols[1], x_bins: 10, y_bins: 10 };
+      if (sourceTableName) params.reference_table = sourceTableName;
+      const comparisonParams = sourceTableName
+        ? { type: "2d", tablename: sourceTableName, column_x: cols[0], column_y: cols[1], x_bins: 10, y_bins: 10, reference_table: sourceTableName }
+        : null;
+
+      Promise.all([
+        queryPreviewHistogram(params),
+        comparisonParams && sourceTableName !== tableName
+          ? queryPreviewHistogram(comparisonParams)
+          : Promise.resolve(null),
+      ]).then(([result, comparisonResult]) => {
+        if (!isActive) return;
+        if (result?.success) {
+          setData(result.histogram);
+          setComparisonData(
+            comparisonResult?.success ? comparisonResult.histogram : result.histogram
+          );
+        } else {
+          setError(result?.error || "Failed to load preview");
+        }
+        setLoading(false);
+      });
     } else if (chartType === "scatterplot") {
       const scatterParams = {
         tablename: tableName,
@@ -94,6 +132,7 @@ export default function PreviewCard({
 
       queryPreviewScatterplot(scatterParams)
         .then(result => {
+          if (!isActive) return;
           if (result?.success) {
             setData(result.scatterplot_data);
           } else {
@@ -102,11 +141,17 @@ export default function PreviewCard({
           setLoading(false);
         });
     }
-  }, [tableName, colsKey, chartType, selectedRowsKey]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [tableName, sourceTableName, cols, colsKey, chartType, selectedRowIds, selectedRowsKey]);
 
   useEffect(() => {
     let isActive = true;
-    setSourceScatterData(null);
+    queueMicrotask(() => {
+      if (isActive) setSourceScatterData(null);
+    });
 
     if (
       chartType !== "scatterplot" ||
@@ -138,11 +183,13 @@ export default function PreviewCard({
     return () => {
       isActive = false;
     };
-  }, [sourceTableName, colsKey, chartType, animationType, selectedRowsKey]);
+  }, [sourceTableName, cols, colsKey, chartType, animationType, selectedRowsKey]);
 
   useEffect(() => {
     let isActive = true;
-    setHighlightBins(null);
+    queueMicrotask(() => {
+      if (isActive) setHighlightBins(null);
+    });
 
     if (!tableName || !cols || cols.length === 0 || !selectedRowIds?.length) {
       return () => {
@@ -162,6 +209,7 @@ export default function PreviewCard({
         type: "1d",
         column: cols[0],
         row_ids: selectedRowIds,
+        reference_table: sourceTableName,
       }).then(result => {
         if (!isActive || !result?.success) return;
         setHighlightBins(new Set((result.bins || []).map(String)));
@@ -173,6 +221,7 @@ export default function PreviewCard({
         column_x: cols[0],
         column_y: cols[1],
         row_ids: selectedRowIds,
+        reference_table: sourceTableName,
       }).then(result => {
         if (!isActive || !result?.success) return;
         setHighlightBins(new Set((result.bins || []).map(b => `${b.xBin}|${b.yBin}`)));
@@ -182,7 +231,7 @@ export default function PreviewCard({
     return () => {
       isActive = false;
     };
-  }, [tableName, colsKey, chartType, selectedRowsKey]);
+  }, [tableName, sourceTableName, cols, colsKey, chartType, selectedRowIds, selectedRowsKey]);
 
   // ── draw chart ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -195,16 +244,30 @@ export default function PreviewCard({
       .attr("transform", `translate(${LEFT_M}, ${TOP_M})`);
 
     if (chartType === "histogram") {
-      draw1D(canvas, data, colorScale, highlightBins);
+      draw1D(canvas, data, colorScale, highlightBins, {
+        comparisonData,
+        sharedCountDomainMax,
+      });
     } else if (chartType === "heatmap") {
-      draw2D(canvas, data, colorScale, highlightBins);
+      draw2D(canvas, data, colorScale, highlightBins, comparisonData);
     } else if (chartType === "scatterplot") {
       drawScatter(canvas, data, colorScale, selectedRowIds, {
         animationType,
         sourceScatterData,
       });
     }
-  }, [data, sourceScatterData, chartType, highlightBins, selectedRowsKey, animationType]);
+  }, [
+    data,
+    comparisonData,
+    sourceScatterData,
+    chartType,
+    highlightBins,
+    selectedRowsKey,
+    animationType,
+    sharedCountDomainMax,
+    colorScale,
+    selectedRowIds,
+  ]);
 
   const cardClassName = [
     "repair-method",
@@ -236,6 +299,18 @@ export default function PreviewCard({
           <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ width: "100%", height: "auto" }} />
         )}
       </div>
+      {impact && (
+        <div className="preview-card-impact" aria-label={`${label} impact`}>
+          <div>
+            <span>Rows affected</span>
+            <strong>{formatImpactValue(impact.rowsAffected, impact.loading)}</strong>
+          </div>
+          <div>
+            <span>Values changed</span>
+            <strong>{formatImpactValue(impact.valuesChanged, impact.loading)}</strong>
+          </div>
+        </div>
+      )}
       {onExecuteWrangle && (
         <button
           type="button"
@@ -243,9 +318,9 @@ export default function PreviewCard({
             event.stopPropagation();
             onExecuteWrangle();
           }}
-          className="regButton preview-card-execute"
+          className={`regButton preview-card-execute ${isDestructive ? "preview-card-execute--destructive" : ""}`}
         >
-          Execute Wrangle
+          {isDestructive ? "Review deletion" : "Apply repair"}
         </button>
       )}
     </div>
@@ -253,9 +328,22 @@ export default function PreviewCard({
 }
 
 // ── 1-D bar chart renderer ─────────────────────────────────────────────────
-function draw1D(canvas, histogramData, colorScale, highlightBins = null) {
-  const numHistDataX = histogramData.scaleX.numeric || [];
-  const catHistDataX = histogramData.scaleX.categorical || [];
+function formatImpactValue(value, loading) {
+  if (loading) return "...";
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number).toLocaleString() : "-";
+}
+
+function draw1D(canvas, histogramData, colorScale, highlightBins = null, options = {}) {
+  const { comparisonData = null, sharedCountDomainMax = null } = options;
+  const referenceNumeric = comparisonData?.scaleX?.numeric || [];
+  const numHistDataX = referenceNumeric.length > 0
+    ? referenceNumeric
+    : (histogramData.scaleX.numeric || []);
+  const catHistDataX = mergeCategoricalScale(
+    comparisonData?.scaleX?.categorical,
+    histogramData.scaleX.categorical,
+  );
 
   const numDomainY = (numHistDataX.length === 0 || !numHistDataX[0])
     ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];
@@ -264,8 +352,14 @@ function draw1D(canvas, histogramData, colorScale, highlightBins = null) {
   const xScale = createHybridScales(
     PLOT_SIZE, numHistDataX, catHistDataX, numDomainY, catDomainY, "horizontal"
   );
+  const currentMax = d3.max(histogramData.histograms, d => d.count.items) || 1;
+  const comparisonMax = d3.max(comparisonData?.histograms || [], d => d.count.items) || 1;
+  const requestedDomainMax = Number(sharedCountDomainMax);
+  const yDomainMax = Number.isFinite(requestedDomainMax) && requestedDomainMax > 0
+    ? Math.max(requestedDomainMax, currentMax, comparisonMax)
+    : Math.max(currentMax, comparisonMax);
   const yScale = d3.scaleLinear()
-    .domain([0, d3.max(histogramData.histograms, d => d.count.items) || 1]).nice()
+    .domain([0, yDomainMax]).nice()
     .range([PLOT_SIZE, 0]);
 
   // Flatten stacked bars
@@ -306,11 +400,23 @@ function draw1D(canvas, histogramData, colorScale, highlightBins = null) {
 }
 
 // ── 2-D heatmap renderer ───────────────────────────────────────────────────
-function draw2D(canvas, histogramData, colorScale, highlightBins = null) {
-  const numHistDataX = histogramData.scaleX.numeric || [];
-  const catHistDataX = histogramData.scaleX.categorical || [];
-  const numHistDataY = histogramData.scaleY.numeric || [];
-  const catHistDataY = histogramData.scaleY.categorical || [];
+function draw2D(canvas, histogramData, colorScale, highlightBins = null, comparisonData = null) {
+  const referenceNumericX = comparisonData?.scaleX?.numeric || [];
+  const referenceNumericY = comparisonData?.scaleY?.numeric || [];
+  const numHistDataX = referenceNumericX.length > 0
+    ? referenceNumericX
+    : (histogramData.scaleX.numeric || []);
+  const catHistDataX = mergeCategoricalScale(
+    comparisonData?.scaleX?.categorical,
+    histogramData.scaleX.categorical,
+  );
+  const numHistDataY = referenceNumericY.length > 0
+    ? referenceNumericY
+    : (histogramData.scaleY.numeric || []);
+  const catHistDataY = mergeCategoricalScale(
+    comparisonData?.scaleY?.categorical,
+    histogramData.scaleY.categorical,
+  );
 
   const numDomainX = (numHistDataX.length === 0 || !numHistDataX[0])
     ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];

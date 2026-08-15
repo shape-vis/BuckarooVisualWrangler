@@ -7,22 +7,15 @@ import { useRepair } from "../store/RepairContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
-import { usePgraph } from "../store/PGraphContext.jsx";
+import { usePgraph } from "../store/PGraphStore.jsx";
 import { logInteractionEvent } from "../utils/interactionLogger.jsx";
+
+const LARGE_DELETE_RATIO = 0.20;
 
 function buildPreviewOptions(previews) {
   if (!previews) return [];
 
-  const options = [{
-    key: "delete",
-    label: "Delete Rows",
-    tableName: previews.preview_delete,
-    repairType: "delete_rows",
-    action: "delete",
-    targetColumn: null,
-    diffCols: previews.cols || [],
-    animationType: "delete",
-  }];
+  const options = [];
 
   if (previews.type === "histogram") {
     options.push({
@@ -35,28 +28,39 @@ function buildPreviewOptions(previews) {
       diffCols: [previews.cols[0]],
       animationType: "impute",
     });
-    return options;
+  } else {
+    options.push({
+      key: "impute-x",
+      label: `Impute "${previews.cols[0]}"`,
+      tableName: previews.preview_impute_x,
+      repairType: `impute:${previews.cols[0]}`,
+      action: "impute",
+      targetColumn: previews.cols[0],
+      diffCols: [previews.cols[0]],
+      animationType: "impute",
+    });
+    options.push({
+      key: "impute-y",
+      label: `Impute "${previews.cols[1]}"`,
+      tableName: previews.preview_impute_y,
+      repairType: `impute:${previews.cols[1]}`,
+      action: "impute",
+      targetColumn: previews.cols[1],
+      diffCols: [previews.cols[1]],
+      animationType: "impute",
+    });
   }
 
+  // Destructive options are intentionally last and are never selected by default.
   options.push({
-    key: "impute-x",
-    label: `Impute "${previews.cols[0]}"`,
-    tableName: previews.preview_impute_x,
-    repairType: `impute:${previews.cols[0]}`,
-    action: "impute",
-    targetColumn: previews.cols[0],
-    diffCols: [previews.cols[0]],
-    animationType: "impute",
-  });
-  options.push({
-    key: "impute-y",
-    label: `Impute "${previews.cols[1]}"`,
-    tableName: previews.preview_impute_y,
-    repairType: `impute:${previews.cols[1]}`,
-    action: "impute",
-    targetColumn: previews.cols[1],
-    diffCols: [previews.cols[1]],
-    animationType: "impute",
+    key: "delete",
+    label: "Delete Rows",
+    tableName: previews.preview_delete,
+    repairType: "delete_rows",
+    action: "delete",
+    targetColumn: null,
+    diffCols: previews.cols || [],
+    animationType: "delete",
   });
 
   return options;
@@ -64,6 +68,23 @@ function buildPreviewOptions(previews) {
 
 function rowPhrase(count) {
   return `${count} selected ${count === 1 ? "row" : "rows"}`;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "unknown";
+  const digits = value >= 0.1 ? 1 : 2;
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function emptyDiffState() {
+  return {
+    loading: false,
+    error: null,
+    rows: [],
+    truncated: false,
+    totalRowCount: 0,
+    impact: null,
+  };
 }
 
 function shortValue(value, maxLength = 44) {
@@ -117,13 +138,11 @@ export default function RepairPanel() {
   const [previewsGenerated, setPreviewsGenerated] = useState(false);
   const [busyMessage, setBusyMessage] = useState("Generating previews...");
   const [selectedPreviewTable, setSelectedPreviewTable] = useState(null);
-  const [diffState, setDiffState] = useState({
-    loading: false,
-    error: null,
-    rows: [],
-    truncated: false,
-    totalRowCount: 0,
-  });
+  const [sourceRowCount, setSourceRowCount] = useState(0);
+  const [previewImpacts, setPreviewImpacts] = useState({});
+  const [diffState, setDiffState] = useState(emptyDiffState);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
 
   const hasSelection = highlightedRowIds && highlightedRowIds.length > 0;
   const selectedColumns = useMemo(() => highlightedCols || [], [highlightedCols]);
@@ -137,10 +156,18 @@ export default function RepairPanel() {
   );
   const previewOptions = useMemo(() => buildPreviewOptions(previews), [previews]);
   const activePreview = useMemo(() => {
-    return previewOptions.find(option => option.tableName === selectedPreviewTable)
-      || previewOptions[0]
-      || null;
+    return previewOptions.find(option => option.tableName === selectedPreviewTable) || null;
   }, [previewOptions, selectedPreviewTable]);
+  const selectedRowCount = highlightedRowIds?.length || 0;
+  const selectedRowRatio = sourceRowCount > 0 ? selectedRowCount / sourceRowCount : NaN;
+  const selectedRowPercent = formatPercent(selectedRowRatio);
+  const isLargeSelection = Number.isFinite(selectedRowRatio)
+    && selectedRowRatio >= LARGE_DELETE_RATIO;
+  const pendingDeleteImpact = pendingDelete
+    ? previewImpacts[pendingDelete.tableName]
+    : null;
+  const deleteConfirmationReady = !isLargeSelection
+    || deleteConfirmationText.trim().toUpperCase() === "DELETE";
   const selectedRowsKey = useMemo(() => (highlightedRowIds || []).map(String).join(","), [highlightedRowIds]);
   const activeDiffColsKey = activePreview?.diffCols?.join("|") || "";
   const previewExplanation = useMemo(() => (
@@ -149,6 +176,8 @@ export default function RepairPanel() {
 
   const closeWorkspace = useCallback(() => {
     setIsOpen(false);
+    setPendingDelete(null);
+    setDeleteConfirmationText("");
     closeRepairPanel();
   }, [closeRepairPanel]);
 
@@ -156,14 +185,12 @@ export default function RepairPanel() {
     setIsOpen(true);
     setPreviewError(null);
     setPreviews(null);
+    setSourceRowCount(0);
+    setPreviewImpacts({});
     setSelectedPreviewTable(null);
-    setDiffState({
-      loading: false,
-      error: null,
-      rows: [],
-      truncated: false,
-      totalRowCount: 0,
-    });
+    setPendingDelete(null);
+    setDeleteConfirmationText("");
+    setDiffState(emptyDiffState());
     setPreviewsGenerated(false);
     setBusyMessage("Generating previews...");
     logInteractionEvent("repair_previews_requested", {
@@ -197,6 +224,7 @@ export default function RepairPanel() {
     }
 
     setPreviewsGenerated(true);
+    setSourceRowCount(Number(result.source_row_count) || 0);
     logInteractionEvent("repair_previews_generated", {
       table: tableName,
       source: previewSource,
@@ -242,27 +270,57 @@ export default function RepairPanel() {
   }, [repairPanelCloseTrigger]);
 
   useEffect(() => {
-    if (!previewOptions.length) {
-      setSelectedPreviewTable(null);
-      return;
+    let isActive = true;
+
+    if (!previewOptions.length || !tableName || !selectedRowsKey) {
+      setPreviewImpacts({});
+      return () => {
+        isActive = false;
+      };
     }
 
-    if (!selectedPreviewTable || !previewOptions.some(option => option.tableName === selectedPreviewTable)) {
-      setSelectedPreviewTable(previewOptions[0].tableName);
-    }
-  }, [previewOptions, selectedPreviewTable]);
+    setPreviewImpacts(Object.fromEntries(
+      previewOptions.map(option => [option.tableName, { loading: true }])
+    ));
+
+    Promise.all(previewOptions.map(async option => {
+      const result = await queryPreviewRowDiff({
+        source_table: tableName,
+        preview_table: option.tableName,
+        row_ids: highlightedRowIds || [],
+        cols: option.diffCols,
+        summary_only: true,
+      });
+      return [option.tableName, result];
+    })).then(results => {
+      if (!isActive) return;
+      const nextImpacts = {};
+      results.forEach(([previewTable, result]) => {
+        nextImpacts[previewTable] = result?.success
+          ? { ...result.impact, loading: false }
+          : { loading: false, error: result?.error || "Impact unavailable" };
+      });
+      setPreviewImpacts(nextImpacts);
+    }).catch(error => {
+      if (!isActive) return;
+      setPreviewImpacts(Object.fromEntries(
+        previewOptions.map(option => [
+          option.tableName,
+          { loading: false, error: error?.message || "Impact unavailable" },
+        ])
+      ));
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [previewOptions, tableName, selectedRowsKey, highlightedRowIds]);
 
   useEffect(() => {
     let isActive = true;
 
     if (!activePreview || !tableName || !selectedRowsKey || !activePreview.diffCols?.length) {
-      setDiffState({
-        loading: false,
-        error: null,
-        rows: [],
-        truncated: false,
-        totalRowCount: 0,
-      });
+      setDiffState(emptyDiffState());
       return () => {
         isActive = false;
       };
@@ -274,6 +332,7 @@ export default function RepairPanel() {
       rows: [],
       truncated: false,
       totalRowCount: highlightedRowIds?.length || 0,
+      impact: null,
     });
 
     queryPreviewRowDiff({
@@ -290,6 +349,7 @@ export default function RepairPanel() {
           rows: result.rows || [],
           truncated: Boolean(result.truncated),
           totalRowCount: result.totalRowCount || 0,
+          impact: result.impact || null,
         });
       } else {
         setDiffState({
@@ -298,6 +358,7 @@ export default function RepairPanel() {
           rows: [],
           truncated: false,
           totalRowCount: 0,
+          impact: null,
         });
       }
     }).catch(error => {
@@ -308,6 +369,7 @@ export default function RepairPanel() {
         rows: [],
         truncated: false,
         totalRowCount: 0,
+        impact: null,
       });
     });
 
@@ -315,12 +377,48 @@ export default function RepairPanel() {
       isActive = false;
     };
   }, [
+    activePreview,
     activePreview?.tableName,
     activeDiffColsKey,
     tableName,
     selectedRowsKey,
     highlightedRowIds,
   ]);
+
+  function requestExecuteWrangle(option) {
+    if (!option) return;
+    if (option.action === "delete") {
+      setPendingDelete(option);
+      setDeleteConfirmationText("");
+      logInteractionEvent("wrangle_delete_confirmation_opened", {
+        table: tableName,
+        rowCount: selectedRowCount,
+        sourceRowCount,
+        selectedRatio: Number.isFinite(selectedRowRatio) ? selectedRowRatio : null,
+        requiresTypedConfirmation: isLargeSelection,
+      });
+      return;
+    }
+
+    handleExecuteWrangle(option.tableName, option.repairType);
+  }
+
+  function cancelDelete() {
+    setPendingDelete(null);
+    setDeleteConfirmationText("");
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    if (isLargeSelection && deleteConfirmationText.trim().toUpperCase() !== "DELETE") {
+      return;
+    }
+
+    const option = pendingDelete;
+    setPendingDelete(null);
+    setDeleteConfirmationText("");
+    handleExecuteWrangle(option.tableName, option.repairType);
+  }
 
   async function handleExecuteWrangle(previewTableName, repairType) {
     setBusy(true);
@@ -404,9 +502,12 @@ export default function RepairPanel() {
             chartType={previews.type}
             selectedRowIds={highlightedRowIds}
             animationType={option.animationType}
+            sharedCountDomainMax={sourceRowCount}
+            impact={previewImpacts[option.tableName] || { loading: true }}
+            isDestructive={option.action === "delete"}
             isSelected={activePreview?.tableName === option.tableName}
             onSelect={() => setSelectedPreviewTable(option.tableName)}
-            onExecuteWrangle={() => handleExecuteWrangle(option.tableName, option.repairType)}
+            onExecuteWrangle={() => requestExecuteWrangle(option)}
           />
         ))}
       </>
@@ -486,14 +587,23 @@ export default function RepairPanel() {
         aria-labelledby="repair-workspace-title"
       >
         <header className="repair-workspace-header">
-          <div>
+          <div className="repair-workspace-title-group">
             <h2 id="repair-workspace-title">Repair Workspace</h2>
             <div className="repair-workspace-subtitle">
-              {hasSelection
-                ? `${highlightedRowIds.length} row(s) selected`
-                : "No active selection"}
+              {hasSelection ? `Selected from ${sourceLabel}` : "No active selection"}
             </div>
           </div>
+          {hasSelection && (
+            <div className={`repair-selection-impact ${isLargeSelection ? "repair-selection-impact--danger" : ""}`}>
+              <span>Selected</span>
+              <strong>
+                {selectedRowCount.toLocaleString()} of {sourceRowCount > 0
+                  ? sourceRowCount.toLocaleString()
+                  : "?"} rows
+              </strong>
+              <b>{selectedRowPercent}</b>
+            </div>
+          )}
           <button
             type="button"
             className="repair-workspace-close"
@@ -533,7 +643,11 @@ export default function RepairPanel() {
             <dl className="repair-summary-list">
               <div>
                 <dt>Rows</dt>
-                <dd>{hasSelection ? highlightedRowIds.length : 0}</dd>
+                <dd>
+                  {hasSelection
+                    ? `${selectedRowCount.toLocaleString()} of ${sourceRowCount > 0 ? sourceRowCount.toLocaleString() : "?"} (${selectedRowPercent})`
+                    : "0"}
+                </dd>
               </div>
               <div>
                 <dt>Columns</dt>
@@ -548,6 +662,12 @@ export default function RepairPanel() {
                 <dd>{tableName || "None"}</dd>
               </div>
             </dl>
+            {isLargeSelection && (
+              <div className="repair-large-selection-warning" role="status">
+                <strong>Large selection</strong>
+                <span>Deleting it would remove {selectedRowPercent} of this table.</span>
+              </div>
+            )}
             <div className="repair-row-list-title">Selected Row IDs</div>
             <div className="repair-row-list">
               {hasSelection
@@ -566,10 +686,12 @@ export default function RepairPanel() {
               <PreviewCard
                 label="Current Data"
                 tableName={tableName}
+                sourceTableName={tableName}
                 cols={selectedColumns}
                 errorColors={ERROR_COLORS}
                 chartType={chartType}
                 selectedRowIds={highlightedRowIds}
+                sharedCountDomainMax={sourceRowCount}
               />
             ) : (
               <div className="repair-empty-preview">No selected data to preview.</div>
@@ -578,12 +700,78 @@ export default function RepairPanel() {
 
           <aside className="repair-workspace-column repair-workspace-previews">
             <div className="repair-workspace-section-title">Repair Previews</div>
+            {!activePreview && previews && (
+              <div className="repair-preview-guidance">
+                Choose a preview to inspect it. No repair is selected automatically.
+              </div>
+            )}
             <div className="repair-preview-list">
               {renderPreviewCards()}
             </div>
           </aside>
         </div>
       </section>
+      {pendingDelete && (
+        <div className="repair-confirmation-backdrop" role="presentation">
+          <section
+            className="repair-confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="repair-delete-title"
+            aria-describedby="repair-delete-description"
+          >
+            <div className="repair-confirmation-kicker">Destructive repair</div>
+            <h3 id="repair-delete-title">
+              Delete {selectedRowCount.toLocaleString()} of {sourceRowCount > 0
+                ? sourceRowCount.toLocaleString()
+                : "?"} rows?
+            </h3>
+            <p id="repair-delete-description">
+              This would remove <strong>{selectedRowPercent}</strong> of the current table.
+              The repair can be undone, but it is not selected or applied automatically.
+            </p>
+
+            <div className="repair-confirmation-impact">
+              <div>
+                <span>Rows affected</span>
+                <strong>{Number(pendingDeleteImpact?.rowsAffected ?? selectedRowCount).toLocaleString()}</strong>
+              </div>
+              <div>
+                <span>Values changed</span>
+                <strong>{Number(pendingDeleteImpact?.valuesChanged ?? 0).toLocaleString()}</strong>
+              </div>
+            </div>
+
+            {isLargeSelection && (
+              <label className="repair-confirmation-input">
+                <span>Type DELETE to confirm this large removal</span>
+                <input
+                  type="text"
+                  value={deleteConfirmationText}
+                  onChange={event => setDeleteConfirmationText(event.target.value)}
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck="false"
+                />
+              </label>
+            )}
+
+            <div className="repair-confirmation-actions">
+              <button type="button" className="repair-confirmation-cancel" onClick={cancelDelete}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="repair-confirmation-delete"
+                onClick={confirmDelete}
+                disabled={!deleteConfirmationReady || busy}
+              >
+                Delete selected rows
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

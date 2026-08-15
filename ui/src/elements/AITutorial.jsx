@@ -3,7 +3,17 @@ import { SelectionContext } from "../store/SelectionContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
 import "../styles/AITutorial.css";
 
-export default function AITutorial({ showSignal = 0 }) {
+const DISMISSED_KEY = "buckarooAiTutorialDismissed";
+
+function shouldShowOnLoad() {
+  try {
+    return window.localStorage?.getItem(DISMISSED_KEY) !== "true";
+  } catch {
+    return true;
+  }
+}
+
+export default function AITutorial({ showSignal = 0, selectedAttributes = [] }) {
   const { highlightedRowIds } = useContext(SelectionContext);
   const {
     repairPanelOpenTrigger,
@@ -11,36 +21,47 @@ export default function AITutorial({ showSignal = 0 }) {
     repairWrangleExecutedCount,
   } = useRepair();
 
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(shouldShowOnLoad);
   const [repairWorkspaceOpen, setRepairWorkspaceOpen] = useState(false);
   const [exported, setExported] = useState(false);
   const lastOpenTrigger = useRef(repairPanelOpenTrigger);
   const lastCloseTrigger = useRef(repairPanelCloseTrigger);
 
   useEffect(() => {
-    try {
-      window.localStorage?.removeItem("buckarooAiTutorialDismissed");
-    } catch {
-      // Ignore unavailable localStorage; the guide is still visible by default.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (showSignal > 0) setVisible(true);
+    if (showSignal <= 0) return undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setVisible(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [showSignal]);
 
   useEffect(() => {
-    if (repairPanelOpenTrigger > lastOpenTrigger.current) {
-      setRepairWorkspaceOpen(true);
-    }
+    const opened = repairPanelOpenTrigger > lastOpenTrigger.current;
     lastOpenTrigger.current = repairPanelOpenTrigger;
+    if (!opened) return undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setRepairWorkspaceOpen(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [repairPanelOpenTrigger]);
 
   useEffect(() => {
-    if (repairPanelCloseTrigger > lastCloseTrigger.current) {
-      setRepairWorkspaceOpen(false);
-    }
+    const closed = repairPanelCloseTrigger > lastCloseTrigger.current;
     lastCloseTrigger.current = repairPanelCloseTrigger;
+    if (!closed) return undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setRepairWorkspaceOpen(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [repairPanelCloseTrigger]);
 
   useEffect(() => {
@@ -92,6 +113,16 @@ export default function AITutorial({ showSignal = 0 }) {
       };
     }
 
+    if (selectedAttributes.length === 0) {
+      return {
+        key: "choose-column",
+        target: "columns",
+        title: "Choose a column first",
+        body: "Select the checkbox beside a column name. Buckaroo will draw its profile before asking you to select any rows.",
+        actionLabel: "Dismiss",
+      };
+    }
+
     return {
       key: "select",
       target: "plots",
@@ -99,7 +130,7 @@ export default function AITutorial({ showSignal = 0 }) {
       body: "Start by selecting a point or region in a plot. Buckaroo will keep that selection highlighted across the repair workflow.",
       actionLabel: "Skip",
     };
-  }, [exported, highlightedRowIds, repairWorkspaceOpen, repairWrangleExecutedCount]);
+  }, [exported, highlightedRowIds, repairWorkspaceOpen, repairWrangleExecutedCount, selectedAttributes]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -115,12 +146,22 @@ export default function AITutorial({ showSignal = 0 }) {
 
   function dismiss() {
     setVisible(false);
+    try {
+      window.localStorage?.setItem(DISMISSED_KEY, "true");
+    } catch {
+      // The guide still closes when browser storage is unavailable.
+    }
   }
 
   if (!visible) return null;
 
   return (
-    <aside className={`ai-tutorial ai-tutorial--${step.key}`} aria-live="polite">
+    <aside
+      className={`ai-tutorial ai-tutorial--${step.key}`}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="ai-tutorial-title"
+    >
       <div className="ai-tutorial-header">
         <span className="ai-tutorial-badge">AI Guide</span>
         <button
@@ -133,7 +174,7 @@ export default function AITutorial({ showSignal = 0 }) {
         </button>
       </div>
       <div className="ai-tutorial-step">{step.key.replace("-", " ")}</div>
-      <h2>{step.title}</h2>
+      <h2 id="ai-tutorial-title">{step.title}</h2>
       <p>{step.body}</p>
       <div className="ai-tutorial-actions">
         <button type="button" onClick={dismiss}>

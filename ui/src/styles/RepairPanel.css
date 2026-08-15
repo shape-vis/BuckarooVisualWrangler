@@ -176,10 +176,57 @@
   line-height: 1.2;
 }
 
+.repair-workspace-title-group {
+  min-width: 0;
+}
+
 .repair-workspace-subtitle {
   margin-top: 4px;
   color: #64748b;
   font-size: 12px;
+}
+
+.repair-selection-impact {
+  margin-left: auto;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.repair-selection-impact span {
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.repair-selection-impact strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.repair-selection-impact b {
+  padding: 3px 6px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.repair-selection-impact--danger {
+  border-color: #fca5a5;
+  background: #fff1f2;
+}
+
+.repair-selection-impact--danger b {
+  color: #991b1b;
+  background: #fee2e2;
 }
 
 .repair-workspace-close {
@@ -258,6 +305,19 @@
   color: #111827;
   font-size: 13px;
   word-break: break-word;
+}
+
+.repair-large-selection-warning {
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 10px;
+  color: #9f1239;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .repair-row-list-title {
@@ -397,6 +457,16 @@
   gap: 12px;
 }
 
+.repair-preview-guidance {
+  margin: -2px 0 10px;
+  padding: 8px 10px;
+  color: #475569;
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .repair-empty-preview {
   display: flex;
   align-items: center;
@@ -427,6 +497,127 @@
   min-width: 150px;
 }
 
+.repair-confirmation-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.repair-confirmation-dialog {
+  width: min(520px, calc(100vw - 48px));
+  padding: 22px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.34);
+}
+
+.repair-confirmation-kicker {
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.repair-confirmation-dialog h3 {
+  margin: 6px 0 8px;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.repair-confirmation-dialog p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.repair-confirmation-impact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.repair-confirmation-impact > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+}
+
+.repair-confirmation-impact span,
+.repair-confirmation-input span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.repair-confirmation-impact strong {
+  color: #9a3412;
+  font-size: 18px;
+}
+
+.repair-confirmation-input {
+  display: grid;
+  gap: 6px;
+}
+
+.repair-confirmation-input input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.repair-confirmation-input input:focus {
+  outline: 2px solid #fca5a5;
+  outline-offset: 1px;
+}
+
+.repair-confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.repair-confirmation-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.repair-confirmation-cancel {
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.repair-confirmation-delete {
+  color: #ffffff;
+  background: #b91c1c;
+  border: 1px solid #991b1b;
+}
+
+.repair-confirmation-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 @media (max-width: 1050px) {
   .repair-workspace {
     width: calc(100vw - 32px);
@@ -444,5 +635,13 @@
 
   .repair-workspace-column {
     min-height: 260px;
+  }
+
+  .repair-selection-impact {
+    grid-template-columns: auto auto;
+  }
+
+  .repair-selection-impact span {
+    display: none;
   }
 }

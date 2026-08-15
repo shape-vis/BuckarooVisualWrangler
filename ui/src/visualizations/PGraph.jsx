@@ -2,15 +2,13 @@ import {
   ReactFlow,
   Background,
   Controls,
-  addEdge,
-  MiniMap, ConnectionLineType, Panel,
+  MiniMap, ConnectionLineType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
-import {getPGraph} from "../utils/serverCalls.jsx";
-import {usePgraph} from "../store/PGraphContext.jsx";
+import {usePgraph} from "../store/PGraphStore.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
-import {useEffect} from "react";
+import {useMemo} from "react";
 
 
 export default function PGraph() {
@@ -19,27 +17,20 @@ const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick
 
 const { tableName } = useTableName();
 
-useEffect(() => {
-    nodes.forEach((node) => {
-      if (nodes.length === 1) {
-          node.style = {backgroundColor: "#64ea96"}
-      } else if (nodes.length > 1) {
-          if (node.id === tableName) {
-              node.style = {backgroundColor: "#64ea96"}
-          }
-          else {
-              node.style = {backgroundColor: "white"}
-          }
-      }
-    })
-}, [])
+const styledNodes = useMemo(() => nodes.map((node) => ({
+  ...node,
+  style: {
+    ...node.style,
+    backgroundColor: nodes.length === 1 || node.id === tableName ? "#64ea96" : "white",
+  },
+})), [nodes, tableName]);
 
 
   return (
     <div className="pgraph-container">
       <ReactFlow
         colorMode={"light"}
-        nodes={nodes}
+        nodes={styledNodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
