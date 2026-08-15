@@ -5,7 +5,13 @@ import pandas as pd
 import traceback
 
 from app import app, engine, db_operations
-from app.server_utils.data_attribute_summary_integration import generate_complete_json
+from app.server_utils.data_attribute_summary_integration import (
+    delete_profile_role_override,
+    generate_complete_json,
+    save_profile_role_override,
+)
+from app.server_utils.semantic_grouping import generate_semantic_grouping_json
+from app.server_utils.multi_view_grouping import generate_multiview_grouping_json
 
 import math
 from collections import Counter
@@ -340,12 +346,25 @@ def get_bins_for_rows():
         body = request.get_json(force=True)
         dim = body.get("type", "1d")
         row_ids = body.get("row_ids", [])
+        table = body.get("table") or body.get("tablename")
+        reference_table = body.get("reference_table")
+
+        plot_operations = db_operations
+        if table and table != db_operations.main_table_name:
+            from app.db_utils.db_functions_sql import DBOperations
+
+            plot_operations = DBOperations(engine)
+            plot_operations.load_table(table, error_table_name=f"errors_{table}")
 
         if dim == "1d":
             # After a repair preview, this tells the frontend which 1D bars
             # contain the selected rows so it can highlight affected bins.
             column = body["column"]
-            bins = db_operations.get_1d_bins_containing_rows(column, row_ids)
+            bins = plot_operations.get_1d_bins_containing_rows(
+                column,
+                row_ids,
+                reference_table=reference_table,
+            )
             return {"success": True, "bins": bins}
         else:
             # Same idea for 2D plots: return the heatmap coordinates affected
@@ -354,7 +373,11 @@ def get_bins_for_rows():
             col_y = body["column_y"]
             joint_col = (col_x, col_y)
 
-            bins = db_operations.get_2d_bins_containing_rows(joint_col, row_ids)
+            bins = plot_operations.get_2d_bins_containing_rows(
+                joint_col,
+                row_ids,
+                reference_table=reference_table,
+            )
             return {"success": True, "bins": bins}
     except Exception as e:
         traceback.print_exc()
@@ -379,6 +402,125 @@ def attribute_summaries():
         traceback.print_exc()
         return {"success": False, "error": str(e)}
 
+
+@app.post("/api/plots/profile-overrides")
+def save_attribute_profile_override():
+    """Persist a human correction without replacing Buckaroo's raw inference."""
+    try:
+        tablename = db_operations.main_table_name
+        if not tablename:
+            return {"success": False, "error": "No dataset is currently loaded."}, 400
+
+        body = request.get_json(silent=True) or {}
+        override = save_profile_role_override(
+            tablename,
+            body.get("column"),
+            body.get("role"),
+            body.get("note", ""),
+            engine,
+        )
+        return {"success": True, "override": override}
+    except (TypeError, ValueError) as error:
+        return {"success": False, "error": str(error)}, 400
+    except Exception as error:
+        traceback.print_exc()
+        return {"success": False, "error": str(error)}, 500
+
+
+@app.delete("/api/plots/profile-overrides")
+def remove_attribute_profile_override():
+    """Remove a human correction and keep the original Buckaroo output intact."""
+    try:
+        tablename = db_operations.main_table_name
+        if not tablename:
+            return {"success": False, "error": "No dataset is currently loaded."}, 400
+
+        body = request.get_json(silent=True) or {}
+        delete_profile_role_override(tablename, body.get("column"), engine)
+        return {"success": True}
+    except (TypeError, ValueError) as error:
+        return {"success": False, "error": str(error)}, 400
+    except Exception as error:
+        traceback.print_exc()
+        return {"success": False, "error": str(error)}, 500
+
+
+@app.get("/api/plots/semantic-groups")
+def semantic_groups():
+    """
+    Return ranked profiler-guided row groups with semantic and quality evidence.
+
+    Query params:
+      tablename       - optional table name; defaults to current table
+      strategy        - semantic_quality | multi_view | auto | cluster_first | error_first | exact_slices
+      limit           - max groups returned
+      sample_rows     - max rows read from the current table
+      cluster_count   - optional explicit k for clustering
+      min_group_size  - minimum rows per returned group
+      min_error_rows  - minimum error rows per returned group
+    """
+    try:
+        tablename = request.args.get("tablename") or db_operations.main_table_name
+        if not tablename:
+            return {"success": False, "error": "Load a dataset before discovering useful groups."}, 400
+        strategy = request.args.get("strategy", "auto")
+        limit = int(request.args.get("limit", 8))
+        sample_rows_arg = request.args.get("sample_rows")
+        sample_rows = int(sample_rows_arg) if sample_rows_arg else None
+        cluster_count_arg = request.args.get("cluster_count")
+        cluster_count = int(cluster_count_arg) if cluster_count_arg else None
+        min_group_size_arg = request.args.get("min_group_size")
+        min_group_size = int(min_group_size_arg) if min_group_size_arg else None
+        min_error_rows = int(request.args.get("min_error_rows", 2))
+
+        if strategy in {
+            "semantic_quality",
+            "profiler_guided_semantic_quality",
+            "multi_view",
+            "profiler_guided_multi_view",
+            "semantic_quality_embeddings",
+            "semantic_quality_free_text_embeddings",
+        }:
+            data = generate_multiview_grouping_json(
+                tablename,
+                engine,
+                limit=limit,
+                sample_rows=sample_rows,
+                min_group_size=min_group_size,
+                # SBERT-based categorical similarity is part of the default
+                # semantic_quality path. It only activates on columns that pass
+                # the role + adaptive cardinality gate in semantic_embeddings.py,
+                # so it's a no-op on datasets without open-vocabulary categorical
+                # columns (see docs/clustering/RANKING_AND_SIMILARITY_POSITION.md).
+                use_semantic_embeddings=True,
+                # Free-text embeddings (replacing TF-IDF for eligible free_text
+                # columns) are a separate, narrower representation swap and stay
+                # opt-in behind their own strategy value pending the same kind of
+                # cross-dataset scrutiny the categorical rollout got before it
+                # became default -- see RANKING_AND_SIMILARITY_POSITION.md.
+                use_free_text_embeddings=strategy == "semantic_quality_free_text_embeddings",
+            )
+        else:
+            legacy_sample_rows = sample_rows if sample_rows is not None else 5000
+            legacy_min_group_size = min_group_size if min_group_size is not None else 12
+            data = generate_semantic_grouping_json(
+                tablename,
+                engine,
+                strategy=strategy,
+                limit=limit,
+                sample_rows=legacy_sample_rows,
+                cluster_count=cluster_count,
+                min_group_size=legacy_min_group_size,
+                min_error_rows=min_error_rows,
+            )
+        return {"success": True, "data": data}
+    except ValueError as e:
+        return {"success": False, "error": str(e)}, 400
+    except Exception as e:
+        print(f"Error generating semantic groups: {e}")
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}, 500
+
 @app.get("/api/plots/preview-histogram")
 def get_preview_histogram():
     """
@@ -397,8 +539,9 @@ def get_preview_histogram():
     """
     from app.db_utils.db_functions_sql import DBOperations
 
-    table  = request.args.get("tablename")
-    type_  = request.args.get("type", "2d")
+    table = request.args.get("tablename")
+    type_ = request.args.get("type", "2d")
+    reference_table = request.args.get("reference_table")
 
     try:
         errors_table = f"errors_{table}"
@@ -408,14 +551,24 @@ def get_preview_histogram():
         if type_ == "1d":
             column    = request.args.get("column")
             bin_count = int(request.args.get("bins", 10))
-            histogram = preview_ops.generate_one_d_histogram_with_errors(column, bin_count)
+            histogram = preview_ops.generate_one_d_histogram_with_errors(
+                column,
+                bin_count,
+                reference_table=reference_table,
+            )
             return {"success": True, "histogram": histogram}
         else:
             column_x = request.args.get("column_x")
             column_y = request.args.get("column_y")
             x_bins   = int(request.args.get("x_bins", 10))
             y_bins   = int(request.args.get("y_bins", 10))
-            histogram = preview_ops.generate_two_d_histogram_with_errors(column_x, column_y, x_bins, y_bins)
+            histogram = preview_ops.generate_two_d_histogram_with_errors(
+                column_x,
+                column_y,
+                x_bins,
+                y_bins,
+                reference_table=reference_table,
+            )
             return {"success": True, "histogram": histogram}
 
     except Exception as e:
@@ -442,12 +595,24 @@ def get_preview_scatterplot():
     y_column = request.args.get("y_column")
     error_sample_count = int(request.args.get("error_sample_count", 300))
     total_sample_count = int(request.args.get("total_sample_count", 1000))
+    selected_row_ids_arg = request.args.get("selected_row_ids", "")
+    selected_row_ids = [
+        row_id
+        for row_id in selected_row_ids_arg.split(",")
+        if row_id != ""
+    ]
 
     try:
         errors_table = f"errors_{table}"
         preview_ops = DBOperations(engine)
         preview_ops.load_table(table, error_table_name=errors_table)
-        scatterplot_data = preview_ops.generate_scatterplot_with_errors(x_column, y_column, error_sample_count, total_sample_count)
+        scatterplot_data = preview_ops.generate_scatterplot_with_errors(
+            x_column,
+            y_column,
+            error_sample_count,
+            total_sample_count,
+            selected_row_ids=selected_row_ids,
+        )
         return {"success": True, "scatterplot_data": scatterplot_data}
     except Exception as e:
         traceback.print_exc()

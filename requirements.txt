@@ -17,3 +17,16 @@ setuptools~=78.1.1
 python-dateutil~=2.9.0.post0
 six~=1.17.0
 pytest~=8.4.1
+scikit-learn~=1.9.0
+# Optional: only imported when strategy=semantic_quality_embeddings is requested
+# (app/server_utils/semantic_embeddings.py). Pinned to 3.4.1, not the latest --
+# newer releases opportunistically import torchcodec for audio/video embedding
+# support, which fails to load on machines without a matching FFmpeg build. This
+# version predates that code path and only needs plain text encoding.
+sentence-transformers==3.4.1
+# Static, offline geography reference data for country-name distance
+# (app/server_utils/geography_reference.py) -- no network calls at request
+# time. geonamescache supplies country/capital-city coordinates; pycountry
+# supplies robust name/alias resolution (official names, common typos).
+geonamescache~=3.0.1
+pycountry~=26.2.16
