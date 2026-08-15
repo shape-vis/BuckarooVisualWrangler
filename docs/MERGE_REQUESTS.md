@@ -45,20 +45,41 @@ Scope:
 - repair safeguards, filter/delete-column actions, and export visibility;
 - responsive styling and regenerated Vite distribution assets.
 
-## 4. `codex/research-evaluation-pipeline`
+## 4. `codex/profiling-evaluation-pipeline`
 
 Base: `codex/profiling-review-ui`
 
 Scope:
 
-- canonical sampling, noise, ablation, early-stopping, runtime, and grouping
-  experiment drivers;
-- reproducibility and benchmark validation helpers;
-- methodology, threshold audit, benchmark protocol, and defense documentation;
+- canonical sampling, noise, ablation, early-stopping, and runtime drivers;
+- profiler ladder and external-result comparison adapters;
+- reproducibility and benchmark validation helpers; and
 - tests that prevent metric leakage and methodological regressions.
 
 Generated outputs are excluded. A reviewer can rerun the experiment from the
 committed driver and provide a dataset path explicitly.
+
+## 5. `codex/human-benchmark-tooling`
+
+Base: `codex/profiling-evaluation-pipeline`
+
+Scope:
+
+- research-grade and compact manual-label workbook generators;
+- reviewed-versus-provisional accuracy reporting;
+- DataProfiler and Deequ external-baseline adapters; and
+- portable output configuration for benchmark artifacts.
+
+## 6. `codex/clustering-evaluation-pipeline`
+
+Base: `codex/human-benchmark-tooling`
+
+Scope:
+
+- semi-synthetic semantic-quality benchmark construction;
+- blinded pairwise task and AI-reference generation;
+- matrixless sketch, adaptive selector, and algorithm/parameter sweeps; and
+- methodology tests for planted cohorts, shuffled controls, and blinding.
 
 ## Review rule
 

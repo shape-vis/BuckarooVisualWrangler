@@ -1,0 +1,9 @@
+# Core backend, profiler, and clustering dependencies.
+-r requirements.txt
+
+# Formatted manual-labeling workbooks.
+openpyxl~=3.1.5
+
+# DataProfiler and Deequ are external baselines with separate, heavyweight
+# runtimes. Install DataProfiler in its own environment and run Deequ through
+# the Spark package coordinates recorded by experiments/deequ_order_items.scala.

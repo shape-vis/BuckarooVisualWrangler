@@ -3,19 +3,26 @@
 ## Local services
 
 Buckaroo uses PostgreSQL, a Flask backend, and a Vite/React frontend. The
-repository's Docker configuration is the preferred way to obtain a consistent
-database and backend environment; the frontend can also run directly with npm.
+repository's Docker configuration starts PostgreSQL only; Flask and Vite run
+as local development processes.
 
 ```powershell
-docker compose up --build
+docker compose up -d db
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python start.py
+
+# In a second terminal:
 cd ui
 npm install
 npm run dev
 ```
 
-The Vite development URL is normally `http://127.0.0.1:5173/`. Database
-credentials for a non-Docker backend belong in `app/database.json`, which is
-ignored by Git.
+Flask listens on `http://127.0.0.1:5001`; the Vite development URL is normally
+`http://127.0.0.1:5173/`. Database credentials belong in
+`app/database.json`, which is ignored by Git, or in `BUCKAROO_DB_*`
+environment variables.
 
 ## Verification commands
 
@@ -29,6 +36,10 @@ cd ui
 npm run build
 npm run lint
 ```
+
+The repository still contains legacy frontend lint debt. A merge request that
+does not fix that debt must run ESLint against every changed JavaScript file and
+report the remaining full-project baseline separately.
 
 SQL integration tests require PostgreSQL and their test database configuration:
 
