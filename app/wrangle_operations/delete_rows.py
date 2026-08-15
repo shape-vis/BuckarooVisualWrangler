@@ -8,10 +8,11 @@ class DeleteRowsOperation(WrangleOperation):
     """Delete selected row IDs from both the SQL view and exported Pandas script."""
 
     def pandas_code(self, parameters: Dict[str, Any]) -> str:
-        row_ids = parameters.get("row_ids", [])
-        # In Pandas, isin(row_ids) marks selected rows, and the ~ flips the
-        # mask so only unselected rows remain.
-        return f"df = df[~df['ID'].isin({row_ids})]"
+        # Coerce to plain ints so the generated literal is a clean Python list.
+        # Selections can carry NumPy integers, whose repr (e.g. np.int64(2))
+        # would reference an unimported name and break the exported script.
+        row_ids = [int(row_id) for row_id in parameters.get("row_ids", [])]
+        return f"df = buckaroo_delete_rows_by_id(df, {row_ids!r})"
 
     def create_view(self, conn, engine, source_table: str, target_view: str, parameters: Dict[str, Any]) -> bool:
         row_ids = parameters.get("row_ids", [])

@@ -4,15 +4,21 @@
 
 #make it able to read the variables from the .env file
 import builtins
+from collections import OrderedDict
 import logging
 import os
 import pkgutil
+import secrets
+import threading
+import time
+import uuid
 
 import psycopg2
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, has_request_context, session
 from sqlalchemy import create_engine
 import json
+from werkzeug.local import LocalProxy
 
 
 #This is so that that whatever we print in the server comes out blue in the terminal
@@ -83,6 +89,13 @@ def load_database_info():
             }
             f.write(json.dumps(db_info, indent=4))
 
+    # Environment overrides make CI/test databases explicit and prevent SQL
+    # integration tests from touching a developer's normal Buckaroo database.
+    host = os.environ.get("BUCKAROO_DB_HOST", host)
+    port = int(os.environ.get("BUCKAROO_DB_PORT", port))
+    user = os.environ.get("BUCKAROO_DB_USER", user)
+    password = os.environ.get("BUCKAROO_DB_PASSWORD", password)
+    db_name = os.environ.get("BUCKAROO_DB_NAME", db_name)
     return host, port, user, password, db_name
 
 
@@ -93,6 +106,41 @@ load_dotenv()
 app = Flask(__name__,
             static_folder="../ui/dist",
             static_url_path="/")
+app.secret_key = os.environ.get("BUCKAROO_SESSION_SECRET") or secrets.token_hex(32)
+
+
+class _BoundedSessionStateRegistry:
+    """Thread-safe, bounded storage for mutable per-browser app state."""
+
+    def __init__(self, state_factory, max_states=128, idle_ttl_seconds=12 * 60 * 60):
+        self._state_factory = state_factory
+        self._max_states = max(1, int(max_states))
+        self._idle_ttl_seconds = max(0.001, float(idle_ttl_seconds))
+        self._states = OrderedDict()
+        self._lock = threading.RLock()
+
+    def get_or_create(self, state_id):
+        now = time.monotonic()
+        with self._lock:
+            expired = [
+                key
+                for key, (last_seen, _state) in self._states.items()
+                if now - last_seen > self._idle_ttl_seconds
+            ]
+            for key in expired:
+                self._states.pop(key, None)
+
+            entry = self._states.pop(state_id, None)
+            state = entry[1] if entry else self._state_factory()
+            self._states[state_id] = (now, state)
+
+            while len(self._states) > self._max_states:
+                self._states.popitem(last=False)
+            return state
+
+    def __len__(self):
+        with self._lock:
+            return len(self._states)
 
 # Tests set BUCKAROO_SKIP_DB_INIT=1 so importing Flask routes does not require
 # a live local Postgres database. Normal app runs leave this unset.
@@ -101,6 +149,18 @@ skip_db_init = os.environ.get("BUCKAROO_SKIP_DB_INIT") == "1"
 if skip_db_init:
     engine = None
     db_operations = None
+
+    class _BuckarooSessionState:
+        def __init__(self):
+            self.db_operations = None
+            self.pgraph_for_session = None
+            self.original_table_name = "data.csv"
+            self.wrangle_occurred = False
+
+    _test_state = _BuckarooSessionState()
+
+    def get_session_state():
+        return _test_state
 else:
     #sets the URL to the DB url specified for the local postgresql db on my local machine specified in .env
 
@@ -125,16 +185,32 @@ else:
     engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
     from app.db_utils.db_functions_sql import DBOperations
-    db_operations = DBOperations(engine)
 
-# Global vars to use throughout one browser session.
-wrangle_occurred = False
-# pgraph_for_session is filled after upload/preloaded dataset load. It stores
-# the table-version graph used for undo/redo and Pandas export.
-pgraph_for_session = None
-# original_table_name is used by export so the generated script starts from the
-# same CSV the user loaded in the UI.
-original_table_name = "data.csv"
+    class _BuckarooSessionState:
+        def __init__(self):
+            self.db_operations = DBOperations(engine)
+            self.pgraph_for_session = None
+            self.original_table_name = "data.csv"
+            self.wrangle_occurred = False
+
+    _session_states = _BoundedSessionStateRegistry(
+        _BuckarooSessionState,
+        max_states=int(os.environ.get("BUCKAROO_MAX_ACTIVE_SESSIONS", "128")),
+        idle_ttl_seconds=int(os.environ.get("BUCKAROO_SESSION_IDLE_TTL_SECONDS", str(12 * 60 * 60))),
+    )
+    _background_state = _BuckarooSessionState()
+
+    def get_session_state():
+        """Return isolated mutable state for the current browser session."""
+        if not has_request_context():
+            return _background_state
+        state_id = session.get("buckaroo_state_id")
+        if not state_id:
+            state_id = uuid.uuid4().hex
+            session["buckaroo_state_id"] = state_id
+        return _session_states.get_or_create(state_id)
+
+    db_operations = LocalProxy(lambda: get_session_state().db_operations)
 
 if not skip_db_init:
     #this automatically imports any new route files added to the app/routes dir

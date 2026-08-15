@@ -176,6 +176,30 @@ app/database.json
 report/
 histogram_exports/
 
+# Local experiment results and generated research artifacts.  Reproducible
+# drivers belong in experiments/, but their CSV/JSON/PDF/PPTX outputs do not.
+output/
+outputs/
+work/
+tmp/
+.codex-logs/
+experiments/*_outputs*/
+experiments/compare_matrix_*/
+experiments/compare_sketch_*/
+experiments/outputs/
+
+# One-off local profiling and timing probes.  Canonical experiment drivers use
+# descriptive names inside experiments/ and are reviewed as source code.
+_baseline_*.csv
+_baseline_*.py
+_bench_*.py
+_profile_*.py
+_verify_*.py
+
+# Office lock files and locally installed poster fonts.
+~$*
+assets/poster_fonts/
+
 
 # Logs
 logs

@@ -19,7 +19,7 @@ class RecordingConnection:
 def test_delta_generates_pandas_code_from_delete():
     # A delete Delta should immediately know how to replay itself in Pandas.
     delta = Delta("delete", {"operation": "delete", "row_ids": [1, 3]})
-    assert delta.pandas_code == "df = df[~df['ID'].isin([1, 3])]"
+    assert delta.pandas_code == "df = buckaroo_delete_rows_by_id(df, [1, 3])"
 
 
 def test_delta_json_stores_operation_parameters_and_pandas_code():
@@ -32,7 +32,7 @@ def test_delta_json_stores_operation_parameters_and_pandas_code():
     assert data == {
         "operation": "delete-column",
         "parameters": {"operation": "delete-column", "column": "foo"},
-        "pandas_code": "df.drop(columns=['foo'], inplace=True)",
+        "pandas_code": "df = buckaroo_delete_column(df, 'foo')",
     }
 
 
@@ -56,12 +56,12 @@ def test_delta_from_dict_generates_pandas_code_when_not_stored():
         "parameters": {"operation": "delete", "row_ids": [9]},
     })
 
-    assert delta.pandas_code == "df = df[~df['ID'].isin([9])]"
+    assert delta.pandas_code == "df = buckaroo_delete_rows_by_id(df, [9])"
 
 
 def test_map_to_pandas_delegates_to_delta():
     code = map_to_pandas("delete", {"row_ids": [2]})
-    assert code == "df = df[~df['ID'].isin([2])]"
+    assert code == "df = buckaroo_delete_rows_by_id(df, [2])"
 
 
 def test_delete_delta_creates_view_without_caller_knowing_sql_shape():
@@ -88,8 +88,7 @@ def test_delete_delta_returns_false_without_row_ids():
 
 def test_impute_delta_pandas_code():
     delta = Delta("impute", {"operation": "impute", "row_ids": [1], "col": "age"})
-    assert "df['age']" in delta.pandas_code
-    assert "[1]" in delta.pandas_code
+    assert delta.pandas_code == "df = buckaroo_impute_missing_by_id(df, [1], 'age')"
 
 
 @patch("app.db_utils.query._compute_imputation_value", return_value=42)
@@ -107,13 +106,14 @@ def test_impute_delta_creates_view_with_case_expression(mock_is_num, mock_fill):
 
     assert created is True
     create_sql = conn.sql[-1]
-    assert 'CASE WHEN "ID" IN (1, 2) THEN 42' in create_sql
+    assert 'CASE WHEN "ID" IN (1, 2)' in create_sql
+    assert 'THEN 42 ELSE "age"::numeric END AS "age"' in create_sql
     assert '"age"' in create_sql
 
 
 def test_delete_column_delta_pandas_code():
     delta = Delta("delete-column", {"operation": "delete-column", "column": "foo"})
-    assert "df.drop(columns=['foo']" in delta.pandas_code
+    assert delta.pandas_code == "df = buckaroo_delete_column(df, 'foo')"
 
 
 @patch("app.wrangle_operations.delete_column.table_columns", return_value=["ID", "foo", "bar"])
@@ -134,6 +134,27 @@ def test_delete_column_operation_result(mock_cols):
     meta = delta.operation_result(object(), "n0_sales")
     assert meta["remaining_columns"] == 2
     assert meta["deleted_column"] == "foo"
+    assert meta["column_deleted"] is True
+
+
+@patch("app.wrangle_operations.delete_column.table_columns", return_value=["ID", "foo", "bar"])
+def test_delete_column_refuses_required_id_column(mock_cols):
+    conn = RecordingConnection()
+    delta = Delta("delete-column", {"operation": "delete-column", "column": "ID"})
+
+    assert delta.create_view(conn, object(), "n0_sales", "n0_sales_col_del") is False
+    assert conn.sql == []
+    assert "ID is required" in delta.pandas_code
+
+
+@patch("app.wrangle_operations.delete_column.table_columns", return_value=["ID", "foo", "bar"])
+def test_delete_column_returns_false_for_missing_column(mock_cols):
+    conn = RecordingConnection()
+    delta = Delta("delete-column", {"operation": "delete-column", "column": "missing"})
+
+    assert delta.create_view(conn, object(), "n0_sales", "n0_sales_col_del") is False
+    assert conn.sql == []
+    assert delta.operation_result(object(), "n0_sales")["column_deleted"] is False
 
 
 def test_promote_from_preview_creates_view_promotes_errors_and_drops_preview():

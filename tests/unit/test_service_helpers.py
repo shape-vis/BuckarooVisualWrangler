@@ -10,9 +10,41 @@ from numpy.ma.testutils import assert_equal
 from app.server_utils.service_helpers import generate_table_name, get_whole_table_query, run_detectors, create_error_dict, \
     get_range_of_ids_query, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
     group_by_attribute, get_error_dist, update_errors_incrementally, DETECTOR_SCOPES
+from detectors.common import infer_detector_config
 
 
 DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
+
+
+def test_infer_detector_config_adapts_to_small_samples_and_preserves_overrides():
+    df = pd.DataFrame({
+        "ID": [1, 2, 3],
+        "category": ["alpha", "beta", "gamma"],
+    })
+
+    adaptive = infer_detector_config(df)
+    overridden = infer_detector_config(df, {"rare_value_min_rows": 5})
+
+    assert adaptive["rare_value_min_rows"] > len(df)
+    assert overridden["rare_value_min_rows"] == 5
+
+
+def test_run_detectors_passes_explicit_config_to_detector_callers():
+    df = pd.DataFrame({
+        "ID": list(range(1, 11)),
+        "mostly_numeric": ["1", "2", "3", "4", "5", "6", "7", "8", "bad", "worse"],
+    })
+
+    default_errors = run_detectors(df, adaptive_config=False)
+    overridden_errors = run_detectors(
+        df,
+        detector_config={"type_confidence_threshold": 0.75},
+        adaptive_config=False,
+    )
+
+    assert "mismatch" not in default_errors["error_type"].values
+    mismatch_rows = overridden_errors[overridden_errors["error_type"] == "mismatch"]
+    assert set(mismatch_rows["row_id"].tolist()) == {9, 10}
 
 
 def test_update_errors_incrementally_impute_invalidates_only_required_scopes():

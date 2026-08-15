@@ -1,26 +1,32 @@
-from zipfile import error
-
-import pandas as pd
-from numpy.ma.core import indices
+from detectors.common import MISSING_MARKERS, error_value, is_missing_value
 
 
-def missing_value(data_frame):
+def missing_value(data_frame, include_details=False, missing_markers=None):
     """
-    goes through each cell in the datatable and checks to see if the cell is
-    null, undefined, an empty string, or a null/undefined string
-    :param data_frame: the datatable to run the detector on
-    :return: a dictionary of structure: { column: { id: errorType } }
+    Detect missing cells using the shared Buckaroo missing-value definition.
+
+    The default return shape preserves the legacy detector contract:
+    {column: {row_id: "missing"}}. Set include_details=True to receive
+    structured records with severity, confidence, and reason.
     """
     error_map = {}
+    markers = missing_markers or MISSING_MARKERS
+    id_values = data_frame["ID"].to_numpy()
 
-    mask = data_frame.isna() | (data_frame.astype(str) == 'null') | (data_frame.astype(str) == 'undefined')
-    na_locations = mask.stack()
-    missing_coords = na_locations[na_locations].index.tolist()
-
-    for cord in missing_coords:
-        if cord[1] not in error_map:
-            error_map[cord[1]] = {}
-            error_map[cord[1]][int(data_frame.loc[cord[0], 'ID'])] = "missing"
-        else: error_map[cord[1]][int(data_frame.loc[cord[0], 'ID'])] = "missing"
+    for column in data_frame.columns:
+        if column == "ID":
+            continue
+        mask = data_frame[column].map(lambda value: is_missing_value(value, markers)).to_numpy()
+        if mask.any():
+            error_map[column] = {
+                int(row_id): error_value(
+                    "missing",
+                    include_details=include_details,
+                    severity="error",
+                    confidence="high",
+                    reason="value matches shared missing-value markers",
+                )
+                for row_id in id_values[mask]
+            }
 
     return error_map

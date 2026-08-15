@@ -11,9 +11,14 @@ from typing import TypedDict, List, Dict, Any
 
 import app
 from app.pgraph.node import GraphNode
+from app.server_utils.pandas_export import build_pandas_export_script
 
 class PGraph:
-    def __init__(self):
+    def __init__(self, source_filename: str | None = None):
+        # Keep export provenance self-contained. A graph may outlive the request
+        # that loaded the CSV, so the replay script must not depend on mutable
+        # module globals to discover its source file.
+        self.source_filename = source_filename
         self.root_node = None
         # Fast lookup by table name. Example: "n1_sales" -> GraphNode(...).
         self.node_map = {}
@@ -177,26 +182,15 @@ class PGraph:
     def get_script_to_node(self, node_table_name: str) -> str:
         """Generate a complete Pandas script for the requested data state."""
         path = self.get_path_to_node(node_table_name)
-        
-        # Every exported script starts by loading the original CSV, then it
-        # applies each Delta along the path to the current node.
-        filename = getattr(app, 'original_table_name', 'data.csv')
-        script = [
-            "import pandas as pd",
-            "",
-            f"df = pd.read_csv('{filename}')",
-            "# Ensure ID column exists as in the app",
-            "if 'ID' not in df.columns:",
-            "    df.insert(0, 'ID', range(1, len(df) + 1))",
-            ""
-        ]
-        
-        for node in path:
-            if node.delta:
-                # The node stores the Delta, and the Delta stores the exact
-                # Pandas code needed to replay that wrangle.
-                script.append(f"# Operation: {node.wrangle_op}")
-                script.append(node.delta.pandas_code)
-                script.append("")
-        
-        return "\n".join(script)
+
+        # Every exported script starts by loading the original CSV, then the
+        # shared builder adds readable helper functions and applies each Delta
+        # along the path to the current node.
+        filename = self.source_filename
+        if not filename:
+            # Compatibility for graphs created before source_filename became a
+            # graph property. New production graphs always take the first path.
+            filename = getattr(app.get_session_state(), "original_table_name", None)
+        if not filename:
+            filename = getattr(app, "original_table_name", "data.csv")
+        return build_pandas_export_script(filename, path)

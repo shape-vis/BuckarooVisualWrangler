@@ -13,7 +13,7 @@ class PGraphTests(unittest.TestCase):
     def test_json_serializes_delta_storage(self):
         # The serialized graph should include the Delta, because the UI/export
         # need the operation name, parameters, and generated Pandas code.
-        graph = PGraph()
+        graph = PGraph(source_filename="sales.csv")
         root = GraphNode("none", "none", "n0", "n0_errors")
         node1 = GraphNode(
             "n0",
@@ -37,11 +37,11 @@ class PGraphTests(unittest.TestCase):
         self.assertEqual(node_data["n1"]["delta"]["parameters"]["row_ids"], [1, 3])
         self.assertEqual(
             node_data["n1"]["delta"]["pandas_code"],
-            "df = df[~df['ID'].isin([1, 3])]",
+            "df = buckaroo_delete_rows_by_id(df, [1, 3])",
         )
 
     def test_undo_at_root_returns_none_and_keeps_current_root(self):
-        graph = PGraph()
+        graph = PGraph(source_filename="sales.csv")
         root = GraphNode("root", "root", "n0", "n0_errors")
 
         graph.add_root_node(root)
@@ -112,7 +112,7 @@ class PGraphTests(unittest.TestCase):
     def test_get_script_to_node_exports_only_selected_path_deltas_in_order(self):
         # This proves export order: load CSV first, then apply Deltas from root
         # to the requested table. The branch node should not appear.
-        graph = PGraph()
+        graph = PGraph(source_filename="sales.csv")
         root = GraphNode("root", "root", "n0_sales", "errors_n0_sales")
         delete_node = GraphNode(
             "n0_sales",
@@ -142,26 +142,29 @@ class PGraphTests(unittest.TestCase):
         graph.set_clicked_node_as_current("n0_sales")
         graph.add_node(branch_node)
 
-        with patch("app.original_table_name", "sales.csv", create=True):
-            script = graph.get_script_to_node("n2_sales")
+        script = graph.get_script_to_node("n2_sales")
 
         self.assertIn("import pandas as pd", script)
         self.assertIn("df = pd.read_csv('sales.csv')", script)
-        self.assertIn("if 'ID' not in df.columns:", script)
+        # The helper boilerplate now lives in an external library that the
+        # script imports, instead of being defined inline.
+        self.assertIn("from buckaroo_export_helpers import (", script)
+        self.assertIn("df = buckaroo_ensure_id(df)", script)
+        self.assertNotIn("def buckaroo_delete_rows_by_id", script)
+        self.assertNotIn("def buckaroo_impute_missing_by_id", script)
         self.assertIn("# Operation: delete", script)
-        self.assertIn("df = df[~df['ID'].isin([4])]", script)
+        self.assertIn("df = buckaroo_delete_rows_by_id(df, [4])", script)
         self.assertIn("# Operation: impute", script)
-        self.assertIn("df.loc[df['ID'].isin([5]), 'age']", script)
-        self.assertNotIn("delete-column", script)
+        self.assertIn("df = buckaroo_impute_missing_by_id(df, [5], 'age')", script)
+        self.assertNotIn("# Operation: delete-column", script)
         self.assertLess(script.index("# Operation: delete"), script.index("# Operation: impute"))
 
     def test_get_script_to_root_contains_load_and_no_wrangle_operations(self):
-        graph = PGraph()
+        graph = PGraph(source_filename="sales.csv")
         root = GraphNode("root", "root", "n0_sales", "errors_n0_sales")
         graph.add_root_node(root)
 
-        with patch("app.original_table_name", "sales.csv", create=True):
-            script = graph.get_script_to_node("n0_sales")
+        script = graph.get_script_to_node("n0_sales")
 
         self.assertIn("df = pd.read_csv('sales.csv')", script)
         self.assertNotIn("# Operation:", script)

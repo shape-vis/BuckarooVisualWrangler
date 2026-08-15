@@ -1,5 +1,28 @@
 from flask import request
 from app import app, db_operations
+from app.wrangle_operations.sql_utils import quote_identifier, quote_literal
+
+
+NUMERIC_VALUE_PATTERN = r"'^\s*-?\d+(\.\d+)?\s*$'"
+
+
+def _qualified_column(table_name, column_name):
+    return f"{quote_identifier(table_name)}.{quote_identifier(column_name)}"
+
+
+def _safe_numeric_expression(table_name, column_name):
+    column_sql = _qualified_column(table_name, column_name)
+    return (
+        f"CASE WHEN {column_sql}::text ~ {NUMERIC_VALUE_PATTERN} "
+        f"THEN {column_sql}::numeric END"
+    )
+
+
+def _categorical_predicate(table_name, column_name, value):
+    column_sql = _qualified_column(table_name, column_name)
+    if value is None or str(value).strip().lower() in {"null", "none", "nan"}:
+        return f"{column_sql} IS NULL"
+    return f"{column_sql}::text = {quote_literal(value)}"
 
 
 def _build_sql_predicate(table_name, selection):
@@ -37,7 +60,9 @@ def _build_sql_predicate(table_name, selection):
     if view_type == "scatterplot":
         ids = [str(int(d["ID"])) for d in data if d.get("ID") is not None]
         if ids:
-            predicates.append(f'"{table_name}"."ID" IN ({", ".join(ids)})')
+            predicates.append(
+                f"{_qualified_column(table_name, 'ID')} IN ({', '.join(ids)})"
+            )
 
     elif view_type == "barchart":
         x_col = cols[0]
@@ -52,14 +77,14 @@ def _build_sql_predicate(table_name, selection):
                     continue
                 b = numeric_bins[int(bin_val)]
                 x0, x1 = float(b["x0"]), float(b["x1"])
+                numeric_value = _safe_numeric_expression(table_name, x_col)
                 predicates.append(
-                    f'"{table_name}"."{x_col}"::numeric >= {x0} '
-                    f'AND "{table_name}"."{x_col}"::numeric <= {x1}'
+                    f"({numeric_value}) >= {x0} "
+                    f"AND ({numeric_value}) <= {x1}"
                 )
             else:
                 # categorical — bin is the label string
-                label = str(bin_val).replace("'", "''")
-                predicates.append(f'"{table_name}"."{x_col}"::text = \'{label}\'')
+                predicates.append(_categorical_predicate(table_name, x_col, bin_val))
 
     elif view_type == "heatmap":
         x_col = cols[0]
@@ -78,26 +103,26 @@ def _build_sql_predicate(table_name, selection):
                 if x_bin is None or int(x_bin) >= len(numeric_bins_x):
                     continue
                 bx = numeric_bins_x[int(x_bin)]
+                numeric_x = _safe_numeric_expression(table_name, x_col)
                 x_pred = (
-                    f'"{table_name}"."{x_col}"::numeric >= {float(bx["x0"])} '
-                    f'AND "{table_name}"."{x_col}"::numeric <= {float(bx["x1"])}'
+                    f"({numeric_x}) >= {float(bx['x0'])} "
+                    f"AND ({numeric_x}) <= {float(bx['x1'])}"
                 )
             else:
-                label = str(x_bin).replace("'", "''")
-                x_pred = f'"{table_name}"."{x_col}"::text = \'{label}\''
+                x_pred = _categorical_predicate(table_name, x_col, x_bin)
 
             # Build Y predicate
             if y_type == "numeric":
                 if y_bin is None or int(y_bin) >= len(numeric_bins_y):
                     continue
                 by = numeric_bins_y[int(y_bin)]
+                numeric_y = _safe_numeric_expression(table_name, y_col)
                 y_pred = (
-                    f'"{table_name}"."{y_col}"::numeric >= {float(by["x0"])} '
-                    f'AND "{table_name}"."{y_col}"::numeric <= {float(by["x1"])}'
+                    f"({numeric_y}) >= {float(by['x0'])} "
+                    f"AND ({numeric_y}) <= {float(by['x1'])}"
                 )
             else:
-                label = str(y_bin).replace("'", "''")
-                y_pred = f'"{table_name}"."{y_col}"::text = \'{label}\''
+                y_pred = _categorical_predicate(table_name, y_col, y_bin)
 
             predicates.append(f'({x_pred}) AND ({y_pred})')
 

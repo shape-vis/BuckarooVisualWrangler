@@ -9,18 +9,21 @@ class DeleteColumnOperation(WrangleOperation):
 
     def pandas_code(self, parameters: Dict[str, Any]) -> str:
         column = parameters.get("column")
-        # The export script should mutate df the same way the live app mutates
-        # the current table version.
-        return f"df.drop(columns=['{column}'], inplace=True)"
+        if column == "ID":
+            return "# Delete column skipped: ID is required by Buckaroo"
+        return f"df = buckaroo_delete_column(df, {column!r})"
 
     def create_view(self, conn, engine, source_table: str, target_view: str, parameters: Dict[str, Any]) -> bool:
         column = parameters.get("column")
-        if not column:
+        if not column or column == "ID":
             return False
 
         # Instead of physically copying data, create a view that selects every
         # column except the deleted one.
-        columns = [name for name in table_columns(engine, source_table) if name != column]
+        current_columns = table_columns(engine, source_table)
+        if column not in current_columns:
+            return False
+        columns = [name for name in current_columns if name != column]
         if not columns:
             return False
 
@@ -33,8 +36,11 @@ class DeleteColumnOperation(WrangleOperation):
         column = parameters.get("column")
         if not column:
             return {}
-        remaining = [name for name in table_columns(engine, source_table) if name != column]
+        current_columns = table_columns(engine, source_table)
+        can_delete = column in current_columns and column != "ID"
+        remaining = [name for name in current_columns if name != column] if can_delete else current_columns
         return {
             "remaining_columns": len(remaining),
             "deleted_column": column,
+            "column_deleted": can_delete,
         }

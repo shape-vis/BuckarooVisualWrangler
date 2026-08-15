@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   db:
     # Local Postgres used by the Flask backend during demos/development.
@@ -10,7 +9,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

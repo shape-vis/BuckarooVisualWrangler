@@ -3,11 +3,15 @@
 import pandas as pd
 
 from app.pgraph.delta import Delta
+from app.server_utils.pandas_export import read_export_library_source
 
 
 def run_delta_pandas_code(df, delta):
     """Execute the generated Pandas code using a copy of the input DataFrame."""
-    namespace = {"df": df.copy()}
+    namespace = {"df": df.copy(), "pd": pd}
+    # Load the helper library the same way the generated script does, then run
+    # the operation's exported code against it.
+    exec(read_export_library_source(), namespace)
     exec(delta.pandas_code, namespace)
     return namespace["df"]
 

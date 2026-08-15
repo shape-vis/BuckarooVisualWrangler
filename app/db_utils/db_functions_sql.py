@@ -5,6 +5,7 @@ import pandas as pd
 from app.server_utils import service_helpers
 from app.db_utils.filtering_sql import FilteringSQL
 from app.db_utils.execute_sql import fetch_sql, execute_sql
+from app.wrangle_operations.sql_utils import quote_identifier
 
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
@@ -214,7 +215,12 @@ class DBOperations:
         return self.filtering_table.delete_filters(sql_filters)
 
 
-    def generate_one_d_histogram_with_errors(self, axis_column: str, bin_count=10):
+    def generate_one_d_histogram_with_errors(
+            self,
+            axis_column: str,
+            bin_count=10,
+            reference_table: str = None,
+    ):
         """
         Creates the entire SQL query for generating a 1D histogram with errors and executes it to the Postgres database.
         :arg: axis_column: name of the axis column.
@@ -225,6 +231,7 @@ class DBOperations:
         # This function is made up of several sequential steps / segments to achieve the final query string
         # Keep them in order to join all together at the end.
         hist_1d_steps = [self.gather_filtered_rows(axis_column, None),
+                         self.generate_1d_hist_bounds(axis_column, reference_table),
                          self.gather_bins_1d_hist(axis_column, bin_count),
                          self.errors_per_bin_1d_hist(axis_column),
                          self.form_final_1d_hist_bins(),
@@ -296,6 +303,37 @@ class DBOperations:
         return data_rows
 
 
+    def generate_1d_hist_bounds(self, axis_column: str, reference_table: str = None) -> str:
+        """Build stable numeric bounds, optionally from a comparison source table."""
+        if not self.col_types.is_numeric_col(axis_column):
+            return ""
+
+        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
+        if reference_table:
+            table_sql = quote_identifier(reference_table)
+            column_sql = quote_identifier(axis_column)
+            source_sql = (
+                f"FROM {table_sql} "
+                f"WHERE {column_sql}::text ~ {numeric_regex}"
+            )
+            value_sql = f"{column_sql}::numeric"
+        else:
+            source_sql = f"FROM data_rows WHERE value::text ~ {numeric_regex}"
+            value_sql = "value::numeric"
+
+        return f''', raw_numeric_bounds AS (
+                SELECT
+                    COALESCE(MIN({value_sql}), 0) AS min_val,
+                    COALESCE(MAX({value_sql}), 1) AS max_val
+                {source_sql}
+            ), numeric_bounds AS (
+                SELECT
+                    min_val,
+                    CASE WHEN max_val = min_val THEN min_val + 1 ELSE max_val END AS max_val
+                FROM raw_numeric_bounds
+            )'''
+
+
     def gather_bins_1d_hist(self, axis_column: str, bin_count: int) -> str:
         """
         Binning logic for 1D histogram. Bins numeric columns into a specified number of bins linearly across
@@ -316,8 +354,8 @@ class DBOperations:
                                             COALESCE(
                                                 width_bucket(
                                                     d.value::numeric,
-                                                    (SELECT MIN(value::numeric) FROM data_rows WHERE value::text ~ {numeric_regex}),
-                                                    (SELECT MAX(value::numeric) FROM data_rows WHERE value::text ~ {numeric_regex}),
+                                                    (SELECT min_val FROM numeric_bounds),
+                                                    (SELECT max_val FROM numeric_bounds),
                                                     {bin_count}
                                                 ) - 1,
                                                 0
@@ -399,13 +437,9 @@ class DBOperations:
         else:
             return f''', range_data AS (
                 SELECT
-                    MIN(value::numeric) AS min_val,
-                    CASE
-                        WHEN MAX(value::numeric) = MIN(value::numeric)
-                        THEN 0
-                        ELSE (MAX(value::numeric) - MIN(value::numeric)) / {bin_count}::numeric
-                    END AS bin_width
-                FROM data_rows
+                    min_val,
+                    (max_val - min_val) / {bin_count}::numeric AS bin_width
+                FROM numeric_bounds
             ),
             numeric_scale_data AS (
                 SELECT
@@ -483,7 +517,14 @@ class DBOperations:
             ))'''
 
 
-    def generate_two_d_histogram_with_errors(self, x_axis_column: str, y_axis_column: str, x_bin_count=10, y_bin_count=10) -> str:
+    def generate_two_d_histogram_with_errors(
+            self,
+            x_axis_column: str,
+            y_axis_column: str,
+            x_bin_count=10,
+            y_bin_count=10,
+            reference_table: str = None,
+    ) -> str:
         """
         Creates the entire SQL query for generating a 2D histogram with errors and executes it to the Postgres database.
         :arg: x_axis_column: the column to create the x-axis for the 2D histogram.
@@ -503,8 +544,8 @@ class DBOperations:
         y_scale_table_name = "y_numeric_scale_data"
 
         hist_2d_steps = [self.gather_filtered_rows(x_axis_column, y_axis_column),
-                         self.generate_2d_hist_bounds(x_bound_table, x_axis_column, x_alias),
-                         self.generate_2d_hist_bounds(y_bound_table, y_axis_column, y_alias),
+                         self.generate_2d_hist_bounds(x_bound_table, x_axis_column, x_alias, reference_table),
+                         self.generate_2d_hist_bounds(y_bound_table, y_axis_column, y_alias, reference_table),
                          self.gather_bins_2d_hist(x_axis_column, y_axis_column, x_bin_count, y_bin_count, x_alias, y_alias, x_bound_table, y_bound_table),
                          self.errors_per_bin_2d_hist(x_axis_column, y_axis_column),
                          self.form_final_2d_hist_bins(),
@@ -518,7 +559,13 @@ class DBOperations:
         return hist
 
 
-    def generate_2d_hist_bounds(self, bound_table_name: str, axis_column: str, col_alias: str) -> str:
+    def generate_2d_hist_bounds(
+            self,
+            bound_table_name: str,
+            axis_column: str,
+            col_alias: str,
+            reference_table: str = None,
+    ) -> str:
         """
         Generates the min and max value boundaries for a histogram column.
         :arg: bound_table_name: what the name of the bound table should be.
@@ -529,12 +576,27 @@ class DBOperations:
 
         if self.col_types.is_numeric_col(axis_column):
             numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
+            if reference_table:
+                table_sql = quote_identifier(reference_table)
+                column_sql = quote_identifier(axis_column)
+                source_sql = (
+                    f"FROM {table_sql} "
+                    f"WHERE {column_sql}::text ~ {numeric_regex}"
+                )
+                value_sql = f"{column_sql}::numeric"
+            else:
+                source_sql = f"FROM data_rows WHERE {col_alias}::text ~ {numeric_regex}"
+                value_sql = f"{col_alias}::numeric"
+
             return f''', {bound_table_name} AS (
-                    SELECT
-                        COALESCE(MIN({col_alias}::numeric), 0) as min_val,
-                        COALESCE(MAX({col_alias}::numeric), 1) as max_val
-                    FROM data_rows
-                    WHERE {col_alias}::text ~ {numeric_regex}  -- only numeric values
+                    SELECT min_val,
+                           CASE WHEN max_val = min_val THEN min_val + 1 ELSE max_val END AS max_val
+                    FROM (
+                        SELECT
+                            COALESCE(MIN({value_sql}), 0) AS min_val,
+                            COALESCE(MAX({value_sql}), 1) AS max_val
+                        {source_sql}
+                    ) raw_bounds
                 )'''
         else:
             return ""
@@ -759,7 +821,14 @@ class DBOperations:
         return ",\n".join(json_query_components)
 
 
-    def generate_scatterplot_with_errors(self, x_axis_column: str, y_axis_column: str, error_sample_size=30, total_sample_size=100):
+    def generate_scatterplot_with_errors(
+            self,
+            x_axis_column: str,
+            y_axis_column: str,
+            error_sample_size=30,
+            total_sample_size=100,
+            selected_row_ids=None,
+    ):
         """
         Creates the entire SQL query for generating a scatterplot with errors and executes it to the Postgres database.
         :arg: x_axis_column: the column to create the x-axis for the 2D histogram.
@@ -776,7 +845,7 @@ class DBOperations:
         x_bound_table      = "x_bounds"
         y_bound_table      = "y_bounds"
 
-        scatter_steps = [self.sample_rows_scatter(x_axis_column, y_axis_column, error_sample_size, total_sample_size),
+        scatter_steps = [self.sample_rows_scatter(x_axis_column, y_axis_column, error_sample_size, total_sample_size, selected_row_ids),
                          self.scatter_aggregate_errors(x_axis_column, y_axis_column),
                          self.collect_scatter_axis_bounds(x_bound_table, x_axis_column, x_alias),
                          self.collect_scatter_axis_bounds(y_bound_table, y_axis_column, y_alias),
@@ -786,7 +855,14 @@ class DBOperations:
         return fetch_sql(scatter_final_query, True, self.engine)
 
 
-    def sample_rows_scatter(self, x_axis_column: str, y_axis_column: str, error_sample_size: int, total_sample_size: int) -> str:
+    def sample_rows_scatter(
+            self,
+            x_axis_column: str,
+            y_axis_column: str,
+            error_sample_size: int,
+            total_sample_size: int,
+            selected_row_ids=None,
+    ) -> str:
         """
         Gathers a sample of data points that exist in the x-axis and y-axis columns that have errors according to
         error_sample_size and that don't have errors according to total_sample_size - error_sample_size. This must
@@ -814,9 +890,30 @@ class DBOperations:
             data_row_filtering_main = ""
             data_row_filtering_error = ""
 
+        selected_ids = []
+        for row_id in selected_row_ids or []:
+            try:
+                selected_ids.append(str(int(row_id)))
+            except (TypeError, ValueError):
+                continue
+
+        selected_rows_query = ""
+        if selected_ids:
+            selected_rows_query = f'''
+                (
+                    -- Always keep explicitly selected rows in scatter previews.
+                    SELECT "ID" as row_id
+                    FROM "{self.main_table_name}"
+                    {data_row_filtering_main}
+                    WHERE "ID" IN ({",".join(selected_ids)})
+                )
+                UNION
+            '''
+
         return f'''WITH
             -- Step 1: Sample IDs (prioritize errors, then clean rows)
             all_sampled_ids AS (
+                {selected_rows_query}
                 (
                     -- Sample error rows
                     SELECT e.row_id
@@ -1031,7 +1128,12 @@ class DBOperations:
             return []
 
 
-    def get_1d_bins_containing_rows(self, column: str, row_ids: list) -> list:
+    def get_1d_bins_containing_rows(
+            self,
+            column: str,
+            row_ids: list,
+            reference_table: str = None,
+    ) -> list:
         """
         Given a list of row IDs, return which 1-D bin indices/labels those
         rows fall into.  Returns a list of bin identifier strings.
@@ -1039,16 +1141,33 @@ class DBOperations:
         if not row_ids:
             return []
 
+        if column not in self.active_hists:
+            self.generate_one_d_histogram_with_errors(
+                column,
+                10,
+                reference_table=reference_table,
+            )
+
         affected_bins = set()
         rows_to_bins = self.active_hists[column][0]
         for row_id in row_ids:
-            if row_id in rows_to_bins:
-                affected_bins.add(rows_to_bins[row_id])
+            try:
+                row_key = int(row_id)
+            except (TypeError, ValueError):
+                row_key = row_id
+
+            if row_key in rows_to_bins:
+                affected_bins.add(rows_to_bins[row_key])
 
         return list(affected_bins)
 
 
-    def get_2d_bins_containing_rows(self, joint_col: str, row_ids: list) -> list:
+    def get_2d_bins_containing_rows(
+            self,
+            joint_col: str,
+            row_ids: list,
+            reference_table: str = None,
+    ) -> list:
         """
         Given a list of row IDs, return which 2-D bin coordinates (xBin, yBin)
         those rows fall into.  Returns a list of {xBin, yBin} dicts.
@@ -1056,11 +1175,26 @@ class DBOperations:
         if not row_ids:
             return []
 
+        if joint_col not in self.active_hists:
+            x_column, y_column = joint_col
+            self.generate_two_d_histogram_with_errors(
+                x_column,
+                y_column,
+                10,
+                10,
+                reference_table=reference_table,
+            )
+
         affected_bins = set()
         rows_to_bins = self.active_hists[joint_col][0]
         for row_id in row_ids:
-            if row_id in rows_to_bins:
-                affected_bins.add(rows_to_bins[row_id])
+            try:
+                row_key = int(row_id)
+            except (TypeError, ValueError):
+                row_key = row_id
+
+            if row_key in rows_to_bins:
+                affected_bins.add(rows_to_bins[row_key])
 
         # Now to satisfy the front-end formatting
         affected_bins_list = []

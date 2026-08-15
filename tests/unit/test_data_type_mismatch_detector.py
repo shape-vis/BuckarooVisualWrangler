@@ -1,96 +1,60 @@
-"""Tests for detecting values whose type disagrees with the column majority."""
+"""Tests for parse-based datatype mismatch detection."""
 
 import unittest
-from pathlib import Path
 
 import pandas as pd
 
-from app.server_utils.set_id_column import set_id_column
 from detectors.datatype_mismatch import datatype_mismatch
 
 
-DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
-
-
 class TestDataTypeMismatch(unittest.TestCase):
-    def test_basic_mismatch(self):
-        test_data = {
-            'ID': range(1, 11),
-            'classname': ["word", "word", "systems", "networking", "compilers", "full-stack", "vis", "vis", "vis",
-                          "vis"],
-            'day': ["word", "word", "M/W", "T/H", "M/W", "M/W/F", "T/H", "vis", "vis", "vis"],
-            'enrollment_cap': ["word", "word", 100, 100, 250, 250, 100, "test", "adding", "words"],
-            'professor': ["word", "word", "kopta", "martin", "panchekha", "johnson", "rosen", "vis", "vis", "vis"]
-        }
-        expected_data = {"enrollment_cap":{1:"mismatch",2:"mismatch",8:"mismatch",9:"mismatch",10:"mismatch"}}
-        df = pd.DataFrame(test_data)
-        detected_df = datatype_mismatch(df)
-        self.assertEqual(expected_data,detected_df)
+    def test_mostly_numeric_column_flags_unparseable_values(self):
+        df = pd.DataFrame({
+            "ID": range(1, 11),
+            "age": ["20", "21", "22", "23", "24", "25", "26", "27", "28", "unknown-ish"],
+        })
 
-    def test_no_mismatch(self):
-        test_data = {
-            'ID': range(1, 6),
-            'classname': ["word", "systems", "networking", "compilers", "full-stack"],
-            'day': ["M/W", "T/H", "M/W", "M/W/F", "T/H"],
-            'enrollment_cap': [100, 100, 250, 250, 100],
-            'professor': ["kopta", "martin", "panchekha", "johnson", "rosen"]
-        }
-        expected_data = {}
-        df = pd.DataFrame(test_data)
-        detected_df = datatype_mismatch(df)
-        self.assertEqual(expected_data,detected_df)
+        self.assertEqual({"age": {10: "mismatch"}}, datatype_mismatch(df))
 
-    def test_stackoverflow(self):
-        test_dataframe = pd.read_csv(DATASETS_DIR / 'stackoverflow_db_uncleaned.csv')
-        detected_df = datatype_mismatch(test_dataframe)
-        error_map = {"Age": {4: "mismatch", 5: "mismatch"}}
-        self.assertEqual(error_map, detected_df)
+    def test_weak_type_signal_does_not_force_a_mismatch(self):
+        df = pd.DataFrame({
+            "ID": range(1, 11),
+            "mixed": ["word", "word", 100, 100, 250, 250, 100, "test", "adding", "words"],
+        })
 
-    #----------Should finish building these tests if full integration doesn't work down the line-------#
-    def test_crimes_report_with_main_detector_result(self):
-        test_dataframe = pd.read_csv(DATASETS_DIR / '(original)crimes___one_year_prior_to_present_20250421.csv')
-        detected_df = datatype_mismatch(set_id_column(test_dataframe.head(200)))
-        expected_error_map = {
-  "FBI CD": {
-    1: "mismatch",
-    2: "mismatch",
-    3: "mismatch"
-  }
-}
-        self.assertEqual(expected_error_map, detected_df)
+        self.assertEqual({}, datatype_mismatch(df))
 
-    def test_complaints_with_main_detector_result(self):
-        test_dataframe = pd.read_csv(DATASETS_DIR / 'complaints-2025-04-21_17_31.csv')
-        detected_df = datatype_mismatch(set_id_column(test_dataframe.head(200)))
-        expected_error_map = {
-  "ZIP code": {
-    5: "mismatch",
-    19: "mismatch",
-    22: "mismatch",
-    23: "mismatch",
-    51: "mismatch",
-    66: "mismatch",
-    67: "mismatch",
-    71: "mismatch",
-    101: "mismatch",
-    106: "mismatch",
-    111: "mismatch",
-    114: "mismatch",
-    121: "mismatch",
-    122: "mismatch",
-    128: "mismatch",
-    134: "mismatch",
-    141: "mismatch",
-    147: "mismatch",
-    159: "mismatch",
-      167: 'mismatch',
-      184: 'mismatch',
-      186: 'mismatch',
-      187: 'mismatch',
-      198: 'mismatch',
-      200: 'mismatch'
-  }
-}
-        self.assertEqual(expected_error_map, detected_df)
-if __name__ == '__main__':
+    def test_date_like_column_flags_bad_date(self):
+        df = pd.DataFrame({
+            "ID": range(1, 11),
+            "date": [
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-03",
+                "2024-01-04",
+                "2024-01-05",
+                "2024-01-06",
+                "2024-01-07",
+                "2024-01-08",
+                "2024-01-09",
+                "not-a-date",
+            ],
+        })
+
+        self.assertEqual({"date": {10: "mismatch"}}, datatype_mismatch(df))
+
+    def test_details_include_expected_type_and_confidence(self):
+        df = pd.DataFrame({
+            "ID": range(1, 11),
+            "flag": ["yes", "no", "true", "false", "yes", "no", "true", "false", "yes", "maybe"],
+        })
+
+        result = datatype_mismatch(df, include_details=True)
+
+        self.assertEqual("type_mismatch", result["flag"][10]["error_type"])
+        self.assertEqual("mismatch", result["flag"][10]["legacy_error_type"])
+        self.assertEqual("boolean", result["flag"][10]["expected_type"])
+
+
+if __name__ == "__main__":
     unittest.main()

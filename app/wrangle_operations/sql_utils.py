@@ -43,7 +43,18 @@ def drop_view(conn, view_name: str) -> None:
 
 
 def promote_errors_preview(conn, preview_table: str, new_table_name: str) -> None:
-    """Rename errors_<preview> physical table to errors_<new_table_name>."""
+    """Rename errors_<preview> physical table to errors_<new_table_name>.
+
+    A stale errors_<new_table_name> can be left behind by an earlier execute,
+    an undo/redo that reused a node id, or a partially failed run. Renaming onto
+    an existing relation raises DuplicateTable, which surfaces in the UI as the
+    opaque "not able to execute" error, so we clear any leftover target first.
+    """
+    target = f"errors_{new_table_name}"
+    # errors_<target> is always a physical table (built by the Pandas detectors
+    # via to_sql and moved with ALTER TABLE), so a plain DROP TABLE is the right
+    # clear. DROP VIEW IF EXISTS would raise WrongObjectType on a real table.
+    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{target}" CASCADE'))
     conn.execute(
-        sa_text(f'ALTER TABLE "errors_{preview_table}" RENAME TO "errors_{new_table_name}"')
+        sa_text(f'ALTER TABLE "errors_{preview_table}" RENAME TO "{target}"')
     )

@@ -6,7 +6,8 @@ from pathlib import Path
 import pandas as pd
 
 from app.server_utils.data_attribute_summary_integration import get_categorical_stats, get_numeric_stats, \
-    build_attribute_distributions, convert_error_list_to_dict, generate_complete_json
+    build_attribute_distributions, build_attribute_profiles, convert_error_list_to_dict, generate_complete_json, \
+    format_attribute_profile_record
 
 
 DATASETS_DIR = Path(__file__).resolve().parents[2] / "provided_datasets"
@@ -104,6 +105,165 @@ class TestBuildAttributeDistributions(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertIn('col', result)
+
+
+class TestBuildAttributeProfiles(unittest.TestCase):
+
+    def test_build_profiles_contains_explainability_fields(self):
+        df = pd.DataFrame({
+            "created_at": pd.date_range("2026-01-01", periods=120, freq="h").astype(str),
+            "sale_price": [9.99, 12.50, 18.75, 12.50] * 30,
+            "city": [f"City {index}" for index in range(120)],
+        })
+
+        result = build_attribute_profiles(df)
+
+        self.assertIn("created_at", result)
+        self.assertIn("sale_price", result)
+        self.assertIn("city", result)
+        self.assertEqual(result["created_at"]["roleLabel"], "high-uniqueness timestamp")
+        self.assertIn("Timestamp uniqueness alone", result["created_at"]["warning"])
+        self.assertEqual(result["sale_price"]["topCandidateRole"], "numeric_measure")
+        self.assertIsInstance(result["sale_price"]["candidateRoles"], list)
+        self.assertIsNotNone(result["sale_price"]["confidenceScore"])
+        chosen_sale_price_candidates = [
+            candidate for candidate in result["sale_price"]["candidateRoles"]
+            if candidate["chosen"]
+        ]
+        self.assertEqual(len(chosen_sale_price_candidates), 1)
+        self.assertEqual(result["sale_price"]["chosenCandidateRole"], "numeric_measure")
+        self.assertEqual(
+            result["sale_price"]["chosenCandidateConfidence"],
+            result["sale_price"]["confidenceScore"],
+        )
+        self.assertEqual(
+            chosen_sale_price_candidates[0]["confidence"],
+            result["sale_price"]["confidenceScore"],
+        )
+        self.assertIsNotNone(chosen_sale_price_candidates[0]["evidenceStrength"])
+        self.assertEqual(result["city"]["roleLabel"], "high-uniqueness location field")
+        self.assertTrue(result["city"]["warning"])
+        self.assertTrue(result["city"]["positiveEvidence"])
+        self.assertTrue(result["city"]["negativeEvidence"])
+        self.assertTrue(result["sale_price"]["supportingExamples"])
+        self.assertEqual(result["sale_price"]["conflictingExamples"], [])
+        self.assertTrue(any(
+            "location" in evidence.lower()
+            for evidence in result["city"]["negativeEvidence"]
+        ))
+        self.assertTrue(any(
+            "numbers" in evidence.lower()
+            for evidence in result["sale_price"]["positiveEvidence"]
+        ))
+
+    def test_chosen_candidate_stays_visible_when_not_in_top_four(self):
+        result = format_attribute_profile_record({
+            "column": "notes",
+            "role": "free_text",
+            "profile_role": "free_text",
+            "confidence": "low",
+            "confidence_score": 0.41,
+            "chosen_candidate_role": "free_text",
+            "chosen_candidate_confidence": 0.41,
+            "candidate_roles": [
+                {"role": "primary_key", "confidence": 0.80},
+                {"role": "categorical", "confidence": 0.72},
+                {"role": "datetime", "confidence": 0.68},
+                {"role": "numeric_measure", "confidence": 0.62},
+                {
+                    "role": "free_text",
+                    "confidence": 0.41,
+                    "evidence_strength": 0.55,
+                    "chosen": True,
+                },
+            ],
+        })
+
+        self.assertEqual(len(result["candidateRoles"]), 4)
+        self.assertTrue(any(
+            candidate["role"] == "free_text" and candidate["chosen"]
+            for candidate in result["candidateRoles"]
+        ))
+
+    def test_examples_separate_matching_and_conflicting_values(self):
+        result = format_attribute_profile_record({
+            "column": "amount",
+            "role": "numeric",
+            "profile_role": "numeric_measure",
+            "confidence_score": 0.82,
+        }, pd.Series(["10.5", "15", "unknown", "20"]))
+
+        self.assertIn("10.5", result["supportingExamples"])
+        self.assertEqual(result["conflictingExamples"], ["unknown"])
+
+    def test_routine_geography_uses_safeguard_without_creating_review_work(self):
+        result = format_attribute_profile_record({
+            "column": "country",
+            "role": "location_name",
+            "profile_role": "location_name",
+            "confidence_score": 0.91,
+            "adaptive_warning": "Location-like fields should not be used as primary keys from uniqueness alone.",
+        }, pd.Series(["United States", "India", "Netherlands"]))
+
+        self.assertTrue(result["semanticSafeguardApplied"])
+        self.assertFalse(result["isSemanticallySensitive"])
+        self.assertEqual(result["dataWarning"], "")
+        self.assertEqual(result["reviewReasons"], [])
+
+    def test_high_uniqueness_geography_is_a_review_item_not_a_warning(self):
+        result = format_attribute_profile_record({
+            "column": "location_code",
+            "role": "high_uniqueness_location_field",
+            "profile_role": "high_uniqueness_location_field",
+            "confidence_score": 0.91,
+        }, pd.Series(["LOC-001", "LOC-002", "LOC-003"]))
+
+        self.assertTrue(result["semanticSafeguardApplied"])
+        self.assertTrue(result["isSemanticallySensitive"])
+        self.assertEqual(result["dataWarning"], "")
+        self.assertTrue(any(
+            "location" in reason.lower()
+            for reason in result["reviewReasons"]
+        ))
+
+    def test_data_warning_is_distinct_from_review_reasons(self):
+        result = format_attribute_profile_record({
+            "column": "amount",
+            "role": "numeric",
+            "profile_role": "numeric_measure",
+            "confidence_score": 0.82,
+            "data_warning": "Values mix incompatible numeric formats.",
+        }, pd.Series(["10", "unknown"]))
+
+        self.assertEqual(result["dataWarning"], "Values mix incompatible numeric formats.")
+        self.assertEqual(result["reviewReasons"], [])
+        self.assertIn(
+            "Values mix incompatible numeric formats.",
+            result["negativeEvidence"],
+        )
+
+    def test_routine_country_profile_is_stable_after_all_rows(self):
+        df = pd.DataFrame({
+            "Country": ["United States", "India", "Netherlands", "United Kingdom"] * 100,
+        })
+
+        profile = build_attribute_profiles(df)["Country"]
+
+        self.assertEqual(profile["roleFamily"], "geography")
+        self.assertEqual(profile["roleSubtypeLabel"], "location name")
+        self.assertFalse(profile["classificationAmbiguous"])
+        self.assertFalse(profile["samplingExhausted"])
+        self.assertFalse(profile["needsMoreSampling"])
+        self.assertEqual(profile["reviewReasons"], [])
+        self.assertEqual(profile["adaptiveSamplingAction"], "no_more_sampling_needed")
+        self.assertEqual(
+            profile["fullDataStateLabel"],
+            "Stable after examining all rows",
+        )
+        self.assertTrue(any(
+            "Role-family evidence for 'geography'" in evidence
+            for evidence in profile["positiveEvidence"]
+        ))
 
 
 class TestConvertErrorListToDict(unittest.TestCase):

@@ -1,10 +1,25 @@
 """
 Minimal pytest fixtures for SQL testing.
 """
+import os
 import pytest
 import json
 from pathlib import Path
 from sqlalchemy import create_engine, text, exc
+
+
+# The repository-wide conftest disables database initialization for unit tests.
+# SQL tests explicitly opt back in and direct Flask to the disposable test DB
+# before any test module imports ``app``.
+_config_path = Path(__file__).parent / "database_test.json"
+with open(_config_path) as _config_file:
+    _bootstrap_config = json.load(_config_file)
+os.environ["BUCKAROO_SKIP_DB_INIT"] = "0"
+os.environ["BUCKAROO_DB_HOST"] = str(_bootstrap_config["host"])
+os.environ["BUCKAROO_DB_PORT"] = str(_bootstrap_config["port"])
+os.environ["BUCKAROO_DB_USER"] = str(_bootstrap_config["user"])
+os.environ["BUCKAROO_DB_PASSWORD"] = str(_bootstrap_config["password"])
+os.environ["BUCKAROO_DB_NAME"] = str(_bootstrap_config["db_name"])
 
 
 def _get_db_url(config, db_name=None):
@@ -15,10 +30,25 @@ def _get_db_url(config, db_name=None):
 
 @pytest.fixture(scope="session")
 def test_db_config():
-    """Load test database configuration"""
+    """Load test database configuration.
+
+    Values from database_test.json can be overridden with environment
+    variables so the suite can target a Dockerized Postgres without editing
+    the committed config (e.g. BUCKAROO_TEST_DB_PASSWORD=password).
+    """
     config_path = Path(__file__).parent / "database_test.json"
     with open(config_path) as f:
-        return json.load(f)
+        config = json.load(f)
+
+    env_overrides = {
+        "host": os.environ.get("BUCKAROO_TEST_DB_HOST"),
+        "port": os.environ.get("BUCKAROO_TEST_DB_PORT"),
+        "user": os.environ.get("BUCKAROO_TEST_DB_USER"),
+        "password": os.environ.get("BUCKAROO_TEST_DB_PASSWORD"),
+        "db_name": os.environ.get("BUCKAROO_TEST_DB_NAME"),
+    }
+    config.update({key: value for key, value in env_overrides.items() if value})
+    return config
 
 
 @pytest.fixture(scope="session")

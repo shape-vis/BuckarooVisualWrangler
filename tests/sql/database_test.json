@@ -1,7 +1,7 @@
 {
     "host": "localhost",
-    "port": 5432,
+    "port": 5433,
     "user": "postgres",
-    "password": "secret",
+    "password": "password",
     "db_name": "buckaroo_test_db"
 }

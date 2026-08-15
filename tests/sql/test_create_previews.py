@@ -14,8 +14,12 @@ from app import app as flask_app, engine
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _drop_tables(conn, *names):
+    # Preview "tables" are SQL views that depend on the source table, so the
+    # base table must be dropped with CASCADE to remove the dependent views.
+    # Names are passed source-table-first, so the cascade clears the views
+    # before we reach their (now-absent) names later in the list.
     for name in names:
-        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
+        conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}" CASCADE'))
 
 
 def _table_exists(table_name) -> bool:
@@ -64,12 +68,82 @@ def test_create_previews_returns_correct_1d_names(db_transaction):
         assert data["dims"] == 1
         assert data["preview_delete"] == preview_delete
         assert data["preview_impute"] == preview_impute
+        assert data["source_row_count"] == 5
+        assert data["selected_row_count"] == 2
     finally:
         with engine.begin() as conn:
             _drop_tables(conn,
                 table, f"errors_{table}",
                 preview_delete, f"errors_{preview_delete}",
                 preview_impute, f"errors_{preview_impute}",
+            )
+
+
+@pytest.mark.sql
+def test_preview_row_diff_reports_exact_delete_and_impute_impact(db_transaction):
+    table = "tp_preview_impact"
+    df = pd.DataFrame({
+        "ID": range(1, 6),
+        "val": [1.0, None, 3.0, None, 5.0],
+        "label": ["a", "b", "c", "d", "e"],
+    })
+    error_df = pd.DataFrame({
+        "row_id": [2, 4],
+        "column_id": ["val", "val"],
+        "error_type": ["missing", "missing"],
+    })
+    df.to_sql(table, engine, if_exists="replace", index=False)
+    error_df.to_sql(f"errors_{table}", engine, if_exists="replace", index=False)
+
+    preview_delete = f"{table}_preview_delete"
+    preview_impute = f"{table}_preview_impute"
+
+    try:
+        client = flask_app.test_client()
+        create_response = client.post("/api/wrangle/create-previews", json={
+            "table": table,
+            "row_ids": [2, 4],
+            "cols": ["val"],
+        })
+        assert create_response.status_code == 200
+
+        delete_response = client.post("/api/wrangle/preview-row-diff", json={
+            "source_table": table,
+            "preview_table": preview_delete,
+            "row_ids": [2, 4],
+            "cols": ["val"],
+            "summary_only": True,
+        })
+        assert delete_response.status_code == 200
+        assert delete_response.get_json()["impact"] == {
+            "rowsAffected": 2,
+            "valuesChanged": 4,
+            "selectedRows": 2,
+        }
+
+        impute_response = client.post("/api/wrangle/preview-row-diff", json={
+            "source_table": table,
+            "preview_table": preview_impute,
+            "row_ids": [2, 4],
+            "cols": ["val"],
+            "summary_only": True,
+        })
+        assert impute_response.status_code == 200
+        assert impute_response.get_json()["impact"] == {
+            "rowsAffected": 2,
+            "valuesChanged": 2,
+            "selectedRows": 2,
+        }
+    finally:
+        with engine.begin() as conn:
+            _drop_tables(
+                conn,
+                table,
+                f"errors_{table}",
+                preview_delete,
+                f"errors_{preview_delete}",
+                preview_impute,
+                f"errors_{preview_impute}",
             )
 
 
@@ -207,6 +281,57 @@ def test_create_previews_1d_impute_fills_nulls(db_transaction):
                 table, f"errors_{table}",
                 preview_delete, f"errors_{preview_delete}",
                 preview_impute, f"errors_{preview_impute}",
+            )
+
+
+@pytest.mark.sql
+def test_create_previews_2d_impute_only_touches_selected_column_errors(db_transaction):
+    table = "tp_imp_2d_col_errors"
+    df = pd.DataFrame({
+        "ID": [1, 2, 3, 4],
+        "Continent": ["AS", "EU", "EU", "NA"],
+        "ConvertedSalary": [2000000.0, 100.0, 200.0, 300.0],
+    })
+    error_df = pd.DataFrame({
+        "row_id": [1],
+        "column_id": ["ConvertedSalary"],
+        "error_type": ["anomaly"],
+    })
+    df.to_sql(table, engine, if_exists="replace", index=False)
+    error_df.to_sql(f"errors_{table}", engine, if_exists="replace", index=False)
+
+    preview_delete = f"{table}_preview_delete"
+    preview_impute_x = f"{table}_preview_impute_x"
+    preview_impute_y = f"{table}_preview_impute_y"
+
+    try:
+        client = flask_app.test_client()
+        resp = client.post("/api/wrangle/create-previews", json={
+            "table": table,
+            "row_ids": [1],
+            "cols": ["Continent", "ConvertedSalary"],
+        })
+        assert resp.status_code == 200
+
+        # The selected row has no Continent error, so impute_x is a no-op.
+        imp_x_df = pd.read_sql_query(f'SELECT * FROM "{preview_impute_x}"', engine)
+        imp_x_row = imp_x_df.set_index("ID").loc[1]
+        assert imp_x_row["Continent"] == "AS"
+        assert float(imp_x_row["ConvertedSalary"]) == pytest.approx(2000000.0)
+
+        # The same selected row is flagged for ConvertedSalary, so impute_y
+        # replaces the non-null anomaly with the column fill value.
+        imp_y_df = pd.read_sql_query(f'SELECT * FROM "{preview_impute_y}"', engine)
+        imp_y_row = imp_y_df.set_index("ID").loc[1]
+        assert imp_y_row["Continent"] == "AS"
+        assert float(imp_y_row["ConvertedSalary"]) == pytest.approx(500150.0)
+    finally:
+        with engine.begin() as conn:
+            _drop_tables(conn,
+                table, f"errors_{table}",
+                preview_delete, f"errors_{preview_delete}",
+                preview_impute_x, f"errors_{preview_impute_x}",
+                preview_impute_y, f"errors_{preview_impute_y}",
             )
 
 

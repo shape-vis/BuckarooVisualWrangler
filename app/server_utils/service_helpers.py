@@ -2,12 +2,17 @@
 #This file helps deliver on endpoint services
 
 import hashlib
+import inspect
+import io
 import json
+import os
 import random
 import string
 import re
+import threading
 from sqlalchemy import types as sql_types
 from sqlalchemy import text as sa_text
+import numpy as np
 import pandas as pd
 
 import app
@@ -16,25 +21,40 @@ from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
 from app.server_utils.set_id_column import set_id_column
 from detectors.anomaly import anomaly
+from detectors.common import infer_detector_config, merged_config
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 from app.pgraph.delta import Delta
+from app.wrangle_operations.sql_utils import quote_identifier
 
 # Temporary memory for preview -> Delta parameters.  When a preview is created
 # we store the operation details here; when the user executes that preview,
 # n_wrangle() reads these params and saves them into the permanent graph node.
 PREVIEW_PARAMS = {}
 
+# Progressive upload: large datasets return after a sample detector pass while
+# the full error table is rebuilt in the background.
+PROGRESSIVE_ROW_THRESHOLD = int(os.environ.get("BUCKAROO_UPLOAD_SAMPLE_ROWS", "500"))
+RUN_FULL_BACKGROUND_DETECTION = os.environ.get("BUCKAROO_RUN_FULL_BACKGROUND_DETECTION") == "1"
+MAX_BACKGROUND_DETECTION_ROWS = int(os.environ.get("BUCKAROO_MAX_BACKGROUND_DETECTION_ROWS", "250000"))
+
+
+def should_run_full_background_detection(total_rows, max_rows=None):
+    """Keep background detector work within an explicit, testable row budget."""
+    limit = MAX_BACKGROUND_DETECTION_ROWS if max_rows is None else int(max_rows)
+    return 0 <= int(total_rows) <= max(0, limit)
+UPLOAD_BACKGROUND_STATUS = {}
+
 def get_current_pgraph():
     """
     uses the custom json function in graph to send a json version of the graph back to the view
     :return:
     """
-    return json.dumps(app.pgraph_for_session, default=lambda o: o.__json__() if hasattr(o, '__json__') else None)
+    return json.dumps(app.get_session_state().pgraph_for_session, default=lambda o: o.__json__() if hasattr(o, '__json__') else None)
 
 def clicked_node_access_helper(node_table_name):
-    return app.pgraph_for_session.set_clicked_node_as_current(node_table_name)
+    return app.get_session_state().pgraph_for_session.set_clicked_node_as_current(node_table_name)
 
 def _validate_identifier(name: str) -> str:
     """
@@ -48,10 +68,10 @@ def _validate_identifier(name: str) -> str:
     return name
 
 def get_pgraph_redo():
-    return app.pgraph_for_session.redo_pgraph()
+    return app.get_session_state().pgraph_for_session.redo_pgraph()
 
 def get_pgraph_undo():
-    return app.pgraph_for_session.undo_pgraph()
+    return app.get_session_state().pgraph_for_session.undo_pgraph()
 
 def _safe_pg_name(base: str, suffix: str) -> str:
     """
@@ -166,20 +186,96 @@ def perform_melt(dfs):
 
     return df_combined
 
-def run_detectors(data_frame):
+
+def _has_valid_id_column(df):
+    """True when ID is numeric, unique, and already the first column."""
+    if "ID" not in df.columns or df.columns[0] != "ID":
+        return False
+    id_values = df["ID"]
+    return pd.to_numeric(id_values, errors="coerce").notnull().all() and id_values.is_unique
+
+
+def error_maps_to_dataframe(error_maps, include_details=False):
+    """
+    Convert detector error maps directly into the app's long error format.
+
+    Detectors return {column: {row_id: error_type}}. The old path built a wide
+    DataFrame per detector and then melted it back to long form, which was a
+    large extra cost on upload-sized datasets.
+    """
+    row_ids = []
+    column_ids = []
+    error_types = []
+    severities = []
+    confidences = []
+    reasons = []
+    for error_map in error_maps:
+        if not error_map:
+            continue
+        if isinstance(error_map, dict) and "errors" in error_map:
+            error_map = error_map["errors"]
+        for column_id, row_errors in error_map.items():
+            for row_id, error_record in row_errors.items():
+                if isinstance(error_record, dict):
+                    error_type = error_record.get("legacy_error_type") or error_record.get("error_type")
+                    severity = error_record.get("severity")
+                    confidence = error_record.get("confidence")
+                    reason = error_record.get("reason")
+                else:
+                    error_type = error_record
+                    severity = None
+                    confidence = None
+                    reason = None
+                if pd.notna(error_type):
+                    row_ids.append(int(row_id))
+                    column_ids.append(column_id)
+                    error_types.append(error_type)
+                    severities.append(severity)
+                    confidences.append(confidence)
+                    reasons.append(reason)
+    if not row_ids:
+        return _empty_error_df(include_details=include_details)
+    result = pd.DataFrame(
+        {"row_id": row_ids, "column_id": column_ids, "error_type": error_types},
+    )
+    if include_details:
+        result["severity"] = severities
+        result["confidence"] = confidences
+        result["reason"] = reasons
+    return result
+
+
+def run_detectors(data_frame, include_details=False, detector_config=None, adaptive_config=True):
     """
     Runs all 4 detectors that are implemented
     on the server, on the data, and returns a compiled dataframe of the complete errors
     :param data_frame:the dataframe to run the detectors on
+    :param detector_config: optional explicit detector threshold overrides
+    :param adaptive_config: when true, profile the dataset and adapt defaults before running detectors
     :return: a single compiled dataframe of all the errors detected
     """
-    df_with_id = set_id_column(data_frame)
-    anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
-    return perform_melt(frames)
+    df_with_id = data_frame if _has_valid_id_column(data_frame) else set_id_column(data_frame)
+    effective_config = (
+        infer_detector_config(df_with_id, detector_config)
+        if adaptive_config
+        else merged_config(detector_config)
+    )
+
+    # anomaly and incomplete both need a numeric coercion of every non-ID
+    # column. Computing it once here and sharing it avoids running the
+    # (expensive) pd.to_numeric pass twice over the whole dataset.
+    numeric_cache = {
+        col: pd.to_numeric(df_with_id[col], errors="coerce")
+        for col in df_with_id.columns[1:]
+    }
+
+    error_maps = [
+        anomaly(df_with_id, numeric_cache=numeric_cache, include_details=include_details, config=effective_config),
+        incomplete(df_with_id, numeric_cache=numeric_cache, include_details=include_details, config=effective_config),
+        missing_value(df_with_id, include_details=include_details),
+        datatype_mismatch(df_with_id, include_details=include_details, config=effective_config),
+    ]
+    return error_maps_to_dataframe(error_maps, include_details=include_details)
 
 
 DETECTOR_SCOPES = {
@@ -213,9 +309,12 @@ DETECTOR_SCOPES = {
 }
 
 
-def _empty_error_df():
+def _empty_error_df(include_details=False):
     """Return an empty errors table with the same columns used by detectors."""
-    return pd.DataFrame(columns=["row_id", "column_id", "error_type"])
+    columns = ["row_id", "column_id", "error_type"]
+    if include_details:
+        columns.extend(["severity", "confidence", "reason"])
+    return pd.DataFrame(columns=columns)
 
 
 def _normalize_error_df(error_df):
@@ -229,18 +328,31 @@ def _normalize_error_df(error_df):
     return normalized[["row_id", "column_id", "error_type"]].dropna(subset=["error_type"])
 
 
-def _detector_to_error_df(data_frame, detector_fn):
+def _call_detector(detector_fn, data_frame, detector_config=None):
+    """Call a detector and pass config only when that detector accepts it."""
+    kwargs = {}
+    try:
+        parameters = inspect.signature(detector_fn).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    accepts_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+    if detector_config is not None and ("config" in parameters or accepts_kwargs):
+        kwargs["config"] = detector_config
+    return detector_fn(data_frame.copy(), **kwargs)
+
+
+def _detector_to_error_df(data_frame, detector_fn, detector_config=None):
     """
     Run one detector and convert its nested error map into the app's standard
     long format: row_id, column_id, error_type.
     """
-    detector_df = pd.DataFrame(detector_fn(data_frame.copy())).rename_axis("ID", axis="index").reset_index()
-    if detector_df.empty:
-        return _empty_error_df()
-    return perform_melt([detector_df])
+    return error_maps_to_dataframe([_call_detector(detector_fn, data_frame, detector_config=detector_config)])
 
 
-def _run_detector_scope(data_frame, detector_name, columns=None, row_ids=None):
+def _run_detector_scope(data_frame, detector_name, columns=None, row_ids=None, detector_config=None):
     """
     Run one detector on a narrowed slice of data.
 
@@ -257,10 +369,21 @@ def _run_detector_scope(data_frame, detector_name, columns=None, row_ids=None):
         scoped_df = scoped_df[scoped_df["ID"].isin([int(row_id) for row_id in row_ids])]
 
     scoped_df = scoped_df[["ID"] + columns]
-    return _detector_to_error_df(scoped_df, DETECTOR_SCOPES[detector_name]["detector"])
+    return _detector_to_error_df(
+        scoped_df,
+        DETECTOR_SCOPES[detector_name]["detector"],
+        detector_config=detector_config,
+    )
 
 
-def update_errors_incrementally(data_frame, previous_error_df, operation, parameters):
+def update_errors_incrementally(
+    data_frame,
+    previous_error_df,
+    operation,
+    parameters,
+    detector_config=None,
+    adaptive_config=True,
+):
     """
     Update an errors table by invalidating and recomputing only the detector
     scopes that can be affected by a wrangle.
@@ -274,6 +397,11 @@ def update_errors_incrementally(data_frame, previous_error_df, operation, parame
     df_with_id = set_id_column(data_frame)
     existing = _normalize_error_df(previous_error_df)
     parameters = parameters or {}
+    effective_config = (
+        infer_detector_config(df_with_id, detector_config)
+        if adaptive_config
+        else merged_config(detector_config)
+    )
     # Some callers pass the operation separately, and some store it inside the
     # Delta parameters. Prefer the parameter value so replayed deltas behave the
     # same way they did during preview.
@@ -300,7 +428,11 @@ def update_errors_incrementally(data_frame, previous_error_df, operation, parame
             )
         ]
         recomputed = [
-            _detector_to_error_df(df_with_id, DETECTOR_SCOPES[name]["detector"])
+            _detector_to_error_df(
+                df_with_id,
+                DETECTOR_SCOPES[name]["detector"],
+                detector_config=effective_config,
+            )
             for name in ["mismatch", "anomaly", "incomplete"]
         ]
         return pd.concat([surviving_errors, *recomputed], ignore_index=True).drop_duplicates().reset_index(drop=True)
@@ -309,7 +441,11 @@ def update_errors_incrementally(data_frame, previous_error_df, operation, parame
         column = parameters.get("col")
         row_ids = [int(row_id) for row_id in parameters.get("row_ids", [])]
         if not column:
-            return run_detectors(df_with_id)
+            return run_detectors(
+                df_with_id,
+                detector_config=detector_config,
+                adaptive_config=adaptive_config,
+            )
 
         # Missing errors are stale only for the exact cells that were filled.
         stale_missing = (
@@ -328,15 +464,19 @@ def update_errors_incrementally(data_frame, previous_error_df, operation, parame
         kept = existing[~(stale_missing | stale_column_scoped)]
         recomputed = [
             _run_detector_scope(df_with_id, "missing", [column], row_ids),
-            _run_detector_scope(df_with_id, "mismatch", [column]),
-            _run_detector_scope(df_with_id, "anomaly", [column]),
-            _run_detector_scope(df_with_id, "incomplete", [column]),
+            _run_detector_scope(df_with_id, "mismatch", [column], detector_config=effective_config),
+            _run_detector_scope(df_with_id, "anomaly", [column], detector_config=effective_config),
+            _run_detector_scope(df_with_id, "incomplete", [column], detector_config=effective_config),
         ]
         return pd.concat([kept, *recomputed], ignore_index=True).drop_duplicates().reset_index(drop=True)
 
     # For operations without a specific rule, fall back to the safe behavior:
     # recompute every detector on the whole dataset.
-    return run_detectors(df_with_id)
+    return run_detectors(
+        df_with_id,
+        detector_config=detector_config,
+        adaptive_config=adaptive_config,
+    )
 
 def calculate_attribute_rankings(error_df):
     """
@@ -453,26 +593,40 @@ def is_categorical(column_a):
     :return: True if the column is categorical, False otherwise
     """
     value_counts = column_a.value_counts()
-    type_count = {}
-    type_key = {}
-    largest_type = 0
+    if len(value_counts) == 0:
+        # An all-null column has no dominant concrete type; treat as categorical
+        # to match the original behavior (value_type stays None -> True).
+        return True
+
+    unique_values = value_counts.index
+    counts = value_counts.values
+
+    # Category for each unique value is its Python type name, except string
+    # values that look numeric (e.g. "123", "4.5") which are reclassified as
+    # "numeric" -- identical to the original per-value rule, but the regex test
+    # is vectorized over just the string values instead of one re.fullmatch
+    # call per unique value.
+    type_names = np.array([type(key).__name__ for key in unique_values], dtype=object)
+    is_str = np.array([isinstance(key, str) for key in unique_values])
+    if is_str.any():
+        string_values = pd.Index([key for key in unique_values if isinstance(key, str)])
+        numeric_like = np.asarray(
+            string_values.str.strip().str.fullmatch(r'\d+(\.\d+)?', na=False),
+            dtype=bool,
+        )
+        type_names[is_str] = np.where(numeric_like, "numeric", type_names[is_str])
+
+    # Sum the value counts per category. sort=False preserves first-appearance
+    # order, so ties are broken exactly like the original dict-insertion loop.
+    category_totals = pd.Series(counts).groupby(type_names, sort=False).sum()
+
     value_type = None
-    # populate the count of each type in the column
-    for key, value in value_counts.items():
-        type_of_key = type(key).__name__
-        if (isinstance(key, str)) and (bool(re.fullmatch(r'^\d+(\.\d+)?$', key.strip()))): type_of_key = "numeric"
-        if type_of_key in type_count:
-            type_count[type_of_key] += value
-            if type_of_key in type_key:
-                type_key[type_of_key].append(key)
-        else:
-            type_count[type_of_key] = value
-            type_key[type_of_key] = [key]
-    types = type_count.items()
-    for key, value in types:
-        if value > largest_type:
-            largest_type = value
-            value_type = key
+    largest_type = 0
+    for category, total in category_totals.items():
+        if total > largest_type:
+            largest_type = total
+            value_type = category
+
     if value_type == "str":
         return True
     if value_type is None:
@@ -489,10 +643,29 @@ def get_sqlalchemy_dtype_map(df):
     """
     dtype_map = {}
     for col in df.columns:
-        if is_categorical(df[col]):
+        if col == "ID":
+            dtype_map[col] = sql_types.BigInteger()
+            continue
+
+        series = df[col]
+        pandas_dtype = series.dtype
+
+        # Fast path: pandas already inferred a concrete numeric dtype during
+        # read_csv, so we can skip the expensive per-column type scan.
+        if pd.api.types.is_integer_dtype(pandas_dtype):
+            dtype_map[col] = sql_types.BigInteger()
+            continue
+        if pd.api.types.is_float_dtype(pandas_dtype):
+            dtype_map[col] = sql_types.Float()
+            continue
+        if pd.api.types.is_bool_dtype(pandas_dtype):
+            dtype_map[col] = sql_types.Text()
+            continue
+
+        if is_categorical(series):
             dtype_map[col] = sql_types.Text()
         else:
-            non_null = df[col].dropna()
+            non_null = series.dropna()
             numeric_series = pd.to_numeric(non_null, errors='coerce')
             # If any non-null values failed numeric coercion, the column has true mixed
             # values (e.g. "N/A" strings alongside numbers). Store as Text to preserve
@@ -508,6 +681,136 @@ def get_sqlalchemy_dtype_map(df):
                 except (OverflowError, ValueError):
                     dtype_map[col] = sql_types.Float()
     return dtype_map
+
+
+def get_upload_background_status(table_name):
+    """Return background detector status for a table uploaded progressively."""
+    return UPLOAD_BACKGROUND_STATUS.get(
+        table_name,
+        {"status": "complete"},
+    )
+
+
+def _complete_error_detection(table_name, total_rows):
+    """
+    Recompute the full errors/rankings tables after a progressive upload.
+
+    The upload endpoint writes all rows immediately but only blocks on detector
+    output for the first PROGRESSIVE_ROW_THRESHOLD rows.
+    """
+    try:
+        full_df = pd.read_sql_query(
+            f'SELECT * FROM "{table_name}"',
+            app.engine,
+        )
+        detected_data = run_detectors(full_df)
+        write_dataframe_to_sql(
+            detected_data,
+            f"errors_{table_name}",
+            app.engine,
+            if_exists="replace",
+            index=False,
+        )
+        rankings = calculate_attribute_rankings(detected_data)
+        write_dataframe_to_sql(
+            rankings,
+            f"rankings_{table_name}",
+            app.engine,
+            if_exists="replace",
+            index=False,
+        )
+        if app.db_operations.main_table_name == table_name:
+            app.db_operations.load_table(table_name, f"errors_{table_name}")
+        from app.server_utils.dataset_processing_metadata import mark_detector_complete
+
+        mark_detector_complete(app.engine, table_name, total_rows)
+        UPLOAD_BACKGROUND_STATUS[table_name] = {"status": "complete"}
+        print(f"[BACKGROUND DETECTION COMPLETE] {table_name}")
+    except Exception as exc:
+        UPLOAD_BACKGROUND_STATUS[table_name] = {
+            "status": "failed",
+            "error": str(exc),
+        }
+        print(f"[BACKGROUND DETECTION FAILED] {table_name}: {exc}")
+
+
+def start_background_error_detection(table_name, total_rows=None):
+    """Kick off bounded full-table detector work without risking an unbounded read."""
+    if total_rows is None:
+        total_rows = int(pd.read_sql_query(
+            f'SELECT COUNT(*) AS count FROM "{table_name}"',
+            app.engine,
+        ).iloc[0]["count"])
+    if not should_run_full_background_detection(total_rows):
+        UPLOAD_BACKGROUND_STATUS[table_name] = {
+            "status": "sample_only",
+            "reason": "dataset_exceeds_background_row_limit",
+            "total_rows": int(total_rows),
+            "max_background_rows": MAX_BACKGROUND_DETECTION_ROWS,
+        }
+        return False
+
+    UPLOAD_BACKGROUND_STATUS[table_name] = {"status": "processing"}
+    thread = threading.Thread(
+        target=_complete_error_detection,
+        args=(table_name, int(total_rows)),
+        daemon=True,
+    )
+    thread.start()
+    return True
+
+
+def write_dataframe_to_sql(df, table_name, engine, if_exists="replace", dtype=None, index=False):
+    """
+    Write a DataFrame to SQL using PostgreSQL COPY for fast bulk loads.
+
+    The app already carries row identity in the ID column, so upload paths should
+    pass index=False to avoid storing the pandas RangeIndex as an extra column.
+    """
+    copy_df = df.reset_index() if index else df
+    copy_df = copy_df.copy(deep=False)
+
+    # Let pandas/SQLAlchemy create the table with the desired schema, then use
+    # psycopg2 COPY for the actual rows. COPY is much faster than multi-row
+    # INSERTs for upload-sized datasets.
+    copy_df.head(0).to_sql(
+        table_name,
+        engine,
+        if_exists=if_exists,
+        index=False,
+        dtype=dtype,
+    )
+
+    if copy_df.empty:
+        return 0
+
+    for col, sql_type in (dtype or {}).items():
+        if col in copy_df.columns and isinstance(sql_type, sql_types.BigInteger):
+            numeric_col = pd.to_numeric(copy_df[col], errors="coerce")
+            copy_df[col] = numeric_col.astype("Int64")
+
+    csv_buffer = io.StringIO()
+    copy_df.to_csv(csv_buffer, index=False)
+    csv_buffer.seek(0)
+
+    columns_sql = ", ".join(quote_identifier(str(col)) for col in copy_df.columns)
+    copy_sql = (
+        f"COPY {quote_identifier(table_name)} ({columns_sql}) "
+        "FROM STDIN WITH (FORMAT CSV, HEADER TRUE, NULL '')"
+    )
+
+    raw_conn = engine.raw_connection()
+    try:
+        with raw_conn.cursor() as cursor:
+            cursor.copy_expert(copy_sql, csv_buffer)
+        raw_conn.commit()
+    except Exception:
+        raw_conn.rollback()
+        raise
+    finally:
+        raw_conn.close()
+
+    return len(copy_df)
 
 def create_bins_for_a_numeric_column(column,bin_count):
     """
@@ -547,7 +850,7 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     # the new node name that will become the promoted table version.
     new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed, preview_table)
     
-    node = app.pgraph_for_session.node_map[new_table_name]
+    node = app.get_session_state().pgraph_for_session.node_map[new_table_name]
 
     from sqlalchemy import text as sa_text
     from app import engine
@@ -586,13 +889,47 @@ def trim_preview_suffix(name: str) -> str:
         return name[:idx]
     return name
 
+def impute_target_row_ids(table, row_ids, column, engine):
+    """Return selected row IDs that are currently flagged for the imputed column."""
+    if not row_ids or not column:
+        return []
+
+    normalized_ids = []
+    for row_id in row_ids:
+        try:
+            normalized_ids.append(int(row_id))
+        except (TypeError, ValueError):
+            continue
+
+    if not normalized_ids:
+        return []
+
+    ids_sql = ", ".join(str(row_id) for row_id in normalized_ids)
+    errors_table = quote_identifier(f"errors_{table}")
+    with engine.connect() as conn:
+        flagged_rows = conn.execute(
+            sa_text(
+                f'''
+                SELECT DISTINCT row_id
+                FROM {errors_table}
+                WHERE row_id IN ({ids_sql})
+                  AND column_id = :column
+                '''
+            ),
+            {"column": column},
+        ).scalars().all()
+
+    flagged_set = {int(row_id) for row_id in flagged_rows}
+    return [row_id for row_id in normalized_ids if row_id in flagged_set]
+
 def init_pgraph_for_session(root_table):
     """Start a new provenance graph when a dataset is first loaded."""
-    app.pgraph_for_session = PGraph()
+    state = app.get_session_state()
+    state.pgraph_for_session = PGraph(source_filename=state.original_table_name)
 
     # create the root node, add it to the pgraph as the root
     root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
-    app.pgraph_for_session.add_root_node(root_node)
+    state.pgraph_for_session.add_root_node(root_node)
 
 def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=None, direct_params=None):
     """
@@ -601,6 +938,11 @@ def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=No
     This is where delta storage becomes permanent: preview parameters are read,
     converted into a Delta, and attached to the new GraphNode.
     """
+    state = app.get_session_state()
+    if state.pgraph_for_session is None or parent_table not in state.pgraph_for_session.node_map:
+        init_pgraph_for_session(parent_table)
+        state = app.get_session_state()
+
     new_table_name = make_new_table_name(child_table)
     
     # Delta Storage: capture parameters and map them to replay/export behavior.
@@ -614,7 +956,7 @@ def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=No
         delta = Delta(op, params)
     
     current_node = GraphNode(parent_table, wrangle_executed, new_table_name, f"errors_{new_table_name}", delta=delta)
-    app.pgraph_for_session.add_node(current_node)
+    state.pgraph_for_session.add_node(current_node)
     
     # Cleanup PREVIEW_PARAMS for this table if it was used
     if preview_table_name in PREVIEW_PARAMS:
@@ -624,7 +966,7 @@ def n_wrangle(parent_table, child_table, wrangle_executed, preview_table_name=No
 
 def make_new_table_name(child_table):
     """Prefix the table with the next graph node ID, such as n1_ or n2_."""
-    node_id = app.pgraph_for_session.get_new_node_id()
+    node_id = app.get_session_state().pgraph_for_session.get_new_node_id()
     new_table_name = f"{node_id}{child_table[2:]}"
     return new_table_name
 def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
@@ -659,8 +1001,9 @@ def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
 
     preview_delete = preview_name_fn(table, "_preview_delete")
     preview_impute = preview_name_fn(table, "_preview_impute")
+    impute_row_ids = impute_target_row_ids(table, row_ids, cols[0], engine)
     delete_delta = Delta("delete", {"operation": "delete", "row_ids": row_ids})
-    impute_delta = Delta("impute", {"operation": "impute", "row_ids": row_ids, "col": cols[0]})
+    impute_delta = Delta("impute", {"operation": "impute", "row_ids": impute_row_ids, "col": cols[0]})
     impute_created = False
     
     with engine.begin() as conn:
@@ -716,10 +1059,12 @@ def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
     preview_delete   = preview_name_fn(table, "_preview_delete")
     preview_impute_x = preview_name_fn(table, "_preview_impute_x")
     preview_impute_y = preview_name_fn(table, "_preview_impute_y")
+    impute_x_row_ids = impute_target_row_ids(table, row_ids, cols[0], engine)
+    impute_y_row_ids = impute_target_row_ids(table, row_ids, cols[1], engine)
     deltas_by_preview = {
         preview_delete: Delta("delete", {"operation": "delete", "row_ids": row_ids}),
-        preview_impute_x: Delta("impute_x", {"operation": "impute_x", "row_ids": row_ids, "col": cols[0]}),
-        preview_impute_y: Delta("impute_y", {"operation": "impute_y", "row_ids": row_ids, "col": cols[1]}),
+        preview_impute_x: Delta("impute_x", {"operation": "impute_x", "row_ids": impute_x_row_ids, "col": cols[0]}),
+        preview_impute_y: Delta("impute_y", {"operation": "impute_y", "row_ids": impute_y_row_ids, "col": cols[1]}),
     }
     created_previews = {}
 
