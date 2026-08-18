@@ -13,7 +13,7 @@ from app.db_utils.ai_utils import parse_json_response
 
 datasets_paths = ['provided_datasets/mari_dataset.csv']
 #models = [{"model": "qwen/qwen3.6-27b", "provider": "groq"}]
-models = [{"model": "openai/gpt-oss-20b", "provider": "groq"}]
+models = [{"model": "openai/gpt-oss-20b", "provider": "groq", "requests_per_minute_limit": 30}]
 
 def variant(name, **overrides):
     baseline = {
@@ -59,9 +59,10 @@ if __name__ == "__main__":
     for model_dict in models:
 
         model = model_dict["model"]
-        model_provider = model_dict["provider"]
+        provider = model_dict["provider"]
+        requests_per_minute_limit = model_dict["requests_per_minute_limit"]
 
-        update_settings_table_result = client.post('/api/ai_helper/update_settings_table', json={"model_name": model, "provider": model_provider})
+        update_settings_table_result = client.post('/api/ai_helper/update_settings_table', json={"model_name": model, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit})
         data = update_settings_table_result.get_json()
         assert data["success"] == True
 

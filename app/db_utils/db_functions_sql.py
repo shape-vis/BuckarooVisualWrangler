@@ -36,6 +36,8 @@ class DBOperations:
         self.dp_table_name = None
         self.col_types = None
         self.filtering_table = None
+        self.reqs_per_minute_limiter = None
+        self.reqs_per_minute_limit = None
         self.active_hists = {}
 
     def reset(self):
@@ -50,6 +52,8 @@ class DBOperations:
         self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
+        self.reqs_per_minute_limiter = None
+        self.reqs_per_minute_limit = None
 
     def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None, base_table_name: str = None):
         """

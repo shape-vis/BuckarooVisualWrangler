@@ -74,7 +74,7 @@ def parse_json_response(llm_json_response):
             raise
 
 
-def call_with_retry(function, func_args, max_tries=5):
+def call_with_retry(function, func_args, requests_per_minute_limit, max_tries=5):
     """
     Retry function call until max tries is reached or the function call succeeds.
     :param function: the function to call
@@ -82,9 +82,12 @@ def call_with_retry(function, func_args, max_tries=5):
     :param max_tries: the maximum number of retries
     :return: the result of the function call
     """
+
+    from app.routes.ai_routes import call_rate_limited_api
     for attempt in range(max_tries):
         try:
-            result = function(*func_args)
+
+            result = call_rate_limited_api(function,func_args, requests_per_minute_limit)
 
             return result
         except Exception:

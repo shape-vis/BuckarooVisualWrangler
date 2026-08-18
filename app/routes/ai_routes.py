@@ -5,9 +5,10 @@ from app.db_utils.ai_utils import update_csvs_for_llm, get_api_key, parse_json_r
 from app.db_utils.execute_sql import fetch_sql, execute_sql
 
 from app.db_utils.ai_utils import call_with_retry
+from flask import request
+from pyrate_limiter import Duration, Rate, Limiter
 
 AI_SETTINGS_TABLE_NAME = "ai_settings"
-from flask import request
 
 ablations = ["include_data_profile", "include_dataset_context", "include_action_plan", "include_action_plan_translation"]
 valid_actions = ["delete_wrangle", "impute_wrangle", "delete_column", "plan_end"]
@@ -182,6 +183,52 @@ def query_llm_for_dataset_context(model, api_key, column_names, user_provided_da
     llm_text_response = response.choices[0].message.content
     return llm_text_response
 
+def get_settings_dict(engine):
+    """
+    Retrieves the model name and provider from the settings table.
+    :return: Dictionary containing model name and provider, or None if not found
+    """
+    try:
+        result = fetch_sql(f"SELECT model_name, provider, requests_per_minute_limit FROM {AI_SETTINGS_TABLE_NAME} WHERE id = :id", False, engine, {"id": 1})
+        row = result[0]
+
+        if result is not None:
+            model_name = row.model_name  # or row[0]
+            provider = row.provider
+            requests_per_minute_limit = row.requests_per_minute_limit
+            print("MODEL NAME", model_name, "PROVIDER", provider)
+            settings_dict = {"model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit}
+        else:
+            settings_dict = None
+
+        return settings_dict
+    except Exception as e:
+        logger.exception("Error retrieving settings from table.")
+        raise
+
+def call_rate_limited_api(api_request_function, request_function_args, requests_per_minute_limit):
+    limiter = get_or_create_limiter(requests_per_minute_limit)
+
+    # TODO: when updating to have multiple users, have to change this to be the user id
+    limiter.try_acquire("user")
+
+    return api_request_function(*request_function_args)
+
+def get_or_create_limiter(requests_per_minute_limit):
+    """
+    Depending on API, allows user to modify rate limit
+    """
+    from app import db_operations
+
+    if requests_per_minute_limit is not None and requests_per_minute_limit != db_operations.reqs_per_minute_limit:
+        limiter = Limiter(Rate(requests_per_minute_limit, Duration.MINUTE))
+        db_operations.reqs_per_minute_limiter = limiter
+        db_operations.reqs_per_minute_limit = requests_per_minute_limit
+    else:
+        limiter = db_operations.reqs_per_minute_limiter
+
+    return limiter
+
 @app.post('/api/ai_helper/perform_llm_action')
 def perform_llm_action():
     """
@@ -237,6 +284,7 @@ def get_llm_json_action_plan():
         settings_dict = get_settings_dict(engine)
         model_name = settings_dict.get("model_name")
         provider = settings_dict.get("provider")
+        requests_per_minute_limit = settings_dict.get("requests_per_minute_limit")
         api_key = get_api_key(provider)
 
         assert model_name is not None
@@ -247,12 +295,13 @@ def get_llm_json_action_plan():
 
         text_plan_func_args = (model_name, provider, api_key, action_log_csv_path,
                                                           error_log_csv_path, data_profile_csv_path, full_dataset_csv_path)
-        text_action_plan = call_with_retry(query_llm_for_text_action_plan, text_plan_func_args, max_tries=5)
+        text_action_plan = call_with_retry(query_llm_for_text_action_plan, text_plan_func_args,
+                                           requests_per_minute_limit, max_tries=5)
 
         translation_func_args = (model_name, provider, api_key, text_action_plan)
 
         json_action_plan = call_with_retry(query_llm_for_action_plan_translation, translation_func_args,
-                                                          max_tries=5)
+                                           requests_per_minute_limit, max_tries=5)
 
         return {"success": True, "json_action_plan": json_action_plan}
     except Exception as e:
@@ -271,8 +320,12 @@ def update_settings_table():
     data = request.get_json()
     model_name = data.get("model_name")
     provider = data.get("provider")
+    requests_per_minute_limit = data.get("requests_per_minute_limit")
 
     try:
+
+        execute_sql(f"DROP TABLE IF EXISTS {AI_SETTINGS_TABLE_NAME}", engine)
+
         execute_sql(f"""
                          CREATE TABLE IF NOT EXISTS {AI_SETTINGS_TABLE_NAME}
                          (
@@ -287,6 +340,10 @@ def update_settings_table():
                              provider
                              TEXT
                              NOT
+                             NULL, 
+                             requests_per_minute_limit
+                             INTEGER
+                             NOT
                              NULL
                          )
                          """, engine)
@@ -298,14 +355,14 @@ def update_settings_table():
         if result is None:
             print("VALUE DOESN'T EXIST. INSERTING ONE")
             execute_sql(
-                f"INSERT INTO {AI_SETTINGS_TABLE_NAME} (id, model_name, provider) VALUES (:id, :model_name, :provider)",
-                engine, {"id": 1, "model_name": model_name, "provider": provider}
+                f"INSERT INTO {AI_SETTINGS_TABLE_NAME} (id, model_name, provider, requests_per_minute_limit) VALUES (:id, :model_name, :provider, :requests_per_minute_limit)",
+                engine, {"id": 1, "model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit}
             )
         else:
             print("VALUE EXISTS, REPLACING")
             execute_sql(
-                f"UPDATE {AI_SETTINGS_TABLE_NAME} SET model_name = :model_name, provider = :provider WHERE id = :id",
-                engine, {"id": 1, "model_name": model_name, "provider": provider}
+                f"UPDATE {AI_SETTINGS_TABLE_NAME} SET model_name = :model_name, provider = :provider, requests_per_minute_limit = :requests_per_minute_limit WHERE id = :id",
+                engine, {"id": 1, "model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit}
             )
 
         return {"success": True}
@@ -313,30 +370,6 @@ def update_settings_table():
         logger.exception("Error updating settings table.")
 
         return {"success": False}
-
-def get_settings_dict(engine):
-    """
-    Retrieves the model name and provider from the settings table.
-    :return: Dictionary containing model name and provider, or None if not found
-    """
-    try:
-        result = fetch_sql(f"SELECT model_name, provider FROM {AI_SETTINGS_TABLE_NAME} WHERE id = :id", False, engine, {"id": 1})
-        row = result[0]
-
-        if result is not None:
-            model_name = row.model_name  # or row[0]
-            provider = row.provider
-            print("MODEL NAME", model_name, "PROVIDER", provider)
-            settings_dict = {"model_name": model_name, "provider": provider}
-        else:
-            settings_dict = None
-
-        return settings_dict
-    except Exception as e:
-        logger.exception("Error retrieving settings from table.")
-        raise
-
-
 
 
 
