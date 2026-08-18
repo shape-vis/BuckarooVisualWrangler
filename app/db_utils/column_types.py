@@ -11,6 +11,8 @@ class ColumnTypes:
         self.gather_pure_categorical_cols(main_table_name)
         self.categorize_mixed_cols(main_table_name)
 
+        self.categorical_cols = self.mixed_categorical_cols.union(self.pure_categorical_cols) # cols that are mixed and pure categorical
+        self.numeric_cols = self.mixed_numeric_cols.union(self.pure_numeric_cols) # cols that are mixed and pure categorical
 
     def get_col_type(self, col_name):
         if col_name in self.pure_numeric_cols:
@@ -150,3 +152,19 @@ class ColumnTypes:
         :return: whether the given col_name is majority categorical among mixed types.
         """
         return col_name in self.mixed_categorical_cols
+
+    def is_numeric_col(self, col_name: str):
+        """
+        Determines whether the given column from the table used to construct this class is numeric (a mixed numeric col or a pure numeric col).
+        :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+        :return: whether the given col_name is numeric or a pure numeric col.
+        """
+        return col_name in self.numeric_cols
+
+    def is_categorical_col(self, col_name: str):
+        """
+        Determines whether the given column from the table used to construct this class is categorical. (a mixed categorical col or a pure categorical col).
+        :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
+        :return: whether the given col_name is categorical.
+        """
+        return col_name in self.categorical_cols
