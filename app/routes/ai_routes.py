@@ -323,9 +323,6 @@ def update_settings_table():
     requests_per_minute_limit = data.get("requests_per_minute_limit")
 
     try:
-
-        execute_sql(f"DROP TABLE IF EXISTS {AI_SETTINGS_TABLE_NAME}", engine)
-
         execute_sql(f"""
                          CREATE TABLE IF NOT EXISTS {AI_SETTINGS_TABLE_NAME}
                          (
