@@ -17,7 +17,18 @@ starting_path = os.getcwd() + os.sep + "app" + os.sep + "ablation_study" + os.se
 
 datasets_paths = {"dirty_winequality-red": starting_path + 'artificially_dirty_datasets' + os.sep + 'dirty_winequality-red.csv'}
 
-datasets_paths = ['provided_datasets/mari_dataset.csv']
+# This additional col info code hasn't been merged into main, so until that happens, just using this hacky way to get more accurate LLM results
+dataset_additional_info = {
+    "dirty_winequality-red": {
+        "text_cols": [],
+        "identifier_cols": []
+    },
+    "": {
+        "text_cols": [],
+        "identifier_cols": []
+    },
+}
+
 #models = [{"model": "qwen/qwen3.6-27b", "provider": "groq"}]
 
 # Gemini 3.6 Flash
@@ -47,6 +58,48 @@ def is_stop_action(action_name):
         return False
 
 
+# This is a really jank way of dealing with this problem but this is the fastest way to implement this without changing too
+# much of the code
+def remove_errors_from_error_table(error_table_name, main_table_name, text_cols, identifier_cols):
+    print("FUNC ERROR TABLE NAME:", error_table_name)
+    print("FUNC DP TABLE NAME:", main_table_name)
+    try:
+        if not len(text_cols) == 0:
+            drop_identifier_columns = ", ".join(
+                f'DROP COLUMN IF EXISTS "{col}"'
+                for col in text_cols
+            )
+            query = f"""
+                    ALTER TABLE IF EXISTS "{error_table_name}"
+                    {drop_identifier_columns}
+                    """
+            execute_sql(query, engine)
+
+        if not len(identifier_cols) == 0:
+            drop_identifier_columns = ", ".join(
+                f'DROP COLUMN IF EXISTS "{col}"'
+                for col in identifier_cols
+            )
+            query = f"""
+                    ALTER TABLE IF EXISTS "{error_table_name}"
+                    {drop_identifier_columns}
+                    """
+            execute_sql(query, engine)
+
+        # This is really cursed I'm sorry
+        # update the data profile??? Idk
+        all_target_col_names = text_cols + identifier_cols
+        update_data_profile_table(main_table_name, all_target_col_names)
+        print("Successfully removed text / identifier columns from error and data profile tables")
+
+    except Exception:
+        logger.exception("Removing text / identifier columns from error and data profile tables failed")
+        raise
+
+
+
+
+
 if __name__ == "__main__":
     load_dotenv()
 
@@ -62,7 +115,6 @@ if __name__ == "__main__":
     client = app_module.test_client()
     app_module.testing = False
 
-    results = []
     for model_dict in models:
         print(f"-------------------------------------------MODEL: {model_dict['model']}-------------------------------------------")
         model = model_dict["model"]
@@ -77,6 +129,12 @@ if __name__ == "__main__":
             # reset globals living in the app package namespace
             app_module.wrangle_occurred = False
 
+            for dataset_name in datasets_paths:
+                text_cols = dataset_additional_info[dataset_name]["text_cols"]
+                identifier_cols = dataset_additional_info[dataset_name]["identifier_cols"]
+                print(
+                    f"-------------------------------------------CONFIG:  {config["name"]}-------------------------------------------")
+
             # reset attributes on the Flask object itself
             app_module.pgraph_for_session = None
 
@@ -87,6 +145,16 @@ if __name__ == "__main__":
                     upload_result = client.post('/api/upload',  data={'file': (f, dataset)},
         content_type='multipart/form-data')
                 dataset_path = datasets_paths[dataset_name]
+                print(f"-------------------------------------------DATASET:  {dataset_name}-------------------------------------------")
+                print(f"Running config {config} wth model {model} and dataset {dataset_name}")
+
+                with open(dataset_path, 'rb') as f:
+                    upload_result = client.post('/api/upload', data={'file': (f, dataset_path)},
+                                                content_type='multipart/form-data')
+
+                print("ERROR TABLE NAME:", db_operations.error_table_name)
+                print("DP TABLE NAME:", db_operations.dp_table_name)
+                remove_errors_from_error_table(db_operations.error_table_name, db_operations.main_table_name, text_cols, identifier_cols)
                 data = upload_result.get_json()
                 assert data["success"] == True
 
@@ -116,6 +184,8 @@ if __name__ == "__main__":
                             stop_action_found = True
 
                         action_result = client.post('/api/ai_helper/perform_llm_action', json=action_dict)
+                        remove_errors_from_error_table(db_operations.error_table_name, db_operations.main_table_name,
+                                                       text_cols, identifier_cols)
                         action_dict["action_plan_batch"] = action_plan_batch
                         action_dict["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                         action_dict["success"] = action_result.get_json()
