@@ -72,9 +72,9 @@ def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path,
     '''
 
     full_message = llm_text_plan_rules + additional_details
-    print("full_message", full_message)
-    print("len(full_message)", len(full_message))
-    print("estimated num tokens", len(full_message) / 4)
+    #print("full_message", full_message)
+    #print("len(full_message)", len(full_message))
+    #print("estimated num tokens", len(full_message) / 4)
     full_model_name = provider + '/' + model
     print("MAX TOKENS", get_max_tokens(full_model_name))
     print("TOKEN COUNT", token_counter(model=full_model_name, text=full_message))
