@@ -19,7 +19,9 @@ datasets_paths = {"dirty_winequality-red": starting_path + 'artificially_dirty_d
 
 datasets_paths = ['provided_datasets/mari_dataset.csv']
 #models = [{"model": "qwen/qwen3.6-27b", "provider": "groq"}]
-models = [{"model": "openai/gpt-oss-20b", "provider": "groq", "requests_per_minute_limit": 30}]
+
+# Gemini 3.6 Flash
+models = [{"model": "gemini-3.1-flash-lite", "provider": "gemini", "requests_per_minute_limit": 15, "dataset_sample_percent": 100.0}]
 
 def variant(name, **overrides):
     baseline = {
