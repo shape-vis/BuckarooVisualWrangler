@@ -113,7 +113,8 @@ def get_api_key(provider):
     key_map = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
-        "groq": "GROQ_API_KEY"
+        "groq": "GROQ_API_KEY",
+        "gemini": "GEMINI_API_KEY"
     }
 
     key = os.environ.get(key_map[provider])
