@@ -135,15 +135,12 @@ if __name__ == "__main__":
                 # reset globals living in the app package namespace
                 app_module.wrangle_occurred = False
 
-            # reset attributes on the Flask object itself
-            app_module.pgraph_for_session = None
+                # reset attributes on the Flask object itself
+                app_module.pgraph_for_session = None
 
-            # reset your stateful class instance
-            db_operations.reset()
+                # reset your stateful class instance
+                db_operations.reset()
 
-                with open(dataset, 'rb') as f:
-                    upload_result = client.post('/api/upload',  data={'file': (f, dataset)},
-        content_type='multipart/form-data')
                 dataset_path = datasets_paths[dataset_name]
                 print(f"-------------------------------------------DATASET:  {dataset_name}-------------------------------------------")
                 print(f"Running config {config} wth model {model} and dataset {dataset_name}")
