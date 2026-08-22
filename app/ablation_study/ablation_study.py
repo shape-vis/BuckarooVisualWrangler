@@ -9,7 +9,13 @@ from app import db_operations, engine
 
 import json
 
-from app.db_utils.ai_utils import parse_json_response
+from app.db_utils.execute_sql import execute_sql
+from app.routes.wrangler_routes_sql import update_data_profile_table
+
+starting_path = os.getcwd() + os.sep + "app" + os.sep + "ablation_study" + os.sep
+
+
+datasets_paths = {"dirty_winequality-red": starting_path + 'artificially_dirty_datasets' + os.sep + 'dirty_winequality-red.csv'}
 
 datasets_paths = ['provided_datasets/mari_dataset.csv']
 #models = [{"model": "qwen/qwen3.6-27b", "provider": "groq"}]
@@ -55,9 +61,8 @@ if __name__ == "__main__":
     app_module.testing = False
 
     results = []
-
     for model_dict in models:
-
+        print(f"-------------------------------------------MODEL: {model_dict['model']}-------------------------------------------")
         model = model_dict["model"]
         provider = model_dict["provider"]
         requests_per_minute_limit = model_dict["requests_per_minute_limit"]
@@ -75,20 +80,17 @@ if __name__ == "__main__":
 
             # reset your stateful class instance
             db_operations.reset()
-            for dataset in datasets_paths:
-                print(f"Running config {config} wth model {model} and dataset {dataset}")
 
                 with open(dataset, 'rb') as f:
                     upload_result = client.post('/api/upload',  data={'file': (f, dataset)},
         content_type='multipart/form-data')
+                dataset_path = datasets_paths[dataset_name]
                 data = upload_result.get_json()
                 assert data["success"] == True
 
-                result_dict = {}  # Dict added to the result json
-                result_dict["model"] = model_dict
-                result_dict["config_name"] = config["name"]
-                result_dict["dataset"] = dataset
-                result_dict["actions"] = []
+
+                llm_action_list = []
+                ablation_study_result_path = starting_path + f'ablation_study_results' + os.sep + f'ablation_results_{model}_{dataset_name}_{config["name"]}{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
 
                 action_plan_batch = 0
 
@@ -116,10 +118,19 @@ if __name__ == "__main__":
                         action_dict["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                         action_dict["success"] = action_result.get_json()
 
-                        results.append(action_dict)
+                        llm_action_list.append(action_dict)
+
+                    # update the ablation study results every 5 actions
+                    with open(ablation_study_result_path, 'w') as f:
+                        print("UPDATED ABLATION STUDY RESULTS FOR", ablation_study_result_path)
+                        json.dump(llm_action_list, f)
+
+                print(f"ABLATION STUDY FOR MODEL {model} DATASET {dataset_name} CONFIG: {config} COMPLETED!!!!!!!!! ")
+
+    print("ABLATION STUDY COMPLETED")
 
 
-    with open(f'ablation_results_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json', 'w') as outfile:
-        json.dump(results, outfile)
+
+
 
 
