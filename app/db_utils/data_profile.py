@@ -254,7 +254,6 @@ class DataProfile:
             """
 
             mode = fetch_sql(query, True, self.engine)
-            print("MODE FROM SQL QUERY: ", mode)
 
         except Exception as e:
             logger.exception(f"Error fetching the mode for table {self.table_name} at column {column_name}")

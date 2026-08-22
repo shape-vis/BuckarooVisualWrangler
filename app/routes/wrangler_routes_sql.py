@@ -185,7 +185,7 @@ def create_previews():
         #cols    = [f'{col}' for col in cols]
 
         if not row_ids:
-            update_action_log(dataset_id=table, action_name="create_previews",
+            update_action_log(main_table_name=table, action_name="create_previews",
                               action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine,
                               timestamp=timestamp, action_successful=False, action_error_message="Row IDs list is empty")
 
@@ -225,9 +225,9 @@ def create_previews():
         action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
 
 
-        update_action_log(dataset_id=table, action_name="create_previews",
+        update_action_log(main_table_name=table, action_name="create_previews",
                           action_details=json.dumps(action_details_dict), engine=engine,
-                          timestamp=timestamp, action_duration= action_duration,action_successful=True)
+                          timestamp=timestamp, action_duration= action_duration, action_successful=True)
 
         assert result_dict is not None
 
@@ -235,7 +235,7 @@ def create_previews():
 
     except Exception as e:
 
-        update_action_log(dataset_id=table, action_name="create_previews",
+        update_action_log(main_table_name=table, action_name="create_previews",
                           action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine,
                           timestamp=timestamp, action_successful=False, action_error_message=e)
 
@@ -263,16 +263,16 @@ def execute_wrangle():
         (new_table_name, action_details_dict, wrangle_executed) = execute_wrangle_logic(preview_table, table)
 
         action_duration =  (datetime.now(timezone.utc) - timestamp).total_seconds()
-        update_action_log(dataset_id=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
-                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= action_duration,action_successful=True)
+        update_action_log(main_table_name=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= action_duration, action_successful=True)
 
         return {"success": True, "table": new_table_name}
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())
 
-        update_action_log(dataset_id=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
-                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= None,action_successful=False, action_error_message=e)
+        update_action_log(main_table_name=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= None, action_successful=False, action_error_message=e)
         return {"success": False, "error": str(e)}, 400
 
 
@@ -301,7 +301,7 @@ def wrangle_delete_column():
         update_errors_table(table_name, [column])
         update_data_profile_table(table_name, [column])
         action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
-        update_action_log(dataset_id=db_operations.base_table_name, action_name="delete_column",
+        update_action_log(main_table_name=db_operations.base_table_name, action_name="delete_column",
                           action_details={"column": column}, engine=engine, timestamp=timestamp, action_duration= action_duration,
                           action_successful=True)
 
@@ -315,7 +315,7 @@ def wrangle_delete_column():
         print("ERROR OCCURRED")
         print(traceback.format_exc())
 
-        update_action_log(dataset_id=db_operations.base_table_name, action_name=f"delete_column",
-                          action_details={"column": column}, engine=db_operations.engine, timestamp=timestamp, action_duration= None,action_successful=False, action_error_message=e)
+        update_action_log(main_table_name=db_operations.base_table_name, action_name=f"delete_column",
+                          action_details={"column": column}, engine=db_operations.engine, timestamp=timestamp, action_duration= None, action_successful=False, action_error_message=e)
 
         return {"success": False, "error": str(e)}, 400

@@ -126,14 +126,14 @@ if __name__ == "__main__":
         assert data["success"] == True
 
         for config in ablation_configs:
-            # reset globals living in the app package namespace
-            app_module.wrangle_occurred = False
 
             for dataset_name in datasets_paths:
                 text_cols = dataset_additional_info[dataset_name]["text_cols"]
                 identifier_cols = dataset_additional_info[dataset_name]["identifier_cols"]
                 print(
                     f"-------------------------------------------CONFIG:  {config["name"]}-------------------------------------------")
+                # reset globals living in the app package namespace
+                app_module.wrangle_occurred = False
 
             # reset attributes on the Flask object itself
             app_module.pgraph_for_session = None

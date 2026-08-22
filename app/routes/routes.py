@@ -84,7 +84,7 @@ def load_file(csv_file, filename):
         init_pgraph_for_session(table_name_with_node_id)
         action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
 
-        update_action_log(dataset_id=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
+        update_action_log(main_table_name=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
                           timestamp=timestamp, action_duration=action_duration, action_successful=True)
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name_with_node_id}
@@ -93,7 +93,7 @@ def load_file(csv_file, filename):
         import traceback
         traceback.print_exc()
 
-        update_action_log(dataset_id=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
+        update_action_log(main_table_name=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
                           timestamp=timestamp, action_successful=False,
                           action_error_message=e)
         return {"success": False, "error": str(e)}
