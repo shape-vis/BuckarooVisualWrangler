@@ -58,12 +58,13 @@ def _safe_pg_name(base: str, suffix: str) -> str:
     Derived siblings and their affixes:
       errors_<name>     prefix  7 chars  -> name <= 56
       rankings_<name>   prefix  9 chars  -> name <= 54
-      <name>_filtering  suffix 10 chars  -> name <= 53  (most restrictive)
+      <name>_filtering  suffix 10 chars  -> name <= 53
+      n0__<name>_filtering prefix 4 chars, suffix 10 chars -> name <= 49  (most restrictive)
 
     If base+suffix already fits, use it as-is. Otherwise truncate the base
     and append an 8-char MD5 hash so the name stays unique.
     """
-    MAX_LEN = 53  # 63 - len("_filtering")
+    MAX_LEN = 49  # 63 - len("_filtering")
     candidate = f"{base}{suffix}"
     if len(candidate) <= MAX_LEN:
         return candidate
