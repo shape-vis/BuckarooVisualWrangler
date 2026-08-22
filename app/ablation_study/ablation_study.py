@@ -5,7 +5,7 @@ import datetime
 
 
 from app import app as app_module
-from app import db_operations, engine
+from app import db_operations, engine, logger
 
 import json
 

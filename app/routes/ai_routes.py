@@ -8,6 +8,8 @@ from app.db_utils.ai_utils import call_with_retry
 from flask import request
 from pyrate_limiter import Duration, Rate, Limiter
 
+from app.server_utils.logger_utils import update_action_log
+
 AI_SETTINGS_TABLE_NAME = "ai_settings"
 
 ablations = ["include_data_profile", "include_dataset_context", "include_action_plan", "include_action_plan_translation"]
