@@ -10,7 +10,8 @@ import time
 
 # Overwriting the csv every time the LLM needs it to be updated; we don't really need to save the old ones
 
-def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, full_dataset_name):
+def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, full_dataset_name,
+                        dataset_sample_percent):
     """
     Updates the csv files for the LLM to access the error log, data profile, action log, and full dataset tables.
     :param error_table_name: the name of the error table
@@ -22,7 +23,7 @@ def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, fu
     action_log_csv_path = "action_log.csv"
     error_log_csv_path = "error_log.csv"
     data_profile_csv_path = "data_profile.csv"
-    full_dataset_csv_path = "full_dataset.csv"
+    sampled_dataset_csv_path = "sampled_dataset.csv"
 
     _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
     FILES_FOR_LLM_PATH = os.path.abspath(os.path.join(_THIS_DIR, '..', 'files_for_llm'))
@@ -30,17 +31,18 @@ def update_csvs_for_llm(error_table_name, data_profile_name, action_log_name, fu
     action_log_csv_path = FILES_FOR_LLM_PATH + '/' + f'{action_log_csv_path}'
     error_log_csv_path = FILES_FOR_LLM_PATH + '/' + f'{error_log_csv_path}'
     data_profile_csv_path = FILES_FOR_LLM_PATH + '/' + f'{data_profile_csv_path}'
-    full_dataset_csv_path = FILES_FOR_LLM_PATH + '/' + f'{full_dataset_csv_path}'
-
+    sampled_dataset_csv_path = FILES_FOR_LLM_PATH + '/' + f'{sampled_dataset_csv_path}'
 
     table_name_tuple_list =  [(action_log_name, action_log_csv_path),
                               (error_table_name, error_log_csv_path),
-                              (data_profile_name, data_profile_csv_path),
-                              (full_dataset_name, full_dataset_csv_path)]
+                              (data_profile_name, data_profile_csv_path)]
 
     write_tables_to_csv(table_name_tuple_list)
 
-    return (error_log_csv_path, data_profile_csv_path, action_log_csv_path, full_dataset_csv_path)
+    # diff function for sample table because the sampled dataset isn't an existing table
+    create_sample_table_csv(full_dataset_name, dataset_sample_percent, sampled_dataset_csv_path)
+
+    return (error_log_csv_path, data_profile_csv_path, action_log_csv_path, sampled_dataset_csv_path)
 
 
 
@@ -118,6 +120,49 @@ def get_api_key(provider):
     if key is None:
         raise ValueError(f"Could not find API key for {provider}")
     return key
+
+def create_sample_table_csv(table_name, dataset_sample_percent, csv_path):
+    from app.db_utils.execute_sql import execute_sql
+    from app import engine
+    try:
+
+        if dataset_sample_percent == 100.0:
+            query = (f'''
+                    COPY (
+                        SELECT *
+                        FROM "{table_name}"
+                        ORDER BY RANDOM()
+                        )
+                    TO '{csv_path}'
+                    WITH CSV HEADER
+                    ''')
+        else:
+            query = (f'''
+                    COPY (
+                        SELECT *
+                        FROM "{table_name}"
+                        ORDER BY RANDOM()
+                        LIMIT FLOOR(
+                            (
+                            SELECT COUNT(*) * {dataset_sample_percent} 
+                            FROM "{table_name}"
+                            )
+                        )
+                    )
+                    TO '{csv_path}'
+                    WITH CSV HEADER
+                    ''')
+
+
+
+        execute_sql(query, engine)
+    except Exception as e:
+        logger.exception(f"Error: Could not sample table {table_name}")
+        raise e
+
+
+
+
 
 
 

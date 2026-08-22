@@ -121,7 +121,7 @@ if __name__ == "__main__":
         provider = model_dict["provider"]
         requests_per_minute_limit = model_dict["requests_per_minute_limit"]
 
-        update_settings_table_result = client.post('/api/ai_helper/update_settings_table', json={"model_name": model, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit})
+        update_settings_table_result = client.post('/api/ai_helper/update_settings_table', json={"model_name": model, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit, "dataset_sample_percent": 0.0})
         data = update_settings_table_result.get_json()
         assert data["success"] == True
 

@@ -189,7 +189,7 @@ def get_settings_dict(engine):
     :return: Dictionary containing model name and provider, or None if not found
     """
     try:
-        result = fetch_sql(f"SELECT model_name, provider, requests_per_minute_limit FROM {AI_SETTINGS_TABLE_NAME} WHERE id = :id", False, engine, {"id": 1})
+        result = fetch_sql(f"SELECT model_name, provider, requests_per_minute_limit, dataset_sample_percent FROM {AI_SETTINGS_TABLE_NAME} WHERE id = :id", False, engine, {"id": 1})
         row = result[0]
 
         if result is not None:
@@ -197,7 +197,7 @@ def get_settings_dict(engine):
             provider = row.provider
             requests_per_minute_limit = row.requests_per_minute_limit
             print("MODEL NAME", model_name, "PROVIDER", provider)
-            settings_dict = {"model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit}
+            settings_dict = {"model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit, "dataset_sample_percent": row.dataset_sample_percent}
         else:
             settings_dict = None
 
@@ -285,16 +285,17 @@ def get_llm_json_action_plan():
         model_name = settings_dict.get("model_name")
         provider = settings_dict.get("provider")
         requests_per_minute_limit = settings_dict.get("requests_per_minute_limit")
+        dataset_sample_percent = settings_dict.get("dataset_sample_percent")
         api_key = get_api_key(provider)
 
         assert model_name is not None
 
-        (error_log_csv_path, data_profile_csv_path, action_log_csv_path, full_dataset_csv_path) = update_csvs_for_llm(error_table_name,
-                                                                                                   data_profile_name,
-                                                                                                   action_log_name, full_dataset_name)
+        (error_log_csv_path, data_profile_csv_path, action_log_csv_path, full_dataset_csv_path) = update_csvs_for_llm(
+            error_table_name, data_profile_name, action_log_name, full_dataset_name, dataset_sample_percent)
 
-        text_plan_func_args = (model_name, provider, api_key, action_log_csv_path,
-                                                          error_log_csv_path, data_profile_csv_path, full_dataset_csv_path)
+
+        text_plan_func_args = (model_name, provider, api_key, error_log_csv_path,
+            action_log_csv_path, data_profile_csv_path, full_dataset_csv_path)
         text_action_plan = call_with_retry(query_llm_for_text_action_plan, text_plan_func_args,
                                            requests_per_minute_limit, max_tries=5)
 
@@ -321,6 +322,7 @@ def update_settings_table():
     model_name = data.get("model_name")
     provider = data.get("provider")
     requests_per_minute_limit = data.get("requests_per_minute_limit")
+    dataset_sample_percent = data.get("dataset_sample_percent")
 
     try:
         execute_sql(f"""
@@ -341,6 +343,10 @@ def update_settings_table():
                              requests_per_minute_limit
                              INTEGER
                              NOT
+                             NULL,
+                             dataset_sample_percent
+                             FLOAT
+                             NOT
                              NULL
                          )
                          """, engine)
@@ -352,14 +358,14 @@ def update_settings_table():
         if result is None:
             print("VALUE DOESN'T EXIST. INSERTING ONE")
             execute_sql(
-                f"INSERT INTO {AI_SETTINGS_TABLE_NAME} (id, model_name, provider, requests_per_minute_limit) VALUES (:id, :model_name, :provider, :requests_per_minute_limit)",
-                engine, {"id": 1, "model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit}
+                f"INSERT INTO {AI_SETTINGS_TABLE_NAME} (id, model_name, provider, requests_per_minute_limit, dataset_sample_percent) VALUES (:id, :model_name, :provider, :requests_per_minute_limit, :dataset_sample_percent)",
+                engine, {"id": 1, "model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit, "dataset_sample_percent": dataset_sample_percent}
             )
         else:
             print("VALUE EXISTS, REPLACING")
             execute_sql(
-                f"UPDATE {AI_SETTINGS_TABLE_NAME} SET model_name = :model_name, provider = :provider, requests_per_minute_limit = :requests_per_minute_limit WHERE id = :id",
-                engine, {"id": 1, "model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit}
+                f"UPDATE {AI_SETTINGS_TABLE_NAME} SET model_name = :model_name, provider = :provider, requests_per_minute_limit = :requests_per_minute_limit, dataset_sample_percent = :dataset_sample_percent WHERE id = :id",
+                engine, {"id": 1, "model_name": model_name, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit, "dataset_sample_percent": dataset_sample_percent}
             )
 
         return {"success": True}
