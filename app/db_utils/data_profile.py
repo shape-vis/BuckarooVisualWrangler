@@ -63,6 +63,18 @@ class DataProfile:
                             'mode', 'error_counts', 'category_counts'],
         }
 
+        # The two dicts above have to agree: an attribute missing from attribute_type_assignment
+        # would be skipped for every column, and one missing from name_to_func has no way to be
+        # calculated. Catch either mistake here instead of silently producing an empty column
+        assigned_attributes = {attribute
+                               for attributes in self.attribute_type_assignment.values()
+                               for attribute in attributes}
+
+        if set(self.name_to_func) != assigned_attributes:
+            raise ValueError(
+                f"name_to_func and attribute_type_assignment disagree for table {self.table_name}: "
+                f"{sorted(set(self.name_to_func) ^ assigned_attributes)}"
+            )
 
         self.dtype_dict = None
 
@@ -87,7 +99,7 @@ class DataProfile:
 
 
         except Exception as e:
-            print(f"AHHHHHHHHHH Querying for col names unsuccessful because of error: {e}")
+            print(f"Querying for col names unsuccessful because of error: {e}")
 
         return col_names
 
@@ -125,10 +137,25 @@ class DataProfile:
         # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
         # Can properly do calculations
         if self.col_types.is_mixed_col(column_name):
-            query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
+            query += f" WHERE \"{column_name}\" ~ '^-?\\d+(\\.\\d+)?$'"
 
         stat = fetch_sql(query, True, self.engine)
         return stat
+
+    def is_valid_attribute_for_column(self, attribute_name, column_name):
+        """
+        Check that an attribute applies to the type of the column, so that e.g. min / max are never
+        calculated for a categorical column such as one full of country names.
+        :param attribute_name: Name of the attribute (e.g., 'mean', 'median', 'min', 'max')
+        :param column_name: Name of the column the attribute would be calculated for.
+        :return: True if the attribute applies to this column's type.
+        """
+        if self.col_types.is_categorical_col(column_name) or self.col_types.is_categorical_mixed_col(column_name):
+            column_type = 'categorical'
+        else:
+            column_type = 'numeric'
+
+        return attribute_name in self.attribute_type_assignment[column_type]
 
     def calculate_column_attribute(self, attribute_name, column_name, look_up_stat=True):
         """
@@ -137,11 +164,16 @@ class DataProfile:
         :param look_up_stat: If True, first attempt to look up the statistic from the data profile table. If False, calculate it directly.
         :return: The value of the statistic if found or calculated, otherwise None.
         """
+        # An attribute that doesn't apply to the column's type has no meaningful value, so don't
+        # look it up or calculate it
+        if not self.is_valid_attribute_for_column(attribute_name, column_name):
+            return None
+
         if look_up_stat:
             look_up_value = self.look_up_stat_from_profile(attribute_name, column_name)
 
             if look_up_value is not None:
-                print("Successfully found col attribute in data profile table!")
+                # print("Successfully found col attribute in data profile table!")
 
                 return to_scalar(look_up_value)
 
@@ -180,7 +212,7 @@ class DataProfile:
             # If its a numeric column with at least one string / categorical value, we only keep the numeric values so we
             # Can properly do calculations
             if self.col_types.is_mixed_col(column_name):
-                query += f' WHERE pg_input_is_valid("{column_name}", \'numeric\')'
+                query += f" WHERE \"{column_name}\" ~ '^-?\\d+(\\.\\d+)?$'"
             median = fetch_sql(query, True, self.engine)
         except Exception as e:
             print(f"Error fetching the median for table {self.table_name} at column {column_name}: {e}")
@@ -349,7 +381,7 @@ class DataProfile:
             # Put the results into a dict
             for (category, count) in rows:
                 category_counts[category] = count
-            print("CATEGORY COUNTS DICT", category_counts)
+            # print("CATEGORY COUNTS DICT", category_counts)
 
 
         except Exception as e:

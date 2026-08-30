@@ -55,13 +55,15 @@ def load_file(csv_file, filename):
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
         """
         table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
-        detected_data.to_sql(error_table_name, engine, if_exists='replace')
+        # No index: these rows are keyed by column_id / column_name, so the pandas row counter is
+        # just noise that changes whenever a subset of rows is rebuilt
+        detected_data.to_sql(error_table_name, engine, if_exists='replace', index=False)
         data_profile = DataProfile(table_name_with_node_id, engine)
 
         data_profile_df = create_data_profile_df(data_profile)
         dtype_map = data_profile.dtype_dict
 
-        data_profile_df.to_sql(dp_table_name, engine, if_exists='replace', dtype=dtype_map)
+        data_profile_df.to_sql(dp_table_name, engine, if_exists='replace', dtype=dtype_map, index=False)
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,

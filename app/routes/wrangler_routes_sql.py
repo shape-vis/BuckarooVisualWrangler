@@ -39,7 +39,9 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
     dtype_dict = query.get_table_dtypes(target_table_name, engine)
 
     # 1. Push data to a temp staging table
-    updated_df.to_sql(staging_table_name, engine, if_exists='replace', dtype=dtype_dict)
+    # index=False to match how the target table was written: step 2 inserts positionally, so the
+    # staging table has to have exactly the target's columns
+    updated_df.to_sql(staging_table_name, engine, if_exists='replace', dtype=dtype_dict, index=False)
 
     # Make sure that there's a main errors table we can update
     inspector = inspect(engine)
@@ -191,9 +193,9 @@ def create_previews():
             return {"success": False, "error": "No rows selected"}, 400
 
         if len(cols) == 1:
-            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
+            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table)
         else:
-            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table, update_data_profile_table)
+            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table)
 
     except Exception as e:
         print("ERROR in create_previews")

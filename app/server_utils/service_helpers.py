@@ -190,10 +190,9 @@ def create_data_profile_df(data_profile, col_names=None):
     """
     print("CREATED DATA_PROFILE DF FOR TABLE", data_profile.table_name)
 
-    # Dict of attributes that will be in the data profile and the type that they should be
-    default_attributes = ['mean', 'median', 'min', 'max', 'n_categories',
-                  'mode', 'error_counts',
-                  'category_counts']
+    # Every attribute the data profile knows how to calculate goes in, so a new one only has to be
+    # registered in DataProfile
+    default_attributes = list(data_profile.name_to_func)
 
 
     col_list = []
@@ -207,26 +206,26 @@ def create_data_profile_df(data_profile, col_names=None):
         row_dict = {'column_name': col}
         for attribute in default_attributes:
 
-            # Make sure that attribute and the column type match
-
-            numeric = ((data_profile.col_types.is_numeric_mixed_col(col) or data_profile.col_types.is_numeric_col  )and attribute in data_profile.attribute_type_assignment['numeric'])
-            categorical = ((data_profile.col_types.is_categorical_mixed_col(col) or data_profile.col_types.is_categorical_col)and attribute in data_profile.attribute_type_assignment['categorical'])
-
-            if not (numeric or categorical):
-
-                row_dict[attribute] = None
-
-                continue
-
-            print("CALCULATING ATTRIBUTE: ", attribute)
-            print("COLUMN: ", col)
-
+            # Attributes that don't match the column type come back as None, so every column still
+            # gets a value for every attribute in the data profile
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
         col_list.append(row_dict)
 
     df = pd.DataFrame(col_list)
 
     return df
+
+
+def build_data_profile_table(table_name):
+    """
+    Build a table's data profile from scratch, covering every column. Used when a table becomes a
+    node, since preview tables don't get a profile of their own.
+    :param table_name: the table to profile
+    """
+    from app import engine
+
+    data_profile = DataProfile(table_name, engine)
+    create_data_profile_df(data_profile).to_sql(f"dp_{table_name}", engine, if_exists='replace', index=False)
 
 
 def calculate_attribute_rankings(error_df):
@@ -438,6 +437,10 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
     # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
     new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
     app.db_operations.rename_preview_to_new(preview_table, new_table_name)
+
+    # Preview tables have no profile, so the promoted node gets one built here
+    build_data_profile_table(new_table_name)
+
     db_operations.load_table(new_table_name, f"errors_{new_table_name}", f"dp_{new_table_name}")
 
     app.db_operations.update_rankings(new_table_name)
@@ -445,17 +448,13 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
 
     return {"success": True, "table": new_table_name}
 
-def _clone_table_pair(conn, source_table, dest_table, errors_source, dp_source):
-    """Drop-and-recreate dest_table and its errors_ and dp_ sibling as copies of source tables."""
+def _clone_table_pair(conn, source_table, dest_table, errors_source):
+    """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dest_table}"'))
     conn.execute(sa_text(f'CREATE TABLE "{dest_table}" AS SELECT * FROM "{source_table}"'))
     errors_dest = f"errors_{dest_table}"
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
-
-    dp_dest = f"dp_{dest_table}"
-    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dp_dest}"'))
-    conn.execute(sa_text(f'CREATE TABLE "{dp_dest}" AS SELECT * FROM "{dp_source}"'))
 
 def trim_preview_suffix(name: str) -> str:
     """Remove the '_preview...' tail from a table name, if present."""
@@ -505,7 +504,7 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
     # Copy schema but leave empty.
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
 
-def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, update_data_profile_table_fn):
+def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
     """
     Create delete and impute preview tables for a 1D (single-column) selection.
     Returns a dict with preview table names and dims=1.
@@ -513,15 +512,14 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     from app import engine
 
     errors_src = f"errors_{table}"
-    dp_src = f"dp_{table}"
     # Creates name for the preview tables
     preview_delete_table_name = safe_pg_name_fn(table, "_preview_delete")
     preview_impute_table_name = safe_pg_name_fn(table, "_preview_impute")
 
-    # Preview tables are created (error_..._preview, dp_..._preview)
+    # Preview tables are created (error_..._preview)
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete_table_name, errors_src, dp_src)
-        _clone_table_pair(conn, table, preview_impute_table_name, errors_src, dp_src)
+        _clone_table_pair(conn, table, preview_delete_table_name, errors_src)
+        _clone_table_pair(conn, table, preview_impute_table_name, errors_src)
 
         #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
         #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
@@ -531,10 +529,10 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
     query.impute_by_ids(table=preview_impute_table_name, col=cols[0], ids=row_ids)
 
+    # The preview histograms read errors_, but nothing reads a preview's data profile, so it isn't
+    # built until the preview is promoted in execute_wrangle_preview
     update_errors_fn(preview_delete_table_name, cols)
     update_errors_fn(preview_impute_table_name, cols)
-    update_data_profile_table_fn(preview_delete_table_name, cols)
-    update_data_profile_table_fn(preview_impute_table_name, cols)
 
     return {
         "success": True,
@@ -551,7 +549,7 @@ def extract_preview_action(name: str) -> str:
         return name[idx + len(marker):]
     return ""
 
-def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, update_data_profile_table_fn):
+def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
     """
     Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
     Returns a dict with preview table names and dims=2.
@@ -559,27 +557,23 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn, 
     from app import engine
 
     errors_src  = f"errors_{table}"
-    dp_src = f"dp_{table}"
     preview_delete_table_name   = safe_pg_name_fn(table, "_preview_delete")
     preview_impute_x_table_name = safe_pg_name_fn(table, "_preview_impute_x")
     preview_impute_y_table_name = safe_pg_name_fn(table, "_preview_impute_y")
 
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete_table_name, errors_src, dp_src)
-        _clone_table_pair(conn, table, preview_impute_x_table_name, errors_src, dp_src)
-        _clone_table_pair(conn, table, preview_impute_y_table_name, errors_src, dp_src)
+        _clone_table_pair(conn, table, preview_delete_table_name, errors_src)
+        _clone_table_pair(conn, table, preview_impute_x_table_name, errors_src)
+        _clone_table_pair(conn, table, preview_impute_y_table_name, errors_src)
 
     query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
     query.impute_by_ids(table=preview_impute_x_table_name, col=cols[0], ids=row_ids)
     query.impute_by_ids(table=preview_impute_y_table_name, col=cols[1], ids=row_ids)
 
+    # As in the 1D case, the profile is left until the preview is promoted
     update_errors_fn(preview_delete_table_name, cols)
     update_errors_fn(preview_impute_x_table_name, cols)
     update_errors_fn(preview_impute_y_table_name, cols)
-
-    update_data_profile_table_fn(preview_delete_table_name, cols)
-    update_data_profile_table_fn(preview_impute_x_table_name, cols)
-    update_data_profile_table_fn(preview_impute_y_table_name, cols)
 
 
     return {

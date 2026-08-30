@@ -84,11 +84,11 @@ class ColumnTypes:
 
         for col in self.mixed_cols:
             query = f"""
-                   SELECT
-                       SUM(CASE WHEN pg_input_is_valid("{col}", \'numeric\' )THEN 1 ELSE 0 END) AS numeric_count,
-                       COUNT(*) AS total_count
-                   FROM "{main_table_name}";
-               """
+                SELECT
+                    SUM(CASE WHEN "{col}" ~ '^-?(\\d+\\.?\\d*|\\d*\\.?\\d+)([eE][+-]?\\d+)?$' THEN 1 ELSE 0 END) AS numeric_count,
+                    COUNT(*) AS total_count
+                FROM "{main_table_name}";
+            """
             result = fetch_sql(query, False, self.engine)
             if result:
                 numeric_count, total_count = result[0]
