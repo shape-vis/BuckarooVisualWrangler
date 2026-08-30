@@ -7,12 +7,12 @@ from flask import request, send_file
 import time
 from app import app
 from app import db_operations, engine
+from app.db_utils.data_profile import DataProfile 
 from app.server_utils.service_helpers import (
     generate_table_name,
-    run_detectors,
+    create_error_df,
     get_sqlalchemy_dtype_map,
-    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session,
-
+    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
 )
 from app.server_utils.set_id_column import set_id_column
 
@@ -35,13 +35,15 @@ def load_file(csv_file, filename):
     # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
     start_time = time.time()
-    detected_data = run_detectors(dataframe)
+    detected_data = create_error_df(dataframe)
     time_to_detect = time.time() - start_time
     app.original_table_name = filename
     table_name = generate_table_name(filename)
     table_name_with_node_id = f"n0_{table_name}"
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
+    error_table_name = f"errors_{table_name_with_node_id}"
+    dp_table_name = f"dp_{table_name_with_node_id}"
 
     try:
         """
@@ -52,16 +54,24 @@ def load_file(csv_file, filename):
         The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
         """
-        rows_affected = table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
-        detected_rows_affected = detected_data.to_sql("errors_" + table_name_with_node_id, engine, if_exists='replace')
+        table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
+        # No index: these rows are keyed by column_id / column_name, so the pandas row counter is
+        # just noise that changes whenever a subset of rows is rebuilt
+        detected_data.to_sql(error_table_name, engine, if_exists='replace', index=False)
+        data_profile = DataProfile(table_name_with_node_id, engine)
+
+        data_profile_df = create_data_profile_df(data_profile)
+        dtype_map = data_profile.dtype_dict
+
+        data_profile_df.to_sql(dp_table_name, engine, if_exists='replace', dtype=dtype_map, index=False)
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
         get the actual row counts since .to_sql is buggy and not right
         """
-        db_operations.load_table(table_name_with_node_id)
+        db_operations.load_table(table_name_with_node_id, error_table_name, dp_table_name)
         rows_affected = db_operations.get_row_count(table_name_with_node_id)
-        detected_rows_affected = db_operations.get_row_count("errors_" + table_name_with_node_id)
+        detected_rows_affected = db_operations.get_row_count(error_table_name)
 
         #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
         rankings = calculate_attribute_rankings(detected_data)
@@ -127,7 +137,7 @@ def undo_wrangle():
     if not db_operations.table_exists(prev):
         return {"success": False, "error": f"Table '{prev}' does not exist"}, 404
 
-    db_operations.load_table(prev, f"errors_{prev}")
+    db_operations.load_table(prev, f"errors_{prev}", f"dp_{prev}")
 
     return {"success": True, "table_name": prev}
 
@@ -149,7 +159,7 @@ def redo_wrangle():
     if next_node == db_operations.main_table_name:
         return {"success": False, "error": "You have reached the most up to date table"}
 
-    db_operations.load_table(next_node, f"errors_{next_node}")
+    db_operations.load_table(next_node, f"errors_{next_node}", f"dp_{next_node}")
     return {"success": True, "table_name": next_node}
 
 
@@ -164,4 +174,4 @@ def reset_app():
 
 @app.get("/")
 def home():
-    return send_file("../../ui/dist/index.html")
+    return send_file("../ui/dist/index.html")

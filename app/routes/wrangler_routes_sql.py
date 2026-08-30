@@ -7,39 +7,130 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import run_detectors, create_previews_1d, create_previews_2d, execute_wrangle_preview, _safe_pg_name
-from sqlalchemy import text as sa_text
+from app.server_utils.service_helpers import create_error_df, create_previews_1d, create_previews_2d, \
+    execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map
+from sqlalchemy import inspect, text
 
-
+from app.db_utils.data_profile import DataProfile
 
 """
 Wrangling Endpoints - In-place modification of tables
 """
 
+def get_table_dtypes(target_table_name, engine):
+    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
+    inspector = inspect(engine)
+    columns = inspector.get_columns(target_table_name)
+    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
+    return {col["name"]: col["type"] for col in columns}
+
+# Where updated_df is just the data that needed to actually be updated
+# Assumes that updated_df has the same columns as the target table
+# TODO: reimplement with "dirty flags"
+def update_table(updated_df, target_table_name, key_col, cols_to_remove):
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(f'DELETE FROM "{target_table_name}" WHERE "{key_col}" = ANY(:categories)'),
+            {"categories": cols_to_remove}
+        )
+
+    staging_table_name = _safe_pg_name(target_table_name, "_staging")
+
+    dtype_dict = query.get_table_dtypes(target_table_name, engine)
+
+    # 1. Push data to a temp staging table
+    # index=False to match how the target table was written: step 2 inserts positionally, so the
+    # staging table has to have exactly the target's columns
+    updated_df.to_sql(staging_table_name, engine, if_exists='replace', dtype=dtype_dict, index=False)
+
+    # Make sure that there's a main errors table we can update
+    inspector = inspect(engine)
+    assert inspector.has_table(target_table_name), f"Table {target_table_name} does not exist!"
+
+    # 2. Set-based update, Postgres native syntax
+    with engine.begin() as conn:
+        conn.execute(text(f'''
+            INSERT INTO "{target_table_name}"
+            SELECT *
+            FROM "{staging_table_name}"
+        '''))
+
+        conn.execute(text(f'DROP TABLE "{staging_table_name}"'))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
-def update_errors_table(table_name: str) -> None:
+# Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
+def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
+    # TODO: fix this so it doesn't update the whole table after small changes to the table
     """
     After modifying a table in-place, re-run error detection
     and update the errors table.
     """
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
-        detected_errors_df = run_detectors(df)
+
+        df = df[columns_selected_for_wrangling]
+
+        # TODO: optimize this so it doesn't load the whole table into a df first
+        detected_errors_df = create_error_df(df)
         errors_table_name = f"errors_{table_name}"
+
+        key_column = "column_id"
+        update_table(detected_errors_df, errors_table_name, key_column, columns_selected_for_wrangling)
+
         # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
         # table names > 63 chars due to PostgreSQL identifier truncation).
-        with engine.begin() as conn:
-            conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
-        detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
+        #with engine.begin() as conn:
+        #    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
+
+
+        # detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
+
         print(f"✓ Updated errors table: {errors_table_name}")
+        return detected_errors_df
     except Exception as e:
         print(f"ERROR: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()
         raise
 
+# TODO: Make update_data_profile_table and update_errors_table more similar
+# TODO: Re-implement with "dirty flags"
+# TODO:optimize this so it doesn't load the whole table into a df first
+def update_data_profile_table(table_name: str, columns_selected_for_wrangling: list) -> None:
+    try:
+
+        dp_table_name = f"dp_{table_name}"
+
+        # Can't use db_operations.data_profile because this function is also used for updating preview tables,
+        # meaning that the "main_table" that this function uses may be a preview table. Using the db_operations data_profile
+        # has the table name set as the main table and it'll be calculating statistics on the wrong table. So we create a new data
+        # profile object
+        data_profile = DataProfile(table_name, engine)
+
+        updated_df = create_data_profile_df(data_profile, col_names=columns_selected_for_wrangling)
+
+        key_column = "column_name"
+
+        update_table(updated_df, dp_table_name, key_column, columns_selected_for_wrangling)
+
+        print(f"✓ Updated data profile table: {dp_table_name}")
+    except Exception as e:
+        print(f"ERROR: Could not update data profile table for {table_name}: {e}")
+        traceback.print_exc()
+        raise
+
+
+# TODO: Finish this later
+#def update_stat_to_data_profile_table(table_name: str, error_df: pd.DataFrame) -> None:
+
+
+
+
+
+
+# TODO: does this even do anything? Can I remove it?
 def update_preview_error_table(table_name: str, err_table_name: str) -> None:
     """
     After modifying a table in-place, re-run error detection
@@ -142,16 +233,17 @@ def wrangle_delete_column():
     """
     try:
         body = request.get_json(force=True)
-        table = db_operations.main_table_name
+        table_name = db_operations.main_table_name
         column = body["column"]
 
-        print(f"Deleting column '{column}' from table '{table}'")
+        print(f"Deleting column '{column}' from table '{table_name}'")
 
         # Delete the column
-        remaining_columns = query.delete_column(table=table, column=column)
+        remaining_columns = query.delete_column(table=table_name, column=column)
 
         # Re-run error detection
-        update_errors_table(table)
+        update_errors_table(table_name, [column])
+        update_data_profile_table(table_name, [column])
 
         return {
             "success": True,

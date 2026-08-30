@@ -19,6 +19,7 @@ from detectors.anomaly import anomaly
 from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
+from app.db_utils.data_profile import DataProfile
 
 def get_current_pgraph():
     """
@@ -160,7 +161,8 @@ def perform_melt(dfs):
 
     return df_combined
 
-def run_detectors(data_frame):
+# Previously called run_detectors
+def create_error_df(data_frame):
     """
     Runs all 4 detectors that are implemented
     on the server, on the data, and returns a compiled dataframe of the complete errors
@@ -168,12 +170,63 @@ def run_detectors(data_frame):
     :return: a single compiled dataframe of all the errors detected
     """
     df_with_id = set_id_column(data_frame)
+
+    # TODO: optimize these functions
     anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
     frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
-    return perform_melt(frames)
+
+    df = perform_melt(frames)
+    print("CREATE ERROR TABLE TYPE MAP", df.dtypes)
+    return df
+
+def create_data_profile_df(data_profile, col_names=None):
+    """
+    :param data_profile: the data profile object
+    :param col_names: the column names of interest in the table
+    :return: a dataframe of the data profile for the table
+    """
+    print("CREATED DATA_PROFILE DF FOR TABLE", data_profile.table_name)
+
+    # Every attribute the data profile knows how to calculate goes in, so a new one only has to be
+    # registered in DataProfile
+    default_attributes = list(data_profile.name_to_func)
+
+
+    col_list = []
+
+    # If col_names is not provided (no specific columns to create a dp for), use all column names from the data profile
+    if col_names is None:
+        col_names = data_profile.get_col_names()
+
+    for col in col_names:
+
+        row_dict = {'column_name': col}
+        for attribute in default_attributes:
+
+            # Attributes that don't match the column type come back as None, so every column still
+            # gets a value for every attribute in the data profile
+            row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
+        col_list.append(row_dict)
+
+    df = pd.DataFrame(col_list)
+
+    return df
+
+
+def build_data_profile_table(table_name):
+    """
+    Build a table's data profile from scratch, covering every column. Used when a table becomes a
+    node, since preview tables don't get a profile of their own.
+    :param table_name: the table to profile
+    """
+    from app import engine
+
+    data_profile = DataProfile(table_name, engine)
+    create_data_profile_df(data_profile).to_sql(f"dp_{table_name}", engine, if_exists='replace', index=False)
+
 
 def calculate_attribute_rankings(error_df):
     """
@@ -358,7 +411,7 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
 
-def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations):
+def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations):
     """
     Promote a preview table to the new current table and make it as a new node in the pgraph
     1. Drop all other preview tables (and their errors_ siblings)
@@ -369,10 +422,10 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     # from app import engine, db_operations
 
     all_possible_previews = [
-        preview_name_fn(table, "_preview_delete"),
-        preview_name_fn(table, "_preview_impute"),
-        preview_name_fn(table, "_preview_impute_x"),
-        preview_name_fn(table, "_preview_impute_y"),
+        safe_pg_name_fn(table, "_preview_delete"),
+        safe_pg_name_fn(table, "_preview_impute"),
+        safe_pg_name_fn(table, "_preview_impute_x"),
+        safe_pg_name_fn(table, "_preview_impute_y"),
     ]
 
     app.db_operations.drop_preview_tables(all_possible_previews, preview_table)
@@ -384,7 +437,11 @@ def execute_wrangle_preview(table, preview_table, preview_name_fn, db_operations
     # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
     new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
     app.db_operations.rename_preview_to_new(preview_table, new_table_name)
-    db_operations.load_table(new_table_name, f"errors_{new_table_name}")
+
+    # Preview tables have no profile, so the promoted node gets one built here
+    build_data_profile_table(new_table_name)
+
+    db_operations.load_table(new_table_name, f"errors_{new_table_name}", f"dp_{new_table_name}")
 
     app.db_operations.update_rankings(new_table_name)
 
@@ -423,6 +480,7 @@ def make_new_table_name(child_table):
     node_id = app.pgraph_for_session.get_new_node_id()
     new_table_name = f"{node_id}{child_table[2:]}"
     return new_table_name
+
 def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
     """
     Drop and recreate a minimal dest table and empty error table to populate only with regard to the cols.
@@ -446,34 +504,40 @@ def create_minimal_preview_table(conn, source_table, preview_table_name, errors_
     # Copy schema but leave empty.
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
 
-def create_previews_1d(table, row_ids, cols, preview_name_fn, update_errors_fn):
+def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
     """
     Create delete and impute preview tables for a 1D (single-column) selection.
     Returns a dict with preview table names and dims=1.
     """
     from app import engine
 
-    errors_src     = f"errors_{table}"
-    preview_delete = preview_name_fn(table, "_preview_delete")
-    preview_impute = preview_name_fn(table, "_preview_impute")
+    errors_src = f"errors_{table}"
+    # Creates name for the preview tables
+    preview_delete_table_name = safe_pg_name_fn(table, "_preview_delete")
+    preview_impute_table_name = safe_pg_name_fn(table, "_preview_impute")
 
+    # Preview tables are created (error_..._preview)
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute, errors_src)
+        _clone_table_pair(conn, table, preview_delete_table_name, errors_src)
+        _clone_table_pair(conn, table, preview_impute_table_name, errors_src)
+
         #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
         #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
 
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute, col=cols[0], ids=row_ids)
+    # Modify the preview table based on the preview type
+    query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
+    query.impute_by_ids(table=preview_impute_table_name, col=cols[0], ids=row_ids)
 
-    update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute)
+    # The preview histograms read errors_, but nothing reads a preview's data profile, so it isn't
+    # built until the preview is promoted in execute_wrangle_preview
+    update_errors_fn(preview_delete_table_name, cols)
+    update_errors_fn(preview_impute_table_name, cols)
 
     return {
         "success": True,
-        "preview_delete": preview_delete,
-        "preview_impute": preview_impute,
+        "preview_delete": preview_delete_table_name,
+        "preview_impute": preview_impute_table_name,
         "dims": 1,
     }
 
@@ -485,36 +549,38 @@ def extract_preview_action(name: str) -> str:
         return name[idx + len(marker):]
     return ""
 
-def create_previews_2d(table, row_ids, cols, preview_name_fn, update_errors_fn):
+def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
     """
     Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
     Returns a dict with preview table names and dims=2.
     """
     from app import engine
 
-    errors_src       = f"errors_{table}"
-    preview_delete   = preview_name_fn(table, "_preview_delete")
-    preview_impute_x = preview_name_fn(table, "_preview_impute_x")
-    preview_impute_y = preview_name_fn(table, "_preview_impute_y")
+    errors_src  = f"errors_{table}"
+    preview_delete_table_name   = safe_pg_name_fn(table, "_preview_delete")
+    preview_impute_x_table_name = safe_pg_name_fn(table, "_preview_impute_x")
+    preview_impute_y_table_name = safe_pg_name_fn(table, "_preview_impute_y")
 
     with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete, errors_src)
-        _clone_table_pair(conn, table, preview_impute_x, errors_src)
-        _clone_table_pair(conn, table, preview_impute_y, errors_src)
+        _clone_table_pair(conn, table, preview_delete_table_name, errors_src)
+        _clone_table_pair(conn, table, preview_impute_x_table_name, errors_src)
+        _clone_table_pair(conn, table, preview_impute_y_table_name, errors_src)
 
-    query.remove_rows_by_ids(table=preview_delete, ids=row_ids)
-    query.impute_by_ids(table=preview_impute_x, col=cols[0], ids=row_ids)
-    query.impute_by_ids(table=preview_impute_y, col=cols[1], ids=row_ids)
+    query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
+    query.impute_by_ids(table=preview_impute_x_table_name, col=cols[0], ids=row_ids)
+    query.impute_by_ids(table=preview_impute_y_table_name, col=cols[1], ids=row_ids)
 
-    update_errors_fn(preview_delete)
-    update_errors_fn(preview_impute_x)
-    update_errors_fn(preview_impute_y)
+    # As in the 1D case, the profile is left until the preview is promoted
+    update_errors_fn(preview_delete_table_name, cols)
+    update_errors_fn(preview_impute_x_table_name, cols)
+    update_errors_fn(preview_impute_y_table_name, cols)
+
 
     return {
         "success": True,
-        "preview_delete": preview_delete,
-        "preview_impute_x": preview_impute_x,
-        "preview_impute_y": preview_impute_y,
+        "preview_delete": preview_delete_table_name,
+        "preview_impute_x": preview_impute_x_table_name,
+        "preview_impute_y": preview_impute_y_table_name,
         "dims": 2,
     }
 

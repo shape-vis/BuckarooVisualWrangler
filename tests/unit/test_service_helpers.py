@@ -3,7 +3,7 @@ from unittest import TestCase
 import pandas as pd
 from numpy.ma.testutils import assert_equal
 
-from app.server_utils.service_helpers import clean_table_name, get_whole_table_query, run_detectors, create_error_dict, \
+from app.server_utils.service_helpers import clean_table_name, get_whole_table_query, create_error_df, create_error_dict, \
     get_range_of_ids_query, is_categorical, create_bins_for_a_numeric_column, get_2d_bins, \
     group_by_attribute, get_error_dist
 from wranglers.remove_data import remove_data
@@ -38,7 +38,7 @@ class General(TestCase):
 
     def test_run_all_detectors_stackoverflow(self):
         stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
-        actual_error_df = run_detectors(stackoverflow_df)
+        actual_error_df = create_error_df(stackoverflow_df)
         # expected_error_map = {"Age": {3: ["incomplete"], 4: ["mismatch", "incomplete"], 5: ["mismatch", "incomplete"],
         #                               105: ["incomplete"], 159: ["incomplete"]},
         #                       "Continent": {8: ["missing"], 9: ["missing"], 10: ["missing"],
@@ -80,14 +80,14 @@ class General(TestCase):
 
     def test_run_all_detectors_complaints(self):
         stackoverflow_df = pd.read_csv('../../provided_datasets/complaints-2025-04-21_17_31.csv')
-        actual_error_df = run_detectors(stackoverflow_df)
+        actual_error_df = create_error_df(stackoverflow_df)
 
         self.assertEqual(True,True)
 
     def test_create_error_dictionary(self):
         # stackoverflow_df = pd.read_csv('../provided_datasets/stackoverflow_db_uncleaned.csv')
         stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
-        res_df = run_detectors(stackoverflow_df)
+        res_df = create_error_df(stackoverflow_df)
         create_error_dict(res_df,200)
 
     def test_get_range_of_ids_query(self):
@@ -136,6 +136,6 @@ class General(TestCase):
 
     def test_get_error_dis(self):
         stackoverflow_df = pd.read_csv('../../provided_datasets/stackoverflow_db_uncleaned.csv')
-        error_table = run_detectors(stackoverflow_df)
+        error_table = create_error_df(stackoverflow_df)
         error_dist = get_error_dist(error_table,stackoverflow_df)
         assert_equal(1,1)

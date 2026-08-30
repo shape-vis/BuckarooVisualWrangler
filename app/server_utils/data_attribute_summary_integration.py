@@ -5,11 +5,11 @@ Converts the current datastate data into JSON the view can use
 """
 Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.py, execute_sql.py, filtering_sql.py 
 """
-import pandas as pd
 
 from app.db_utils.execute_sql import fetch_sql
 from app.server_utils.service_helpers import get_error_dist, is_categorical, _validate_identifier
-
+from app.db_utils.data_profile import DataProfile
+import pandas as pd
 
 def get_default_attributes_from_rankings(tablename, engine):
     """
@@ -43,75 +43,74 @@ def generate_complete_json(tablename):
     _validate_identifier(tablename)
     print(f"Generating JSON for table: {tablename}")
 
-    main_rows = fetch_sql(f'SELECT * FROM "{tablename}"', False, engine)
-    error_rows = fetch_sql(f'SELECT * FROM "errors_{tablename}"', False, engine)
+    data_profile = DataProfile(tablename, engine)
 
-    main_cols = fetch_sql(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{tablename}' ORDER BY ordinal_position", False, engine)
-    error_cols = fetch_sql(f"SELECT column_name FROM information_schema.columns WHERE table_name = 'errors_{tablename}' ORDER BY ordinal_position", False, engine)
-
-    main_df = pd.DataFrame(main_rows, columns=[row[0] for row in main_cols] if main_cols else None)
-    error_df = pd.DataFrame(error_rows, columns=[row[0] for row in error_cols] if error_cols else None)
+    # TODO: get rid of these arguments from the get_error_dist
+    error_df = pd.read_sql_query(f'SELECT * FROM "{"errors_" + tablename}"', engine)
+    main_df = pd.read_sql_query(f'SELECT * FROM "{tablename}"', engine)
 
     error_list = get_error_dist(error_df, main_df).to_dict('records')
+
     default_attributes = get_default_attributes_from_rankings(tablename, engine)
 
     return {
         "columnErrors": convert_error_list_to_dict(error_list),
-        "attributes": list(main_df.columns),
-        "attributeDistributions": build_attribute_distributions(main_df),
+        "attributes": list(data_profile.get_col_names()),
+        "attributeDistributions": build_attribute_distributions(data_profile, main_df),
         "defaultAttributes": default_attributes
     }
 
-def get_attribute_stats(df, column):
+def get_attribute_stats(data_profile, column, main_df):
     """
     Get statistics for a specific attribute in the DataFrame
-    :param df: DataFrame containing the data
+    :param data_profile: Data profile class instance (used for calculating summary stats)
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the column
     """
-    if is_categorical(df[column]):
-        return get_categorical_stats(df, column)
-    return get_numeric_stats(df, column)
 
-def build_attribute_distributions(main_df):
+    if data_profile.col_types.is_categorical_mixed_col(column) or data_profile.col_types.is_categorical_col(column):
+        return get_categorical_stats(data_profile, column)
+    return get_numeric_stats(data_profile, column)
+
+def build_attribute_distributions(data_profile, main_df):
     """
     Build distributions for each attribute in the main DataFrame
-    :param main_df: DataFrame containing the main data
+    :param data_profile: Data profile class instance (used for calculating summary stats)
+    :param main_df: The main DataFrame containing the data
     :return: dictionary containing distributions for each attribute
     """
     distributions = {}
-    for col in main_df.columns:
-        distributions[col] = get_attribute_stats(main_df, col)
+
+    for col in data_profile.get_col_names():
+        distributions[col] = get_attribute_stats(data_profile, col, main_df)
     return distributions
 
-def get_categorical_stats(df, column):
+def get_categorical_stats(data_profile, column):
     """
     Get statistics for a categorical attribute in the DataFrame
-    :param df: DataFrame containing the data
+    :param data_profile: DataProfile class instance with optimized summary stat calculation functions
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the categorical column
     """
-    col_data = df[column].fillna('N/A')
     return {
         "categorical": {
-            "categories": col_data.nunique(),
-            "mode": col_data.mode().iloc[0]
+            "categories": data_profile.calculate_column_attribute('n_categories', column),
+            "mode": data_profile.calculate_column_attribute('mode', column)
         }
     }
 
-def get_numeric_stats(df, column):
+def get_numeric_stats(data_profile, column):
     """
     Get statistics for a numeric attribute in the DataFrame
-    :param df: DataFrame containing the data
+    :param data_profile: DataProfile class instance with optimized summary stat calculation functions
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the numeric column
     """
-    col_data = pd.to_numeric(df[column], errors='coerce').dropna()
     return {
         "numeric": {
-            "mean": col_data.mean().item(),
-            "min": col_data.min().item(),
-            "max": col_data.max().item()
+            "mean": data_profile.calculate_column_attribute('mean', column),
+            "min": data_profile.calculate_column_attribute('min', column),
+            "max": data_profile.calculate_column_attribute('max', column)
         }
     }
 

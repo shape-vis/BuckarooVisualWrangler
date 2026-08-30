@@ -5,6 +5,7 @@ import pandas as pd
 from app.server_utils import service_helpers
 from app.db_utils.filtering_sql import FilteringSQL
 from app.db_utils.execute_sql import fetch_sql, execute_sql
+from app.db_utils.column_types import ColumnTypes
 
 """
 Provides two classes for querying and visualizing data from a PostgreSQL database table,
@@ -19,98 +20,6 @@ CTE SQL queries that produce JSON payloads for 1D histograms, 2D histograms, and
 each annotated with per-bin/per-point error breakdowns. Also manages row-level data filters.
 """
 
-class ColumnTypes:
-    def __init__(self, main_table_name: str, engine):
-        self.numeric_cols = set()
-        self.categorical_mixed = set()
-        self.pure_categorical = set()
-        self.engine = engine
-        self.gather_numeric_cols(main_table_name)
-        self.gather_mixed_cols(main_table_name)
-
-
-    def gather_numeric_cols(self, main_table_name: str):
-        """
-        Distinguishes the numeric columns from the categorical columns.
-        :arg: main_table_name: name of the main table.
-        """
-
-
-        fetch_col_types = f'''SELECT column_name, data_type
-                              FROM information_schema.columns
-                              WHERE table_name = '{main_table_name}';'''
-
-        fetched_rows = fetch_sql(fetch_col_types, False, self.engine)
-        if fetched_rows:
-            numeric_types = {
-                'integer', 'bigint', 'numeric',
-                'real', 'double precision', 'smallint'
-            }
-
-            for row in fetched_rows:
-                col_name = row[0]
-                data_type = row[1]
-
-                if data_type in numeric_types:
-                    self.numeric_cols.add(col_name)
-                else:
-                    self.categorical_mixed.add(col_name)
-        else:
-            raise Exception(f"No rows fetched from table: {main_table_name}")
-
-
-    def gather_mixed_cols(self, main_table_name: str):
-        """
-        Gather the columns that are labeled as categorical but contain numeric data as well.
-        :arg: main_table_name: name of the main table.
-        """
-
-        # There are no categorical columns in the dataset.
-        if len(self.categorical_mixed) == 0:
-            return
-
-        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
-
-        # Initialized in the other constructor func gather_numeric_cols. This starts as all categorical columns.
-        # Stop early if a mixed type is found, since that makes the entire column of mixed type.
-        queries = [
-            f"""(
-                SELECT '{col}' AS column_name
-                FROM "{main_table_name}"
-                WHERE "{col}" ~ {numeric_regex}
-                LIMIT 1
-            )"""
-            for col in self.categorical_mixed
-        ]
-
-        fetch_mixed_types = "\nUNION ALL\n".join(queries)
-        mixed_cols = fetch_sql(fetch_mixed_types, False, self.engine)
-
-        mixed_col_names = set(row[0] for row in mixed_cols) if mixed_cols else set()
-        self.pure_categorical = self.categorical_mixed - mixed_col_names
-        self.categorical_mixed = mixed_col_names
-
-    def is_categorical_col(self, col_name: str):
-        return col_name in self.pure_categorical
-
-    def is_numeric_col(self, col_name: str):
-            """
-            Determines whether the given column from the table used to construct this class is numeric.
-            :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
-            :return: whether the given col_name is numeric.
-            """
-            return col_name in self.numeric_cols
-
-
-    def is_mixed_col(self, col_name: str):
-        """
-        Determines whether the given column from the table used to construct this class is of mixed type.
-        :arg: col_name: name of the column (assumes it is from the same table used to construct this class).
-        :return: whether the given col_name is of mixed type.
-        """
-        return col_name in self.categorical_mixed
-
-
 # Wraps up all Core DBOperations into one class using a primary main_table.
 class DBOperations:
     def __init__(self, engine):
@@ -123,6 +32,7 @@ class DBOperations:
         self.engine = engine
         self.main_table_name = None
         self.error_table_name = None
+        self.dp_table_name = None
         self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
@@ -134,11 +44,12 @@ class DBOperations:
         """
         self.main_table_name = None
         self.error_table_name = None
+        self.dp_table_name = None
         self.col_types = None
         self.filtering_table = None
         self.active_hists = {}
 
-    def load_table(self, main_table_name: str, error_table_name: str = None):
+    def load_table(self, main_table_name: str, error_table_name: str = None, dp_table_name: str = None):
         """
         Loads in the main and error tables, inits the ColumnTypes and FilteringSQL objects with the new
         table
@@ -147,6 +58,7 @@ class DBOperations:
         """
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
+        self.dp_table_name = dp_table_name if dp_table_name is not None else "dp_" + main_table_name
         self.col_types = ColumnTypes(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
         self.active_hists = {}
@@ -183,6 +95,7 @@ class DBOperations:
             if pt != keep_table:
                 execute_sql(f'DROP TABLE IF EXISTS "{pt}"', self.engine)
                 execute_sql(f'DROP TABLE IF EXISTS "errors_{pt}"', self.engine)
+                execute_sql(f'DROP TABLE IF EXISTS "dp_{pt}"', self.engine)
 
     def rename_preview_to_new(self, preview_table: str, new_table_name: str):
         """
@@ -192,6 +105,7 @@ class DBOperations:
         # self.engine.dispose()
         execute_sql(f'ALTER TABLE "{preview_table}" RENAME TO "{new_table_name}"', self.engine)
         execute_sql(f'ALTER TABLE IF EXISTS "errors_{preview_table}" RENAME TO "errors_{new_table_name}"', self.engine)
+        execute_sql(f'ALTER TABLE IF EXISTS "dp_{preview_table}" RENAME TO "dp_{new_table_name}"', self.engine)
 
 
     def remove_data_filters(self, sql_filters) -> dict:

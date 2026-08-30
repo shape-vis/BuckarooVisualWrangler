@@ -4,7 +4,7 @@
 from typing import Dict, Any, List, Tuple
 from sqlalchemy import text, Engine
 from app import engine
-
+from sqlalchemy import inspect
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper Functions
@@ -15,6 +15,12 @@ _NUMERIC_TYPES = {
     "decimal", "numeric", "real", "double precision"
 }
 
+def get_table_dtypes(target_table_name, engine):
+    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
+    inspector = inspect(engine)
+    columns = inspector.get_columns(target_table_name)
+    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
+    return {col["name"]: col["type"] for col in columns}
 
 def _is_numeric(conn, col: str, table_name: str) -> bool:
     """Check if a column is numeric."""
