@@ -326,13 +326,13 @@ export async function getPGraph(){
     }
 }
 
-export async function getQualityTrajectory(nodeId){
+export async function getBranchTrajectory(source, target, destination){
     try {
-        const params = new URLSearchParams({ node: nodeId });
-        const response = await fetch(`/api/pgraph/quality_trajectory?${params}`, {method: "GET"});
+        const params = new URLSearchParams({ source, target, destination });
+        const response = await fetch(`/api/pgraph/branch_trajectory?${params}`, {method: "GET"});
         return await response.json();
     } catch (error) {
-        console.error("[getQualityTrajectory]", error.message)
+        console.error("[getBranchTrajectory]", error.message)
     }
 }
 

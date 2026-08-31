@@ -32,15 +32,33 @@ function positionTooltip(tooltip, event) {
            .style("top", `${Math.max(0, top)}px`);
 }
 
+/**
+ * Shows the shared tooltip with the given html, placed beside the cursor.
+ *
+ * For callers outside d3 - React event handlers, say - that still want the one tooltip element and
+ * its edge-aware placement.
+ */
+export function showTooltip(html, event) {
+    const tooltip = d3.select("#tooltip");
+    tooltip.style("display", "block").html(html);
+    positionTooltip(tooltip, event);
+}
+
+export function moveTooltip(event) {
+    positionTooltip(d3.select("#tooltip"), event);
+}
+
+export function hideTooltip() {
+    d3.select("#tooltip").style("display", "none");
+}
+
 export function createTooltip(target_objects, html_function, left_click_handler = (d)=>{}, right_click_handler = (d)=>{}, double_click_handler = (d)=>{} ) {
 
     const tooltip = d3.select("#tooltip");
     target_objects.on("mouseover", function(event, d) {
             d3.select(this).attr("opacity", 0.5)
 
-            tooltip.style("display", "block")
-                .html(html_function(d) );
-            positionTooltip(tooltip, event);
+            showTooltip(html_function(d), event);
         })
         .on("mousemove", function(event) {
             positionTooltip(tooltip, event);

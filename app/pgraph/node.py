@@ -7,6 +7,19 @@ and put into the provenance graph
 
 
 
+def wrangle_operation_name(wrangle_op):
+    """
+    The bare operation, with the _x / _y suffix dropped.
+
+    That suffix only says which of a 2D pair was imputed, which is detail rather than identity - the
+    graph's edges are labelled with this, and name the columns in their hover detail instead.
+
+    :param wrangle_op: "delete", "impute", "impute_x", "impute_y" or "root"
+    :return: "delete", "impute" or "root"
+    """
+    return "impute" if wrangle_op.startswith("impute") else wrangle_op
+
+
 def format_wrangle_label(wrangle_op, wrangle_cols):
     """
     Build the label an edge carries: the operation plus the column(s) it acted on.
@@ -36,9 +49,7 @@ def format_wrangle_label(wrangle_op, wrangle_cols):
         return wrangle_op
 
     # The _x / _y suffix has done its job once the column it refers to is named outright
-    operation = "impute" if wrangle_op.startswith("impute") else wrangle_op
-
-    return f"{operation} · {' × '.join(columns)}"
+    return f"{wrangle_operation_name(wrangle_op)} · {' × '.join(columns)}"
 
 
 class GraphNode:
@@ -98,8 +109,12 @@ class GraphNode:
         self.mismatch_metric = mismatch
 
     def wrangle_label(self):
-        """The operation and columns that produced this node, as shown on its incoming edge."""
+        """The operation and columns that produced this node - its incoming edge's hover detail."""
         return format_wrangle_label(self.wrangle_op, self.wrangle_cols)
+
+    def wrangle_name(self):
+        """Just the operation - what its incoming edge is labelled with in the graph."""
+        return wrangle_operation_name(self.wrangle_op)
 
     def add_child(self, child_node: str):
         self.children.append(child_node)

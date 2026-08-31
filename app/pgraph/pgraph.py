@@ -77,25 +77,32 @@ class PGraph:
             )
         return list_of_nodes
 
-    def descendant_paths(self, node_table_name):
+    def path_between(self, start_table_name, end_table_name):
         """
-        Every path from this node down to a leaf, one list per downstream branch. A leaf returns a
-        single one-element path.
-        :param node_table_name: the node to walk down from
-        :return: list of lists of node table names, each ordered from this node to a leaf
+        The path running from start down to end.
+
+        The graph is a tree - every node has exactly one parent - so the path between an ancestor and
+        one of its descendants is unique, and walking up from end until start is reached finds it.
+
+        :param node_table_name: start_table_name, the node the branch runs from
+        :param end_table_name: the node the branch runs to
+        :return: node table names ordered start to end, or None when end is not below start
         """
-        if node_table_name not in self.node_map:
-            return []
+        if start_table_name not in self.node_map or end_table_name not in self.node_map:
+            return None
 
-        children = self.node_map[node_table_name].children
-        if not children:
-            return [[node_table_name]]
+        path = [end_table_name]
+        cursor = end_table_name
 
-        paths = []
-        for child in children:
-            for path in self.descendant_paths(child):
-                paths.append([node_table_name] + path)
-        return paths
+        while cursor != start_table_name:
+            parent = self.node_map[cursor].parent_table
+            if parent not in self.node_map:
+                # Walked off the top without meeting start, so end does not descend from it
+                return None
+            cursor = parent
+            path.append(cursor)
+
+        return list(reversed(path))
 
     def serialize_edges(self):
         list_of_edges = []
@@ -112,7 +119,9 @@ class PGraph:
                         "target": child,
                         "type": "edgeType",
                         "animated": "true",
-                        "label": child_node_obj.wrangle_label()
+                        # The edge shows the bare operation and keeps the columns for its hover detail
+                        "label": child_node_obj.wrangle_name(),
+                        "data": {"detail": child_node_obj.wrangle_label()}
                     }
                 )
         return list_of_edges

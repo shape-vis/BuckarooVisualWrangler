@@ -1,7 +1,7 @@
 /* Every length here is in em so the whole panel scales with the dock's font-size, which RightDock
    derives from the dragged width. Widening the dock grows the text, not just the whitespace. */
 
-#node-detail-root {
+#quality-root {
     display: flex;
     flex-direction: column;
     gap: 0.7em;
@@ -18,55 +18,27 @@
     white-space: nowrap;
 }
 
-.node-detail-empty,
-.node-detail-nochange {
+.quality-empty,
+.quality-nochange {
     color: #65676b;
     font-style: italic;
     font-size: 0.92em;
 }
 
-.node-detail-views,
+.quality-views,
 .node-detail-branches {
     display: flex;
     flex-wrap: wrap;
 }
 
-.node-detail-body {
+.quality-body {
     display: flex;
     flex-direction: column;
     gap: 0.85em;
 }
 
-/* Maps line color to branch, once for the whole view rather than per dimension */
-.branch-legend {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.55em;
-    font-size: 0.83em;
-    color: #65676b;
-}
-
-.branch-legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    font-weight: 600;
-    color: #1c1e21;
-}
-
-.branch-legend-swatch {
-    width: 0.85em;
-    height: 0.2em;
-    border-radius: 0.1em;
-}
-
-.branch-legend-note {
-    font-style: italic;
-}
-
 /* One dimension's sparkline plus its per-step contributions */
-.node-detail-dimension {
+.quality-dimension {
     border: 1px solid #dddfe2;
     border-radius: 0.65em;
     padding: 0.5em;
@@ -74,14 +46,14 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.node-detail-dimension-header {
+.quality-dimension-header {
     display: flex;
     align-items: center;
     gap: 0.42em;
     margin-bottom: 0.17em;
 }
 
-.node-detail-dimension-name {
+.quality-dimension-name {
     font-size: 0.92em;
     font-weight: 600;
     overflow: hidden;
@@ -89,14 +61,14 @@
     white-space: nowrap;
 }
 
-.node-detail-dimension-value {
+.quality-dimension-value {
     margin-left: auto;
     font-size: 0.92em;
     font-weight: 700;
     color: #65676b;
 }
 
-.node-detail-swatch {
+.quality-swatch {
     width: 0.75em;
     height: 0.75em;
     border-radius: 0.17em;
@@ -104,10 +76,10 @@
     display: inline-block;
 }
 
-.node-detail-swatch[data-error-type="missing"]    { background-color: saddlebrown; }
-.node-detail-swatch[data-error-type="mismatch"]   { background-color: hotpink; }
-.node-detail-swatch[data-error-type="anomaly"]    { background-color: red; }
-.node-detail-swatch[data-error-type="incomplete"] { background-color: gray; }
+.quality-swatch[data-error-type="missing"]    { background-color: saddlebrown; }
+.quality-swatch[data-error-type="mismatch"]   { background-color: hotpink; }
+.quality-swatch[data-error-type="anomaly"]    { background-color: red; }
+.quality-swatch[data-error-type="incomplete"] { background-color: gray; }
 
 /* Per-step contributions: each step's share of the branch's total absolute change */
 .contribution-list {
@@ -118,19 +90,12 @@
 
 .contribution-row {
     display: grid;
-    grid-template-columns: 0.55em 1fr 3.4em 5.2em;
+    /* node name, share of the branch's change, delta in points */
+    grid-template-columns: 1fr 3.6em 5.6em;
     align-items: baseline;
     gap: 0.3em;
     font-size: 0.83em;
     color: #65676b;
-}
-
-/* Which branch this step belongs to - same color as its sparkline and its graph edges */
-.contribution-branch {
-    width: 0.55em;
-    height: 0.55em;
-    border-radius: 50%;
-    align-self: center;
 }
 
 .contribution-step {
@@ -200,4 +165,73 @@
 
 .columns-table-zero {
     color: #b0b3b8;
+}
+
+/* Branch picker: the two clicks that name a branch */
+.branch-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    padding: 0.5em;
+    border: 1px solid #dddfe2;
+    border-radius: 0.65em;
+    background: #f7f8fa;
+    font-size: 0.9em;
+}
+
+.branch-picker-step {
+    display: grid;
+    grid-template-columns: 1.4em 5.2em 1fr;
+    align-items: baseline;
+    gap: 0.35em;
+}
+
+.branch-picker-index {
+    width: 1.4em;
+    height: 1.4em;
+    border-radius: 50%;
+    background: #dddfe2;
+    color: #65676b;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.85em;
+    line-height: 1.4em;
+}
+
+.branch-picker-step--done .branch-picker-index {
+    background: #1877F2;
+    color: #ffffff;
+}
+
+.branch-picker-label {
+    color: #65676b;
+}
+
+.branch-picker-value {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A prompt for the next click, rather than a value that has been chosen */
+.branch-picker-value--pending {
+    font-weight: 400;
+    font-style: italic;
+    color: #8c939d;
+}
+
+.branch-summary {
+    font-size: 0.83em;
+    color: #65676b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.columns-node {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

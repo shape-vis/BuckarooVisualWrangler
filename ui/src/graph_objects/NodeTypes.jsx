@@ -1,8 +1,9 @@
-import {useCallback} from "react";
+import {useCallback, useState} from "react";
 import "../styles/Nodes.css"
 import { Handle, Position} from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
+import {ERROR_TYPES, ERROR_DIMENSIONS} from "../store/errorColors.js";
 import "../styles/Buttons.css"
 
 
@@ -20,11 +21,77 @@ function ComparisonBadge( { role } ){
     );
 }
 
-export function NoteNode( { id, data, isConnectable } ){
+/**
+ * The node's quality metrics, revealed by the magnifier.
+ *
+ * Floats below the node rather than growing it: dagre lays the graph out from fixed node sizes, so a
+ * node that actually grew would overlap the rank beneath it. This hangs in the gap RANK_SEPARATION
+ * already leaves there.
+ */
+function NodeMetricsExpansion( { metrics } ){
+    if (!metrics) {
+        return (
+            <div className="node-metrics">
+                <div className="node-metrics-empty">No metrics</div>
+            </div>
+        );
+    }
 
-const { openNodeDetail } = usePgraph();
-// React Flow gives the node its real id; data.label is truncated for display and cannot be used here
-const openDetail = useCallback(() => openNodeDetail(id), [openNodeDetail, id]);
+    return (
+        <div className="node-metrics">
+            <div className="node-metrics-rows">
+                {ERROR_DIMENSIONS.map((dimension) => (
+                    <div key={dimension} className="node-metrics-row" title={ERROR_TYPES[dimension]}>
+                        <span className="node-metrics-swatch" data-error-type={dimension} />
+                        <span className="node-metrics-value">
+                            {((metrics.totals?.[dimension] ?? 0) * 100).toFixed(2)}%
+                        </span>
+                    </div>
+                ))}
+            </div>
+            <div className="node-metrics-footer">
+                {metrics.row_count} rows · {metrics.column_count} cols
+            </div>
+        </div>
+    );
+}
+
+/** The buttons every node carries, and the metrics the magnifier reveals. */
+function NodeTools( { data } ){
+    const { startBranchSelection } = usePgraph();
+    const [expanded, setExpanded] = useState(false);
+
+    const openQuality = useCallback(() => startBranchSelection(), [startBranchSelection]);
+
+    return (
+        <>
+            <div className={"note-node-icon-container"}>
+                <IconButton
+                    className="node-sub-button-chart"
+                    title="Measure quality along a branch"
+                    onClick={openQuality}
+                >
+                    <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
+                </IconButton>
+                <IconButton
+                    className="node-sub-button-inspect"
+                    title={expanded ? "Hide this node's quality metrics" : "Show this node's quality metrics"}
+                    onClick={() => setExpanded((open) => !open)}
+                >
+                    <img
+                        src="/images/icons/inspect.svg"
+                        alt=""
+                        className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
+                    />
+                </IconButton>
+            </div>
+
+            {expanded && <NodeMetricsExpansion metrics={data.metrics} />}
+        </>
+    );
+}
+
+export function NoteNode( { data, isConnectable } ){
 
 return (
     <>
@@ -33,15 +100,7 @@ return (
         <div>
             <div className={"node-node-label"}>
                 <h3>{data.label}</h3>
-                <div className={"note-node-icon-container"}>
-                    <IconButton className="node-sub-buttons">&#8644;</IconButton>
-                    <IconButton className="node-sub-buttons">&#9998;</IconButton>
-                    <IconButton
-                        className="node-sub-button-chart"
-                        title="Inspect this node's quality"
-                        onClick={openDetail}
-                    >&#9602;&#9605;&#9603;&#9607;&#9601;</IconButton>
-                </div>
+                <NodeTools data={data} />
             </div>
         </div>
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
@@ -49,10 +108,7 @@ return (
 )
 }
 
-export function RootNoteNode( { id, data, isConnectable } ){
-
-const { openNodeDetail } = usePgraph();
-const openDetail = useCallback(() => openNodeDetail(id), [openNodeDetail, id]);
+export function RootNoteNode( { data, isConnectable } ){
 
 return (
     <>
@@ -60,16 +116,7 @@ return (
         <div>
             <div className={"node-node-label"}>
                 <h3>{data.label}</h3>
-                <div className={"note-node-icon-container"}>
-                    <IconButton className="node-sub-buttons">&#8644;</IconButton>
-                    <IconButton className="node-sub-buttons">&#9998;</IconButton>
-                    <IconButton
-                        className="node-sub-button-chart"
-                        title="Inspect this node's quality"
-                        onClick={openDetail}
-                    >&#9602;&#9605;&#9603;&#9607;&#9601;</IconButton>
-
-                </div>
+                <NodeTools data={data} />
             </div>
         </div>
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />

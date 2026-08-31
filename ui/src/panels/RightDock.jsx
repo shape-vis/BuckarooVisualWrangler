@@ -1,13 +1,13 @@
 import { useCallback, useRef } from "react";
 
 import RepairPanel from "./RepairPanel.jsx";
-import NodeDetailPanel from "./NodeDetailPanel.jsx";
+import QualityPanel from "./QualityPanel.jsx";
 import { useDock, MIN_DOCK_WIDTH } from "../store/DockContext.jsx";
 
 import "../styles/RightDock.css";
 
 /**
- * The right-hand dock: the repair and node-detail panels as selectable tabs in one resizable pane,
+ * The right-hand dock: the repair and quality panels as selectable tabs in one resizable pane,
  * the way an editor stacks open files.
  *
  * Both panels stay mounted whichever tab is showing, so switching away does not throw away generated
@@ -25,7 +25,7 @@ const fontForWidth = (width) =>
 
 const TABS = [
   { id: "repair", label: "Repair" },
-  { id: "detail", label: "Node Details" },
+  { id: "quality", label: "Quality" },
 ];
 
 export default function RightDock() {
@@ -111,8 +111,8 @@ export default function RightDock() {
         <div className="right-dock-pane" hidden={activeTab !== "repair"}>
           <RepairPanel />
         </div>
-        <div className="right-dock-pane" hidden={activeTab !== "detail"}>
-          <NodeDetailPanel />
+        <div className="right-dock-pane" hidden={activeTab !== "quality"}>
+          <QualityPanel />
         </div>
       </div>
     </div>

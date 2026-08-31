@@ -6,3 +6,10 @@
 .sparkline-point {
     cursor: pointer;
 }
+
+/* Axis rules stay quiet so the trend line reads first. Tick text keeps the app-wide
+   --axis-text-size, via .left-axis-text / .bottom-axis-text in main.css. */
+.sparkline-axis .domain,
+.sparkline-axis .tick line {
+    stroke: #dddfe2;
+}

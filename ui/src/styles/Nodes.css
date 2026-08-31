@@ -26,6 +26,76 @@
   box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
 }
 
+/* The magnifier's readout. Absolutely positioned so revealing it never changes the node's footprint,
+   which dagre has already laid the graph out from - it hangs in the gap below the node instead. */
+.node-metrics {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  padding: 5px 6px;
+  background: #ffffff;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+  text-align: left;
+  cursor: default;
+}
+
+.node-metrics-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+
+.node-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.node-metrics-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.node-metrics-swatch[data-error-type="missing"]    { background-color: saddlebrown; }
+.node-metrics-swatch[data-error-type="mismatch"]   { background-color: hotpink; }
+.node-metrics-swatch[data-error-type="anomaly"]    { background-color: red; }
+.node-metrics-swatch[data-error-type="incomplete"] { background-color: gray; }
+
+.node-metrics-value {
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.node-metrics-footer {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid #f0f2f5;
+  font-size: 9px;
+  color: #65676b;
+}
+
+.node-metrics-empty {
+  font-size: 10px;
+  font-style: italic;
+  color: #65676b;
+}
+
+/* While the end of a branch is being chosen, the nodes it may end on invite the click */
+.react-flow__node.pgraph-node--eligible {
+  outline: 2px dashed #1877F2;
+  outline-offset: 3px;
+  cursor: pointer;
+}
+
 /* Floats above the node, so it adds no height to the dagre layout */
 .node-comparison-badge {
   position: absolute;

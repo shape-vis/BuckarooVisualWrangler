@@ -182,10 +182,14 @@
   font-size: 9px;
 }
 
-.iconButton-node-sub-buttons,
-.iconButton-node-sub-button-chart{
+.iconButton-node-sub-button-chart,
+.iconButton-node-sub-button-inspect{
   cursor: pointer;
-  padding: 3px 3px;
+  /* Centers the SVG icon in the button box */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 4px;
   /*margin-left: 6px;*/
   border-radius: 6px;
   background: transparent;
@@ -197,12 +201,22 @@
   align-self: center;
 }
 
-.iconButton-node-sub-buttons:hover,
-.iconButton-node-sub-button-chart:hover{
+.iconButton-node-sub-button-chart:hover,
+.iconButton-node-sub-button-inspect:hover{
   background-color: #e0e0e0;
   border-color: #a8b4c8;
 }
 
-.iconButton-node-sub-button-chart{
-  font-size: 5px;
+/* Node buttons carry SVG icons, matching the header's view buttons. The filter flattens the artwork
+   to the same grey as the other icon buttons, and to the accent blue while a button is active - the
+   same technique .navButtonSvgIcon uses. */
+.nodeButtonSvgIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  filter: brightness(0) saturate(100%) invert(24%) sepia(9%) saturate(1200%) hue-rotate(187deg) brightness(94%) contrast(88%);
+}
+
+.nodeButtonSvgIcon--active {
+  filter: brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1600%) hue-rotate(206deg) brightness(96%) contrast(92%);
 }

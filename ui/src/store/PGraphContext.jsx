@@ -11,9 +11,9 @@ import {useTableName} from "./TableNameContext"
 import {SelectionContext} from "./SelectionContext.jsx";
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "./visualizationCaches.jsx";
 import {ViewContext} from "../pages/Buckaroo.jsx";
-import {setGraphToClickedNode, getPGraph, getQualityTrajectory} from "../utils/serverCalls.jsx";
+import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/serverCalls.jsx";
 import {useDock} from "./DockContext.jsx";
-import {branchColor, SHARED_BRANCH_COLOR} from "./branchColors.js";
+import {descendantsOf} from "../utils/graphTopology.js";
 import "../styles/Nodes.css"
 
 
@@ -28,18 +28,18 @@ const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 200;
 const nodeHeight = 100;
 
-// Gaps between siblings, between ranks, and between edges sharing a rank. Ranks need the most room:
-// that is where the edge labels sit.
-const NODE_SEPARATION = 70;
-const RANK_SEPARATION = 110;
-const EDGE_SEPARATION = 24;
+// Gaps between siblings, between ranks, and between edges sharing a rank. Ranks get the most room:
+// that is where the edge labels sit, and where the magnifier's readout hangs.
+const NODE_SEPARATION = 50;
+const RANK_SEPARATION = 80;
+const EDGE_SEPARATION = 14;
 
-/* Roughly how wide an edge label renders, so dagre can reserve space for it. Labels name the columns
-   now ("delete · salary × years"), so they are long enough to collide with a sibling branch's label
-   unless the layout accounts for them. */
-const EDGE_LABEL_HEIGHT = 22;
+/* Roughly how wide an edge label renders, so dagre can reserve space for it. Labels are back to the
+   bare operation - "impute", "delete" - with the columns moved into the edge's hover detail, so this
+   reserves far less than it did when the columns were printed on the edge itself. */
+const EDGE_LABEL_HEIGHT = 20;
 const EDGE_LABEL_CHAR_WIDTH = 7;
-const MIN_EDGE_LABEL_WIDTH = 60;
+const MIN_EDGE_LABEL_WIDTH = 44;
 
 const edgeLabelSize = (label) => ({
     width: Math.max(MIN_EDGE_LABEL_WIDTH, String(label ?? "").length * EDGE_LABEL_CHAR_WIDTH),
@@ -103,7 +103,12 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
         };
     });
 
-    return {nodes: newNodes, edges};
+    /* The server sends type "edgeType", which is not a registered edge type - React Flow silently
+       falls back to its bezier default. Name that default outright so the curve is a choice rather
+       than a fallback, and so it cannot change under us. */
+    const newEdges = edges.map((edge) => ({...edge, type: "default"}));
+
+    return {nodes: newNodes, edges: newEdges};
 };
 
 export function PGraphProvider({children}) {
@@ -144,62 +149,86 @@ export function PGraphProvider({children}) {
         return (parent && parent !== "root") ? parent : null;
     }, [baselineNodeId, tableName, nodes]);
 
-    // The node the detail panel is inspecting
-    const [detailNodeId, setDetailNodeId] = useState(null);
-    const [trajectory, setTrajectory] = useState(null);
-    const [trajectoryLoading, setTrajectoryLoading] = useState(false);
+    /* The branch the user is picking out of the graph: an edge fixes where it starts and which way it
+       leaves that node, a destination fixes where it stops. Both are chosen by clicking the graph. */
+    const [branchSelection, setBranchSelection] = useState({source: null, target: null, destination: null});
+    const [branchTrajectory, setBranchTrajectory] = useState(null);
+    const [branchTrajectoryLoading, setBranchTrajectoryLoading] = useState(false);
 
-    const openNodeDetail = useCallback((nodeId) => {
-        setDetailNodeId(nodeId);
-        revealTab("detail");
+    const selectionStage = !branchSelection.target ? "edge"
+        : !branchSelection.destination ? "destination"
+        : "complete";
+
+    const startBranchSelection = useCallback(() => {
+        setBranchSelection({source: null, target: null, destination: null});
+        revealTab("quality");
     }, [revealTab]);
 
-    /* Fetching the trajectory lives here rather than in the detail panel because the graph needs it
-       too: it colors each branch's edges to match that branch's line in the sparklines. Syncing with
-       the server when the inspected node changes is what an effect is actually for. */
+    const resetBranchSelection = useCallback(() => {
+        setBranchSelection({source: null, target: null, destination: null});
+    }, []);
+
+    /* Clears every selection the graph holds at once - the comparison baseline and the branch alike.
+       They are picked with overlapping gestures (shift-click, click, edge click), so a single way out
+       matters more than being able to clear them individually. */
+    const clearAllSelections = useCallback(() => {
+        setBaselineNodeId(null);
+        setBranchSelection({source: null, target: null, destination: null});
+    }, []);
+
+    const hasAnySelection = Boolean(baselineNodeId || branchSelection.target);
+
+    // Choosing an edge always restarts the branch, since the old destination may not lie beyond it
+    const pickBranchEdge = useCallback((source, target) => {
+        setBranchSelection({source, target, destination: null});
+    }, []);
+
+    const pickBranchDestination = useCallback((destination) => {
+        setBranchSelection(current => ({...current, destination}));
+    }, []);
+
+    /* Where the branch is allowed to end: the chosen edge's target and everything below it. Computed
+       here from the edges the UI already holds, so the graph can show which nodes are pickable
+       without a round trip. The server validates the choice independently. */
+    const eligibleDestinations = useMemo(
+        () => (branchSelection.target ? descendantsOf(edges, branchSelection.target) : new Set()),
+        [edges, branchSelection.target]
+    );
+
+    /* Fetching lives here rather than in the panel because the graph needs the result too - it lights
+       up the branch's edges. Syncing to the server when the selection changes is what effects are for. */
     useEffect(() => {
         let stale = false;
 
         async function fetchTrajectory() {
-            if (!detailNodeId) {
-                setTrajectory(null);
+            const {source, target, destination} = branchSelection;
+            if (!source || !target || !destination) {
+                setBranchTrajectory(null);
                 return;
             }
-            setTrajectoryLoading(true);
+            setBranchTrajectoryLoading(true);
 
-            const result = await getQualityTrajectory(detailNodeId);
-            // A second node can be opened while this request is still out, so late replies are dropped
+            const result = await getBranchTrajectory(source, target, destination);
+            // The selection can change while this request is out, so late replies are dropped
             if (stale) return;
 
-            setTrajectory(result?.success ? result : null);
-            setTrajectoryLoading(false);
+            setBranchTrajectory(result?.success ? result : null);
+            setBranchTrajectoryLoading(false);
         }
 
         fetchTrajectory();
         return () => { stale = true; };
-    }, [detailNodeId]);
+    }, [branchSelection]);
 
-    /* Which color each graph edge takes, keyed "source->target". An edge on more than one branch is
-       upstream of their fork and belongs to neither, so it stays neutral. */
-    const branchEdgeColors = useMemo(() => {
-        const claims = new Map();
-
-        (trajectory?.branches ?? []).forEach((branch, index) => {
-            for (let step = 0; step < branch.nodes.length - 1; step++) {
-                const key = `${branch.nodes[step]}->${branch.nodes[step + 1]}`;
-                if (!claims.has(key)) claims.set(key, new Set());
-                claims.get(key).add(index);
-            }
-        });
-
-        const colors = new Map();
-        claims.forEach((branchIndexes, key) => {
-            colors.set(key, branchIndexes.size === 1
-                ? branchColor([...branchIndexes][0])
-                : SHARED_BRANCH_COLOR);
-        });
-        return colors;
-    }, [trajectory]);
+    // The edges making up the selected branch, keyed "source->target", for highlighting in the graph
+    const selectedBranchEdges = useMemo(() => {
+        const path = branchTrajectory?.nodes ?? [];
+        const keys = new Set();
+        for (let step = 0; step < path.length - 1; step++) {
+            keys.add(`${path[step]}->${path[step + 1]}`);
+        }
+        return keys;
+    }, [branchTrajectory]);
 
     // Pull the graph from the server and re-layout it. Every path that mutates the graph - executing a
     // wrangle, undo, redo - has to call this, or the rendered graph drifts from the real one.
@@ -238,26 +267,46 @@ export function PGraphProvider({children}) {
             //setTableName is a dependency you have to list for this to work
             await setGraphToClickedNode(node.id);
             setTableName(node.id);
-            // Navigating picks a new current node, so the comparison falls back to that node's own
-            // parent rather than keeping a baseline chosen for somewhere else in the graph
-            setBaselineNodeId(null);
+            /* Navigating picks a new current node, so the comparison falls back to that node's own
+               parent rather than keeping a baseline chosen for somewhere else in the graph. The
+               branch goes with it: React Flow fires onNodeClick on the first click of a double
+               click, so without this, double-clicking a node while choosing where a branch ends
+               would both end the branch there and navigate away from it. */
+            clearAllSelections();
             // clearHighlight();
             clearScatterPlotCache();
             clearHistogramCache();
             clearHeatMapCache();
             viewContext.setRefreshKey(k => k + 1);
             node.style
-        }, [setTableName, viewContext]
+        }, [setTableName, viewContext, clearAllSelections]
     )
 
-    /* Shift-click re-targets the delta baseline. A plain click is left alone so it does not compete
-       with double-click navigation, and Cmd/Ctrl-click stays free for React Flow's multi-select. */
+    /* Shift-click re-targets the delta baseline. A plain click ends a branch that is mid-selection,
+       and otherwise does nothing so it does not compete with double-click navigation. Cmd/Ctrl-click
+       stays free for React Flow's multi-select. */
     const onNodeClick = useCallback(
         (event, node) => {
-            if (!event.shiftKey) return;
+            if (!event.shiftKey) {
+                if (selectionStage === "destination" && eligibleDestinations.has(node.id)) {
+                    event.stopPropagation();
+                    pickBranchDestination(node.id);
+                }
+                return;
+            }
             event.stopPropagation();
             setBaselineNodeId(current => (current === node.id ? null : node.id));
-        }, []
+        }, [selectionStage, eligibleDestinations, pickBranchDestination]
+    )
+
+    /* Clicking an edge starts a branch there. Allowed at any stage so the branch can be re-aimed
+       without resetting first. */
+    const onEdgeClick = useCallback(
+        (event, edge) => {
+            event.stopPropagation();
+            pickBranchEdge(edge.source, edge.target);
+            revealTab("quality");
+        }, [pickBranchEdge, revealTab]
     )
 
     return (
@@ -266,10 +315,12 @@ export function PGraphProvider({children}) {
             edges, setEdges,
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
-            getLayoutedElements, onNodeDoubleClick, onNodeClick,
+            getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
             baselineNodeId, setBaselineNodeId, resolvedBaselineId,
-            detailNodeId, openNodeDetail,
-            trajectory, trajectoryLoading, branchEdgeColors,
+            branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
+            startBranchSelection, resetBranchSelection,
+            clearAllSelections, hasAnySelection,
+            branchTrajectory, branchTrajectoryLoading,
             refreshGraph
         }}>
             {children}

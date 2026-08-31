@@ -27,16 +27,18 @@ def set_selected_node():
         return {"success": False, "error": str(e)}, 400
 
 
-@app.get("/api/pgraph/quality_trajectory")
-def quality_trajectory_for_node():
+@app.get("/api/pgraph/branch_trajectory")
+def branch_trajectory():
     """
-    How data quality evolves along every branch downstream of a node.
+    How data quality evolves along one branch the user picked out of the graph.
 
-    One entry per downstream branch, each carrying the branch's node sequence and, per quality
-    dimension, the value series plus the step deltas and contributions. A leaf node yields a single
-    one-element branch with no deltas.
+    The branch is named by an edge and an end point: source -> target fixes which way out of source
+    the branch leaves, and destination fixes where it stops. The edge is what disambiguates a source
+    with more than one child - without it, "everything below source" is several different branches.
 
-    Reads the metrics cached on each node when it was created - nothing is recomputed here.
+    Query: ?source=<node>&target=<node>&destination=<node>
+    Returns the branch's node sequence and, per quality dimension, the value series with each step's
+    delta and contribution. Reads the metrics cached on each node at creation - nothing is recomputed.
     """
     try:
         # The session's graph hangs off the app package, not the Flask object
@@ -44,22 +46,33 @@ def quality_trajectory_for_node():
         if pgraph is None:
             return {"success": False, "error": "no graph in this session"}, 400
 
-        node_id = request.args.get("node") or pgraph.current_node_table_name
-        if node_id not in pgraph.node_map:
-            return {"success": False, "error": f"unknown node {node_id}"}, 400
+        source = request.args.get("source")
+        target = request.args.get("target")
+        destination = request.args.get("destination")
 
-        branches = []
-        for path in pgraph.descendant_paths(node_id):
-            ordered_metrics = [pgraph.node_map[table_name].metrics for table_name in path]
-            branches.append({
-                "nodes": path,
-                "leaf": path[-1],
-                # The branch's label - the wrangle that ends it reads better than its table name,
-                # which is mostly a prefix shared with every other node
-                "leaf_op": pgraph.node_map[path[-1]].wrangle_label(),
-                "dimensions": quality_trajectory(ordered_metrics),
-            })
+        for name, value in (("source", source), ("target", target), ("destination", destination)):
+            if not value:
+                return {"success": False, "error": f"missing {name}"}, 400
 
-        return {"success": True, "node": node_id, "branches": branches}
+        path = pgraph.path_between(source, destination)
+        if path is None:
+            return {"success": False,
+                    "error": f"{destination} is not downstream of {source}"}, 400
+
+        # The destination has to lie beyond the chosen edge, not down a sibling branch
+        if len(path) < 2 or path[1] != target:
+            return {"success": False,
+                    "error": f"{destination} is not on the branch leaving through {target}"}, 400
+
+        ordered_metrics = [pgraph.node_map[table_name].metrics for table_name in path]
+
+        return {
+            "success": True,
+            "source": source,
+            "target": target,
+            "destination": destination,
+            "nodes": path,
+            "dimensions": quality_trajectory(ordered_metrics),
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}, 400

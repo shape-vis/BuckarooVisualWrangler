@@ -131,14 +131,14 @@ class QualityTrajectoryTests(unittest.TestCase):
             self.assertIn(dimension, trajectory)
 
 
-class DescendantPathsTests(unittest.TestCase):
+class PathBetweenTests(unittest.TestCase):
     def _branched_graph(self):
         """
-        n0a
-         |
-        n1b --- n2c
-         |
-        n3d
+            n0a
+             |
+            n1b
+            /  \
+          n2c   n3d
         """
         graph = PGraph()
         graph.add_root_node(GraphNode("root", "root", "n0a", "errors_n0a"))
@@ -147,19 +147,31 @@ class DescendantPathsTests(unittest.TestCase):
         graph.add_node(GraphNode("n1b", "delete", "n3d", "errors_n3d"))
         return graph
 
-    def test_one_path_per_leaf(self):
-        paths = self._branched_graph().descendant_paths("n0a")
-
+    def test_walks_from_an_ancestor_down_to_a_descendant(self):
         self.assertEqual(
-            sorted(paths),
-            [["n0a", "n1b", "n2c"], ["n0a", "n1b", "n3d"]],
+            self._branched_graph().path_between("n0a", "n2c"),
+            ["n0a", "n1b", "n2c"],
         )
 
-    def test_leaf_returns_a_single_one_element_path(self):
-        self.assertEqual(self._branched_graph().descendant_paths("n2c"), [["n2c"]])
+    def test_each_sibling_gets_its_own_path(self):
+        graph = self._branched_graph()
+        self.assertEqual(graph.path_between("n1b", "n2c"), ["n1b", "n2c"])
+        self.assertEqual(graph.path_between("n1b", "n3d"), ["n1b", "n3d"])
 
-    def test_unknown_node_returns_nothing(self):
-        self.assertEqual(self._branched_graph().descendant_paths("nope"), [])
+    def test_a_node_reaches_itself(self):
+        self.assertEqual(self._branched_graph().path_between("n1b", "n1b"), ["n1b"])
+
+    def test_siblings_do_not_reach_each_other(self):
+        self.assertIsNone(self._branched_graph().path_between("n2c", "n3d"))
+
+    def test_walking_the_wrong_way_finds_nothing(self):
+        # n0a is above n2c, so there is no path running down from n2c to it
+        self.assertIsNone(self._branched_graph().path_between("n2c", "n0a"))
+
+    def test_unknown_nodes_find_nothing(self):
+        graph = self._branched_graph()
+        self.assertIsNone(graph.path_between("nope", "n2c"))
+        self.assertIsNone(graph.path_between("n0a", "nope"))
 
 
 class NodeIdTests(unittest.TestCase):
