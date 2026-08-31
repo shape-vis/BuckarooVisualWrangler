@@ -1,0 +1,203 @@
+/* Every length here is in em so the whole panel scales with the dock's font-size, which RightDock
+   derives from the dragged width. Widening the dock grows the text, not just the whitespace. */
+
+#node-detail-root {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7em;
+    width: 100%;
+    box-sizing: border-box;
+    color: #1c1e21;
+}
+
+.node-detail-title {
+    font-weight: 700;
+    font-size: 1.08em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.node-detail-empty,
+.node-detail-nochange {
+    color: #65676b;
+    font-style: italic;
+    font-size: 0.92em;
+}
+
+.node-detail-views,
+.node-detail-branches {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.node-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85em;
+}
+
+/* Maps line color to branch, once for the whole view rather than per dimension */
+.branch-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.55em;
+    font-size: 0.83em;
+    color: #65676b;
+}
+
+.branch-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    font-weight: 600;
+    color: #1c1e21;
+}
+
+.branch-legend-swatch {
+    width: 0.85em;
+    height: 0.2em;
+    border-radius: 0.1em;
+}
+
+.branch-legend-note {
+    font-style: italic;
+}
+
+/* One dimension's sparkline plus its per-step contributions */
+.node-detail-dimension {
+    border: 1px solid #dddfe2;
+    border-radius: 0.65em;
+    padding: 0.5em;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.node-detail-dimension-header {
+    display: flex;
+    align-items: center;
+    gap: 0.42em;
+    margin-bottom: 0.17em;
+}
+
+.node-detail-dimension-name {
+    font-size: 0.92em;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.node-detail-dimension-value {
+    margin-left: auto;
+    font-size: 0.92em;
+    font-weight: 700;
+    color: #65676b;
+}
+
+.node-detail-swatch {
+    width: 0.75em;
+    height: 0.75em;
+    border-radius: 0.17em;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.node-detail-swatch[data-error-type="missing"]    { background-color: saddlebrown; }
+.node-detail-swatch[data-error-type="mismatch"]   { background-color: hotpink; }
+.node-detail-swatch[data-error-type="anomaly"]    { background-color: red; }
+.node-detail-swatch[data-error-type="incomplete"] { background-color: gray; }
+
+/* Per-step contributions: each step's share of the branch's total absolute change */
+.contribution-list {
+    list-style: none;
+    margin: 0.17em 0 0 0;
+    padding: 0;
+}
+
+.contribution-row {
+    display: grid;
+    grid-template-columns: 0.55em 1fr 3.4em 5.2em;
+    align-items: baseline;
+    gap: 0.3em;
+    font-size: 0.83em;
+    color: #65676b;
+}
+
+/* Which branch this step belongs to - same color as its sparkline and its graph edges */
+.contribution-branch {
+    width: 0.55em;
+    height: 0.55em;
+    border-radius: 50%;
+    align-self: center;
+}
+
+.contribution-step {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contribution-share {
+    text-align: right;
+    font-weight: 700;
+}
+
+.contribution-share--improved { color: #1a7f37; }
+.contribution-share--worsened { color: #d1242f; }
+
+.contribution-delta {
+    text-align: right;
+}
+
+/* Columns view */
+.columns-sort {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25em;
+    font-size: 0.83em;
+    margin-bottom: 0.4em;
+}
+
+.columns-sort-label {
+    color: #65676b;
+}
+
+.columns-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.83em;
+}
+
+.columns-table th {
+    text-align: right;
+    font-weight: 600;
+    color: #65676b;
+    padding: 0.25em 0.17em;
+    border-bottom: 1px solid #dddfe2;
+}
+
+.columns-table th:first-child {
+    text-align: left;
+}
+
+.columns-table td {
+    text-align: right;
+    padding: 0.25em 0.17em;
+    border-bottom: 1px solid #f0f2f5;
+}
+
+.columns-table-name {
+    text-align: left !important;
+    font-weight: 600;
+}
+
+.columns-table-total {
+    font-weight: 700;
+}
+
+.columns-table-zero {
+    color: #b0b3b8;
+}

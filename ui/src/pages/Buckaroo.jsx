@@ -3,7 +3,7 @@ import { createContext, useState, useCallback } from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import MatrixView from "../panels/SelectionPanel.jsx";
-import RepairPanel from "../panels/RepairPanel.jsx";
+import RightDock from "../panels/RightDock.jsx";
 import { SelectionProvider } from "../store/SelectionContext.jsx";
 import { RowRangeProvider } from "../store/RowRangeContext.jsx";
 import { SettingsProvider } from "../store/SettingsContext.jsx";
@@ -14,6 +14,7 @@ import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
 import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
+import {DockProvider} from "../store/DockContext.jsx";
 
 export const ViewContext = createContext();
 
@@ -37,6 +38,8 @@ export default function Buckaroo({ onReset }) {
         <>
             <ViewContext.Provider value={{ activeView, setActiveView, refreshKey, setRefreshKey}}>
                 <SettingsProvider>
+                {/* Above PGraph and Repair: both ask the dock to show their tab */}
+                <DockProvider>
                 <PGraphProvider>
                 <RowRangeProvider>
                 <SelectionProvider>
@@ -54,12 +57,9 @@ export default function Buckaroo({ onReset }) {
 
                                 {/*Plot view*/}
                                 {activeView === "plots" && (
-                                    <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                            />
-                                        <RepairPanel />
-                                    </>
+                                    <MatrixView
+                                        selectedAttributes={selectedAttributes}
+                                    />
                                 )}
 
                                 {/*Plots and Graph view*/}
@@ -69,13 +69,15 @@ export default function Buckaroo({ onReset }) {
                                             selectedAttributes={selectedAttributes}
                                         />
                                         <PGraph />
-                                        <RepairPanel />
                                     </>
                                 )}
 
                                 {/*Graph View*/}
                                 {activeView === "graph" &&
                                     <PGraph />}
+
+                                {/*Repair and node details, as tabs in one resizable dock*/}
+                                <RightDock />
                             </div>
                             <div className={`table-panel-wrapper ${activeView === "both" || activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
                                 <TablePanel
@@ -90,6 +92,7 @@ export default function Buckaroo({ onReset }) {
                 </SelectionProvider>
                 </RowRangeProvider>
                 </PGraphProvider>
+                </DockProvider>
                 </SettingsProvider>
             </ViewContext.Provider>
         </>

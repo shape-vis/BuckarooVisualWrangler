@@ -3,6 +3,35 @@ import * as d3 from "d3";
 
 /* original functions (copied exactly) */
 
+const TOOLTIP_GAP = 10;
+
+/**
+ * Places the tooltip beside the cursor, flipping to the other side of it when the default placement
+ * would run off the edge of the window. Without this, anything plotted near the right edge - a
+ * sparkline's last point, the rightmost bin of a histogram - shows a clipped tooltip.
+ *
+ * Must be called after the content is set: the flip depends on the rendered size.
+ */
+function positionTooltip(tooltip, event) {
+    const node = tooltip.node();
+    if (!node) return;
+
+    const { offsetWidth: width, offsetHeight: height } = node;
+
+    // pageX/pageY are document coordinates, so the edges have to be in document space too
+    const rightEdge = window.scrollX + document.documentElement.clientWidth;
+    const bottomEdge = window.scrollY + document.documentElement.clientHeight;
+
+    const overflowsRight = event.pageX + TOOLTIP_GAP + width > rightEdge;
+    const overflowsBottom = event.pageY + TOOLTIP_GAP + height > bottomEdge;
+
+    const left = overflowsRight ? event.pageX - TOOLTIP_GAP - width : event.pageX + TOOLTIP_GAP;
+    const top = overflowsBottom ? event.pageY - TOOLTIP_GAP - height : event.pageY + TOOLTIP_GAP;
+
+    tooltip.style("left", `${Math.max(0, left)}px`)
+           .style("top", `${Math.max(0, top)}px`);
+}
+
 export function createTooltip(target_objects, html_function, left_click_handler = (d)=>{}, right_click_handler = (d)=>{}, double_click_handler = (d)=>{} ) {
 
     const tooltip = d3.select("#tooltip");
@@ -10,14 +39,11 @@ export function createTooltip(target_objects, html_function, left_click_handler 
             d3.select(this).attr("opacity", 0.5)
 
             tooltip.style("display", "block")
-                .html(html_function(d) )
-                .style("left", `${event.pageX + 10}px`)
-                .style("top", `${event.pageY + 10}px`);
+                .html(html_function(d) );
+            positionTooltip(tooltip, event);
         })
         .on("mousemove", function(event) {
-            tooltip
-                .style("left", `${event.pageX + 10}px`)
-                .style("top", `${event.pageY + 10}px`);
+            positionTooltip(tooltip, event);
         })
         .on("mouseout", function() {
             d3.select(this).attr("opacity", 1)

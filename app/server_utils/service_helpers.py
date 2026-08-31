@@ -20,6 +20,11 @@ from detectors.datatype_mismatch import datatype_mismatch
 from detectors.incomplete import incomplete
 from detectors.missing_value import missing_value
 from app.db_utils.data_profile import DataProfile
+from app.pgraph.metrics import refresh_node_metrics
+
+# Node tables are named "<node id>_<base name>", where the node id is n{digit}{letter} - see
+# node_id_for_count in app/pgraph/pgraph.py
+NODE_PREFIX_PATTERN = re.compile(r'^n(\d[a-z])_(.+)$')
 
 def get_current_pgraph():
     """
@@ -411,7 +416,7 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
 
-def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations):
+def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations, wrangle_cols=None):
     """
     Promote a preview table to the new current table and make it as a new node in the pgraph
     1. Drop all other preview tables (and their errors_ siblings)
@@ -435,7 +440,7 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
 
     #enter into pgraph before current or new tables are modified, return the new tables name with nodeID added
     # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
-    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed)
+    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed, wrangle_cols)
     app.db_operations.rename_preview_to_new(preview_table, new_table_name)
 
     # Preview tables have no profile, so the promoted node gets one built here
@@ -445,6 +450,9 @@ def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations
 
     app.db_operations.update_rankings(new_table_name)
 
+    # Compute the node's quality metrics once, here. Everything downstream - the attribute summary
+    # deltas, the node detail panel, the sparklines - reads this cached object rather than recomputing
+    refresh_node_metrics(new_table_name)
 
     return {"success": True, "table": new_table_name}
 
@@ -470,16 +478,27 @@ def init_pgraph_for_session(root_table):
     root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
     app.pgraph_for_session.add_root_node(root_node)
 
-def n_wrangle(parent_table, child_table, wrangle_executed):
+    refresh_node_metrics(root_table)
+
+def n_wrangle(parent_table, child_table, wrangle_executed, wrangle_cols=None):
     new_table_name = make_new_table_name(child_table)
-    current_node = GraphNode(parent_table,wrangle_executed, new_table_name,f"errors_{new_table_name}" )
+    current_node = GraphNode(parent_table, wrangle_executed, new_table_name,
+                             f"errors_{new_table_name}", wrangle_cols)
     app.pgraph_for_session.add_node(current_node)
     return new_table_name
 
 def make_new_table_name(child_table):
+    """
+    Re-prefix a parent's table name with the next node id. The old prefix is stripped by pattern
+    rather than by slicing a fixed number of characters, so this stays correct however the node id
+    scheme changes.
+    :param child_table: the parent node's table name, e.g. "n0a_adult_x7f2q"
+    :return: the same base name under the next node id, e.g. "n1b_adult_x7f2q"
+    """
     node_id = app.pgraph_for_session.get_new_node_id()
-    new_table_name = f"{node_id}{child_table[2:]}"
-    return new_table_name
+    parsed = _parse_node_id(child_table)
+    base_name = parsed[1] if parsed else child_table
+    return f"{node_id}_{base_name}"
 
 def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
     """
@@ -585,8 +604,8 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
     }
 
 def _parse_node_id(table_name):
-    """Parse 'n3_rest_of_name' into (3, 'rest_of_name'). Returns None on failure."""
-    m = re.match(r'^n(\d+)_(.+)$', table_name)
+    """Parse 'n0c_rest_of_name' into ('0c', 'rest_of_name'). Returns None on failure."""
+    m = NODE_PREFIX_PATTERN.match(table_name)
     if not m:
         return None
-    return int(m.group(1)), m.group(2)
+    return m.group(1), m.group(2)

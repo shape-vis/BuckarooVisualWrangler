@@ -1,22 +1,8 @@
-
-.react-flow__node-noteNode{
-    background-color: #64ea96;
-}
-.react-flow__node-noteNode {
-  background-color: #64ea96;
-  border: 1px solid #1a192b;
-  border-radius: 3px;
-  padding: 5px;
-  font-size: 12px;
-  text-align: center;
-  min-width: 150px;
-}
-
-.react-flow__node-rootNoteNode{
-    background-color: #64ea96;
-}
+/* Nodes are white at rest. Which node is current and which is the comparison baseline are states, so
+   they are modifier classes set from the node data rather than inline styles written by an effect. */
+.react-flow__node-noteNode,
 .react-flow__node-rootNoteNode {
-  background-color: #121312;
+  background-color: #ffffff;
   border: 1px solid #1a192b;
   border-radius: 3px;
   padding: 5px;
@@ -24,6 +10,39 @@
   text-align: center;
   min-width: 150px;
 }
+
+/* The two nodes the attribute summary panel is comparing. Both get a matching solid ring so they read
+   as a pair against everything else in the graph, and the colors match the panel's strip: green for
+   the wrangled node, blue for the baseline. */
+.react-flow__node.pgraph-node--current {
+  background-color: #64ea96;
+  border: 2px solid #1a7f37;
+  box-shadow: 0 0 0 3px rgba(26, 127, 55, 0.25);
+}
+
+.react-flow__node.pgraph-node--baseline {
+  background-color: #e7f0fd;
+  border: 2px dashed #1877F2;
+  box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
+}
+
+/* Floats above the node, so it adds no height to the dagre layout */
+.node-comparison-badge {
+  position: absolute;
+  top: -15px;
+  left: 0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.node-comparison-badge--current  { background-color: #1a7f37; }
+.node-comparison-badge--baseline { background-color: #1877F2; }
 .react-flow__node-input.selectable.selected,
     .react-flow__node-input.selectable:focus,
     .react-flow__node-input.selectable:focus-visible,

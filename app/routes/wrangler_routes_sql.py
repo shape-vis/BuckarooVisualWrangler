@@ -216,8 +216,11 @@ def execute_wrangle():
         body = request.get_json(force=True)
         table         = db_operations.main_table_name
         preview_table = body["preview_table"]  # the preview to promote
+        # The columns the selection was made on. The preview table name records the operation but not
+        # what it acted on, so the client passes them back through to label the new node's edge.
+        cols          = body.get("cols", [])
 
-        return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations)
+        return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations, cols)
     except Exception as e:
         print("ERROR in execute_wrangle")
         print(traceback.format_exc())

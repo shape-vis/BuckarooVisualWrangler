@@ -256,12 +256,12 @@ export async function queryPreviewHistogram(params) {
  * Promote a preview table to be the main table, deleting all other previews.
  * Backend uses db_operations.main_table_name as the source of truth.
  */
-export async function executeWrangle(previewTable) {
+export async function executeWrangle(previewTable, cols = []) {
     try {
         const response = await fetch("/api/wrangle/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ preview_table: previewTable }),
+            body: JSON.stringify({ preview_table: previewTable, cols }),
         });
         return await response.json();
     } catch (error) {
@@ -323,6 +323,16 @@ export async function getPGraph(){
         return await response.json();
     } catch (error) {
         console.error("[getPGraph]", error.message)
+    }
+}
+
+export async function getQualityTrajectory(nodeId){
+    try {
+        const params = new URLSearchParams({ node: nodeId });
+        const response = await fetch(`/api/pgraph/quality_trajectory?${params}`, {method: "GET"});
+        return await response.json();
+    } catch (error) {
+        console.error("[getQualityTrajectory]", error.message)
     }
 }
 

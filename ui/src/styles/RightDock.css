@@ -1,0 +1,132 @@
+.right-dock {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-left: 1px solid #dddfe2;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Drag target on the dock's left edge. Sits above the content and stays hit-testable at 6px by
+   extending its cursor area, so the pane can be widened without hunting for a 1px border. */
+.right-dock-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+    background: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.right-dock-resize:hover,
+.right-dock-resize:active {
+    background: #1877F2;
+}
+
+/* Tab strip, in the manner of editor file tabs */
+.right-dock-tabstrip {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    background: #f0f2f5;
+    border-bottom: 1px solid #dddfe2;
+    padding-left: 6px;
+}
+
+.right-dock-tab {
+    border: none;
+    border-right: 1px solid #dddfe2;
+    background: transparent;
+    padding: 0.5em 0.9em;
+    font-size: 0.92em;
+    font-family: inherit;
+    color: #65676b;
+    cursor: pointer;
+    white-space: nowrap;
+    border-top: 2px solid transparent;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.right-dock-tab:hover {
+    background: #e7eaee;
+    color: #1c1e21;
+}
+
+/* The active tab reads as the sheet in front: white ground, accent edge, no bottom rule */
+.right-dock-tab--active {
+    background: #ffffff;
+    color: #1c1e21;
+    font-weight: 600;
+    border-top: 2px solid #1877F2;
+    margin-bottom: -1px;
+    padding-bottom: calc(0.5em + 1px);
+}
+
+.right-dock-hide {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: #65676b;
+    font-size: 1.1em;
+    line-height: 1;
+    padding: 0 0.7em;
+    cursor: pointer;
+}
+
+.right-dock-hide:hover {
+    background: #e7eaee;
+    color: #1c1e21;
+}
+
+.right-dock-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.5em;
+}
+
+.right-dock-pane {
+    height: 100%;
+}
+
+/* .right-dock-pane sets a display, so the hidden attribute needs to win explicitly */
+.right-dock-pane[hidden] {
+    display: none;
+}
+
+/* Collapsed: a narrow rail of vertical tab labels, each of which reopens its own panel */
+.right-dock--collapsed {
+    width: 34px;
+    flex-direction: column;
+    align-items: stretch;
+    background: #f0f2f5;
+}
+
+.right-dock-rail-tab {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    flex: 1;
+    border: none;
+    border-bottom: 1px solid #dddfe2;
+    background: transparent;
+    color: #65676b;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 10px 0;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.right-dock-rail-tab:hover {
+    background: #e7eaee;
+    color: #1877F2;
+}

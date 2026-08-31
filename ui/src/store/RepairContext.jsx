@@ -3,6 +3,8 @@ import { undoWrangle, redoWrangle, createPreviews } from "../utils/serverCalls.j
 import { useTableName } from "./TableNameContext.jsx";
 import { useLoading } from "./LoadingContext.jsx";
 import { SelectionContext } from "./SelectionContext.jsx";
+import { usePgraph } from "./PGraphContext.jsx";
+import { useDock } from "./DockContext.jsx";
 
 const RepairContext = createContext(null);
 
@@ -11,14 +13,17 @@ export function RepairProvider({ onWrangleExecuted, children }) {
     const { addLoader, removeLoader } = useLoading();
     const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } =
         useContext(SelectionContext);
+    // Undo and redo move the current node, so the rendered graph has to be re-pulled too
+    const { refreshGraph } = usePgraph();
+
+    // Showing and hiding the repair panel is a dock concern now that it is one of the dock's tabs
+    const { revealTab, hideDock } = useDock();
 
     const [busy, setBusy] = useState(false);
-    const [repairPanelOpenTrigger, setRepairPanelOpenTrigger] = useState(0);
-    const [repairPanelCloseTrigger, setRepairPanelCloseTrigger] = useState(0);
 
     const closeRepairPanel = useCallback(() => {
-        setRepairPanelCloseTrigger(c => c + 1);
-    }, []);
+        hideDock();
+    }, [hideDock]);
 
     // Ref-based callback so the header can trigger RepairPanel's local handler
     const repairHandlerRef = useRef(null);
@@ -28,14 +33,15 @@ export function RepairProvider({ onWrangleExecuted, children }) {
     }, []);
 
     const triggerRepairSelection = useCallback(() => {
-        setRepairPanelOpenTrigger(c => c + 1);
+        revealTab("repair");
         repairHandlerRef.current?.();
-    }, []);
+    }, [revealTab]);
 
     const handleUndo = useCallback(async () => {
         setBusy(true);
         addLoader();
         const result = await undoWrangle();
+        await refreshGraph();
         setBusy(false);
         removeLoader();
         if (result?.success) {
@@ -45,12 +51,13 @@ export function RepairProvider({ onWrangleExecuted, children }) {
             onWrangleExecuted?.();
         }
         return result;
-    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
+    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted, refreshGraph]);
 
     const handleRedo = useCallback(async () => {
         setBusy(true);
         addLoader();
         const result = await redoWrangle();
+        await refreshGraph();
         setBusy(false);
         removeLoader();
         if (result?.success) {
@@ -60,7 +67,7 @@ export function RepairProvider({ onWrangleExecuted, children }) {
             onWrangleExecuted?.();
         }
         return result;
-    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
+    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted, refreshGraph]);
 
     // Returns the raw server result so RepairPanel can set local preview state
     const requestPreviews = useCallback(async () => {
@@ -83,8 +90,6 @@ export function RepairProvider({ onWrangleExecuted, children }) {
             requestPreviews,
             triggerRepairSelection,
             registerRepairHandler,
-            repairPanelOpenTrigger,
-            repairPanelCloseTrigger,
             closeRepairPanel,
             hasSelection,
             onWrangleExecuted,

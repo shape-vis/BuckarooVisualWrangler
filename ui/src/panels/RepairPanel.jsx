@@ -1,7 +1,6 @@
 import { useContext, useState, useEffect, useCallback } from "react";
-import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { SelectionContext } from "../store/SelectionContext.jsx";
-import {executeWrangle, getPGraph} from "../utils/serverCalls.jsx";
+import {executeWrangle} from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
@@ -15,8 +14,8 @@ export default function RepairPanel() {
   const { setTableName } = useTableName();
   const { addLoader, removeLoader } = useLoading();
   const { highlightedRowIds, highlightedCols, clearHighlight } = useContext(SelectionContext);
-  const { busy, setBusy, requestPreviews, registerRepairHandler, repairPanelOpenTrigger, repairPanelCloseTrigger, closeRepairPanel, onWrangleExecuted } = useRepair();
-  const {getLayoutedElements, setNodes, setEdges} = usePgraph();
+  const { busy, setBusy, requestPreviews, registerRepairHandler, closeRepairPanel, onWrangleExecuted } = useRepair();
+  const {refreshGraph} = usePgraph();
   //local component state
   const [previewError, setPreviewError] = useState(null);
   const [previews, setPreviews] = useState(null);
@@ -71,14 +70,11 @@ export default function RepairPanel() {
     setPreviewError(null);
 
     //execute the wrangle
-    const result = await executeWrangle(previewTableName);
-    const pGraphResult = await getPGraph();
+    // The columns the selection was made on, so the new node's edge can name them
+    const result = await executeWrangle(previewTableName, previews?.cols ?? []);
 
-    //update the nodes and edges in the pgraph based on the new result
-    let layoutNodesEdges;
-    layoutNodesEdges = getLayoutedElements(pGraphResult.nodes, pGraphResult.edges)
-    setNodes(layoutNodesEdges.nodes)
-    setEdges(layoutNodesEdges.edges)
+    //the wrangle added a node, so pull the graph back down and re-layout it
+    await refreshGraph();
 
     setBusy(false);
     removeLoader();
@@ -95,8 +91,8 @@ export default function RepairPanel() {
     }
   }
 
+  // The dock owns the panel chrome - tab strip, collapsing and resizing - so this renders bare content
   return (
-    <CollapsiblePanel direction="right" collapsed={"Data Repair Panel"} defaultOpen={false} className="panel--repair" openTrigger={repairPanelOpenTrigger} closeTrigger={repairPanelCloseTrigger}>
       <div id="toolbox">
         <div className="repair-panel-title">
           Data Repair Panel
@@ -191,6 +187,5 @@ export default function RepairPanel() {
           )}
         </div>
       </div>
-    </CollapsiblePanel>
   );
 }

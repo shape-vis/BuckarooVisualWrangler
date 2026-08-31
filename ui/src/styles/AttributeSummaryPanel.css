@@ -215,3 +215,132 @@
   background: #ffffff;
   z-index: 1000;
 }
+
+/* ── Baseline comparison ──────────────────────────────────────────────────── */
+
+/* Names the node the deltas are measured against, and the row-count change on the way there */
+.baseline-strip {
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
+    padding: 7px 8px;
+    width: 250px;
+    margin-bottom: 6px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    font-size: 12px;
+    box-sizing: border-box;
+}
+
+.baseline-strip--empty {
+    color: #65676b;
+    font-style: italic;
+}
+
+/* Fixed label column so the two node names line up under each other */
+.baseline-strip-line {
+    display: grid;
+    grid-template-columns: 102px 1fr auto;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.baseline-strip-label {
+    color: #65676b;
+}
+
+.baseline-strip-node {
+    font-weight: 600;
+    color: #1877F2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The node being wrangled is the one every other panel is showing, so it reads as the active state */
+.baseline-strip-node--current {
+    color: #1a7f37;
+}
+
+.baseline-strip-reset {
+    border: none;
+    background: none;
+    padding: 0;
+    color: #65676b;
+    font-size: 11px;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.baseline-strip-reset:hover {
+    color: #1c1e21;
+}
+
+.baseline-strip-rows {
+    color: #65676b;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+.baseline-strip-rowdelta {
+    font-weight: 600;
+}
+
+/* One "before → after" line per error type. The panel column is a fixed 250px, so these stay on a
+   single line and truncate rather than wrapping. */
+.delta-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 2px;
+}
+
+.delta-list--clean {
+    color: #65676b;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.delta-pair {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.delta-type {
+    display: inline-block;
+    width: 66px;
+    padding: 0 4px;
+    border-radius: 3px;
+    color: #ffffff;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.delta-before {
+    color: #65676b;
+    min-width: 42px;
+    text-align: right;
+}
+
+.delta-arrow {
+    color: #65676b;
+}
+
+.delta-after {
+    font-weight: 700;
+    min-width: 42px;
+}
+
+/* q is an error rate, so falling is an improvement */
+.delta-after--improved { color: #1a7f37; }
+.delta-after--worsened { color: #c1121f; }
+.delta-after--flat     { color: #65676b; }
+
+/* Same palette as the .error-scent chips above */
+.delta-type[data-error-type="missing"]    { background-color: saddlebrown; }
+.delta-type[data-error-type="mismatch"]   { background-color: hotpink; }
+.delta-type[data-error-type="anomaly"]    { background-color: red; }
+.delta-type[data-error-type="incomplete"] { background-color: gray; }

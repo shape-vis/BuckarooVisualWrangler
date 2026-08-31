@@ -12,7 +12,8 @@ function TableStatus() {
     const { tableName } = useTableName();
     const { isLoading } = useLoading();
 
-    const match = tableName?.match(/^n(\d+)_(.+)$/);
+    // Node tables are named "<node id>_<base name>", where the node id is n{digit}{letter}
+    const match = tableName?.match(/^n(\d[a-z])_(.+)$/);
     const label = match ? `n${match[1]} - ${match[2]}` : tableName || "No table";
 
     return (

@@ -15,6 +15,7 @@ from app.server_utils.service_helpers import (
     calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
 )
 from app.server_utils.set_id_column import set_id_column
+from app.pgraph.pgraph import node_id_for_count
 
 
 def load_file(csv_file, filename):
@@ -39,7 +40,7 @@ def load_file(csv_file, filename):
     time_to_detect = time.time() - start_time
     app.original_table_name = filename
     table_name = generate_table_name(filename)
-    table_name_with_node_id = f"n0_{table_name}"
+    table_name_with_node_id = f"{node_id_for_count(0)}_{table_name}"
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
     error_table_name = f"errors_{table_name_with_node_id}"

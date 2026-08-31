@@ -1,0 +1,8 @@
+.sparkline {
+    display: block;
+    overflow: visible;
+}
+
+.sparkline-point {
+    cursor: pointer;
+}
