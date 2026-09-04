@@ -59,7 +59,7 @@ def _safe_pg_name(base: str, suffix: str) -> str:
       errors_<name>     prefix  7 chars  -> name <= 56
       rankings_<name>   prefix  9 chars  -> name <= 54
       <name>_filtering  suffix 10 chars  -> name <= 53
-      n0__<name>_filtering prefix 4 chars, suffix 10 chars -> name <= 49  (most restrictive)
+      n0__<name>_filtering prefix 4 chars suffix 10 chars -> name <=  49 (most restrictive)
 
     If base+suffix already fits, use it as-is. Otherwise truncate the base
     and append an 8-char MD5 hash so the name stays unique.
@@ -84,6 +84,10 @@ def generate_base_table_name(csv_name):
         csv_name = csv_name[0:len(csv_name)-4]
 
     clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name).lower()
+
+    # 49 is max len of name + rand suffix, so max len of name is 44
+    if len(clean_name) > 44:
+        clean_name = clean_name[3:len(clean_name)+ 1]
     random_string = "".join(random.choices(string.ascii_letters + string.digits, k=5))
     return _safe_pg_name(clean_name, "_" + random_string)
 
@@ -140,7 +144,7 @@ def get_values_for_df_melt(df):
     :return: a list of column names to be used in the melt operation
     """
     values = []
-    columns = df.columns
+    columns = list(df.columns)
     for column in columns:
         if column not in ('ID', "Unnamed: 0", "column_id","error_type","row_id"):
             values.append(column)

@@ -10,6 +10,10 @@ from pyrate_limiter import Duration, Rate, Limiter
 
 from app.server_utils.logger_utils import update_action_log
 
+from datetime import datetime, timezone
+from app.server_utils.logger_utils import InvalidActionError
+
+
 AI_SETTINGS_TABLE_NAME = "ai_settings"
 
 ablations = ["include_data_profile", "include_dataset_context", "include_action_plan", "include_action_plan_translation"]
@@ -23,7 +27,7 @@ valid_actions = ["delete_wrangle", "impute_wrangle", "delete_column", "plan_end"
 '''
 
 def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path, action_log_csv_path,
-                                   data_profile_csv_path, full_dataset_csv_path, action_limit=5):
+                                   data_profile_csv_path, full_dataset_csv_path):
     """
     Queries LLM to generate a text action plan after given context
     :param model: name of the model
@@ -33,9 +37,10 @@ def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path,
     :param action_log_csv_path: path to the action log
     :param data_profile_csv_path: path to the data profile
     :param full_dataset_csv_path: path to the full dataset csv
-    :param action_limit: maximum number of actions to generate
     """
-    system_prompt = f"You are data scientist. Create an action plan of the top {action_limit} steps the user could do that efficiently cleans this dataset."
+    action_limit = 5
+    system_prompt = (f"You are data scientist. Create an action plan of the top {action_limit} steps the user could do that efficiently cleans this dataset while"
+                     f"also personalizing the actions to better suit the users wants based on the action log.")
 
     csv_text = {}
 
@@ -52,16 +57,26 @@ def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path,
         csv_text[full_dataset_csv_path] = f.read()
 
     llm_text_plan_rules = '''
-        Each step of the action plan should be numbered and begin with the selection of columns and rows 
-        to perform the wrangles on. You may also select the whole dataset by putting "ALL" for "rows" and "columns". At each step, determine a SINGULAR wrangling
-        action to perform on the selected data. Here are the wrangles that you can perform on the data:
-            - Delete: deletes the selection of data
-            - Impute: impute the selection of data with either the mean if numeric or the mode if categorical
-            - Delete column: deletes a column of the dataset
-            - Stop: stop wrangling the data as the data is at a satisfactory state. This does not have to be the last action in the plan.
+        Each step of the action plan should be numbered and begin with the selection of columns and rows.
+        The columns should the string names columns, or None depending on the action you take. You may only perform an action on TWO COLUMNS AT A TIME. There should only be at most two columns selected
+        while the rows should be each individual rows to perform the wrangles on.
+        At each step, determine a SINGULAR wrangling
+        action to perform on the selected data. 
+        You must specify which datapoints to perform each action on, specified with rows and column.
+            - row: a list of the rows to apply action to. Refer to the "ID" column to decide which row to delete.
+            - column: the name of a single column to apply action to
+        
+        Here are the wrangles that you can perform on the data:
+            - Delete: Deletes the selection of rows; the value for columns is ignored as the row for all columns will be deleted. Rows should be specified and columns should be an empty list.
+            - Impute: Imputes the selection of data with either the mean if numeric or the mode if categorical. The rows and columns should be specified. If you only have one column to impute, only specify one column.
+            - Delete column: Deletes an entire column of the dataset. The columns should be specified and rows should be empty (empty list). YOU MAY NOT DELETE THE ID COLUMN
+            
+            - Stop: stop wrangling the data if the data is at a satisfactory state. The action plan does not have to
+                end with a stop action as the dataset will be reevaluated again later to see if there are any more actions that need to be done.
                 The stop action should only be used if there are no more actions needed to be done. 
-
+                
         OTHER RULES THAT YOU MUST FOLLOW
+        - YOU MAY NOT DELETE THE "ID" COLUMN
         - DO NOT CREATE NEW ACTIONS
         - ONLY OUTPUT THE ACTION PLAN, NOTHING ELSE
     '''
@@ -72,8 +87,10 @@ def query_llm_for_text_action_plan(model, provider, api_key, error_log_csv_path,
     error_log: {csv_text[error_log_csv_path]}\n
     full_dataset: {csv_text[full_dataset_csv_path]}\n
     '''
+    print("FULL_DATASET_CSV_PATH", full_dataset_csv_path)
 
     full_message = llm_text_plan_rules + additional_details
+    print("FULL MESSAGE TO LLM:", full_message)
     #print("full_message", full_message)
     #print("len(full_message)", len(full_message))
     #print("estimated num tokens", len(full_message) / 4)
@@ -108,7 +125,7 @@ def query_llm_for_action_plan_translation(model, provider, api_key, text_action_
     system_prompt = "You are a translator that translates actions from natural language text to JSON where each row is an action.  Translate this action plan from text to JSON."
 
     llm_translated_plan_rules = '''
-        Each step of the action plan should be a dict with the following keys: "action_name", "rows_to_wrangle", "column".
+        Each step of the action plan should be a dict with the following keys: "action_name", "rows_to_wrangle", "columns".
         Here are the valid actions and their names: 
         - Delete -> "delete_wrangle"
         - Impute -> "impute_wrangle"
@@ -116,7 +133,7 @@ def query_llm_for_action_plan_translation(model, provider, api_key, text_action_
         - Stop -> "plan_end"
         
         The value of "rows_to_wrangle" is list of rows to wrangle.
-        The value of "column" is the name of a SINGLE column to wrangle.
+        The value of "columns" is a list of the string name(s) of AT MOST TWO columns to wrangle. If no columns are provided, it should be translated into an empty list.
 
         OTHER RULES THAT YOU MUST FOLLOW
         - DO NOT CREATE NEW ACTIONS
@@ -231,6 +248,7 @@ def get_or_create_limiter(requests_per_minute_limit):
 
     return limiter
 
+# TODO: clean up code
 @app.post('/api/ai_helper/perform_llm_action')
 def perform_llm_action():
     """
@@ -239,32 +257,218 @@ def perform_llm_action():
     :return: JSON response indicating success or failure
     """
     from app import db_operations
-    from app.db_utils.query import remove_rows_by_ids, impute_by_ids
-    action_dict = request.get_json()
+    from app.db_utils.query import remove_rows_by_ids, impute_by_ids, delete_column
+    from app.routes.wrangler_routes_sql import update_errors_table, update_data_profile_table
+    timestamp = datetime.now(timezone.utc)
 
     try:
+        action_dict = request.get_json()
         main_table_name = db_operations.main_table_name
-        action_name = action_dict["action_name"]
-        rows_to_wrangle = action_dict["rows_to_wrangle"]
-        column = action_dict["column"]
+        action_name = str(action_dict["action_name"])
 
-        if action_name == "stop":
+
+        rows_to_wrangle = action_dict["rows_to_wrangle"]
+        if rows_to_wrangle is not None:
+            rows_to_wrangle = list(rows_to_wrangle)
+
+        columns = action_dict["columns"]
+        if columns is not None:
+            columns = list(columns)
+
+
+        action_details = {"row_ids": rows_to_wrangle, "cols": columns}
+
+        if action_name == "plan_end":
             return {
                 "success": True
             }
 
         # Apply the changes directly to the table (no preview)
-        if action_name == "delete":
-           remove_rows_by_ids(table=main_table_name, ids=rows_to_wrangle)
-        elif action_name == "impute":
-            impute_by_ids(table=main_table_name, col=column,ids=rows_to_wrangle)
+        #if action_name == "delete" and rows_to_wrangle == "ALL":
+        #    # The LLM is trying to say that it wants to delete this entire column
+        #contine
+        print("MAIN TABLE NUMERIC COLS", db_operations.col_types.numeric_cols)
+        print("MAIN TABLE CATEGORICAL COLS", db_operations.col_types.categorical_cols)
 
+        all_cols = list(db_operations.col_types.numeric_cols) + list(db_operations.col_types.categorical_cols)
+
+        # Validate/filter rows and columns BEFORE modifying the database
+
+        if action_name == "delete_wrangle":
+            # rows are required
+            if rows_to_wrangle is None:
+                raise InvalidActionError(
+                    "InvalidActionError: rows_to_wrangle should not be None for delete_wrangle"
+                )
+
+            existing_ids = {
+                row[0]
+                for row in fetch_sql(
+                    f'SELECT "ID" FROM "{main_table_name}"',
+                    False,
+                    engine
+                )
+            }
+            valid_rows = []
+            invalid_rows = []
+
+            for r in rows_to_wrangle:
+                try:
+                    r_int = int(r)
+                    if r_int in existing_ids:
+                        valid_rows.append(r_int)
+                    else:
+                        invalid_rows.append(r)
+                except (ValueError, TypeError):
+                    invalid_rows.append(r)
+
+
+            partial_failure = len(invalid_rows) > 0
+            action_details["invalid_rows"] = invalid_rows
+
+            if not valid_rows:
+                raise InvalidActionError(
+                    "InvalidActionError: None of the specified row IDs exist"
+                )
+
+            # Only execute valid rows
+            remove_rows_by_ids(table=main_table_name, ids=valid_rows)
+
+
+        elif action_name == "delete_column":
+            # columns are required
+            if columns is None:
+                raise InvalidActionError(
+                    "InvalidActionError: columns should not be None for delete_column"
+                )
+
+            valid_cols = [
+                col for col in columns
+                if col in all_cols and col != "ID"
+            ]
+            invalid_cols = [c for c in columns if c not in all_cols or c == "ID"]
+
+            action_details["invalid_cols"] = invalid_cols
+            partial_failure = len(invalid_cols) > 0
+
+            if not valid_cols:
+                raise InvalidActionError(
+                    "InvalidActionError: None of the specified columns are valid"
+                )
+
+            # Only execute valid columns
+            for col in valid_cols:
+                delete_column(table=main_table_name, column=col)
+
+
+        elif action_name == "impute_wrangle":
+            # BOTH rows and columns are required
+            if rows_to_wrangle is None:
+                raise InvalidActionError(
+                    "InvalidActionError: rows_to_wrangle should not be None for impute_wrangle"
+                )
+
+            if columns is None:
+                raise InvalidActionError(
+                    "InvalidActionError: columns should not be None for impute_wrangle"
+                )
+
+            existing_ids = {
+                row[0]
+                for row in fetch_sql(
+                    f'SELECT "ID" FROM "{main_table_name}"',
+                    False,
+                    engine
+                )
+            }
+            valid_rows = []
+            invalid_rows = []
+
+            for r in rows_to_wrangle:
+                try:
+                    r_int = int(r)
+                    if r_int in existing_ids:
+                        valid_rows.append(r_int)
+                    else:
+                        invalid_rows.append(r)
+                except (ValueError, TypeError):
+                    invalid_rows.append(r)
+
+            action_details["invalid_rows"] = invalid_rows
+
+            valid_cols = [c for c in columns if c in all_cols and c != "ID"]
+            invalid_cols = [c for c in columns if c not in all_cols or c == "ID"]
+            action_details["invalid_cols"] = invalid_cols
+
+            # Some requested rows/columns were invalid
+            partial_failure = (
+                    len(invalid_rows) > 0 or
+                    len(invalid_cols) > 0
+            )
+
+            if not valid_rows:
+                raise InvalidActionError(
+                    "InvalidActionError: None of the specified row IDs exist"
+                )
+
+            if not valid_cols:
+                raise InvalidActionError(
+                    "InvalidActionError: None of the specified columns are valid"
+                )
+
+            # Only execute valid rows/columns
+            for col in valid_cols:
+                impute_by_ids(
+                    table=main_table_name,
+                    col=col,
+                    ids=valid_rows
+                )
+
+        action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
+
+        if partial_failure:
+            action_success_status = "partial_failure"
+        else:
+            action_success_status = "action_success"
+
+
+        if columns is not None and len(columns) > 1:
+            update_errors_table(main_table_name, columns)
+            update_data_profile_table(main_table_name, columns)
+        else:
+            update_errors_table(main_table_name)
+            update_data_profile_table(main_table_name)
+
+        # Gets action details dict a different way from execute_wrangle because execute
+        if not action_name == "plan_end":
+            update_action_log(main_table_name=main_table_name, action_name=action_name, action_details=action_details,
+                              engine=engine, timestamp=timestamp, action_success_status=action_success_status, llm_suggested=True,
+                              action_duration=action_duration)
+            print("PERFORM LLM ACTION SUCCESSFULLY UPDATED ACTION LOG")
         return {
             "success": True
         }
+    except InvalidActionError as e:
+        logger.exception("Failed performing llm action because of invalid action")
 
+        # with the assumption that action_name is not None
+        if action_name is not None and not action_name == "plan_end":
+            update_action_log(main_table_name=main_table_name, action_name=action_name, action_details=action_details,
+                              engine=engine, timestamp=timestamp, action_success_status="action_fail", llm_suggested=True,
+                              action_error_message=str(e), reset_log=True)
+
+        return {
+            "success": False
+        }
     except Exception as e:
         logger.exception("Error performing LLM action")
+
+        # with the assumption that action_name is not None
+        if action_name is not None and not action_name == "stop":
+            update_action_log(main_table_name=main_table_name, action_name=action_name, action_details=action_details,
+                              engine=engine, timestamp=timestamp, action_success_status="action_fail", llm_suggested=True,
+                              action_error_message=str(e), reset_log=True)
+
         return {
             "success": False
         }
@@ -286,6 +490,7 @@ def get_llm_json_action_plan():
         settings_dict = get_settings_dict(engine)
         model_name = settings_dict.get("model_name")
         provider = settings_dict.get("provider")
+        action_log_limit = settings_dict.get("action_log_limit")
         requests_per_minute_limit = settings_dict.get("requests_per_minute_limit")
         dataset_sample_percent = settings_dict.get("dataset_sample_percent")
         api_key = get_api_key(provider)
@@ -293,18 +498,19 @@ def get_llm_json_action_plan():
         assert model_name is not None
 
         (error_log_csv_path, data_profile_csv_path, action_log_csv_path, full_dataset_csv_path) = update_csvs_for_llm(
-            error_table_name, data_profile_name, action_log_name, full_dataset_name, dataset_sample_percent)
+            error_table_name, data_profile_name, action_log_name, full_dataset_name, dataset_sample_percent,
+            action_log_limit)
 
 
         text_plan_func_args = (model_name, provider, api_key, error_log_csv_path,
             action_log_csv_path, data_profile_csv_path, full_dataset_csv_path)
         text_action_plan = call_with_retry(query_llm_for_text_action_plan, text_plan_func_args,
-                                           requests_per_minute_limit, max_tries=5)
+                                           requests_per_minute_limit, max_tries=15)
 
         translation_func_args = (model_name, provider, api_key, text_action_plan)
 
         json_action_plan = call_with_retry(query_llm_for_action_plan_translation, translation_func_args,
-                                           requests_per_minute_limit, max_tries=5)
+                                           requests_per_minute_limit, max_tries=15)
 
         return {"success": True, "json_action_plan": json_action_plan}
     except Exception as e:

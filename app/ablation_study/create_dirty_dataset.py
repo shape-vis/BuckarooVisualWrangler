@@ -75,10 +75,10 @@ def apply_errors_to_dataframe(row_col_tuples,  dataframe, error_type, col_types)
 if __name__ == '__main__':
     original_file_name = csv_path.split("/")[-1]
     # Read in the dataset
-    dataset = pd.read_csv(csv_path, index_col=False, low_memory=False)
+    dataset = pd.read_csv(csv_path, low_memory=False)
 
     # Have to load the file into a table so that we can use ColumnTypes
-    load_file(csv_path, original_file_name)
+    load_file(csv_path, original_file_name, False)
 
     col_names = dataset.columns.tolist()
     col_types = ColumnTypes(db_operations.main_table_name, engine)
@@ -109,6 +109,8 @@ if __name__ == '__main__':
         positions_with_anomaly = randomly_select_idx_and_col_pairs(numeric_only_pairs, num_rows, 0.1)
         apply_errors_to_dataframe(positions_with_anomaly, dataset, "anomaly", col_types)
         pairs_with_no_errors = set(pairs_with_no_errors) - set(positions_with_anomaly)
+    else:
+        positions_with_anomaly = []
 
         print("NO NUMERIC COLS FOUND. SKIPPING ANOMALY ERRORS")
 
@@ -117,6 +119,7 @@ if __name__ == '__main__':
         apply_errors_to_dataframe(positions_with_incomplete, dataset, "incomplete", col_types)
         pairs_with_no_errors = set(pairs_with_no_errors) - set(positions_with_incomplete)
     else:
+        positions_with_incomplete = []
         print("NO CATEGORICAL COLS FOUND. SKIPPING INCOMPLETE ERRORS")
 
     positions_with_mismatch = randomly_select_idx_and_col_pairs(pairs_with_no_errors,num_rows, 0.1)
@@ -130,11 +133,11 @@ if __name__ == '__main__':
     # write "dirtied" dataset to csv
     dirty_csv_name = f'dirty_{original_file_name}'
 
-    dataset.to_csv(finished_dataset_location + dirty_csv_name)
+    dataset.to_csv(finished_dataset_location + dirty_csv_name, index=False)
     print("------------ Summary ------------")
-    if positions_with_incomplete is not None:
+    if not categorical_only_pairs == []:
         print("Num incomplete:", len(positions_with_incomplete))
-    if positions_with_anomaly is not None:
+    if not numeric_only_pairs == []:
         print("Num anomaly:", len(positions_with_anomaly))
     print("Num missing:", len(positions_with_missing))
     print("Num mismatch:", len(positions_with_mismatch))
@@ -146,6 +149,7 @@ if __name__ == '__main__':
         "missing": positions_with_missing
     }
 
+    original_file_name = original_file_name.split(".")[0]
     errors_json_path = finished_dataset_location + original_file_name +'_errors' ".json"
 
     print("ERRORS JSON PATH", errors_json_path)

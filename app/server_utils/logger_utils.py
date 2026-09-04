@@ -8,9 +8,12 @@ from app.db_utils.execute_sql import fetch_sql, execute_sql
 ACTION_LOG_TABLE_NAME = "action_log"
 PREVIEW_LOG_TABLE_NAME = "preview_log"
 
+class InvalidActionError(Exception):
+    pass
+
 # TODO: update documentation
-def update_action_log(main_table_name, action_name, action_details, engine, timestamp, action_successful,
-                      action_duration=None, action_error_message=None, reset_log=False):
+def update_action_log(main_table_name, action_name, action_details, engine, timestamp, action_success_status,
+                      llm_suggested, action_duration=None, action_error_message=None, reset_log=False):
     """
     Updates the action log table
     :param main_table_name: the name of the dataset that the action was performed on
@@ -18,7 +21,7 @@ def update_action_log(main_table_name, action_name, action_details, engine, time
     :param action_details: a dictionary of details about the action that was performed
     :param engine: the database engine
     :param timestamp: the timestamp of when the action was performed
-    :param action_successful: whether the action was successful
+    :param action_success_status:
     :param action_duration: the duration of the action in seconds
     :param action_error_message: the error message if the action was not successful
     :param reset_log: whether to reset the action log table
@@ -55,21 +58,21 @@ def update_action_log(main_table_name, action_name, action_details, engine, time
                                    "timestamp"
                                     TIMESTAMP,
                                     action_duration
-                                    FLOAT
-                                    NOT NULL,
+                                    FLOAT,
                                     action_successful
-                                    BOOLEAN
+                                    TEXT
                                     NOT NULL,
+                                    llm_suggested
+                                    BOOLEAN,
                                     action_error_message
                                     TEXT
                                )
                                """, engine)
 
         execute_sql(
-            f"INSERT INTO {ACTION_LOG_TABLE_NAME} (dataset_id, action_name, action_details, timestamp, action_duration, action_successful, action_error_message) VALUES (:dataset_id, :action_name, :action_details, :timestamp, :action_duration, :action_successful, :action_error_message)",
-            engine, {"dataset_id": main_table_name, "action_name": action_name, "action_details": action_details, "timestamp": timestamp, "action_duration": action_duration, "action_successful": action_successful, "action_error_message": action_error_message}
+            f"INSERT INTO {ACTION_LOG_TABLE_NAME} (dataset_id, action_name, action_details, timestamp, action_duration, action_successful, llm_suggested, action_error_message) VALUES (:dataset_id, :action_name, :action_details, :timestamp, :action_duration, :action_successful, :llm_suggested, :action_error_message)",
+            engine, {"dataset_id": main_table_name, "action_name": action_name, "action_details": action_details, "timestamp": timestamp, "action_duration": action_duration, "action_successful": action_success_status, "llm_suggested":llm_suggested, "action_error_message": action_error_message}
         )
-
 
         print("UPDATED ACTION LOG TABLE")
     except Exception as e:

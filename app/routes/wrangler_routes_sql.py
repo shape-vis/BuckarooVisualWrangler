@@ -22,6 +22,7 @@ Wrangling Endpoints - In-place modification of tables
 
 # Where updated_df is just the data that needed to actually be updated
 # Assumes that updated_df has the same columns as the target table
+# TODO: fix this so it uses execute_sql instead of conn.execute
 def update_table(updated_df, target_table_name, key_col, cols_to_remove):
     with engine.begin() as conn:
         result = conn.execute(
@@ -56,7 +57,7 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 
 
 
-def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
+def update_errors_table(table_name: str, columns_selected_for_wrangling=None) -> pd.DataFrame:
     """
     After modifying a table in-place, re-run error detection
     and update the errors table.
@@ -64,6 +65,8 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
 
+        if columns_selected_for_wrangling is None :
+            columns_selected_for_wrangling = list(df.columns)
         df = df[columns_selected_for_wrangling]
 
         # TODO: optimize this so it doesn't load the whole table into a df first
@@ -88,7 +91,7 @@ def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -
         raise
 
 # TODO:optimize this so it doesn't load the whole table into a df first
-def update_data_profile_table(table_name: str, columns_selected_for_wrangling: list) -> None:
+def update_data_profile_table(table_name: str, columns_selected_for_wrangling=None) -> None:
     try:
 
         dp_table_name = f"dp_{table_name}"
@@ -98,6 +101,9 @@ def update_data_profile_table(table_name: str, columns_selected_for_wrangling: l
         # has the table name set as the main table and it'll be calculating statistics on the wrong table. So we create a new data
         # profile object
         data_profile = DataProfile(table_name, engine)
+
+        if columns_selected_for_wrangling is None :
+            columns_selected_for_wrangling = data_profile.get_col_names()
 
         updated_df = create_data_profile_df(data_profile, col_names=columns_selected_for_wrangling)
 
@@ -187,7 +193,8 @@ def create_previews():
         if not row_ids:
             update_action_log(main_table_name=table, action_name="create_previews",
                               action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine,
-                              timestamp=timestamp, action_successful=False, action_error_message="Row IDs list is empty")
+                              timestamp=timestamp, action_success_status=False, llm_suggested=None,
+                              action_error_message="Row IDs list is empty")
 
             return {"success": False, "error": "No rows selected"}, 400
 
@@ -224,10 +231,9 @@ def create_previews():
 
         action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
 
-
         update_action_log(main_table_name=table, action_name="create_previews",
-                          action_details=json.dumps(action_details_dict), engine=engine,
-                          timestamp=timestamp, action_duration= action_duration, action_successful=True)
+                          action_details=json.dumps(action_details_dict), engine=engine, timestamp=timestamp,
+                          action_success_status=True, llm_suggested=None, action_duration=action_duration)
 
         assert result_dict is not None
 
@@ -237,7 +243,8 @@ def create_previews():
 
         update_action_log(main_table_name=table, action_name="create_previews",
                           action_details=json.dumps({"row_ids": row_ids, "cols": cols}), engine=engine,
-                          timestamp=timestamp, action_successful=False, action_error_message=e)
+                          timestamp=timestamp, action_success_status=None, llm_suggested=False,
+                          action_error_message=str(e))
 
         print("ERROR in create_previews")
         print(traceback.format_exc())
@@ -264,7 +271,8 @@ def execute_wrangle():
 
         action_duration =  (datetime.now(timezone.utc) - timestamp).total_seconds()
         update_action_log(main_table_name=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
-                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= action_duration, action_successful=True)
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp,
+                          action_success_status=True, llm_suggested=False, action_duration=action_duration)
 
         return {"success": True, "table": new_table_name}
     except Exception as e:
@@ -272,7 +280,9 @@ def execute_wrangle():
         print(traceback.format_exc())
 
         update_action_log(main_table_name=db_operations.base_table_name, action_name=f"{wrangle_executed}_wrangle",
-                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp, action_duration= None, action_successful=False, action_error_message=e)
+                          action_details=action_details_dict, engine=db_operations.engine, timestamp=timestamp,
+                          action_success_status=False, llm_suggested=False, action_duration=None,
+                          action_error_message=str(e))
         return {"success": False, "error": str(e)}, 400
 
 
@@ -302,8 +312,8 @@ def wrangle_delete_column():
         update_data_profile_table(table_name, [column])
         action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
         update_action_log(main_table_name=db_operations.base_table_name, action_name="delete_column",
-                          action_details={"column": column}, engine=engine, timestamp=timestamp, action_duration= action_duration,
-                          action_successful=True)
+                          action_details={"column": column}, engine=engine, timestamp=timestamp,
+                          action_success_status=True, llm_suggested=False, action_duration=action_duration)
 
 
         return {
@@ -316,6 +326,8 @@ def wrangle_delete_column():
         print(traceback.format_exc())
 
         update_action_log(main_table_name=db_operations.base_table_name, action_name=f"delete_column",
-                          action_details={"column": column}, engine=db_operations.engine, timestamp=timestamp, action_duration= None, action_successful=False, action_error_message=e)
+                          action_details={"column": column}, engine=db_operations.engine, timestamp=timestamp,
+                          action_success_status=False, llm_suggested=False, action_duration=None,
+                          action_error_message=str(e))
 
         return {"success": False, "error": str(e)}, 400

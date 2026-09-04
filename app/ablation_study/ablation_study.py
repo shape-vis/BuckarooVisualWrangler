@@ -11,35 +11,59 @@ import json
 
 from app.db_utils.execute_sql import execute_sql
 from app.routes.wrangler_routes_sql import update_data_profile_table
+from app.db_utils.execute_sql import copy_table_to_csv
+from app.server_utils.logger_utils import ACTION_LOG_TABLE_NAME
 
 starting_path = os.getcwd() + os.sep + "app" + os.sep + "ablation_study" + os.sep
 
 
-datasets_paths = {"dirty_winequality-red": starting_path + 'artificially_dirty_datasets' + os.sep + 'dirty_winequality-red.csv'}
+# datasets_paths = {"dirty_winequality-red": starting_path + 'artificially_dirty_datasets' + os.sep + 'dirty_winequality-red.csv',
+#                   "leading_causes_death": starting_path + 'dirty_datasets' + os.sep + 'leading_causes_death.csv',
+#                   "disability_compensation": starting_path + 'dirty_datasets' + os.sep + 'disability_compensation.csv',
+#                   "dirty_global_air_pollution_dataset": starting_path + "artificially_dirty_datasets" + os.sep + "dirty_global_air_pollution_dataset.csv"}
+#                   #"dirty_global_tech_market_2026": starting_path + 'artificially_dirty_datasets' + os.sep + "dirty_global_tech_market_2026.csv",
+
+datasets_paths = {"winequality-red": starting_path + 'all_starting_datasets' + os.sep + 'winequality-red.csv',
+                  "leading_causes_death": starting_path + 'all_starting_datasets' + os.sep + 'leading_causes_death.csv',
+                  "disability_compensation": starting_path + 'all_starting_datasets' + os.sep + 'disability_compensation.csv',
+                  "global_air_pollution_dataset": starting_path + "all_starting_datasets" + os.sep + "global_air_pollution_dataset.csv"}
 
 # This additional col info code hasn't been merged into main, so until that happens, just using this hacky way to get more accurate LLM results
 dataset_additional_info = {
-    "dirty_winequality-red": {
+    "winequality-red": {
         "text_cols": [],
         "identifier_cols": []
     },
-    "": {
+    # "dirty_global_tech_market_2026": {
+    #     "text_cols": ["description"],
+    #     "identifier_cols": ["job_id"]
+    # },
+    "global_air_pollution_dataset": {
+        "text_cols": [],
+        "identifier_cols": ["Record_ID"]
+    },
+    "disability_compensation": {
+        "text_cols": [],
+        "identifier_cols": ["FIPS code"]
+
+    },
+    "leading_causes_death": {
         "text_cols": [],
         "identifier_cols": []
-    },
+    }
 }
 
 #models = [{"model": "qwen/qwen3.6-27b", "provider": "groq"}]
 
 # Gemini 3.6 Flash
-models = [{"model": "gemini-3.1-flash-lite", "provider": "gemini", "requests_per_minute_limit": 15, "dataset_sample_percent": 100.0}]
+models = [{"model": "gemini-3.1-flash-lite", "provider": "gemini", "requests_per_minute_limit": 25, "dataset_sample_percent": 0.1}]
+#models = [{"model": "gemini-3.6-flash", "provider": "gemini", "requests_per_minute_limit": 10, "dataset_sample_percent": 100.0}]
 
 def variant(name, **overrides):
     baseline = {
         "name": "baseline",
         "include_error_log": True,
         "include_data_profile": True,
-
         "include_action_log": True,
         "action_log_limit": 10,
         "include_full_dataset": True
@@ -52,7 +76,7 @@ def variant(name, **overrides):
 
 
 def is_stop_action(action_name):
-    if action_name == "stop":
+    if action_name == "plan_end":
         return True
     else:
         return False
@@ -96,19 +120,15 @@ def remove_errors_from_error_table(error_table_name, main_table_name, text_cols,
         logger.exception("Removing text / identifier columns from error and data profile tables failed")
         raise
 
-
-
-
-
 if __name__ == "__main__":
     load_dotenv()
 
     ablation_configs = [
         variant("baseline"),
         variant("no_error_log", include_error_log=False),
-        variant("no_data_profile", include_data_profile=False),
-        variant("no_action_log", include_action_log=False),
-        variant("no_full_dataset", include_full_dataset=False),
+         variant("no_data_profile", include_data_profile=False),
+         variant("no_action_log", include_action_log=False),
+         variant("no_full_dataset", include_full_dataset=False),
         variant("no_action_log_limit", action_log_limit=None) # Includes full action log
     ]
 
@@ -120,12 +140,19 @@ if __name__ == "__main__":
         model = model_dict["model"]
         provider = model_dict["provider"]
         requests_per_minute_limit = model_dict["requests_per_minute_limit"]
+        dataset_sample_percent = model_dict["dataset_sample_percent"]
 
-        update_settings_table_result = client.post('/api/ai_helper/update_settings_table', json={"model_name": model, "provider": provider, "requests_per_minute_limit": requests_per_minute_limit, "dataset_sample_percent": 0.0})
-        data = update_settings_table_result.get_json()
-        assert data["success"] == True
 
         for config in ablation_configs:
+            action_log_limit = config["action_log_limit"]
+
+            update_settings_table_result = client.post('/api/ai_helper/update_settings_table',
+                                                       json={"model_name": model,
+                                                             "provider": provider,
+                                                             "requests_per_minute_limit": requests_per_minute_limit,
+                                                             "dataset_sample_percent": dataset_sample_percent})
+            data = update_settings_table_result.get_json()
+            assert data["success"] == True
 
             for dataset_name in datasets_paths:
                 text_cols = dataset_additional_info[dataset_name]["text_cols"]
@@ -146,18 +173,22 @@ if __name__ == "__main__":
                 print(f"Running config {config} wth model {model} and dataset {dataset_name}")
 
                 with open(dataset_path, 'rb') as f:
-                    upload_result = client.post('/api/upload', data={'file': (f, dataset_path)},
+                    # Resetting action log after each dataset give LLM consistent info
+                    upload_result = client.post('/api/upload', data={'file': (f, dataset_path), "reset_action_log": "True"},
                                                 content_type='multipart/form-data')
 
                 print("ERROR TABLE NAME:", db_operations.error_table_name)
                 print("DP TABLE NAME:", db_operations.dp_table_name)
-                remove_errors_from_error_table(db_operations.error_table_name, db_operations.main_table_name, text_cols, identifier_cols)
+                remove_errors_from_error_table(db_operations.error_table_name, db_operations.main_table_name, text_cols,
+                                               identifier_cols)
                 data = upload_result.get_json()
                 assert data["success"] == True
 
 
                 llm_action_list = []
                 ablation_study_result_path = starting_path + f'ablation_study_results' + os.sep + f'ablation_results_{model}_{dataset_name}_{config["name"]}{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
+                final_dataset_path = starting_path + f'ablation_study_results' + os.sep + f'final_dataset_{model}_{dataset_name}_{config["name"]}{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.csv'
+                action_log_path = starting_path + f'ablation_study_results' + os.sep + f'action_log_{model}_{dataset_name}_{config["name"]}{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.csv'
 
                 action_plan_batch = 0
 
@@ -188,6 +219,12 @@ if __name__ == "__main__":
                         action_dict["success"] = action_result.get_json()
 
                         llm_action_list.append(action_dict)
+
+                    # save final main table to csv
+                    copy_table_to_csv(table_name=db_operations.main_table_name,csv_file_path=final_dataset_path, engine=engine)
+
+                    # save action_log to csv
+                    copy_table_to_csv(table_name=ACTION_LOG_TABLE_NAME,csv_file_path=action_log_path, engine=engine)
 
                     # update the ablation study results every 5 actions
                     with open(ablation_study_result_path, 'w') as f:

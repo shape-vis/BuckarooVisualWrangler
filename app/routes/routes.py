@@ -19,7 +19,7 @@ from app.server_utils.set_id_column import set_id_column
 from app.server_utils.logger_utils import update_action_log
 
 
-def load_file(csv_file, filename):
+def load_file(csv_file, filename, reset_action_log=False):
     """
     This loads the csv from the local path of the repo that the user clicked;
     set's IDs to each row,
@@ -33,7 +33,7 @@ def load_file(csv_file, filename):
     :return: json object
     """
     timestamp = datetime.now(timezone.utc)
-    dataframe = pd.read_csv(csv_file)
+    dataframe = pd.read_csv(csv_file, low_memory=False)
 
     # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
@@ -84,8 +84,9 @@ def load_file(csv_file, filename):
         init_pgraph_for_session(table_name_with_node_id)
         action_duration = (datetime.now(timezone.utc) - timestamp).total_seconds()
 
-        update_action_log(main_table_name=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
-                          timestamp=timestamp, action_duration=action_duration, action_successful=True)
+        update_action_log(main_table_name=base_table_name, action_name="load_dataset", action_details=None,
+                          engine=engine, timestamp=timestamp, action_success_status=True, llm_suggested=None,
+                          action_duration=action_duration, reset_log=reset_action_log)
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name_with_node_id}
     except Exception as e:
@@ -93,9 +94,9 @@ def load_file(csv_file, filename):
         import traceback
         traceback.print_exc()
 
-        update_action_log(main_table_name=base_table_name, action_name="load_dataset", action_details=None, engine=engine,
-                          timestamp=timestamp, action_successful=False,
-                          action_error_message=e)
+        update_action_log(main_table_name=base_table_name, action_name="load_dataset", action_details=None,
+                          engine=engine, timestamp=timestamp, action_success_status=False, llm_suggested=None,
+                          action_error_message=str(e), reset_log=reset_action_log)
         return {"success": False, "error": str(e)}
 
 
@@ -107,6 +108,16 @@ def upload_csv():
     """
     #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
+    reset_action_log = request.form.get("reset_action_log", None)
+
+    if reset_action_log is not None and isinstance(reset_action_log, str):
+        if reset_action_log in ["True", "true"]:
+            reset_action_log = True
+        else:
+            reset_action_log = False
+
+    if reset_action_log is not None:
+        return load_file(csv_file, csv_file.filename, reset_action_log)
     return load_file(csv_file, csv_file.filename)
 
 
@@ -120,7 +131,7 @@ def preloaded_csv():
     csv_file = request.args.get("file")
     csv_file = csv_file[csv_file.rfind("/") + 1:]
 
-    return load_file("provided_datasets/" + csv_file, csv_file)
+    return load_file("provided_datasets/" + csv_file, csv_file, False)
 
 
 @app.get("/api/tablename")

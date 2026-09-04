@@ -10,7 +10,6 @@ class ColumnTypes:
         self.gather_pure_numeric_cols(main_table_name)
         self.gather_pure_categorical_cols(main_table_name)
         self.categorize_mixed_cols(main_table_name)
-
         self.categorical_cols = self.mixed_categorical_cols.union(self.pure_categorical_cols) # cols that are mixed and pure categorical
         self.numeric_cols = self.mixed_numeric_cols.union(self.pure_numeric_cols) # cols that are mixed and pure categorical
 
