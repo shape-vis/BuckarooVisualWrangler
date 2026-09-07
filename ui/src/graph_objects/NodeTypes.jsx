@@ -91,6 +91,63 @@ function NodeTools( { data } ){
     );
 }
 
+/**
+ * Stands in for a run of nodes folded out of the view.
+ *
+ * Nothing is destroyed to make this: it carries the ids of the real nodes it hides, and reports the
+ * metrics of the run's last node, since that is the state the run actually arrives at. Expanding
+ * simply drops the run, and the real nodes are drawn again from data that never changed.
+ */
+export function CollapsedNode( { id, data, isConnectable } ){
+
+const { expandRun, selectRunBranch } = usePgraph();
+const [expanded, setExpanded] = useState(false);
+
+// A folded run is a sequence, so its trajectory is the branch running through it, head to tail
+const openQuality = useCallback(() => selectRunBranch(data.run), [selectRunBranch, data.run]);
+
+return (
+    <>
+        <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>
+        <div>
+            <div className={"node-node-label"}>
+                <h3 title={data.run?.join(" → ")}>{data.label}</h3>
+                <div className={"collapsed-node-range"}>
+                    {String(data.head).split("_")[0]} … {String(data.tail).split("_")[0]}
+                </div>
+                <div className={"note-node-icon-container"}>
+                    <IconButton
+                        className="node-sub-button-chart"
+                        title={`Plot quality across these ${data.run?.length} nodes`}
+                        onClick={openQuality}
+                    >
+                        <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
+                    </IconButton>
+                    <IconButton
+                        className="node-sub-button-inspect"
+                        title={expanded ? "Hide quality metrics" : "Show the run's resulting quality metrics"}
+                        onClick={() => setExpanded((open) => !open)}
+                    >
+                        <img
+                            src="/images/icons/inspect.svg"
+                            alt=""
+                            className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
+                        />
+                    </IconButton>
+                    <IconButton
+                        className="node-sub-button-expand"
+                        title={`Expand these ${data.run?.length} nodes`}
+                        onClick={() => expandRun(id)}
+                    >+</IconButton>
+                </div>
+            </div>
+        </div>
+        {expanded && <NodeMetricsExpansion metrics={data.metrics} />}
+        <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
+    </>
+)
+}
+
 export function NoteNode( { data, isConnectable } ){
 
 return (

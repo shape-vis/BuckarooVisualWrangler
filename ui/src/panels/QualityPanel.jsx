@@ -5,6 +5,7 @@ import Sparkline from "../visualizations/Sparkline.jsx";
 import { ERROR_TYPES, ERROR_DIMENSIONS, errorColors } from "../store/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
 import { usePgraph } from "../store/PGraphContext.jsx";
+import { collapsedNodeIds } from "../utils/graphTopology.js";
 import { useTableName } from "../store/TableNameContext.jsx";
 
 import "../styles/QualityPanel.css";
@@ -122,7 +123,7 @@ function ContributionList({ rows }) {
   );
 }
 
-function TrajectoryView({ trajectory, stage, loading }) {
+function TrajectoryView({ trajectory, stage, loading, foldedNodeIds }) {
   if (loading) return <div className="quality-empty">Loading…</div>;
 
   if (stage !== "complete" || !trajectory) {
@@ -158,6 +159,7 @@ function TrajectoryView({ trajectory, stage, loading }) {
               deltas={series.deltas}
               nodeIds={trajectory.nodes}
               color={errorColors(dimension)}
+              collapsedNodeIds={foldedNodeIds}
             />
 
             <ContributionList rows={contributionRows(trajectory, dimension)} />
@@ -226,7 +228,7 @@ function ColumnsView({ metrics, nodeId }) {
 export default function QualityPanel() {
   const {
     nodes, branchSelection, selectionStage, eligibleDestinations,
-    branchTrajectory, branchTrajectoryLoading, resetBranchSelection,
+    branchTrajectory, branchTrajectoryLoading, resetBranchSelection, collapsedRuns,
   } = usePgraph();
   const { tableName } = useTableName();
 
@@ -235,6 +237,10 @@ export default function QualityPanel() {
   // Columns describe wherever the branch ends, falling back to the node currently loaded
   const columnsNodeId = branchSelection.destination ?? tableName;
   const metrics = nodes.find((node) => node.id === columnsNodeId)?.data?.metrics;
+
+  /* Which of the branch's nodes the graph currently has folded away. The trajectory itself is
+     unchanged - this only lets the chart mark the points you cannot see in the graph. */
+  const foldedNodeIds = useMemo(() => collapsedNodeIds(collapsedRuns), [collapsedRuns]);
 
   // The dock owns the panel chrome - tab strip, collapsing and resizing - so this renders bare content
   return (
@@ -260,6 +266,7 @@ export default function QualityPanel() {
             trajectory={branchTrajectory}
             stage={selectionStage}
             loading={branchTrajectoryLoading}
+            foldedNodeIds={foldedNodeIds}
           />
         </>
       )}

@@ -5,7 +5,7 @@ import {
     useNodesState,
     useEdgesState
 } from "@xyflow/react";
-import {NoteNode, RootNoteNode} from "../graph_objects/NodeTypes.jsx";
+import {NoteNode, RootNoteNode, CollapsedNode} from "../graph_objects/NodeTypes.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import {SelectionContext} from "./SelectionContext.jsx";
@@ -13,7 +13,7 @@ import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from ".
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/serverCalls.jsx";
 import {useDock} from "./DockContext.jsx";
-import {descendantsOf} from "../utils/graphTopology.js";
+import {descendantsOf, orderCollapsibleRun, collapsedRunId, applyCollapse} from "../utils/graphTopology.js";
 import "../styles/Nodes.css"
 
 
@@ -50,7 +50,8 @@ const edgeLabelSize = (label) => ({
 
 const nodeTypes = {
     noteNode: NoteNode,
-    rootNoteNode:  RootNoteNode
+    rootNoteNode:  RootNoteNode,
+    collapsedNode: CollapsedNode
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -66,20 +67,25 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
         edgesep: EDGE_SEPARATION,
     });
 
+    // A placeholder standing in for a collapsed run keeps the type and label it was built with
+    const isCollapsed = (node) => node.type === "collapsedNode";
+
     nodes.forEach((node) => {
-        // A table name too long to fit collapses to just its node id, which is 3 characters under the
-        // n{digit}{letter} scheme - n0a, n1b, ... - rather than the 2 the old n{count} scheme needed
-        if (node.data.label.length > 20) {
-            node.data.label = node.data.label.slice(0, 3)
+        if (!isCollapsed(node)) {
+            // A table name too long to fit collapses to just its node id, which is 3 characters under
+            // the n{digit}{letter} scheme - n0a, n1b, ... - not the 2 the old n{count} scheme needed
+            if (node.data.label.length > 20) {
+                node.data.label = node.data.label.slice(0, 3)
+            }
+            node.type = "noteNode"
         }
-        node.type = "noteNode"
         dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
     });
 
     // Find the root by its parent rather than by position: collapsing hands us a filtered list, in
     // which the root is not necessarily first
     const rootNode = nodes.find((node) => node.data.parent === "root") || nodes[0];
-    rootNode.type = "rootNoteNode"
+    if (rootNode && !isCollapsed(rootNode)) rootNode.type = "rootNoteNode"
 
     edges.forEach((edge) => {
         // Passing the label's size makes dagre lay the graph out around the labels rather than
@@ -187,6 +193,20 @@ export function PGraphProvider({children}) {
         setBranchSelection(current => ({...current, destination}));
     }, []);
 
+    /* A folded run stands for a sequence of wrangles, so its trajectory is the branch running through
+       it: from its head, out through its first step, down to its tail. Selecting it this way means a
+       collapsed node's sparkline is the same thing as any other branch's - just one already named. */
+    const selectRunBranch = useCallback((runNodes) => {
+        if (!runNodes || runNodes.length < 2) return;
+
+        setBranchSelection({
+            source: runNodes[0],
+            target: runNodes[1],
+            destination: runNodes[runNodes.length - 1],
+        });
+        revealTab("quality");
+    }, [revealTab]);
+
     /* Where the branch is allowed to end: the chosen edge's target and everything below it. Computed
        here from the edges the UI already holds, so the graph can show which nodes are pickable
        without a round trip. The server validates the choice independently. */
@@ -220,6 +240,58 @@ export function PGraphProvider({children}) {
         return () => { stale = true; };
     }, [branchSelection]);
 
+    /* Runs of nodes folded into a single placeholder in the view. Purely a way of looking at the
+       graph: the underlying nodes, their tables and their metrics are untouched, so collapsing can
+       never change a number - see §8(b)(ii) and (iii). */
+    const [collapsedRuns, setCollapsedRuns] = useState([]);
+    const [collapseError, setCollapseError] = useState(null);
+
+    /* Fold the nodes the user lassoed. Rejects anything that is not one unbroken run on a single
+       branch, because collapsing through a fork would orphan the sibling subtree. */
+    const collapseNodes = useCallback((selectedIds) => {
+        const run = orderCollapsibleRun(edges, selectedIds);
+        if (run.error) {
+            setCollapseError(run.error);
+            return;
+        }
+
+        setCollapseError(null);
+        setCollapsedRuns(current => {
+            const id = collapsedRunId(run.nodes);
+            if (current.some(existing => existing.id === id)) return current;
+            return [...current, {id, nodes: run.nodes}];
+        });
+    }, [edges]);
+
+    const expandRun = useCallback((runId) => {
+        setCollapsedRuns(current => current.filter(run => run.id !== runId));
+    }, []);
+
+    const expandAllRuns = useCallback(() => setCollapsedRuns([]), []);
+
+    /* The graph as the server sent it, before any folding. Collapsing is derived from this, so
+       expanding restores the real nodes without another request. */
+    const [serverGraph, setServerGraph] = useState({nodes: [], edges: []});
+
+    /* Fold the server's graph into what React Flow should draw, and write it into React Flow's own
+       state rather than deriving it alongside.
+
+       This has to be the state React Flow owns. It reports each node's measured size back through
+       onNodesChange, and a node missing from that state never receives its dimensions - React Flow
+       then keeps it permanently invisible while still laying out around it. */
+    useEffect(() => {
+        if (serverGraph.nodes.length === 0) return;
+
+        function drawGraph() {
+            const folded = applyCollapse(serverGraph.nodes, serverGraph.edges, collapsedRuns);
+            const layout = getLayoutedElements(folded.nodes, folded.edges);
+            setNodes(layout.nodes);
+            setEdges(layout.edges);
+        }
+
+        drawGraph();
+    }, [serverGraph, collapsedRuns, setNodes, setEdges]);
+
     // The edges making up the selected branch, keyed "source->target", for highlighting in the graph
     const selectedBranchEdges = useMemo(() => {
         const path = branchTrajectory?.nodes ?? [];
@@ -236,10 +308,9 @@ export function PGraphProvider({children}) {
         const pGraphResult = await getPGraph();
         if (!pGraphResult?.nodes) return;
 
-        const layout = getLayoutedElements(pGraphResult.nodes, pGraphResult.edges);
-        setNodes(layout.nodes);
-        setEdges(layout.edges);
-    }, [setNodes, setEdges]);
+        // Folding and layout happen in the effect above, so both paths into the graph agree
+        setServerGraph({nodes: pGraphResult.nodes, edges: pGraphResult.edges});
+    }, []);
 
     const onConnect = useCallback(
         (params) =>
@@ -320,6 +391,8 @@ export function PGraphProvider({children}) {
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             startBranchSelection, resetBranchSelection,
             clearAllSelections, hasAnySelection,
+            collapsedRuns, collapseNodes, expandRun, expandAllRuns, selectRunBranch,
+            collapseError, setCollapseError,
             branchTrajectory, branchTrajectoryLoading,
             refreshGraph
         }}>

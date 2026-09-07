@@ -3,8 +3,13 @@
   width: 100%;
 }
 
-/* Sits over the graph, appearing only while something is selected */
-.pgraph-clear-selections {
+.pgraph-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Sits over the graph, appearing only while something is selected or collapsed */
+.pgraph-action-button {
   border: 1px solid #dddfe2;
   border-radius: 6px;
   background: #ffffff;
@@ -17,10 +22,27 @@
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.pgraph-clear-selections:hover {
+.pgraph-action-button:hover {
   background: #edf3fe;
   color: #1877F2;
   box-shadow: 0 2px 6px rgba(24, 119, 242, 0.2);
+}
+
+.pgraph-collapse-error {
+  background: #fdecea;
+  border: 1px solid #f5c2bd;
+  color: #a3261c;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.pgraph-collapse-error-dismiss {
+  margin-left: 6px;
+  text-decoration: underline;
+  opacity: 0.75;
 }
 
 

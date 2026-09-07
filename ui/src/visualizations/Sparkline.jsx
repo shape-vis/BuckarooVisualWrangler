@@ -6,9 +6,14 @@ import "../styles/Sparkline.css";
 /**
  * One quality dimension along the selected branch.
  *
+ * Every node on the branch is plotted, whether or not the graph currently has it folded into a
+ * collapsed node - collapsing is a way of looking at the tree and never changes what a step
+ * contributed. Points belonging to a folded run are ringed, so it is clear which nodes the graph is
+ * hiding while their values stay on the chart.
+ *
  * Each step is its own line segment so it can carry its own color - green where the error rate fell,
  * red where it rose. A single path could not do that, which is why this is hand-drawn rather than
- * taken from a sparkline library. The points are colored by dimension to tie the chart to its title.
+ * taken from a sparkline library.
  */
 
 const PLOT_W = 176;
@@ -31,11 +36,16 @@ const asPercent = (rate) => `${(rate * 100).toFixed(2)}%`;
 // other node - the leading "n0a" is the part that identifies it
 const shortNodeId = (nodeId) => String(nodeId ?? "").split("_")[0];
 
-export default function Sparkline({ values = [], deltas = [], nodeIds = [], color = "steelblue" }) {
+export default function Sparkline({
+  values = [], deltas = [], nodeIds = [], color = "steelblue", collapsedNodeIds,
+}) {
   const svgRef = useRef(null);
 
   useEffect(() => {
     if (!svgRef.current || values.length === 0) return;
+
+    const folded = collapsedNodeIds ?? new Set();
+    const isFolded = (i) => folded.has(nodeIds[i]);
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -60,9 +70,9 @@ export default function Sparkline({ values = [], deltas = [], nodeIds = [], colo
     const pointX = (i) => xScale(i);
 
     /* Axes. The y axis is the quality metric; the x axis is the branch's nodes in path order, so it
-       gets one tick per node rather than dagre's continuous scale ticks. A flat branch is padded to
-       a readable domain above, so its ticks are suppressed to avoid implying a spread that is not
-       in the data. */
+       gets one tick per node rather than the scale's own ticks. A flat branch is padded to a readable
+       domain above, so its y ticks are reduced to the one real value rather than implying a spread
+       that is not in the data. */
     canvas.append("g")
       .attr("class", "sparkline-axis")
       .call(
@@ -85,7 +95,7 @@ export default function Sparkline({ values = [], deltas = [], nodeIds = [], colo
           .tickSize(3)
       )
       .selectAll("text")
-      .attr("class", "bottom-axis-text");
+      .attr("class", (i) => `bottom-axis-text${isFolded(i) ? " sparkline-tick--folded" : ""}`);
 
     canvas.selectAll("line.sparkline-step")
       .data(deltas.map((delta, i) => ({ delta, i })))
@@ -98,6 +108,15 @@ export default function Sparkline({ values = [], deltas = [], nodeIds = [], colo
       .attr("stroke", (d) => stepColor(d.delta))
       .attr("stroke-width", 2)
       .attr("stroke-linecap", "round");
+
+    // A ring behind the dot marks a node the graph currently has folded into a collapsed node
+    canvas.selectAll("circle.sparkline-folded-ring")
+      .data(values.map((value, i) => ({ value, i })).filter((d) => isFolded(d.i)))
+      .join("circle")
+      .attr("class", "sparkline-folded-ring")
+      .attr("cx", (d) => pointX(d.i))
+      .attr("cy", (d) => yScale(d.value))
+      .attr("r", 5.5);
 
     // Bound as objects, not raw numbers: createTooltip passes only the datum, and a repeated value
     // would otherwise be ambiguous about which step it came from
@@ -121,9 +140,10 @@ export default function Sparkline({ values = [], deltas = [], nodeIds = [], colo
         : delta === 0
           ? "no change"
           : `${delta > 0 ? "+" : ""}${(delta * 100).toFixed(2)} pts`;
-      return `<strong>${node}</strong><br/>${asPercent(d.value)}<br/>${change}`;
+      const foldedNote = isFolded(d.i) ? "<br/><em>hidden in a collapsed node</em>" : "";
+      return `<strong>${node}</strong><br/>${asPercent(d.value)}<br/>${change}${foldedNote}`;
     });
-  }, [values, deltas, nodeIds, color]);
+  }, [values, deltas, nodeIds, color, collapsedNodeIds]);
 
   return (
     <svg

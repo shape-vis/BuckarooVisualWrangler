@@ -10,15 +10,29 @@ import "../styles/PGraph.css";
 import {usePgraph} from "../store/PGraphContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
-import {useCallback, useMemo} from "react";
+import {useCallback, useEffect, useMemo, useRef} from "react";
 
 
 export default function PGraph() {
 
-const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
+const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
         onEdgeClick, nodeTypes, baselineNodeId,
         selectionStage, eligibleDestinations, selectedBranchEdges,
-        clearAllSelections, hasAnySelection } = usePgraph();
+        clearAllSelections, hasAnySelection,
+        nodes, edges,
+        collapsedRuns, collapseNodes, expandAllRuns,
+        collapseError, setCollapseError } = usePgraph();
+
+// Which nodes the c-drag lasso currently has, read when the drag ends
+const lassoed = useRef([]);
+
+/* Folding or expanding a run re-lays the whole graph out, but fitView only runs at mount - without
+   this the nodes shift under a stale viewport and can end up off-screen entirely. */
+const flow = useRef(null);
+
+useEffect(() => {
+    flow.current?.fitView({duration: 300, padding: 0.2});
+}, [collapsedRuns]);
 
 const { tableName } = useTableName();
 // const [showNote, setShowNote] = useState(false);
@@ -79,10 +93,21 @@ const onEdgeMouseEnter = useCallback((event, edge) => {
 const onEdgeMouseMove = useCallback((event) => moveTooltip(event), []);
 const onEdgeMouseLeave = useCallback(() => hideTooltip(), []);
 
+/* Holding "c" turns a pane drag into a lasso (selectionKeyCode below). Whatever it caught is folded
+   on release, so collapsing is its own gesture and does not compete with the click handlers. */
+const onSelectionChange = useCallback(({nodes: selected}) => {
+    lassoed.current = selected.map((node) => node.id);
+}, []);
+
+const onSelectionEnd = useCallback(() => {
+    if (lassoed.current.length > 1) collapseNodes(lassoed.current);
+}, [collapseNodes]);
+
   return (
     <div className="pgraph-container">
       <ReactFlow
         colorMode={"light"}
+        onInit={(instance) => { flow.current = instance; }}
         nodes={styledNodes}
         edges={styledEdges}
         nodeTypes={nodeTypes}
@@ -97,19 +122,42 @@ const onEdgeMouseLeave = useCallback(() => hideTooltip(), []);
         onEdgeMouseEnter={onEdgeMouseEnter}
         onEdgeMouseMove={onEdgeMouseMove}
         onEdgeMouseLeave={onEdgeMouseLeave}
-        /* Shift is the baseline-picking modifier, so it must not also start a selection box */
-        selectionKeyCode={null}
+        onSelectionChange={onSelectionChange}
+        onSelectionEnd={onSelectionEnd}
+        /* Hold "c" and drag to lasso a run to collapse. Shift is deliberately not the lasso key -
+           it already re-targets the comparison baseline. */
+        selectionKeyCode={"c"}
       >
         {/* The selections are made by clicking the graph, so the way out of them belongs here too */}
-        {hasAnySelection && (
-          <Panel position="top-right">
-            <button
-              className="pgraph-clear-selections"
-              onClick={clearAllSelections}
-              title="Clear the comparison baseline and the selected branch"
-            >
-              Clear selections
-            </button>
+        {(hasAnySelection || collapsedRuns.length > 0) && (
+          <Panel position="top-right" className="pgraph-actions">
+            {collapsedRuns.length > 0 && (
+              <button
+                className="pgraph-action-button"
+                onClick={expandAllRuns}
+                title="Expand every collapsed run"
+              >
+                Expand all ({collapsedRuns.length})
+              </button>
+            )}
+            {hasAnySelection && (
+              <button
+                className="pgraph-action-button"
+                onClick={clearAllSelections}
+                title="Clear the comparison baseline and the selected branch"
+              >
+                Clear selections
+              </button>
+            )}
+          </Panel>
+        )}
+
+        {/* Why a lasso was refused - §8(b)(iv) only allows an unbroken run on a single branch */}
+        {collapseError && (
+          <Panel position="top-center">
+            <div className="pgraph-collapse-error" onClick={() => setCollapseError(null)}>
+              {collapseError} <span className="pgraph-collapse-error-dismiss">dismiss</span>
+            </div>
           </Panel>
         )}
 

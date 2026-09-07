@@ -26,6 +26,45 @@
   box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
 }
 
+/* A folded run. Dashed and tinted so it reads as several nodes standing in for themselves rather than
+   as a wrangling step of its own. */
+.react-flow__node-collapsedNode {
+  background-color: #f0f2f5;
+  border: 2px dashed #8c939d;
+  border-radius: 6px;
+  padding: 5px;
+  font-size: 12px;
+  text-align: center;
+  min-width: 150px;
+}
+
+.collapsed-node-range {
+  font-size: 10px;
+  color: #65676b;
+  margin-bottom: 2px;
+}
+
+.iconButton-node-sub-button-expand {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: #1877F2;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.iconButton-node-sub-button-expand:hover {
+  background-color: #e0e0e0;
+  border-color: #a8b4c8;
+}
+
 /* The magnifier's readout. Absolutely positioned so revealing it never changes the node's footprint,
    which dagre has already laid the graph out from - it hangs in the gap below the node instead. */
 .node-metrics {
