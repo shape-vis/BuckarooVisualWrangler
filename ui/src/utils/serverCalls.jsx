@@ -351,6 +351,62 @@ export {
     queryHistogram2d,
 };
 
+/**
+ * GET /api/ai/status
+ * Whether AI suggestions are configured at all, so the AI buttons can be hidden rather than
+ * offered on every node only to fail the same way each time.
+ */
+export async function aiStatus() {
+    try {
+        const response = await fetch("/api/ai/status", { method: "GET" });
+        return await response.json();
+    } catch (error) {
+        console.error("[aiStatus]", error.message);
+        return { success: false, configured: false };
+    }
+}
+
+/**
+ * POST /api/ai/suggest
+ * Ask the model what it would repair on one node. Read-only: it does not move the session off
+ * whatever table is current.
+ *
+ * Returns { success, suggestions: [{id, op, columns, target, error_type, row_count, reason,
+ * label}] } or { success, no_suggestions: "<why>" }.
+ *
+ * Takes an AbortSignal so a superseded request can be dropped rather than raced.
+ */
+export async function requestAiSuggestions(nodeTable, signal) {
+    const response = await fetch("/api/ai/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node_table: nodeTable }),
+        signal,
+    });
+    return await response.json();
+}
+
+/**
+ * POST /api/ai/accept
+ * Run one suggestion, cementing a new node onto the graph. The server re-validates the
+ * suggestion from scratch, so this is not a trusted payload.
+ *
+ * Returns { success, table } - the new node's table name - or { success: false, error }.
+ */
+export async function acceptAiSuggestion(nodeTable, suggestion) {
+    try {
+        const response = await fetch("/api/ai/accept", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ node_table: nodeTable, suggestion }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[acceptAiSuggestion]", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 const serverCalls = {
     uploadFileToDB,
     queryHistogram1d,
@@ -368,6 +424,9 @@ const serverCalls = {
     queryPreviewHistogram,
     queryPreviewScatterplot,
     executeWrangle,
+    aiStatus,
+    requestAiSuggestions,
+    acceptAiSuggestion,
 };
 
 export default serverCalls;

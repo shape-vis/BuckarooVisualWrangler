@@ -6,6 +6,7 @@ import {
     useEdgesState
 } from "@xyflow/react";
 import {NoteNode, RootNoteNode, CollapsedNode} from "../graph_objects/NodeTypes.jsx";
+import {ProspectiveNode} from "../graph_objects/ProspectiveNode.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import {SelectionContext} from "./SelectionContext.jsx";
@@ -13,7 +14,8 @@ import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from ".
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/serverCalls.jsx";
 import {useDock} from "./DockContext.jsx";
-import {descendantsOf, orderCollapsibleRun, collapsedRunId, applyCollapse} from "../utils/graphTopology.js";
+import {descendantsOf, orderCollapsibleRun, collapsedRunId, applyCollapse,
+        isProspectiveId} from "../utils/graphTopology.js";
 import "../styles/Nodes.css"
 
 
@@ -51,7 +53,8 @@ const edgeLabelSize = (label) => ({
 const nodeTypes = {
     noteNode: NoteNode,
     rootNoteNode:  RootNoteNode,
-    collapsedNode: CollapsedNode
+    collapsedNode: CollapsedNode,
+    prospectiveNode: ProspectiveNode
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -67,11 +70,14 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
         edgesep: EDGE_SEPARATION,
     });
 
-    // A placeholder standing in for a collapsed run keeps the type and label it was built with
-    const isCollapsed = (node) => node.type === "collapsedNode";
+    /* Nodes we build ourselves keep the type and label they were built with. Everything else is
+       a node the server sent, which is retyped and re-labelled below. A collapsed placeholder
+       stands in for a run; a prospective node stands in for a wrangle that has not happened. */
+    const PRESERVED_TYPES = new Set(["collapsedNode", "prospectiveNode"]);
+    const isPreserved = (node) => PRESERVED_TYPES.has(node.type);
 
     nodes.forEach((node) => {
-        if (!isCollapsed(node)) {
+        if (!isPreserved(node)) {
             // A table name too long to fit collapses to just its node id, which is 3 characters under
             // the n{digit}{letter} scheme - n0a, n1b, ... - not the 2 the old n{count} scheme needed
             if (node.data.label.length > 20) {
@@ -85,7 +91,9 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
     // Find the root by its parent rather than by position: collapsing hands us a filtered list, in
     // which the root is not necessarily first
     const rootNode = nodes.find((node) => node.data.parent === "root") || nodes[0];
-    if (rootNode && !isCollapsed(rootNode)) rootNode.type = "rootNoteNode"
+    // The || nodes[0] fallback can land on anything, so guard the write as well as the search -
+    // otherwise a render with no root would promote a prospective node into the root's shape
+    if (rootNode && !isPreserved(rootNode)) rootNode.type = "rootNoteNode"
 
     edges.forEach((edge) => {
         // Passing the label's size makes dagre lay the graph out around the labels rather than
@@ -210,8 +218,12 @@ export function PGraphProvider({children}) {
     /* Where the branch is allowed to end: the chosen edge's target and everything below it. Computed
        here from the edges the UI already holds, so the graph can show which nodes are pickable
        without a round trip. The server validates the choice independently. */
+    /* descendantsOf now walks the suggestion edges too, so filter them back out - a suggestion
+       is not somewhere a branch can end. */
     const eligibleDestinations = useMemo(
-        () => (branchSelection.target ? descendantsOf(edges, branchSelection.target) : new Set()),
+        () => (branchSelection.target
+            ? new Set([...descendantsOf(edges, branchSelection.target)].filter((id) => !isProspectiveId(id)))
+            : new Set()),
         [edges, branchSelection.target]
     );
 
@@ -246,10 +258,23 @@ export function PGraphProvider({children}) {
     const [collapsedRuns, setCollapsedRuns] = useState([]);
     const [collapseError, setCollapseError] = useState(null);
 
+    /* The AI's suggestions, drawn as nodes hanging off the node they were asked for. Like
+       collapsing, this is a way of looking at the graph rather than part of it: nothing here has
+       a table behind it until the user accepts it.
+
+       It lives here, rather than in the context that fetches it, because the effect below is the
+       only writer of what React Flow draws. Anything injected through setNodes from outside would
+       be erased the next time the server graph or a collapsed run changed. Entries are
+       {id, parent, op, label, reason, rowCount, suggestion}. */
+    const [prospectiveNodes, setProspectiveNodes] = useState([]);
+    const clearProspectiveNodes = useCallback(() => setProspectiveNodes([]), []);
+
     /* Fold the nodes the user lassoed. Rejects anything that is not one unbroken run on a single
        branch, because collapsing through a fork would orphan the sibling subtree. */
     const collapseNodes = useCallback((selectedIds) => {
-        const run = orderCollapsibleRun(edges, selectedIds);
+        // A lasso catches whatever is under it, suggestions included; they are not part of the
+        // run being folded, so drop them before the run is validated
+        const run = orderCollapsibleRun(edges, selectedIds.filter((id) => !isProspectiveId(id)));
         if (run.error) {
             setCollapseError(run.error);
             return;
@@ -284,13 +309,50 @@ export function PGraphProvider({children}) {
 
         function drawGraph() {
             const folded = applyCollapse(serverGraph.nodes, serverGraph.edges, collapsedRuns);
-            const layout = getLayoutedElements(folded.nodes, folded.edges);
+
+            /* A suggestion whose parent has been folded into a run has nothing to hang off.
+               dagre.setEdge invents a node for an endpoint it does not know, and that invented
+               node has no dimensions - which turns every position in the graph into NaN. */
+            const visible = new Set(folded.nodes.map((node) => node.id));
+            const live = prospectiveNodes.filter((s) => visible.has(s.parent));
+
+            const suggested = live.map((s) => ({
+                id: s.id,
+                type: "prospectiveNode",
+                position: {x: 0, y: 0},
+                data: {
+                    label: s.label,
+                    parent: s.parent,
+                    reason: s.reason,
+                    rowCount: s.rowCount,
+                    errorType: s.errorType,
+                    suggestion: s.suggestion,
+                    metrics: null,
+                },
+            }));
+
+            const suggestedEdges = live.map((s) => ({
+                id: `e${s.id}`,
+                source: s.parent,
+                target: s.id,
+                label: s.op,
+                animated: false,
+                style: {stroke: "#7c3aed", strokeDasharray: "6 4"},
+            }));
+
+            /* applyCollapse hands back the server's own node objects by reference when nothing is
+               folded, and laying out writes type and label onto whatever it is given - so build a
+               new array rather than pushing onto that one. */
+            const layout = getLayoutedElements(
+                [...folded.nodes, ...suggested],
+                [...folded.edges, ...suggestedEdges],
+            );
             setNodes(layout.nodes);
             setEdges(layout.edges);
         }
 
         drawGraph();
-    }, [serverGraph, collapsedRuns, setNodes, setEdges]);
+    }, [serverGraph, collapsedRuns, prospectiveNodes, setNodes, setEdges]);
 
     // The edges making up the selected branch, keyed "source->target", for highlighting in the graph
     const selectedBranchEdges = useMemo(() => {
@@ -311,6 +373,28 @@ export function PGraphProvider({children}) {
         // Folding and layout happen in the effect above, so both paths into the graph agree
         setServerGraph({nodes: pGraphResult.nodes, edges: pGraphResult.edges});
     }, []);
+
+    /* Pull the graph as soon as there is a table to pull it for.
+
+       Nothing did this before: refreshGraph was only called after a wrangle, undo or redo, so a
+       freshly uploaded table rendered the seeded placeholder node above instead of its own root,
+       and serverGraph stayed empty. The effect that draws the graph returns early while that is
+       true, which meant anything derived from the real graph - the AI's suggestions among them -
+       had nothing to attach to and silently never appeared. */
+    useEffect(() => {
+        if (!tableName) return;
+
+        // Guarded the way the trajectory fetch above is: a reply that arrives after the table
+        // has moved on must not write itself into the graph
+        let stale = false;
+        (async () => {
+            const result = await getPGraph();
+            if (stale || !result?.nodes) return;
+            setServerGraph({nodes: result.nodes, edges: result.edges});
+        })();
+
+        return () => { stale = true; };
+    }, [tableName]);
 
     const onConnect = useCallback(
         (params) =>
@@ -335,6 +419,9 @@ export function PGraphProvider({children}) {
     /* https://reactflow.dev/api-reference/types/node-mouse-handler - this is how you know the params */
     const onNodeDoubleClick = useCallback(
         async (event, node) => {
+            // A suggestion has no table behind it, and this sets the app's current table from the
+            // node id without asking - navigating to one would point every panel at nothing
+            if (isProspectiveId(node.id)) return;
             //setTableName is a dependency you have to list for this to work
             await setGraphToClickedNode(node.id);
             setTableName(node.id);
@@ -366,6 +453,8 @@ export function PGraphProvider({children}) {
                 return;
             }
             event.stopPropagation();
+            // Same reason: a suggestion cannot be a comparison baseline
+            if (isProspectiveId(node.id)) return;
             setBaselineNodeId(current => (current === node.id ? null : node.id));
         }, [selectionStage, eligibleDestinations, pickBranchDestination]
     )
@@ -389,6 +478,8 @@ export function PGraphProvider({children}) {
             getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
             baselineNodeId, setBaselineNodeId, resolvedBaselineId,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
+            prospectiveNodes, setProspectiveNodes, clearProspectiveNodes,
+            hasProspectiveNodes: prospectiveNodes.length > 0,
             startBranchSelection, resetBranchSelection,
             clearAllSelections, hasAnySelection,
             collapsedRuns, collapseNodes, expandRun, expandAllRuns, selectRunBranch,

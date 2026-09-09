@@ -62,31 +62,34 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
-def update_errors_table(table_name: str, columns_selected_for_wrangling: list) -> pd.DataFrame:
-    # TODO: fix this so it doesn't update the whole table after small changes to the table
+def update_errors_table(table_name: str) -> pd.DataFrame:
     """
-    After modifying a table in-place, re-run error detection
-    and update the errors table.
+    After modifying a table in-place, re-run error detection and rebuild the errors table.
+
+    The whole frame goes to the detectors, "ID" included, and the whole errors table is rebuilt.
+
+    Both of those matter. Slicing the frame down to just the wrangled columns - which this did
+    between 33f0e34 and now - drops "ID", so set_id_column mints fresh positional ids and every
+    row_id in errors_<table> ends up naming a row *position* rather than a row. And updating only
+    the wrangled columns' rows leaves error rows for every other column pointing at ids that a
+    delete has since removed. A full rebuild has neither problem.
+
+    The cost is re-detecting every column on the whole table. That is what this did before
+    33f0e34; making it incremental again needs to be scoped by row, not by column, so "ID"
+    is never at risk. See tests/sql/test_errors_row_id.py.
     """
     try:
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
 
-        df = df[columns_selected_for_wrangling]
-
-        # TODO: optimize this so it doesn't load the whole table into a df first
         detected_errors_df = create_error_df(df)
         errors_table_name = f"errors_{table_name}"
 
-        key_column = "column_id"
-        update_table(detected_errors_df, errors_table_name, key_column, columns_selected_for_wrangling)
-
         # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
         # table names > 63 chars due to PostgreSQL identifier truncation).
-        #with engine.begin() as conn:
-        #    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
+        with engine.begin() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
 
-
-        # detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
+        detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
 
         print(f"✓ Updated errors table: {errors_table_name}")
         return detected_errors_df
@@ -245,7 +248,7 @@ def wrangle_delete_column():
         remaining_columns = query.delete_column(table=table_name, column=column)
 
         # Re-run error detection
-        update_errors_table(table_name, [column])
+        update_errors_table(table_name)
         update_data_profile_table(table_name, [column])
 
         return {

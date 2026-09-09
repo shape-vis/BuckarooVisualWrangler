@@ -8,12 +8,18 @@ import {
 import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
 import {usePgraph} from "../store/PGraphContext.jsx";
+import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
 import {useCallback, useEffect, useMemo, useRef} from "react";
 
 
 export default function PGraph() {
+
+/* The AI's own messages: a failure, or the model reporting that it found nothing worth
+   repairing. Neither is a node, so both live in the same top-center panel the collapse error
+   already uses. */
+const ai = useAISuggestions();
 
 const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
         onEdgeClick, nodeTypes, baselineNodeId,
@@ -149,6 +155,24 @@ const onSelectionEnd = useCallback(() => {
                 Clear selections
               </button>
             )}
+          </Panel>
+        )}
+
+        {ai?.error && (
+          <Panel position="top-center">
+            <div className="pgraph-collapse-error" onClick={ai.dismissMessages}>
+              {ai.error} <span className="pgraph-collapse-error-dismiss">dismiss</span>
+            </div>
+          </Panel>
+        )}
+
+        {/* Not an error and not a node: the model looked and found nothing to do */}
+        {ai?.notice && !ai?.error && (
+          <Panel position="top-center">
+            <div className="pgraph-ai-notice" onClick={ai.dismissMessages}>
+              Nothing to repair here — {ai.notice}{" "}
+              <span className="pgraph-collapse-error-dismiss">dismiss</span>
+            </div>
           </Panel>
         )}
 

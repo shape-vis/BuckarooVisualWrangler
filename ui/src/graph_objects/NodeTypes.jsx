@@ -3,6 +3,7 @@ import "../styles/Nodes.css"
 import { Handle, Position} from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
+import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
 import {ERROR_TYPES, ERROR_DIMENSIONS} from "../store/errorColors.js";
 import "../styles/Buttons.css"
 
@@ -56,16 +57,37 @@ function NodeMetricsExpansion( { metrics } ){
     );
 }
 
-/** The buttons every node carries, and the metrics the magnifier reveals. */
-function NodeTools( { data } ){
-    const { startBranchSelection } = usePgraph();
+/**
+ * The buttons every node carries, and the metrics the magnifier reveals.
+ *
+ * Takes the node's id rather than reading data.label, because the layout truncates a long label
+ * down to the three-character node id - so the label is not a table name you can send anywhere.
+ */
+function NodeTools( { nodeId, data } ){
+    const { startBranchSelection, hasProspectiveNodes } = usePgraph();
+    const ai = useAISuggestions();
     const [expanded, setExpanded] = useState(false);
 
     const openQuality = useCallback(() => startBranchSelection(), [startBranchSelection]);
 
+    const askAI = useCallback(() => ai?.requestSuggestions(nodeId), [ai, nodeId]);
+
+    /* One set of suggestions at a time. Rather than silently replacing the last node's, every AI
+       button goes inert until the outstanding ones have been accepted or declined - so there is
+       never a second dashed forest, and never a question of which is stale. */
+    const aiBlocked = !ai?.configured || ai?.busy || hasProspectiveNodes;
+    const aiTitle = !ai?.configured
+        ? "AI suggestions are not configured - add GEMINI_API_KEY to .env"
+        : hasProspectiveNodes
+            ? "Accept or decline the current suggestions first"
+            : ai?.busy ? "Working…" : "Suggest repairs for this node";
+
     return (
         <>
-            <div className={"note-node-icon-container"}>
+            {/* stopPropagation on click does not stop dblclick, and React Flow navigates the app
+                on a node double-click - so a quick double-tap on any of these would move the
+                current table out from under the user */}
+            <div className={"note-node-icon-container"} onDoubleClick={(e) => e.stopPropagation()}>
                 <IconButton
                     className="node-sub-button-chart"
                     title="Measure quality along a branch"
@@ -82,6 +104,18 @@ function NodeTools( { data } ){
                         src="/images/icons/inspect.svg"
                         alt=""
                         className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
+                    />
+                </IconButton>
+                <IconButton
+                    className="node-sub-button-ai"
+                    title={aiTitle}
+                    onClick={askAI}
+                    disabled={aiBlocked}
+                >
+                    <img
+                        src="/images/icons/sparkle.svg"
+                        alt=""
+                        className={`nodeButtonSvgIcon ${ai?.pendingNode === nodeId ? "nodeButtonSvgIcon--active" : ""}`}
                     />
                 </IconButton>
             </div>
@@ -148,7 +182,7 @@ return (
 )
 }
 
-export function NoteNode( { data, isConnectable } ){
+export function NoteNode( { id, data, isConnectable } ){
 
 return (
     <>
@@ -157,7 +191,7 @@ return (
         <div>
             <div className={"node-node-label"}>
                 <h3>{data.label}</h3>
-                <NodeTools data={data} />
+                <NodeTools nodeId={id} data={data} />
             </div>
         </div>
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
@@ -165,7 +199,7 @@ return (
 )
 }
 
-export function RootNoteNode( { data, isConnectable } ){
+export function RootNoteNode( { id, data, isConnectable } ){
 
 return (
     <>
@@ -173,7 +207,7 @@ return (
         <div>
             <div className={"node-node-label"}>
                 <h3>{data.label}</h3>
-                <NodeTools data={data} />
+                <NodeTools nodeId={id} data={data} />
             </div>
         </div>
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />

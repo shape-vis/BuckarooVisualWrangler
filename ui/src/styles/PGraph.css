@@ -47,3 +47,16 @@
 
 
 
+
+/* The model reporting that it found nothing worth repairing. Not an error - it sits in the same
+   top-center slot as the collapse error, but reads as information rather than as a failure. */
+.pgraph-ai-notice {
+  background: #faf5ff;
+  border: 1px solid #ddd6fe;
+  color: #5b21b6;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}

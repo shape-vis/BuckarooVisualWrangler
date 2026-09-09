@@ -190,3 +190,98 @@
 .node-node-label{
     padding-bottom: 2px;
 }
+/* ── Prospective nodes ───────────────────────────────────────────────────────
+   A wrangle the AI is proposing, drawn where the resulting node would sit. Dashed and violet, so
+   it cannot be mistaken for a real node: the baseline marker is dashed blue and a folded run is
+   dashed grey, and both of those stand for something that exists. This one does not - yet. */
+.react-flow__node-prospectiveNode {
+  background-color: #faf5ff;
+  border: 2px dashed #7c3aed;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: center;
+  /* Matches the other node types, so dagre's fixed 200x100 footprint still describes it */
+  min-width: 150px;
+  max-width: 190px;
+  cursor: default;
+}
+
+.prospective-node-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-weight: 600;
+  color: #4c1d95;
+}
+
+/* Same swatch treatment the metrics expansion uses, so an error type reads the same colour
+   wherever it appears */
+.prospective-node-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.prospective-node-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prospective-node-rows {
+  color: #6b21a8;
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.prospective-node-reason {
+  color: #4b5563;
+  font-size: 10px;
+  line-height: 1.3;
+  margin: 4px 0 6px;
+  text-align: left;
+}
+
+.prospective-node-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.prospective-node-btn {
+  cursor: pointer;
+  border: 1px solid #c4b5fd;
+  background: #ffffff;
+  color: #4c1d95;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.prospective-node-btn:hover:not(:disabled) {
+  background: #ede9fe;
+  border-color: #7c3aed;
+}
+
+.prospective-node-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Accepting is the affirmative action, and green already means "the wrangled node" in this
+   graph - see pgraph-node--current */
+.prospective-node-btn--accept {
+  background: #64ea96;
+  border-color: #1a7f37;
+  color: #06301a;
+  font-weight: 600;
+}
+
+.prospective-node-btn--accept:hover:not(:disabled) {
+  background: #46d97e;
+}

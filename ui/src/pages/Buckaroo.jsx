@@ -14,6 +14,7 @@ import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
 import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
+import {AISuggestionsProvider} from "../store/AISuggestionsContext.jsx";
 import {DockProvider} from "../store/DockContext.jsx";
 
 export const ViewContext = createContext();
@@ -41,6 +42,9 @@ export default function Buckaroo({ onReset }) {
                 {/* Above PGraph and Repair: both ask the dock to show their tab */}
                 <DockProvider>
                 <PGraphProvider>
+                {/* Inside PGraphProvider: the graph owns the suggestion nodes, this owns asking
+                    for them. Accepting one runs the same post-wrangle sequence RepairContext does. */}
+                <AISuggestionsProvider onWrangleExecuted={handleWrangleExecuted}>
                 <RowRangeProvider>
                 <SelectionProvider>
                 <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
@@ -91,6 +95,7 @@ export default function Buckaroo({ onReset }) {
                 </RepairProvider>
                 </SelectionProvider>
                 </RowRangeProvider>
+                </AISuggestionsProvider>
                 </PGraphProvider>
                 </DockProvider>
                 </SettingsProvider>

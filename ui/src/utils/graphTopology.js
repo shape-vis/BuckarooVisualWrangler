@@ -161,3 +161,17 @@ export function collapsedNodeIds(collapsedRuns) {
     (collapsedRuns ?? []).forEach((run) => run.nodes.forEach((id) => ids.add(id)));
     return ids;
 }
+
+/* Prospective nodes - the AI's suggestions, drawn in the graph but not part of it.
+
+   They carry an id that cannot collide with a table name: real node tables are named
+   "n{digit}{letter}_{base}", and a colon is not a legal character in one. Collapsed placeholders
+   already use the same trick with "collapsed:". */
+export const PROSPECTIVE_PREFIX = "ai:";
+
+export const prospectiveId = (parentId, index) => `${PROSPECTIVE_PREFIX}${parentId}:${index}`;
+
+/* Several handlers take a node id and hand it to the server as a table name - navigating to a
+   node, resolving a branch, folding a run. A prospective node has no table behind it, so every
+   one of those has to be able to recognise and skip it. */
+export const isProspectiveId = (id) => String(id ?? "").startsWith(PROSPECTIVE_PREFIX);

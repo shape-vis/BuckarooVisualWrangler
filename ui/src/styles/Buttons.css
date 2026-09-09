@@ -183,7 +183,8 @@
 }
 
 .iconButton-node-sub-button-chart,
-.iconButton-node-sub-button-inspect{
+.iconButton-node-sub-button-inspect,
+.iconButton-node-sub-button-ai{
   cursor: pointer;
   /* Centers the SVG icon in the button box */
   display: inline-flex;
@@ -201,10 +202,21 @@
   align-self: center;
 }
 
-.iconButton-node-sub-button-chart:hover,
-.iconButton-node-sub-button-inspect:hover{
+.iconButton-node-sub-button-chart:hover:not(:disabled),
+.iconButton-node-sub-button-inspect:hover:not(:disabled),
+.iconButton-node-sub-button-ai:hover:not(:disabled){
   background-color: #e0e0e0;
   border-color: #a8b4c8;
+}
+
+/* A disabled node button has to read as deliberately off rather than broken. The AI button
+   spends most of its life disabled - while suggestions are already on the graph - so this
+   carries real weight. */
+.iconButton-node-sub-button-chart:disabled,
+.iconButton-node-sub-button-inspect:disabled,
+.iconButton-node-sub-button-ai:disabled{
+  cursor: default;
+  opacity: 0.35;
 }
 
 /* Node buttons carry SVG icons, matching the header's view buttons. The filter flattens the artwork

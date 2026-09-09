@@ -6,6 +6,7 @@ import json
 import random
 import string
 import re
+import threading
 from sqlalchemy import types as sql_types
 from sqlalchemy import text as sa_text
 import pandas as pd
@@ -25,6 +26,20 @@ from app.pgraph.metrics import refresh_node_metrics
 # Node tables are named "<node id>_<base name>", where the node id is n{digit}{letter} - see
 # node_id_for_count in app/pgraph/pgraph.py
 NODE_PREFIX_PATTERN = re.compile(r'^n(\d[a-z])_(.+)$')
+
+"""
+Serializes preview-and-promote, which is not safe to run concurrently:
+
+  - get_new_node_id() only reads node_count, so two wrangles in flight both claim the same id
+  - _safe_pg_name(table, "_preview_delete") is deterministic, so two wrangles off the same
+    parent build previews under the same names and clobber each other mid-flight
+  - execute_wrangle_preview drops every preview name derived from its table, including ones
+    another request is still using
+
+Flask's dev server is threaded, so this is reachable simply by clicking twice. Held across
+create_previews_* -> execute_wrangle_preview. The manual path does not take it yet.
+"""
+WRANGLE_LOCK = threading.RLock()
 
 def get_current_pgraph():
     """
@@ -550,8 +565,8 @@ def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
 
     # The preview histograms read errors_, but nothing reads a preview's data profile, so it isn't
     # built until the preview is promoted in execute_wrangle_preview
-    update_errors_fn(preview_delete_table_name, cols)
-    update_errors_fn(preview_impute_table_name, cols)
+    update_errors_fn(preview_delete_table_name)
+    update_errors_fn(preview_impute_table_name)
 
     return {
         "success": True,
@@ -590,9 +605,9 @@ def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
     query.impute_by_ids(table=preview_impute_y_table_name, col=cols[1], ids=row_ids)
 
     # As in the 1D case, the profile is left until the preview is promoted
-    update_errors_fn(preview_delete_table_name, cols)
-    update_errors_fn(preview_impute_x_table_name, cols)
-    update_errors_fn(preview_impute_y_table_name, cols)
+    update_errors_fn(preview_delete_table_name)
+    update_errors_fn(preview_impute_x_table_name)
+    update_errors_fn(preview_impute_y_table_name)
 
 
     return {
