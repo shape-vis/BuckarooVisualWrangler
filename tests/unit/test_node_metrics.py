@@ -260,3 +260,23 @@ class WrangleLabelTests(unittest.TestCase):
         root = GraphNode("root", "root", "n0a_x", "errors_n0a_x")
         self.assertEqual(root.wrangle_cols, [])
         self.assertEqual(root.wrangle_label(), "root")
+
+    def test_summary_names_only_the_columns_the_wrangle_acted_on(self):
+        node = GraphNode("n0a_x", "impute_x", "n0b_x", "errors_n0b_x", ["salary", "region"])
+        self.assertEqual(node.wrangle_summary(), {"op": "impute", "columns": ["salary"]})
+
+    def test_root_summary_has_no_columns(self):
+        root = GraphNode("root", "root", "n0a_x", "errors_n0a_x")
+        self.assertEqual(root.wrangle_summary(), {"op": "root", "columns": []})
+
+    def test_serialized_nodes_carry_their_wrangle(self):
+        # A node folded into a collapsed run loses its incoming edge on screen, so the node itself has
+        # to say what produced it
+        graph = PGraph()
+        graph.add_root_node(GraphNode("root", "root", "n0a_x", "errors_n0a_x"))
+        graph.add_node(GraphNode("n0a_x", "delete", "n0b_x", "errors_n0b_x", ["salary", "region"]))
+
+        wrangles = {node["id"]: node["data"]["wrangle"] for node in graph.serialize_nodes()}
+
+        self.assertEqual(wrangles["n0a_x"], {"op": "root", "columns": []})
+        self.assertEqual(wrangles["n0b_x"], {"op": "delete", "columns": ["salary", "region"]})

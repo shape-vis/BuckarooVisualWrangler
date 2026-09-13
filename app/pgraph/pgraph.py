@@ -71,7 +71,10 @@ class PGraph:
                         # The front end derives the default delta baseline, collapse validation and
                         # node highlighting from this, so none of them need a round trip
                         "parent": node.parent_table,
-                        "metrics": node.metrics.__json__() if node.metrics is not None else None
+                        "metrics": node.metrics.__json__() if node.metrics is not None else None,
+                        # What produced the node, so it can be described without its incoming edge -
+                        # which a collapsed run hides, and which the root never had
+                        "wrangle": node.wrangle_summary()
                     }
                 }
             )

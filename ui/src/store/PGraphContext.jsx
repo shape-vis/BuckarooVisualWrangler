@@ -163,6 +163,15 @@ export function PGraphProvider({children}) {
         return (parent && parent !== "root") ? parent : null;
     }, [baselineNodeId, tableName, nodes]);
 
+    /* The pair the user set up on purpose: a shift-clicked baseline against the current node. Only
+       this pair is badged in the graph and offered to the header's Compare button - the panel's
+       fallback to the parent is a default, not a selection. */
+    const comparisonPair = useMemo(() => (
+        (baselineNodeId && baselineNodeId !== tableName)
+            ? {baseline: baselineNodeId, comparator: tableName}
+            : null
+    ), [baselineNodeId, tableName]);
+
     /* The branch the user is picking out of the graph: an edge fixes where it starts and which way it
        leaves that node, a destination fixes where it stops. Both are chosen by clicking the graph. */
     const [branchSelection, setBranchSelection] = useState({source: null, target: null, destination: null});
@@ -297,6 +306,13 @@ export function PGraphProvider({children}) {
     /* The graph as the server sent it, before any folding. Collapsing is derived from this, so
        expanding restores the real nodes without another request. */
     const [serverGraph, setServerGraph] = useState({nodes: [], edges: []});
+
+    /* Every real node by id, whether or not it is drawn. A node folded into a run is gone from
+       `nodes`, but anything describing it - the compare modal, say - still needs its data. */
+    const serverNodesById = useMemo(
+        () => Object.fromEntries(serverGraph.nodes.map((node) => [node.id, node])),
+        [serverGraph]
+    );
 
     /* Fold the server's graph into what React Flow should draw, and write it into React Flow's own
        state rather than deriving it alongside.
@@ -476,7 +492,7 @@ export function PGraphProvider({children}) {
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
             getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
-            baselineNodeId, setBaselineNodeId, resolvedBaselineId,
+            baselineNodeId, setBaselineNodeId, resolvedBaselineId, comparisonPair, serverNodesById,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             prospectiveNodes, setProspectiveNodes, clearProspectiveNodes,
             hasProspectiveNodes: prospectiveNodes.length > 0,

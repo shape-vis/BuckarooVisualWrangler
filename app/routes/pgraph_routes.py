@@ -2,9 +2,11 @@
 
 from flask import request
 import app as app_package
-from app import app, db_operations
+from app import app, db_operations, engine
 from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
+from app.pgraph.compare import (PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap,
+                                compare_scatter, summarize_changes)
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
 
 
@@ -73,6 +75,76 @@ def branch_trajectory():
             "destination": destination,
             "nodes": path,
             "dimensions": quality_trajectory(ordered_metrics),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 400
+
+
+def _bounded_int(name, default, low, high):
+    """An integer query parameter, clamped so a request cannot ask for an absurd amount of work."""
+    return max(low, min(high, int(request.args.get(name, default))))
+
+
+@app.get("/api/pgraph/compare")
+def compare_nodes():
+    """
+    Plot data for comparing the data behind two nodes, binned on axes the two states share.
+
+    Query: ?base=<node>&other=<node>&kind=histogram|heatmap|scatter&x=<column>[&y=<column>]
+           [&bins=10][&sample=600]
+    base is the baseline and other the comparator; y is required for heatmap and scatter. Returns the
+    plot payload for that kind plus what happened to the rows between the two, matched by ID.
+    Read-only: neither node becomes the session's current table. See app/pgraph/compare.py.
+    """
+    try:
+        pgraph = app_package.pgraph_for_session
+        if pgraph is None:
+            return {"success": False, "error": "no graph in this session"}, 400
+
+        base_table = request.args.get("base")
+        other_table = request.args.get("other")
+        # Only tables the graph owns can be read, so a request cannot name an arbitrary table
+        for name, value in (("base", base_table), ("other", other_table)):
+            if not value:
+                return {"success": False, "error": f"missing {name}"}, 400
+            if value not in pgraph.node_map:
+                return {"success": False, "error": f"{value} is not a node in this graph"}, 400
+
+        kind = request.args.get("kind", "histogram")
+        if kind not in PLOT_KINDS:
+            return {"success": False, "error": f"unknown plot kind {kind!r}"}, 400
+
+        x_column = request.args.get("x")
+        y_column = request.args.get("y") if kind != "histogram" else None
+        if not x_column:
+            return {"success": False, "error": "missing x"}, 400
+        if kind != "histogram" and not y_column:
+            return {"success": False, "error": f"a {kind} needs a y column"}, 400
+
+        bin_count = _bounded_int("bins", 10, 1, 50)
+        sample_size = _bounded_int("sample", 600, 50, 5000)
+
+        columns = [x_column] if y_column is None else [x_column, y_column]
+        base = load_node_state(engine, base_table, columns)
+        other = load_node_state(engine, other_table, columns)
+
+        if kind == "histogram":
+            plot = compare_histogram(base, other, x_column, bin_count)
+        elif kind == "heatmap":
+            plot = compare_heatmap(base, other, x_column, y_column, bin_count)
+        else:
+            plot = compare_scatter(base, other, x_column, y_column, sample_size)
+
+        return {
+            "success": True,
+            "kind": kind,
+            "base": base_table,
+            "other": other_table,
+            "x": x_column,
+            "y": y_column,
+            "rows": {"base": len(base.data), "other": len(other.data)},
+            "changes": summarize_changes(base, other, columns),
+            **plot,
         }
     except Exception as e:
         return {"success": False, "error": str(e)}, 400

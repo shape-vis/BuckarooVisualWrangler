@@ -336,6 +336,21 @@ export async function getBranchTrajectory(source, target, destination){
     }
 }
 
+/**
+ * GET /api/pgraph/compare
+ * Plot data for two nodes' tables, binned on axes they share so a bin means the same range on both
+ * sides. kind is "histogram" | "heatmap" | "scatter"; y is only sent for the 2D kinds.
+ *
+ * Takes an AbortSignal so a superseded request - the user switching attribute mid-flight - is
+ * dropped rather than raced. Rejects with an AbortError when that happens.
+ */
+export async function getNodeComparison({ base, other, kind, x, y, bins }, signal) {
+    const params = new URLSearchParams({ base, other, kind, x, bins });
+    if (y) params.set("y", y);
+    const response = await fetch(`/api/pgraph/compare?${params}`, { method: "GET", signal });
+    return await response.json();
+}
+
 export async function resetApp() {
     try {
         const response = await fetch("/api/reset", { method: "POST" });

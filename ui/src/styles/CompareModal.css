@@ -1,0 +1,614 @@
+/* The compare modal, laid out as sketched: a narrow column of plot options on the left and the plot
+   filling the rest. It is portaled to <body> and centered with flexbox rather than a transform - a
+   transformed ancestor would become the containing block for the plot's own tooltip. */
+
+.compare-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.45);
+    animation: compare-fade-in 0.15s ease-out;
+}
+
+@keyframes compare-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.compare-window {
+    display: flex;
+    flex-direction: column;
+    width: min(1320px, 100%);
+    height: min(860px, 100%);
+    background: #ffffff;
+    border: 1px solid #dddfe2;
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #1c1e21;
+    overflow: hidden;
+    outline: none;
+}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+
+.compare-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e4e6eb;
+}
+
+.compare-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.compare-heading {
+    min-width: 0;
+}
+
+/* The two nodes and the wrangle that produced each. Wraps rather than truncating, since a wrangle
+   over two long column names is exactly the detail worth reading in full. */
+.compare-subtitle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #65676b;
+}
+
+.compare-node-summary {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    min-width: 0;
+}
+
+.compare-wrangle {
+    font-weight: 600;
+    color: #1c1e21;
+}
+
+.compare-wrangle-meta::before {
+    content: "·";
+    margin-right: 6px;
+}
+
+.compare-subtitle-arrow {
+    color: #8a8d91;
+}
+
+/* The same pairing the graph draws: a dashed blue baseline and a solid green comparator */
+.compare-node-chip {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.compare-node-chip--base {
+    color: #1877F2;
+    background: #e7f0fd;
+    border: 1px dashed #1877F2;
+}
+
+.compare-node-chip--other {
+    color: #1a7f37;
+    background: #e6f4ea;
+    border: 1px solid #1a7f37;
+}
+
+.compare-close {
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 24px;
+    line-height: 1;
+    color: #65676b;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.compare-close:hover {
+    background: #e4e6eb;
+    color: #1c1e21;
+}
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+
+.compare-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    background: #f0f2f5;
+}
+
+.compare-options {
+    width: 280px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    box-sizing: border-box;
+    background: #ffffff;
+    border: 1px solid #dddfe2;
+    border-radius: 10px;
+}
+
+.compare-section {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.compare-section + .compare-section {
+    padding-top: 12px;
+    border-top: 1px solid #eef0f2;
+}
+
+.compare-section-title {
+    display: flex;
+    justify-content: space-between;
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #65676b;
+}
+
+.compare-section-value {
+    color: #1c1e21;
+    letter-spacing: 0;
+}
+
+.compare-muted {
+    font-size: 12px;
+    font-style: italic;
+    color: #65676b;
+}
+
+/* ── Nodes ────────────────────────────────────────────────────────── */
+
+.compare-node-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+}
+
+.compare-role {
+    flex-shrink: 0;
+    min-width: 78px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+    color: #ffffff;
+}
+
+.compare-role--base  { background: #1877F2; }
+.compare-role--other { background: #1a7f37; }
+
+.compare-node-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.compare-node-rows {
+    margin-left: auto;
+    font-size: 12px;
+    color: #65676b;
+    white-space: nowrap;
+}
+
+.compare-pair-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.compare-row-change {
+    font-size: 12px;
+    font-weight: 600;
+    color: #3c4043;
+}
+
+.compare-swap {
+    margin-left: auto;
+    padding: 4px 10px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    background: #ffffff;
+    font: inherit;
+    font-size: 12px;
+    color: #1c1e21;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.compare-swap:hover {
+    background: #f0f2f5;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────── */
+
+.compare-segmented {
+    display: flex;
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.compare-segment {
+    flex: 1;
+    padding: 6px 4px;
+    border: none;
+    background: #f7f9fa;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: #3c4043;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.compare-segment + .compare-segment {
+    border-left: 1px solid #dddfe2;
+}
+
+.compare-segment:hover {
+    background: #e8eaed;
+}
+
+.compare-segment--active,
+.compare-segment--active:hover {
+    background: #e7f0fd;
+    color: #1877F2;
+    font-weight: 600;
+}
+
+.compare-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.compare-field-label {
+    font-size: 12px;
+    color: #65676b;
+}
+
+.compare-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    background: #ffffff;
+    font: inherit;
+    font-size: 13px;
+    color: #1c1e21;
+}
+
+.compare-range {
+    width: 100%;
+    accent-color: #1877F2;
+}
+
+.compare-segment:focus-visible,
+.compare-select:focus-visible,
+.compare-swap:focus-visible,
+.compare-close:focus-visible,
+.compare-ranked-item:focus-visible {
+    outline: 2px solid #1877F2;
+    outline-offset: 1px;
+}
+
+/* ── What changed ─────────────────────────────────────────────────── */
+
+.compare-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    font-size: 12px;
+}
+
+.compare-changes > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.compare-changes dt {
+    color: #65676b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.compare-changes dd {
+    margin: 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.compare-ranked {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.compare-ranked-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    color: #1c1e21;
+    cursor: pointer;
+}
+
+.compare-ranked-item:hover {
+    background: #f0f2f5;
+}
+
+.compare-ranked-item--active,
+.compare-ranked-item--active:hover {
+    background: #e7f0fd;
+    border-color: #1877F2;
+}
+
+.compare-ranked-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Matches the attribute summary panel's delta colors */
+.compare-delta {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.compare-delta--improved { color: #1a7f37; }
+.compare-delta--worsened { color: #c1121f; }
+.compare-delta--flat     { color: #65676b; }
+
+/* ── Plot ─────────────────────────────────────────────────────────── */
+
+.compare-plot {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px solid #dddfe2;
+    border-radius: 10px;
+}
+
+.compare-plot-frame {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: opacity 0.15s ease;
+}
+
+.compare-plot--loading .compare-plot-frame {
+    opacity: 0.4;
+}
+
+.compare-plot-canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Out of flow, so the svg's own size never feeds back into the canvas the ResizeObserver measures */
+.compare-plot-canvas > svg {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+}
+
+.compare-plot-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.compare-plot-pill {
+    max-width: 70%;
+    padding: 6px 14px;
+    border: 1px solid #dddfe2;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    font-size: 13px;
+    text-align: center;
+    color: #65676b;
+}
+
+.compare-plot-pill--error {
+    border-color: #f5c2bd;
+    border-radius: 8px;
+    background: #fdecea;
+    color: #a3261c;
+}
+
+/* The app's axis text size applies here too, but never below what reads at this scale */
+.compare-plot-canvas .bottom-axis-text,
+.compare-plot-canvas .left-axis-text {
+    font-size: max(10px, var(--axis-text-size, 8px));
+}
+
+.compare-axis .domain,
+.compare-axis .tick line {
+    stroke: #c4c7cc;
+}
+
+.compare-panel-title text {
+    font-size: 12px;
+    font-weight: 600;
+    fill: #1c1e21;
+}
+
+.compare-axis-label {
+    font-size: 12px;
+    font-weight: 500;
+    fill: #3c4043;
+}
+
+.compare-zero {
+    stroke: #1c1e21;
+    stroke-width: 1;
+}
+
+.compare-hit {
+    fill: transparent;
+}
+
+.compare-hit.compare-mark--hover {
+    fill: rgba(28, 30, 33, 0.06);
+}
+
+.compare-mark.compare-mark--hover {
+    opacity: 0.6;
+}
+
+.compare-empty {
+    font-size: 13px;
+    fill: #65676b;
+}
+
+.compare-tooltip {
+    position: absolute;
+    z-index: 2;
+    display: none;
+    max-width: 300px;
+    padding: 6px 10px;
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    font-size: 12px;
+    line-height: 1.5;
+    color: #1c1e21;
+    pointer-events: none;
+}
+
+.compare-tooltip-swatch {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+    border-radius: 2px;
+}
+
+/* ── Legend ───────────────────────────────────────────────────────── */
+
+.compare-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 12px;
+    color: #3c4043;
+}
+
+.compare-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.compare-legend-mark {
+    flex-shrink: 0;
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.compare-legend-mark--box {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.compare-legend-mark--dot {
+    border-radius: 50%;
+}
+
+.compare-legend-mark--ring {
+    border: 2px solid;
+    border-radius: 50%;
+}
+
+.compare-legend-mark--ghost {
+    border: 1.5px dashed #8a8d91;
+    border-radius: 50%;
+}
+
+.compare-legend-mark--ramp {
+    width: 44px;
+}
+
+.compare-legend-mark--line {
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.compare-caption {
+    font-size: 11px;
+    color: #65676b;
+}
+
+@media (max-width: 760px) {
+    .compare-body {
+        flex-direction: column;
+    }
+
+    .compare-options {
+        width: auto;
+        max-height: 40%;
+    }
+}

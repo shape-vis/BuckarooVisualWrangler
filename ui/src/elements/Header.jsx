@@ -1,11 +1,13 @@
 import {NavButton, IconButton} from "./Buttons.jsx";
-import {useContext, useState} from "react";
+import {useCallback, useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
+import CompareModal from "./CompareModal.jsx";
 import { resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
+import { usePgraph } from "../store/PGraphContext.jsx";
 import "../styles/Header.css"
 
 function TableStatus() {
@@ -46,6 +48,12 @@ export function BuckarooHeader( { onReset} ) {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection } = useRepair();
 
+    /* The two nodes paired in the graph, if any. The pair is copied when the modal opens, so the modal
+       keeps comparing what was clicked even if the graph's selection moves on underneath it. */
+    const { comparisonPair } = usePgraph();
+    const [openPair, setOpenPair] = useState(null);
+    const closeCompare = useCallback(() => setOpenPair(null), []);
+
     const handleBack = async () => {
         await resetApp();
         onReset();
@@ -62,6 +70,17 @@ export function BuckarooHeader( { onReset} ) {
                 />
             </h1>
             <TableStatus />
+            {/* Only offered while two nodes are paired: a shift-clicked baseline and the current node */}
+            {comparisonPair && (
+                <button
+                    className="header-action-btn header-compare-btn"
+                    onClick={() => setOpenPair(comparisonPair)}
+                    title={`Compare ${comparisonPair.baseline} (baseline) with ${comparisonPair.comparator}`}
+                >
+                    <img src="/images/icons/compare.svg" alt="" className="btn-svg-icon" />
+                    Compare
+                </button>
+            )}
             <div className="navButtonContainer">
                 <NavButton onClick={() => setActiveView('both')} isSelected={activeView === 'both'} icon={<img src="images/icons/both.svg" alt="" className="navButtonSvgIcon" /> } >Both</NavButton>
                 <NavButton onClick={() => setActiveView('graph')} isSelected={activeView === 'graph'} icon={<img src="/images/icons/pgraphlogo.svg" alt="" className="navButtonSvgIcon" />}>Provenance Graph</NavButton>
@@ -99,6 +118,7 @@ export function BuckarooHeader( { onReset} ) {
                 <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
             </div>
             <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            {openPair && <CompareModal pair={openPair} onClose={closeCompare} />}
         </div>
     );
 }

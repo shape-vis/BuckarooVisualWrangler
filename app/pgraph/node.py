@@ -20,13 +20,31 @@ def wrangle_operation_name(wrangle_op):
     return "impute" if wrangle_op.startswith("impute") else wrangle_op
 
 
+def acted_on_columns(wrangle_op, wrangle_cols):
+    """
+    The column(s) a wrangle actually acted on.
+
+    A 1D wrangle acted on its single column. A 2D delete acted on both, because it removes rows picked
+    out by the pair. A 2D impute acted only on the column it filled - which is the whole point of the
+    _x / _y suffix, since "impute_x" on its own never said *which* column that was.
+
+    :param wrangle_op: "delete", "impute", "impute_x", "impute_y" or "root"
+    :param wrangle_cols: the columns the wrangle was performed on, in selection order
+    :return: a list of column names, empty when none were recorded
+    """
+    if not wrangle_cols:
+        return []
+    if wrangle_op == "impute_x":
+        return list(wrangle_cols[:1])
+    if wrangle_op == "impute_y":
+        return list(wrangle_cols[1:2])
+    return list(wrangle_cols)
+
+
 def format_wrangle_label(wrangle_op, wrangle_cols):
     """
-    Build the label an edge carries: the operation plus the column(s) it acted on.
-
-    A 1D wrangle names its single column. A 2D delete names both, because it removes rows picked out
-    by the pair. A 2D impute names only the column it actually filled - which is the whole point of
-    the _x / _y suffix, since "impute_x" on its own never said *which* column that was.
+    Build the label an edge carries: the operation plus the column(s) it acted on, as
+    acted_on_columns picks them.
 
     Falls back to the bare operation when no columns were recorded, so the root node and any wrangle
     that did not carry its columns through still label sensibly.
@@ -35,16 +53,7 @@ def format_wrangle_label(wrangle_op, wrangle_cols):
     :param wrangle_cols: the columns the wrangle was performed on, in selection order
     :return: a label such as "impute · salary" or "delete · salary × region"
     """
-    if not wrangle_cols:
-        return wrangle_op
-
-    if wrangle_op == "impute_x":
-        columns = wrangle_cols[:1]
-    elif wrangle_op == "impute_y":
-        columns = wrangle_cols[1:2]
-    else:
-        columns = wrangle_cols
-
+    columns = acted_on_columns(wrangle_op, wrangle_cols)
     if not columns:
         return wrangle_op
 
@@ -115,6 +124,10 @@ class GraphNode:
     def wrangle_name(self):
         """Just the operation - what its incoming edge is labelled with in the graph."""
         return wrangle_operation_name(self.wrangle_op)
+
+    def wrangle_summary(self):
+        """The operation and the columns it acted on, for the front end to describe this node with."""
+        return {"op": self.wrangle_name(), "columns": acted_on_columns(self.wrangle_op, self.wrangle_cols)}
 
     def add_child(self, child_node: str):
         self.children.append(child_node)

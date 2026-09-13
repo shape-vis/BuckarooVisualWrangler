@@ -322,6 +322,18 @@ The `wrangle_op` string is extracted from the chosen preview's suffix via `extra
 - `POST /api/redo` → `get_pgraph_redo()` → mirror of the above
 - The old wrangled tables are **never** deleted — they remain in Postgres, so navigation between any two nodes is instant
 
+### Comparing two nodes
+
+Shift-clicking a node pins it as the comparison **baseline** against the current node (the **comparator**). While that pair exists, `comparisonPair` in `PGraphContext` is set and the header shows a **Compare** button to the left of the view tabs. It opens `ui/src/elements/CompareModal.jsx`, which has plot options on the left and the plot (`ui/src/visualizations/ComparisonPlot.jsx`) on the right.
+
+The plot data comes from `GET /api/pgraph/compare?base=&other=&kind=histogram|heatmap|scatter&x=&y=&bins=`, backed by `app/pgraph/compare.py`. It deliberately does **not** reuse the `DBOperations` histogram SQL. That SQL bins each table across its own min/max, so two nodes' bins would not line up. Instead:
+- Both states are binned on one shared axis (`Axis.shared`). Every histogram bin is listed for both sides, empty bins included, so side-by-side, overlay and difference views all come from one payload.
+- Rows are matched by `ID`, which survives every wrangle. The response therefore carries `changes`: rows removed, rows added, and values changed per compared column. A scatter follows the same sampled rows across both states.
+- A categorical axis keeps at most `MAX_CATEGORIES` bands and folds the long tail into `(other)`. `null` is always kept.
+- The endpoint is read-only. It never changes the session's current table, and it only reads tables that are nodes in the session graph.
+
+The modal header describes the wrangle that produced each node, for example "Imputed age · from n0d". This comes from `data.wrangle` (`{op, columns}`, built by `GraphNode.wrangle_summary()`), which `serialize_nodes` sends for every node. It is sent on the node itself rather than read from the incoming edge, because a collapsed run hides that edge and the root never had one. The frontend looks nodes up through `serverNodesById` in `PGraphContext`, so a node folded out of view can still be described.
+
 ---
 
 ## 9. Rankings Table

@@ -98,6 +98,37 @@
     filter: brightness(0) saturate(100%) invert(35%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%);
 }
 
+/* ── Compare button ──────────────────────────────────────────────── */
+
+/* Appears only while two nodes are paired in the graph. It takes over the auto margin that normally
+   pushes the view tabs right, so it sits immediately left of "Both" rather than stranded mid-bar. */
+.header-compare-btn {
+    margin-left: auto;
+    margin-right: 12px;
+    color: #1877F2;
+    background: #e7f0fd;
+    border-color: #1877F2;
+    animation: header-compare-in 0.18s ease-out;
+}
+
+.header-compare-btn:hover:not(:disabled) {
+    background-color: #d6e6fd;
+    border-color: #1466d2;
+}
+
+.header-compare-btn .btn-svg-icon {
+    filter: brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1600%) hue-rotate(206deg) brightness(96%) contrast(92%);
+}
+
+.header-compare-btn + .navButtonContainer {
+    margin-left: 0;
+}
+
+@keyframes header-compare-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 /* ── Table status label ──────────────────────────────────────────── */
 
 .table-status {

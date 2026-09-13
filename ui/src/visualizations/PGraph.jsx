@@ -22,7 +22,7 @@ export default function PGraph() {
 const ai = useAISuggestions();
 
 const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
-        onEdgeClick, nodeTypes, baselineNodeId,
+        onEdgeClick, nodeTypes, comparisonPair,
         selectionStage, eligibleDestinations, selectedBranchEdges,
         clearAllSelections, hasAnySelection,
         nodes, edges,
@@ -49,7 +49,7 @@ const styledNodes = useMemo(() => {
     // Only a comparison the user set up with shift-click is signposted. The panel also falls back to
     // comparing against the parent, but that default is between adjacent nodes and needs no marking -
     // labelling it would badge a lone root node that has nothing to compare against.
-    const comparisonBaselineId = (baselineNodeId && baselineNodeId !== tableName) ? baselineNodeId : null;
+    const comparisonBaselineId = comparisonPair?.baseline ?? null;
 
     // While the branch's end is being chosen, the nodes it may end on are marked as pickable
     const markEligible = selectionStage === "destination";
@@ -73,7 +73,7 @@ const styledNodes = useMemo(() => {
             data: (role && comparisonBaselineId) ? {...node.data, comparisonRole: role} : node.data,
         };
     });
-}, [nodes, tableName, baselineNodeId, selectionStage, eligibleDestinations]);
+}, [nodes, tableName, comparisonPair, selectionStage, eligibleDestinations]);
 
 
 // The selected branch is lit up in the graph, so the trajectory in the panel is tied to a visible
