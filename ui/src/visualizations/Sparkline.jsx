@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { createTooltip } from "../utils/visCommon.jsx";
+import { formatDrift, formatDriftDelta } from "../utils/drift.js";
 import "../styles/Sparkline.css";
 
 /**
@@ -14,6 +15,9 @@ import "../styles/Sparkline.css";
  * Each step is its own line segment so it can carry its own color - green where the error rate fell,
  * red where it rose. A single path could not do that, which is why this is hand-drawn rather than
  * taken from a sparkline library.
+ *
+ * Drift from root is drawn with polarity "neutral": it has no better or worse direction - zero means
+ * nothing was done, not that the data is good - so its steps are never green or red.
  */
 
 const PLOT_W = 176;
@@ -29,8 +33,26 @@ const IMPROVED = "#1a7f37";
 const WORSENED = "#d1242f";
 const UNCHANGED = "#8c939d";
 
-const stepColor = (delta) => (delta === 0 ? UNCHANGED : delta < 0 ? IMPROVED : WORSENED);
-const asPercent = (rate) => `${(rate * 100).toFixed(2)}%`;
+/* An error rate falling is an improvement and rising a regression, so its steps are green and red. A
+   neutral series draws every step that moved in its own color, and only a flat step in grey. */
+const stepColor = (delta, polarity, color) => (
+  delta === 0 ? UNCHANGED : polarity === "neutral" ? color : delta < 0 ? IMPROVED : WORSENED
+);
+
+/* How a series' numbers read. Error rates are percentages whose steps are points; drift is a bare
+   number, W1/IQR or TVD, whose steps are differences of two values both measured from root. */
+const FORMATS = {
+  rate: {
+    value: (rate) => `${(rate * 100).toFixed(2)}%`,
+    tick: (rate) => `${(rate * 100).toFixed(1)}%`,
+    delta: (delta) => `${delta > 0 ? "+" : ""}${(delta * 100).toFixed(2)} pts`,
+  },
+  drift: {
+    value: formatDrift,
+    tick: d3.format(".2~r"),
+    delta: formatDriftDelta,
+  },
+};
 
 // Axis labels have to fit in a few pixels, and a table name is mostly a prefix shared with every
 // other node - the leading "n0a" is the part that identifies it
@@ -38,6 +60,7 @@ const shortNodeId = (nodeId) => String(nodeId ?? "").split("_")[0];
 
 export default function Sparkline({
   values = [], deltas = [], nodeIds = [], color = "steelblue", collapsedNodeIds,
+  polarity = "error", format = "rate",
 }) {
   const svgRef = useRef(null);
 
@@ -46,6 +69,7 @@ export default function Sparkline({
 
     const folded = collapsedNodeIds ?? new Set();
     const isFolded = (i) => folded.has(nodeIds[i]);
+    const formats = FORMATS[format] ?? FORMATS.rate;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -79,7 +103,7 @@ export default function Sparkline({
         d3.axisLeft(yScale)
           .ticks(flat ? 1 : 3)
           .tickValues(flat ? [values[0]] : null)
-          .tickFormat((rate) => `${(rate * 100).toFixed(1)}%`)
+          .tickFormat(formats.tick)
           .tickSize(3)
       )
       .selectAll("text")
@@ -105,7 +129,7 @@ export default function Sparkline({
       .attr("y1", (d) => yScale(values[d.i]))
       .attr("x2", (d) => pointX(d.i + 1))
       .attr("y2", (d) => yScale(values[d.i + 1]))
-      .attr("stroke", (d) => stepColor(d.delta))
+      .attr("stroke", (d) => stepColor(d.delta, polarity, color))
       .attr("stroke-width", 2)
       .attr("stroke-linecap", "round");
 
@@ -139,11 +163,11 @@ export default function Sparkline({
         ? "start of branch"
         : delta === 0
           ? "no change"
-          : `${delta > 0 ? "+" : ""}${(delta * 100).toFixed(2)} pts`;
+          : formats.delta(delta);
       const foldedNote = isFolded(d.i) ? "<br/><em>hidden in a collapsed node</em>" : "";
-      return `<strong>${node}</strong><br/>${asPercent(d.value)}<br/>${change}${foldedNote}`;
+      return `<strong>${node}</strong><br/>${formats.value(d.value)}<br/>${change}${foldedNote}`;
     });
-  }, [values, deltas, nodeIds, color, collapsedNodeIds]);
+  }, [values, deltas, nodeIds, color, collapsedNodeIds, polarity, format]);
 
   return (
     <svg

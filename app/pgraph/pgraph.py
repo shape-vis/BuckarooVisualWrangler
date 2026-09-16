@@ -10,6 +10,7 @@ from typing import TypedDict
 from sqlalchemy import String
 
 from app.pgraph.node import GraphNode
+from app.pgraph.distortion import pareto_frontier
 
 # Node ids are n{digit}{letter} - n0a, n0b ... n0z, n1a ... n9z. Always exactly three characters, so
 # the prefix on a table name has a fixed width and 260 nodes fit before ids run out.
@@ -56,8 +57,26 @@ class PGraph:
             "edges": self.serialize_edges(),
             "current_table": self.current_node_table_name,
             "prev_table": self.prev_node_table_name,
-            "next_table": self.next_node_table_name
+            "next_table": self.next_node_table_name,
+            "pareto": self.pareto()
         }
+
+    def pareto(self):
+        """
+        Which leaf nodes are beaten outright on error and drift together - see distortion.pareto_frontier.
+
+        Only leaves are candidates: an interior node is a step on the way somewhere, not where a branch
+        ended up, so it is never ranked. A leaf is scored once it carries both numbers.
+
+        :return: {"scored", "frontier", "dominated": {dominated id: dominating id}}
+        """
+        scores = [{"id": node.table_name, "error": node.metrics.dimension("total"),
+                   "distortion": node.distortion["overall"]}
+                  for node in self.node_map.values()
+                  if not node.children and node.metrics is not None
+                  and node.distortion is not None and node.distortion.get("overall") is not None]
+        frontier, dominated = pareto_frontier(scores)
+        return {"scored": [score["id"] for score in scores], "frontier": frontier, "dominated": dominated}
 
     def serialize_nodes(self):
         list_of_nodes = []
@@ -72,6 +91,8 @@ class PGraph:
                         # node highlighting from this, so none of them need a round trip
                         "parent": node.parent_table,
                         "metrics": node.metrics.__json__() if node.metrics is not None else None,
+                        # Drift from root, sent beside the error metrics rather than among them
+                        "distortion": node.distortion,
                         # What produced the node, so it can be described without its incoming edge -
                         # which a collapsed run hides, and which the root never had
                         "wrangle": node.wrangle_summary()

@@ -11,6 +11,7 @@ import {usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
+import {nodeName} from "../utils/comparison.js";
 import {useCallback, useEffect, useMemo, useRef} from "react";
 
 
@@ -22,7 +23,7 @@ export default function PGraph() {
 const ai = useAISuggestions();
 
 const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
-        onEdgeClick, nodeTypes, comparisonPair,
+        onEdgeClick, nodeTypes, comparisonPair, pareto,
         selectionStage, eligibleDestinations, selectedBranchEdges,
         clearAllSelections, hasAnySelection,
         nodes, edges,
@@ -43,6 +44,13 @@ useEffect(() => {
 const { tableName } = useTableName();
 // const [showNote, setShowNote] = useState(false);
 
+/* The leaf that beats a node outright on error and drift together, if any - see PGraph.pareto on the
+   server. A folded run stands for its last node, so it takes that node's standing. */
+const dominatorOf = useCallback((node) => {
+    const table = node.type === "collapsedNode" ? node.data?.tail : node.id;
+    return pareto?.dominated?.[table] ?? null;
+}, [pareto]);
+
 // Derived on every render rather than written once into node.style, so the marks follow navigation
 // instead of going stale after mount.
 const styledNodes = useMemo(() => {
@@ -58,12 +66,15 @@ const styledNodes = useMemo(() => {
         const isCurrent = node.id === tableName;
         const isBaseline = node.id === comparisonBaselineId;
         const isEligible = markEligible && eligibleDestinations.has(node.id);
-        if (!isCurrent && !isBaseline && !isEligible) return node;
+        const isDominated = Boolean(dominatorOf(node));
+        if (!isCurrent && !isBaseline && !isEligible && !isDominated) return node;
 
         const role = isCurrent ? "current" : isBaseline ? "baseline" : null;
         const classes = [
             role ? `pgraph-node--${role}` : "",
             isEligible ? "pgraph-node--eligible" : "",
+            // Alongside the other marks rather than instead of them - a dominated node can still be current
+            isDominated ? "pgraph-node--dominated" : "",
         ].filter(Boolean).join(" ");
 
         return {
@@ -73,7 +84,7 @@ const styledNodes = useMemo(() => {
             data: (role && comparisonBaselineId) ? {...node.data, comparisonRole: role} : node.data,
         };
     });
-}, [nodes, tableName, comparisonPair, selectionStage, eligibleDestinations]);
+}, [nodes, tableName, comparisonPair, selectionStage, eligibleDestinations, dominatorOf]);
 
 
 // The selected branch is lit up in the graph, so the trajectory in the panel is tied to a visible
@@ -98,6 +109,17 @@ const onEdgeMouseEnter = useCallback((event, edge) => {
 
 const onEdgeMouseMove = useCallback((event) => moveTooltip(event), []);
 const onEdgeMouseLeave = useCallback(() => hideTooltip(), []);
+
+/* A greyed node says what beats it on hover, so ruling it out is never unexplained */
+const onNodeMouseEnter = useCallback((event, node) => {
+    const dominator = dominatorOf(node);
+    if (!dominator) return;
+    showTooltip(`<strong>Dominated by ${nodeName(dominator)}</strong><br/>`
+        + "no worse on error or drift, and better on at least one", event);
+}, [dominatorOf]);
+
+const onNodeMouseMove = useCallback((event) => moveTooltip(event), []);
+const onNodeMouseLeave = useCallback(() => hideTooltip(), []);
 
 /* Holding "c" turns a pane drag into a lasso (selectionKeyCode below). Whatever it caught is folded
    on release, so collapsing is its own gesture and does not compete with the click handlers. */
@@ -128,6 +150,9 @@ const onSelectionEnd = useCallback(() => {
         onEdgeMouseEnter={onEdgeMouseEnter}
         onEdgeMouseMove={onEdgeMouseMove}
         onEdgeMouseLeave={onEdgeMouseLeave}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseMove={onNodeMouseMove}
+        onNodeMouseLeave={onNodeMouseLeave}
         onSelectionChange={onSelectionChange}
         onSelectionEnd={onSelectionEnd}
         /* Hold "c" and drag to lasso a run to collapse. Shift is deliberately not the lasso key -

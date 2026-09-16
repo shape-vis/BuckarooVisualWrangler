@@ -128,6 +128,17 @@
   color: #65676b;
 }
 
+/* A leaf another leaf beats on both error and drift - never the right choice, whatever the analyst
+   values. Faded and struck through in place rather than hidden, and combined with the current / baseline
+   marks rather than replacing them. Hovering it names what beats it. */
+.react-flow__node.pgraph-node--dominated {
+  opacity: 0.5;
+}
+
+.react-flow__node.pgraph-node--dominated h3 {
+  text-decoration: line-through;
+}
+
 /* While the end of a branch is being chosen, the nodes it may end on invite the click */
 .react-flow__node.pgraph-node--eligible {
   outline: 2px dashed #1877F2;

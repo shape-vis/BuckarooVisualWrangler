@@ -229,6 +229,85 @@
     white-space: nowrap;
 }
 
+/* Drift from root. Ruled off from the error cards and given its own colour, because it is a cost rather
+   than an error - a fifth error card would invert what it means. Never red: red is kept for the
+   null-test flag. The teal matches DRIFT_COLOR in errorColors.js. */
+.quality-drift {
+    margin-top: 0.5em;
+    border-top: 3px solid #0f766e;
+}
+
+.quality-swatch--drift {
+    background-color: #0f766e;
+}
+
+.quality-drift-note {
+    margin-top: 0.2em;
+    font-size: 0.8em;
+    color: #65676b;
+}
+
+.columns-table .columns-table-drift {
+    border-left: 2px solid #dddfe2;
+    padding-left: 0.4em;
+    white-space: nowrap;
+}
+
+.columns-table-reason {
+    color: #8c939d;
+    font-style: italic;
+}
+
+/* Trade-off view: the graph's leaves on error and drift together */
+.tradeoff-note {
+    font-size: 0.83em;
+    color: #65676b;
+}
+
+.columns-table .tradeoff-wrangle {
+    max-width: 9em;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Ruled out, not hidden: struck through like the node in the graph */
+.tradeoff-row--dominated td {
+    color: #8c939d;
+    text-decoration: line-through;
+}
+
+/* An inline-block does not inherit the row's strike-through, so what beats the node stays readable */
+.tradeoff-beaten {
+    display: inline-block;
+    margin-left: 0.4em;
+    font-size: 0.85em;
+    font-weight: 400;
+    font-style: italic;
+    text-decoration: none;
+}
+
+.tradeoff-use {
+    padding: 0.15em 0.6em;
+    border: 1px solid #dddfe2;
+    border-radius: 0.4em;
+    background: #ffffff;
+    font: inherit;
+    font-size: 0.9em;
+    color: #1877F2;
+    cursor: pointer;
+}
+
+.tradeoff-use:hover:not(:disabled) {
+    background: #edf3fe;
+}
+
+.tradeoff-use:disabled {
+    color: #b0b3b8;
+    cursor: default;
+}
+
 .columns-node {
     font-weight: 700;
     overflow: hidden;

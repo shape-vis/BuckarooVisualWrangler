@@ -188,4 +188,9 @@ def refresh_node_metrics(table_name):
     )
     node.set_metrics(metrics)
 
+    # Drift from root is computed at the same moment, so every path that makes a node gets both. It is
+    # its own object on the node, never part of these totals - see app/pgraph/distortion.py
+    from app.pgraph.distortion import refresh_node_distortion
+    refresh_node_distortion(table_name)
+
     return metrics

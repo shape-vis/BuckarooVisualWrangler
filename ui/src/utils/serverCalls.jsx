@@ -351,6 +351,31 @@ export async function getNodeComparison({ base, other, kind, x, y, bins }, signa
     return await response.json();
 }
 
+/**
+ * GET /api/pgraph/drift_null
+ * Where each of a node's columns' drift sits among random deletions of the same size. Computed on the
+ * server on demand and cached there, so it is only asked for by a view that shows the flags. columns
+ * narrows it to some columns; empty means all of them. Rejects with an AbortError when superseded.
+ */
+export async function getDriftNull(node, columns = [], signal) {
+    const params = new URLSearchParams({ node });
+    columns.forEach((column) => params.append("columns", column));
+    const response = await fetch(`/api/pgraph/drift_null?${params}`, { method: "GET", signal });
+    return await response.json();
+}
+
+/**
+ * GET /api/pgraph/drift_detail
+ * What the compare modal's Drift views draw for one node and one column: the quantile shift or share
+ * changes, the ridgeline curves or the Sankey flows, the null test and an annotation. grid is "tail" or
+ * "uniform". Takes an AbortSignal, as getNodeComparison does.
+ */
+export async function getDriftDetail({ node, column, grid = "tail" }, signal) {
+    const params = new URLSearchParams({ node, column, grid });
+    const response = await fetch(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
+    return await response.json();
+}
+
 export async function resetApp() {
     try {
         const response = await fetch("/api/reset", { method: "POST" });

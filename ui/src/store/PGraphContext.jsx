@@ -305,7 +305,9 @@ export function PGraphProvider({children}) {
 
     /* The graph as the server sent it, before any folding. Collapsing is derived from this, so
        expanding restores the real nodes without another request. */
-    const [serverGraph, setServerGraph] = useState({nodes: [], edges: []});
+    /* pareto rides along: which leaves another leaf beats outright on error and drift together, worked
+       out on the server - see PGraph.pareto */
+    const [serverGraph, setServerGraph] = useState({nodes: [], edges: [], pareto: null});
 
     /* Every real node by id, whether or not it is drawn. A node folded into a run is gone from
        `nodes`, but anything describing it - the compare modal, say - still needs its data. */
@@ -387,7 +389,7 @@ export function PGraphProvider({children}) {
         if (!pGraphResult?.nodes) return;
 
         // Folding and layout happen in the effect above, so both paths into the graph agree
-        setServerGraph({nodes: pGraphResult.nodes, edges: pGraphResult.edges});
+        setServerGraph({nodes: pGraphResult.nodes, edges: pGraphResult.edges, pareto: pGraphResult.pareto});
     }, []);
 
     /* Pull the graph as soon as there is a table to pull it for.
@@ -406,7 +408,7 @@ export function PGraphProvider({children}) {
         (async () => {
             const result = await getPGraph();
             if (stale || !result?.nodes) return;
-            setServerGraph({nodes: result.nodes, edges: result.edges});
+            setServerGraph({nodes: result.nodes, edges: result.edges, pareto: result.pareto});
         })();
 
         return () => { stale = true; };
@@ -493,6 +495,7 @@ export function PGraphProvider({children}) {
             onNodesChange, onEdgesChange, onConnect, onLayout,
             getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
             baselineNodeId, setBaselineNodeId, resolvedBaselineId, comparisonPair, serverNodesById,
+            pareto: serverGraph.pareto,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             prospectiveNodes, setProspectiveNodes, clearProspectiveNodes,
             hasProspectiveNodes: prospectiveNodes.length > 0,

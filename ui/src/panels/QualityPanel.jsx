@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 
 import { NavButton, StandardButton } from "../elements/Buttons.jsx";
 import Sparkline from "../visualizations/Sparkline.jsx";
-import { ERROR_TYPES, ERROR_DIMENSIONS, errorColors } from "../store/errorColors.js";
+import DriftFlag from "../elements/DriftFlag.jsx";
+import { ERROR_TYPES, ERROR_DIMENSIONS, errorColors, DRIFT_COLOR } from "../store/errorColors.js";
+import { formatDrift, useDriftNull } from "../utils/drift.js";
+import { describeWrangle, nodeName } from "../utils/comparison.js";
 import { truncateText } from "../utils/textUtils.js";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { collapsedNodeIds } from "../utils/graphTopology.js";
@@ -37,11 +40,16 @@ function contributionRows(trajectory, dimension) {
   }));
 }
 
-/** The columns view's rows, ordered by whichever dimension is being sorted on. */
-function columnRows(metrics, sortBy) {
+/** The columns view's rows, ordered by whichever error dimension - or drift - is being sorted on. */
+function columnRows(metrics, distortion, sortBy) {
+  // A column with no drift value sorts below every column that has one
+  const driftOf = (row) => row.drift?.value ?? -1;
+
   return Object.entries(metrics?.columns ?? {})
-    .map(([name, rates]) => ({ name, rates }))
-    .sort((a, b) => (b.rates[sortBy] ?? 0) - (a.rates[sortBy] ?? 0));
+    .map(([name, rates]) => ({ name, rates, drift: distortion?.columns?.[name] }))
+    .sort((a, b) => (sortBy === "drift"
+      ? driftOf(b) - driftOf(a)
+      : (b.rates[sortBy] ?? 0) - (a.rates[sortBy] ?? 0)));
 }
 
 /* ── Branch selection ──────────────────────────────────────────────────────────────────────── */
@@ -166,14 +174,80 @@ function TrajectoryView({ trajectory, stage, loading, foldedNodeIds }) {
           </div>
         );
       })}
+
+      {trajectory.distortion && (
+        <DriftCard series={trajectory.distortion} nodeIds={trajectory.nodes} foldedNodeIds={foldedNodeIds} />
+      )}
     </div>
   );
 }
 
-/** Per-column error rates for one node, straight from the metrics already in the graph. */
-function ColumnsView({ metrics, nodeId }) {
+/**
+ * Drift from root along the branch, ruled off below the error cards because it is not one of them.
+ * Every value is measured from root and each step is the difference of two of them. It is a cost to be
+ * spent knowingly: zero means nothing was done, not that the data is clean, so it is never colored as
+ * better or worse - see app/pgraph/distortion.py.
+ */
+function DriftCard({ series, nodeIds, foldedNodeIds }) {
+  const measured = series.values.every((value) => value != null);
+
+  return (
+    <div className="quality-dimension quality-drift">
+      <div className="quality-dimension-header">
+        <span className="quality-swatch quality-swatch--drift" />
+        <span className="quality-dimension-name">Drift from root</span>
+        {measured && (
+          <span className="quality-dimension-value">
+            {formatDrift(series.values[0])} → {formatDrift(series.values[series.values.length - 1])}
+          </span>
+        )}
+      </div>
+
+      {measured ? (
+        <Sparkline
+          values={series.values}
+          deltas={series.deltas}
+          nodeIds={nodeIds}
+          color={DRIFT_COLOR}
+          polarity="neutral"
+          format="drift"
+          collapsedNodeIds={foldedNodeIds}
+        />
+      ) : (
+        <div className="quality-nochange">not measured on every node of this branch</div>
+      )}
+
+      <div className="quality-drift-note">A cost, not an error: how far the data has moved from the upload.</div>
+    </div>
+  );
+}
+
+/** One column's drift, with the null test's flag when it fired. A column with no value says why. */
+function DriftCell({ drift, nullResult }) {
+  if (!drift) return <td className="columns-table-drift columns-table-zero">—</td>;
+  if (drift.degenerate) {
+    return <td className="columns-table-drift columns-table-reason" title={drift.reason}>{drift.reason}</td>;
+  }
+
+  return (
+    <td
+      className="columns-table-drift"
+      title={drift.low_confidence ? "Fewer than 30 values on one side, so this is a noisy estimate" : undefined}
+    >
+      {formatDrift(drift.value)}
+      <DriftFlag result={nullResult} />
+    </td>
+  );
+}
+
+/**
+ * Per-column error rates and drift for one node, straight from what the graph already carries. Drift has
+ * its own column, ruled off from the error rates.
+ */
+function ColumnsView({ metrics, distortion, nodeId }) {
   const [sortBy, setSortBy] = useState("total");
-  const rows = useMemo(() => columnRows(metrics, sortBy), [metrics, sortBy]);
+  const rows = useMemo(() => columnRows(metrics, distortion, sortBy), [metrics, distortion, sortBy]);
+  const nullResults = useDriftNull(nodeId, distortion?.facts?.rows_removed);
 
   if (rows.length === 0) return <div className="quality-empty">No column metrics.</div>;
 
@@ -183,7 +257,7 @@ function ColumnsView({ metrics, nodeId }) {
 
       <div className="columns-sort">
         <span className="columns-sort-label">Sort by</span>
-        {["total", ...ERROR_DIMENSIONS].map((dimension) => (
+        {["total", ...ERROR_DIMENSIONS, "drift"].map((dimension) => (
           <NavButton
             key={dimension}
             isSelected={sortBy === dimension}
@@ -205,10 +279,11 @@ function ColumnsView({ metrics, nodeId }) {
               </th>
             ))}
             <th>total</th>
+            <th className="columns-table-drift" title="Drift from root - a cost, not an error">drift</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ name, rates }) => (
+          {rows.map(({ name, rates, drift }) => (
             <tr key={name}>
               <td className="columns-table-name" title={name}>{truncateText(name, 12)}</td>
               {ERROR_DIMENSIONS.map((dimension) => (
@@ -217,6 +292,87 @@ function ColumnsView({ metrics, nodeId }) {
                 </td>
               ))}
               <td className="columns-table-total">{asPercent(rates.total)}</td>
+              <DriftCell drift={drift} nullResult={nullResults[name]} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * The graph's leaves on error and drift together. A leaf another leaf beats on both is ruled out whatever
+ * the analyst values, so it is struck through, names what beats it, and cannot be picked. The rest - the
+ * frontier - are deliberately not ranked against each other: whether fewer errors or less drift matters
+ * more is the analyst's call. The same verdict greys the dominated nodes in the graph itself.
+ */
+function TradeoffView({ pareto, nodesById, currentNode, onUse }) {
+  const rows = useMemo(() => (pareto?.scored ?? [])
+    .map((id) => {
+      const data = nodesById?.[id]?.data;
+      return {
+        id,
+        wrangle: describeWrangle(data?.wrangle),
+        error: data?.metrics?.totals?.total,
+        drift: data?.distortion?.overall,
+        rows: data?.metrics?.row_count,
+        dominator: pareto.dominated?.[id] ?? null,
+      };
+    })
+    // The frontier first, then the dominated; within each, fewest errors first
+    .sort((a, b) => (Number(Boolean(a.dominator)) - Number(Boolean(b.dominator))) || ((a.error ?? 0) - (b.error ?? 0))),
+  [pareto, nodesById]);
+
+  if (rows.length === 0) return <div className="quality-empty">No finished branches to weigh up yet.</div>;
+
+  return (
+    <div className="quality-body">
+      <div className="tradeoff-note">
+        Every leaf of the graph, on error and drift together. A struck-through leaf is beaten on both by
+        another, so it is never the better choice.
+      </div>
+
+      <table className="columns-table tradeoff-table">
+        <thead>
+          <tr>
+            <th>node</th>
+            <th className="tradeoff-wrangle">wrangle</th>
+            <th>error</th>
+            <th className="columns-table-drift">drift</th>
+            <th>rows</th>
+            <th aria-label="Use" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className={row.dominator ? "tradeoff-row--dominated" : ""}>
+              <td className="columns-table-name" title={row.id}>
+                {nodeName(row.id)}
+                {row.dominator && (
+                  <span
+                    className="tradeoff-beaten"
+                    title={`Dominated by ${nodeName(row.dominator)}: no worse on error or drift, and better on at least one`}
+                  >
+                    beaten by {nodeName(row.dominator)}
+                  </span>
+                )}
+              </td>
+              <td className="tradeoff-wrangle" title={row.wrangle ?? ""}>{row.wrangle ?? "—"}</td>
+              <td>{asPercent(row.error)}</td>
+              <td className="columns-table-drift">{formatDrift(row.drift)}</td>
+              <td>{row.rows?.toLocaleString() ?? "—"}</td>
+              <td>
+                <button
+                  type="button"
+                  className="tradeoff-use"
+                  disabled={Boolean(row.dominator) || row.id === currentNode}
+                  onClick={() => onUse(row.id)}
+                  title={row.id === currentNode ? "This is the current node" : "Make this the current node"}
+                >
+                  Use
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -228,7 +384,8 @@ function ColumnsView({ metrics, nodeId }) {
 export default function QualityPanel() {
   const {
     nodes, branchSelection, selectionStage, eligibleDestinations,
-    branchTrajectory, branchTrajectoryLoading, resetBranchSelection, collapsedRuns,
+    branchTrajectory, branchTrajectoryLoading, resetBranchSelection, collapsedRuns, serverNodesById,
+    pareto, onNodeDoubleClick,
   } = usePgraph();
   const { tableName } = useTableName();
 
@@ -236,7 +393,8 @@ export default function QualityPanel() {
 
   // Columns describe wherever the branch ends, falling back to the node currently loaded
   const columnsNodeId = branchSelection.destination ?? tableName;
-  const metrics = nodes.find((node) => node.id === columnsNodeId)?.data?.metrics;
+  // Read by the real table, so a node folded into a collapsed run still has its numbers
+  const columnsData = (serverNodesById?.[columnsNodeId] ?? nodes.find((node) => node.id === columnsNodeId))?.data;
 
   /* Which of the branch's nodes the graph currently has folded away. The trajectory itself is
      unchanged - this only lets the chart mark the points you cannot see in the graph. */
@@ -251,6 +409,9 @@ export default function QualityPanel() {
         </NavButton>
         <NavButton isSelected={view === "columns"} onClick={() => setView("columns")}>
           Columns
+        </NavButton>
+        <NavButton isSelected={view === "tradeoff"} onClick={() => setView("tradeoff")}>
+          Trade-off
         </NavButton>
       </div>
 
@@ -271,7 +432,19 @@ export default function QualityPanel() {
         </>
       )}
 
-      {view === "columns" && <ColumnsView metrics={metrics} nodeId={columnsNodeId} />}
+      {view === "columns" && (
+        <ColumnsView metrics={columnsData?.metrics} distortion={columnsData?.distortion} nodeId={columnsNodeId} />
+      )}
+
+      {view === "tradeoff" && (
+        <TradeoffView
+          pareto={pareto}
+          nodesById={serverNodesById}
+          currentNode={tableName}
+          // The same navigation as double-clicking the node in the graph
+          onUse={(id) => onNodeDoubleClick(null, { id })}
+        />
+      )}
     </div>
   );
 }

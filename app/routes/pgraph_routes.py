@@ -7,6 +7,7 @@ from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
 from app.pgraph.compare import (PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap,
                                 compare_scatter, summarize_changes)
+from app.pgraph.distortion import GRIDS, NULL_DRAWS, distortion_trajectory, drift_detail, drift_null
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
 
 
@@ -75,6 +76,8 @@ def branch_trajectory():
             "destination": destination,
             "nodes": path,
             "dimensions": quality_trajectory(ordered_metrics),
+            # Beside the error dimensions rather than among them: drift is a cost, not an error
+            "distortion": distortion_trajectory([pgraph.node_map[table_name].distortion for table_name in path]),
         }
     except Exception as e:
         return {"success": False, "error": str(e)}, 400
@@ -146,5 +149,74 @@ def compare_nodes():
             "changes": summarize_changes(base, other, columns),
             **plot,
         }
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 400
+
+
+def _requested_node(pgraph):
+    """
+    The node a request names, refusing anything that is not a node in this session's graph.
+    :return: (node, None), or (None, an error response)
+    """
+    node = request.args.get("node")
+    if not node:
+        return None, ({"success": False, "error": "missing node"}, 400)
+    if node not in pgraph.node_map:
+        return None, ({"success": False, "error": f"{node} is not a node in this graph"}, 400)
+    return node, None
+
+
+@app.get("/api/pgraph/drift_null")
+def drift_null_test():
+    """
+    The null test for a node's columns: where each column's drift sits among random deletions of the same
+    size. Asked for on demand rather than sent with the graph, because it is the one expensive part of
+    distortion, and cached - see app/pgraph/distortion.py.
+
+    Query: ?node=<node>[&columns=<column>&columns=<column>...][&draws=500]
+    Returns {column: {applicable, reason, percentile, flagged, null_mean, null_p95, draws}}. Read-only.
+    """
+    try:
+        pgraph = app_package.pgraph_for_session
+        if pgraph is None:
+            return {"success": False, "error": "no graph in this session"}, 400
+
+        node, error = _requested_node(pgraph)
+        if error:
+            return error
+
+        columns = request.args.getlist("columns") or None
+        draws = _bounded_int("draws", NULL_DRAWS, 100, 5000)
+        return {"success": True, "node": node, "columns": drift_null(pgraph, node, columns, draws)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.get("/api/pgraph/drift_detail")
+def drift_detail_view():
+    """
+    What the compare modal's Drift views draw for one node and one column: the quantile shift or share
+    changes, the ridgeline curves or the Sankey flows, the null test and a plain-language annotation.
+
+    Query: ?node=<node>&column=<column>[&grid=tail|uniform]
+    Read-only: the node does not become the session's current table.
+    """
+    try:
+        pgraph = app_package.pgraph_for_session
+        if pgraph is None:
+            return {"success": False, "error": "no graph in this session"}, 400
+
+        node, error = _requested_node(pgraph)
+        if error:
+            return error
+
+        column = request.args.get("column")
+        if not column:
+            return {"success": False, "error": "missing column"}, 400
+        grid = request.args.get("grid", "tail")
+        if grid not in GRIDS:
+            return {"success": False, "error": f"unknown grid {grid!r}"}, 400
+
+        return {"success": True, **drift_detail(pgraph, node, column, grid)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400

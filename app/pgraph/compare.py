@@ -42,30 +42,45 @@ def _quote(identifier):
     return '"' + identifier.replace('"', '""') + '"'
 
 
-def load_node_state(engine, table_name, columns):
+def load_node_data(engine, table_name, columns=None):
     """
-    Read one node's table and its error flags for the compared columns.
+    Read one node's rows: "ID" plus the given columns, or every column when none are named.
 
-    table_name has to come from the session graph rather than straight from a request - the route
-    checks that. Columns are checked against the table's real columns before they are interpolated.
+    table_name has to come from the session graph rather than straight from a request - the routes
+    check that. Columns are checked against the table's real columns before they are interpolated.
 
     :param engine: SQLAlchemy engine
     :param table_name: a node's table
-    :param columns: the columns being compared
-    :return: a NodeState
+    :param columns: the columns to read, or None for all of them
+    :return: a DataFrame
     """
-    columns = list(dict.fromkeys(columns))
-    existing = set(pd.read_sql_query(
-        text("SELECT column_name FROM information_schema.columns WHERE table_name = :table"),
+    existing = list(pd.read_sql_query(
+        text("SELECT column_name FROM information_schema.columns WHERE table_name = :table "
+             "ORDER BY ordinal_position"),
         engine, params={"table": table_name},
     )["column_name"])
 
+    if columns is None:
+        columns = existing
     for column in columns:
         if column not in existing:
             raise ValueError(f"{table_name} has no column {column!r}")
 
     selected = ", ".join(_quote(column) for column in dict.fromkeys(["ID", *columns]))
-    data = pd.read_sql_query(f"SELECT {selected} FROM {_quote(table_name)}", engine)
+    return pd.read_sql_query(f"SELECT {selected} FROM {_quote(table_name)}", engine)
+
+
+def load_node_state(engine, table_name, columns):
+    """
+    Read one node's table and its error flags for the compared columns.
+
+    :param engine: SQLAlchemy engine
+    :param table_name: a node's table, from the session graph
+    :param columns: the columns being compared
+    :return: a NodeState
+    """
+    columns = list(dict.fromkeys(columns))
+    data = load_node_data(engine, table_name, columns)
 
     errors = pd.read_sql_query(
         text(f"SELECT row_id, column_id, error_type FROM {_quote('errors_' + table_name)} "
@@ -322,11 +337,11 @@ def _differs(before, after):
     return (before_null != after_null) | (~before_null & ~after_null & (numbers_differ | text_differs))
 
 
-def _matched(base, other, columns, how):
-    """Both states' compared columns side by side, one row per ID, suffixed _base and _other."""
+def _matched(base_data, other_data, columns, how):
+    """Two states' rows side by side, one row per ID, the compared columns suffixed _base and _other."""
     columns = list(dict.fromkeys(columns))
     selected = list(dict.fromkeys(["ID", *columns]))
-    return base.data[selected].merge(other.data[selected], on="ID", how=how, suffixes=("_base", "_other"))
+    return base_data[selected].merge(other_data[selected], on="ID", how=how, suffixes=("_base", "_other"))
 
 
 def summarize_changes(base, other, columns):
@@ -338,7 +353,7 @@ def summarize_changes(base, other, columns):
               "changed_rows": shared rows where any compared column differs}
     """
     columns = list(dict.fromkeys(columns))
-    matched = _matched(base, other, columns, "inner")
+    matched = _matched(base.data, other.data, columns, "inner")
 
     per_column = {column: _differs(matched[f"{column}_base"], matched[f"{column}_other"])
                   for column in columns}
@@ -405,7 +420,7 @@ def compare_scatter(base, other, x_column, y_column, sample_size, seed=0):
     x_axis = Axis.shared(base.data[x_column], other.data[x_column], 1)
     y_axis = Axis.shared(base.data[y_column], other.data[y_column], 1)
 
-    matched = _matched(base, other, columns, "outer")
+    matched = _matched(base.data, other.data, columns, "outer")
     in_base = matched["ID"].isin(base.data["ID"]).to_numpy()
     in_other = matched["ID"].isin(other.data["ID"]).to_numpy()
 

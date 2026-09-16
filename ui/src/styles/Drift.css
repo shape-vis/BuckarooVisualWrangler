@@ -1,0 +1,7 @@
+/* The null test's flag. The one place drift is ever red - see DriftFlag.jsx */
+.drift-flag {
+    margin-left: 0.25em;
+    color: #d1242f;
+    font-size: 0.85em;
+    cursor: help;
+}

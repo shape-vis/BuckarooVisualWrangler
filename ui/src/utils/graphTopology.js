@@ -122,6 +122,7 @@ export function applyCollapse(nodes, edges, collapsedRuns) {
                 label: `${run.nodes.length} steps`,
                 // The state you actually arrive at is the tail's, so that is what the node reports
                 metrics: nodesById.get(tail)?.data?.metrics,
+                distortion: nodesById.get(tail)?.data?.distortion,
                 parent: nodesById.get(head)?.data?.parent,
                 run: run.nodes,
                 head,

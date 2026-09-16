@@ -85,6 +85,11 @@ class GraphNode:
         # created and never recomputed on read - see app/pgraph/metrics.py
         self.metrics = None
 
+        # Drift from root, per column and for the node, with the facts about what its wrangles did.
+        # Computed once alongside metrics and kept apart from them: drift is a cost, not an error, and is
+        # never folded into the error totals - see app/pgraph/distortion.py
+        self.distortion = None
+
     def __json__(self):
         return {
             "parent_table": self.parent_table,
@@ -93,7 +98,8 @@ class GraphNode:
             "table_name": self.table_name,
             "error_table_name": self.error_table_name,
             "children": self.children,
-            "metrics": self.metrics.__json__() if self.metrics is not None else None
+            "metrics": self.metrics.__json__() if self.metrics is not None else None,
+            "distortion": self.distortion
         }
 
     def set_metrics(self, metrics):
@@ -109,6 +115,13 @@ class GraphNode:
             incomplete=metrics.dimension("incomplete"),
             mismatch=metrics.dimension("mismatch"),
         )
+
+    def set_distortion(self, distortion):
+        """
+        Cache this node's drift from root.
+        :param distortion: what distortion.node_distortion returns, plus the node's edit facts
+        """
+        self.distortion = distortion
 
     def update_metrics(self, anomaly, missing, incomplete, mismatch):
 
