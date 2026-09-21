@@ -5,9 +5,8 @@ import app as app_package
 from app import app, db_operations, engine
 from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
-from app.pgraph.compare import (PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap,
-                                compare_scatter, summarize_changes)
-from app.pgraph.distortion import GRIDS, NULL_DRAWS, distortion_trajectory, drift_detail, drift_null
+from app.pgraph.compare import PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap
+from app.pgraph.distortion import NULL_DRAWS, distortion_trajectory, drift_detail, drift_null
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
 
 
@@ -93,10 +92,9 @@ def compare_nodes():
     """
     Plot data for comparing the data behind two nodes, binned on axes the two states share.
 
-    Query: ?base=<node>&other=<node>&kind=histogram|heatmap|scatter&x=<column>[&y=<column>]
-           [&bins=10][&sample=600]
-    base is the baseline and other the comparator; y is required for heatmap and scatter. Returns the
-    plot payload for that kind plus what happened to the rows between the two, matched by ID.
+    Query: ?base=<node>&other=<node>&kind=histogram|heatmap&x=<column>[&y=<column>][&bins=10]
+    base is the baseline and other the comparator; y is required for a heatmap. Returns the plot payload
+    for that kind plus each side's row count.
     Read-only: neither node becomes the session's current table. See app/pgraph/compare.py.
     """
     try:
@@ -125,18 +123,13 @@ def compare_nodes():
             return {"success": False, "error": f"a {kind} needs a y column"}, 400
 
         bin_count = _bounded_int("bins", 10, 1, 50)
-        sample_size = _bounded_int("sample", 600, 50, 5000)
 
         columns = [x_column] if y_column is None else [x_column, y_column]
         base = load_node_state(engine, base_table, columns)
         other = load_node_state(engine, other_table, columns)
 
-        if kind == "histogram":
-            plot = compare_histogram(base, other, x_column, bin_count)
-        elif kind == "heatmap":
-            plot = compare_heatmap(base, other, x_column, y_column, bin_count)
-        else:
-            plot = compare_scatter(base, other, x_column, y_column, sample_size)
+        plot = (compare_histogram(base, other, x_column, bin_count) if kind == "histogram"
+                else compare_heatmap(base, other, x_column, y_column, bin_count))
 
         return {
             "success": True,
@@ -146,7 +139,6 @@ def compare_nodes():
             "x": x_column,
             "y": y_column,
             "rows": {"base": len(base.data), "other": len(other.data)},
-            "changes": summarize_changes(base, other, columns),
             **plot,
         }
     except Exception as e:
@@ -195,10 +187,10 @@ def drift_null_test():
 @app.get("/api/pgraph/drift_detail")
 def drift_detail_view():
     """
-    What the compare modal's Drift views draw for one node and one column: the quantile shift or share
-    changes, the ridgeline curves or the Sankey flows, the null test and a plain-language annotation.
+    What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
+    Sankey flows, the null test and a plain-language annotation.
 
-    Query: ?node=<node>&column=<column>[&grid=tail|uniform]
+    Query: ?node=<node>&column=<column>
     Read-only: the node does not become the session's current table.
     """
     try:
@@ -213,10 +205,7 @@ def drift_detail_view():
         column = request.args.get("column")
         if not column:
             return {"success": False, "error": "missing column"}, 400
-        grid = request.args.get("grid", "tail")
-        if grid not in GRIDS:
-            return {"success": False, "error": f"unknown grid {grid!r}"}, 400
 
-        return {"success": True, **drift_detail(pgraph, node, column, grid)}
+        return {"success": True, **drift_detail(pgraph, node, column)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400

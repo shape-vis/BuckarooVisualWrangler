@@ -12,34 +12,29 @@ import DriftFlag from "./DriftFlag.jsx";
 import ComparisonPlot from "../visualizations/ComparisonPlot.jsx";
 import "../styles/CompareModal.css";
 
-/* Each plot kind offers the views that make sense for it: a scatter has no bins to subtract, and a
-   heatmap overlay would be two grids painted over one another. Drift draws each node against root rather
-   than against the other, and its views depend on the column instead - see DRIFT_VIEWS. */
+/* Each plot kind offers the views that make sense for it: a heatmap overlay would be two grids painted
+   over one another. Drift draws each node against root rather than against the other, and its views
+   depend on the column instead - see DRIFT_VIEWS. */
 const PLOT_KINDS = [
     { id: "histogram", label: "Histogram", axes: 1, views: ["side", "overlay", "difference"] },
     { id: "heatmap", label: "Heatmap", axes: 2, views: ["side", "difference"] },
-    { id: "scatter", label: "Scatter", axes: 2, views: ["side", "overlay"] },
     { id: "drift", label: "Drift", axes: 1, views: null },
 ];
 
-/* Drift's views: for a numeric column, where its mass moved and the shape it now has; for a categorical
-   one, how its shares changed and where its rows went */
-const DRIFT_VIEWS = { numeric: ["shift", "ridgeline"], categorical: ["change", "flows"] };
+/* Drift's views: the shape a numeric column now has, and where a categorical one's rows went */
+const DRIFT_VIEWS = { numeric: ["ridgeline"], categorical: ["flows"] };
 
 const VIEW_LABELS = {
     side: "Side by side", overlay: "Overlay", difference: "Difference",
-    shift: "Shift", ridgeline: "Ridgeline", change: "Change", flows: "Flows",
+    ridgeline: "Ridgeline", flows: "Flows",
 };
-
-// A Sankey's ribbons at true width, or at square-root width so small categories stay legible
-const FLOW_SCALES = [{ id: "linear", label: "Linear" }, { id: "sqrt", label: "√ width" }];
 
 const RANKINGS = [{ id: "error", label: "Error change" }, { id: "drift", label: "Drift" }];
 
 // How many attributes the most-changed list offers
 const RANKED_LIMIT = 8;
 
-// The bins slider fires on every step it is dragged through, so a request waits for it to settle
+// Options can be changed in quick succession, so a request waits for them to settle
 const FETCH_DELAY_MS = 150;
 
 /* A folded run stands in for its last node - the state the run arrives at, and whose metrics it
@@ -54,17 +49,15 @@ function formatRate(rate) {
 
 const signedRows = (change) => `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString()} rows`;
 
-/* The Drift kind's data: each node's breakdown against root, fetched side by side, and the pair's own
-   row changes from the compare endpoint, so "What changed" still reads while Drift is on screen. */
+/* The Drift kind's data: each node's breakdown against root, the two fetched side by side */
 async function getDriftComparison({ base, other, x }, signal) {
-    const [baseDetail, otherDetail, pair] = await Promise.all([
+    const [baseDetail, otherDetail] = await Promise.all([
         getDriftDetail({ node: base, column: x }, signal),
         getDriftDetail({ node: other, column: x }, signal),
-        getNodeComparison({ base, other, kind: "histogram", x, bins: 1 }, signal),
     ]);
-    const failed = [baseDetail, otherDetail, pair].find((response) => !response?.success);
+    const failed = [baseDetail, otherDetail].find((response) => !response?.success);
     if (failed) return { success: false, error: failed?.error };
-    return { success: true, kind: "drift", x, base: baseDetail, other: otherDetail, changes: pair.changes };
+    return { success: true, kind: "drift", x, base: baseDetail, other: otherDetail };
 }
 
 /* A change in error rate, in percentage points. Errors going down is an improvement. */
@@ -135,42 +128,14 @@ function NodeRow({ role, table, rows }) {
     );
 }
 
-/* What happened between the two states for the columns on screen. Rows removed and added are
-   table-wide; values changed and error rates are per plotted column. */
-function ChangeSummary({ changes, columns, baseColumns, otherColumns }) {
-    if (!changes) return <div className="compare-muted">Comparing…</div>;
-
-    return (
-        <dl className="compare-changes">
-            <div><dt>Rows removed</dt><dd>{changes.removed.toLocaleString()}</dd></div>
-            <div><dt>Rows added</dt><dd>{changes.added.toLocaleString()}</dd></div>
-            {columns.map((column) => (
-                <div key={`changed-${column}`}>
-                    <dt title={column}>Values changed in {column}</dt>
-                    <dd>{(changes.changed[column] ?? 0).toLocaleString()}</dd>
-                </div>
-            ))}
-            {columns.map((column) => (
-                <div key={`rate-${column}`}>
-                    <dt title={column}>Error rate of {column}</dt>
-                    <dd>{formatRate(baseColumns?.[column]?.total)} → {formatRate(otherColumns?.[column]?.total)}</dd>
-                </div>
-            ))}
-        </dl>
-    );
-}
-
 /* Each node's drift from root. Both are measured against the same fixed reference rather than one against
    the other - that is what makes nodes on different branches comparable at all. */
 function DriftSummary({ baseTable, otherTable, baseDrift, otherDrift }) {
     return (
-        <div className="compare-drift-summary">
-            <div className="compare-drift-title">Distortion from root</div>
-            <dl className="compare-changes">
-                <div><dt title={baseTable}>{nodeName(baseTable)} · baseline</dt><dd>{formatDrift(baseDrift)}</dd></div>
-                <div><dt title={otherTable}>{nodeName(otherTable)} · comparator</dt><dd>{formatDrift(otherDrift)}</dd></div>
-            </dl>
-        </div>
+        <dl className="compare-changes">
+            <div><dt title={baseTable}>{nodeName(baseTable)} · baseline</dt><dd>{formatDrift(baseDrift)}</dd></div>
+            <div><dt title={otherTable}>{nodeName(otherTable)} · comparator</dt><dd>{formatDrift(otherDrift)}</dd></div>
+        </dl>
     );
 }
 
@@ -185,10 +150,8 @@ export default function CompareModal({ pair, onClose }) {
 
     const nodesById = useMemo(() => Object.fromEntries(nodes.map((node) => [node.id, node])), [nodes]);
 
-    // Swapping only re-orients this modal; the graph's pair stays as the user set it
-    const [swapped, setSwapped] = useState(false);
-    const baseId = swapped ? pair.comparator : pair.baseline;
-    const otherId = swapped ? pair.baseline : pair.comparator;
+    const baseId = pair.baseline;
+    const otherId = pair.comparator;
     const baseTable = tableOf(nodesById[baseId], baseId);
     const otherTable = tableOf(nodesById[otherId], otherId);
 
@@ -226,37 +189,36 @@ export default function CompareModal({ pair, onClose }) {
             const driftOther = otherDistortion?.columns?.[name]?.value ?? null;
             return { name, before, after, delta: (after ?? 0) - (before ?? 0), driftBase, driftOther };
         })
+        /* An attribute that neither node moved has nothing to say, so it is left out entirely. The test is
+           for exactly zero rather than for what the row would print: a column no operation touched usually
+           drifts by a fraction that shows as 0.000, and those are the rows the metric exists to surface. */
+        .filter((attribute) => attribute.delta !== 0 || attribute.driftBase || attribute.driftOther)
         .sort((a, b) => (rankBy === "drift"
             ? Math.max(b.driftBase ?? 0, b.driftOther ?? 0) - Math.max(a.driftBase ?? 0, a.driftOther ?? 0)
             : Math.abs(b.delta) - Math.abs(a.delta))),
     [attributes, baseMetrics, otherMetrics, baseDistortion, otherDistortion, rankBy]);
 
     const [kind, setKind] = useState("histogram");
-    const [x, setX] = useState(() => ranked[0]?.name ?? "");
-    const [y, setY] = useState(() => ranked[1]?.name ?? ranked[0]?.name ?? "");
+    /* The plot opens on what moved most. When nothing moved the ranking is empty, so it falls back to the
+       attributes themselves rather than leaving the modal with nothing to plot. */
+    const [x, setX] = useState(() => ranked[0]?.name ?? attributes[0] ?? "");
+    const [y, setY] = useState(() => ranked[1]?.name ?? ranked[0]?.name ?? attributes[1] ?? attributes[0] ?? "");
     const [view, setView] = useState("side");
     const [measure, setMeasure] = useState("items");
-    const [bins, setBins] = useState(10);
-    const [flowScale, setFlowScale] = useState("linear");
     const [result, setResult] = useState({ key: null, data: null, error: null });
 
     const spec = PLOT_KINDS.find((plotKind) => plotKind.id === kind);
     // Drift's views follow the column - numeric or categorical, as root decided it
     const columnKind = (baseDistortion?.columns?.[x] ?? otherDistortion?.columns?.[x])?.kind;
     const views = kind === "drift" ? DRIFT_VIEWS[columnKind] ?? DRIFT_VIEWS.numeric : spec.views;
-    /* A view this kind does not offer falls back, keeping the choice for later: to side by side, or for
-       drift to the view that suits what happened to the column - the server's detail_route */
-    const suggestedView = result.data?.kind === "drift" ? result.data.other?.route : null;
-    const fallbackView = kind !== "drift" ? "side" : views.includes(suggestedView) ? suggestedView : views[0];
-    const activeView = views.includes(view) ? view : fallbackView;
+    // A view this kind does not offer falls back to its first, keeping the choice for later
+    const activeView = views.includes(view) ? view : (kind === "drift" ? views[0] : "side");
     const usesMeasure = kind === "heatmap" || activeView === "difference";
-    const usesBins = kind !== "scatter" && kind !== "drift";
     const yColumn = spec.axes === 2 ? y : null;
-    const columns = [...new Set([x, yColumn].filter(Boolean))];
 
     /* Names the request the current options call for. A result is only current when it carries this
        key, which is how loading is known without any state of its own. */
-    const requestKey = [baseTable, otherTable, kind, x, yColumn, usesBins ? bins : null].join("|");
+    const requestKey = [baseTable, otherTable, kind, x, yColumn].join("|");
     const loading = Boolean(x) && result.key !== requestKey;
     const current = result.key === requestKey ? result : null;
     // While the next result loads, the last one of the same kind stays up, dimmed
@@ -271,7 +233,7 @@ export default function CompareModal({ pair, onClose }) {
                 const response = kind === "drift"
                     ? await getDriftComparison({ base: baseTable, other: otherTable, x }, controller.signal)
                     : await getNodeComparison(
-                        { base: baseTable, other: otherTable, kind, x, y: yColumn, bins },
+                        { base: baseTable, other: otherTable, kind, x, y: yColumn },
                         controller.signal,
                     );
                 setResult(response?.success
@@ -289,7 +251,7 @@ export default function CompareModal({ pair, onClose }) {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [requestKey, baseTable, otherTable, kind, x, yColumn, bins]);
+    }, [requestKey, baseTable, otherTable, kind, x, yColumn]);
 
     useEffect(() => {
         dialogRef.current?.focus();
@@ -302,7 +264,6 @@ export default function CompareModal({ pair, onClose }) {
 
     const baseRows = baseMetrics?.row_count;
     const otherRows = otherMetrics?.row_count;
-    const rowChange = (baseRows != null && otherRows != null) ? otherRows - baseRows : null;
 
     // Portaled to <body> so it sits above the fixed header, whose stacking context would trap it
     return createPortal(
@@ -348,21 +309,6 @@ export default function CompareModal({ pair, onClose }) {
                             <h3 className="compare-section-title">Nodes</h3>
                             <NodeRow role="base" table={baseTable} rows={baseRows} />
                             <NodeRow role="other" table={otherTable} rows={otherRows} />
-                            <div className="compare-pair-footer">
-                                {rowChange !== null && (
-                                    <span className="compare-row-change">
-                                        {rowChange === 0 ? "Same row count" : signedRows(rowChange)}
-                                    </span>
-                                )}
-                                <button
-                                    type="button"
-                                    className="compare-swap"
-                                    onClick={() => setSwapped((isSwapped) => !isSwapped)}
-                                    title="Swap which node is the baseline"
-                                >
-                                    ⇄ Swap
-                                </button>
-                            </div>
                         </section>
 
                         <section className="compare-section">
@@ -389,20 +335,16 @@ export default function CompareModal({ pair, onClose }) {
                             )}
                         </section>
 
-                        <section className="compare-section">
-                            <h3 className="compare-section-title">View</h3>
-                            <Segmented
-                                label="View"
-                                options={views.map((id) => ({ id, label: VIEW_LABELS[id] }))}
-                                value={activeView}
-                                onChange={setView}
-                            />
-                        </section>
-
-                        {activeView === "flows" && (
+                        {/* A kind with one view has nothing to choose - a drift column is always drawn the one way */}
+                        {views.length > 1 && (
                             <section className="compare-section">
-                                <h3 className="compare-section-title">Ribbon width</h3>
-                                <Segmented label="Ribbon width" options={FLOW_SCALES} value={flowScale} onChange={setFlowScale} />
+                                <h3 className="compare-section-title">View</h3>
+                                <Segmented
+                                    label="View"
+                                    options={views.map((id) => ({ id, label: VIEW_LABELS[id] }))}
+                                    value={activeView}
+                                    onChange={setView}
+                                />
                             </section>
                         )}
 
@@ -422,31 +364,10 @@ export default function CompareModal({ pair, onClose }) {
                             </section>
                         )}
 
-                        {usesBins && (
-                            <section className="compare-section">
-                                <h3 className="compare-section-title">
-                                    Bins <span className="compare-section-value">{bins}</span>
-                                </h3>
-                                <input
-                                    className="compare-range"
-                                    type="range"
-                                    min={4}
-                                    max={30}
-                                    value={bins}
-                                    onChange={(event) => setBins(Number(event.target.value))}
-                                    aria-label="Number of bins"
-                                />
-                            </section>
-                        )}
-
                         <section className="compare-section">
-                            <h3 className="compare-section-title">What changed</h3>
-                            <ChangeSummary
-                                changes={current?.data?.changes}
-                                columns={columns}
-                                baseColumns={baseMetrics?.columns}
-                                otherColumns={otherMetrics?.columns}
-                            />
+                            <h3 className="compare-section-title compare-section-title--drift">
+                                Distortion from root
+                            </h3>
                             <DriftSummary
                                 baseTable={baseTable}
                                 otherTable={otherTable}
@@ -497,7 +418,6 @@ export default function CompareModal({ pair, onClose }) {
                             data={plotData}
                             view={activeView}
                             measure={measure}
-                            flowScale={flowScale}
                             baseLabel={nodeName(baseTable)}
                             otherLabel={nodeName(otherTable)}
                         />

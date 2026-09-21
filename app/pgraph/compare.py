@@ -7,8 +7,8 @@ nodes' bins cover different ranges and bar n on one side is not bar n on the oth
 bins both states on one shared axis instead, which is what makes a bin-by-bin difference meaningful.
 
 Row IDs survive every wrangle - previews are CREATE TABLE AS copies, deletes remove by "ID" and
-imputes update in place - so rows are also matched across the two states by ID. That is how the
-comparison can say which rows were removed, added or changed, rather than only how the totals moved.
+imputes update in place - so rows can also be matched across two states by ID. _matched and _differs
+do that, and the distortion metric reuses both - see app/pgraph/distortion.py.
 
 The loader touches the database; everything else is plain pandas over frames it is handed, so it is
 testable without one.
@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-PLOT_KINDS = ("histogram", "heatmap", "scatter")
+PLOT_KINDS = ("histogram", "heatmap")
 
 # What a null is called on a categorical axis - the same label the main histograms give it
 NULL_LABEL = "null"
@@ -194,16 +194,6 @@ class Axis:
         return (pd.Series(types, index=values.index, dtype=object),
                 pd.Series(bins, index=values.index, dtype=object))
 
-    def place(self, values):
-        """
-        Where each value sits for a scatterplot: its own number on the numeric part, or its label.
-        :return: (types, positions) lists
-        """
-        is_number, numbers, labels = self._split(values)
-        types = ["numeric" if number else "categorical" for number in is_number]
-        positions = [float(n) if number else label for n, number, label in zip(numbers, is_number, labels)]
-        return types, positions
-
     def keys(self):
         """Every bin on the axis in display order: numeric bins left to right, then the labels."""
         numeric = [("numeric", i) for i in range(self.bin_count)] if self.is_numeric else []
@@ -217,11 +207,6 @@ class Axis:
             numeric = [{"x0": self.lo + i * width, "x1": self.lo + (i + 1) * width}
                        for i in range(self.bin_count)]
         return {"numeric": numeric, "categorical": list(self.labels)}
-
-    def point_scale(self):
-        """The axis as a scatterplot takes it: the numeric domain rather than bin edges."""
-        return {"numeric": [self.lo, self.hi] if self.is_numeric else [],
-                "categorical": list(self.labels)}
 
 
 def _counts(keyed, errors, key_columns):
@@ -342,119 +327,3 @@ def _matched(base_data, other_data, columns, how):
     columns = list(dict.fromkeys(columns))
     selected = list(dict.fromkeys(["ID", *columns]))
     return base_data[selected].merge(other_data[selected], on="ID", how=how, suffixes=("_base", "_other"))
-
-
-def summarize_changes(base, other, columns):
-    """
-    What happened to the rows between the two states, matched by ID.
-
-    :return: {"removed": rows only in base, "added": rows only in other, "shared": rows in both,
-              "changed": {column: shared rows whose value in that column differs},
-              "changed_rows": shared rows where any compared column differs}
-    """
-    columns = list(dict.fromkeys(columns))
-    matched = _matched(base.data, other.data, columns, "inner")
-
-    per_column = {column: _differs(matched[f"{column}_base"], matched[f"{column}_other"])
-                  for column in columns}
-    any_changed = np.logical_or.reduce(list(per_column.values()))
-
-    base_ids, other_ids = set(base.data["ID"]), set(other.data["ID"])
-    return {
-        "removed": len(base_ids - other_ids),
-        "added": len(other_ids - base_ids),
-        "shared": len(matched),
-        "changed": {column: int(np.count_nonzero(changed)) for column, changed in per_column.items()},
-        "changed_rows": int(np.count_nonzero(any_changed)),
-    }
-
-
-def _sample_rows(changed, flagged, sample_size, seed):
-    """
-    Pick up to sample_size row positions. Half the budget goes to rows that changed, a quarter to rows
-    carrying errors, and the rest to everything else - with whatever one pool cannot fill passed on to
-    the next, so a small change set does not shrink the sample.
-
-    :return: the chosen positions, in order
-    """
-    rng = np.random.default_rng(seed)
-    pools = [np.flatnonzero(changed), np.flatnonzero(~changed & flagged),
-             np.flatnonzero(~changed & ~flagged)]
-    pools = [rng.permutation(pool) for pool in pools]
-
-    shares = [sample_size // 2, sample_size // 4]
-    shares.append(sample_size - sum(shares))
-
-    taken = [min(len(pool), share) for pool, share in zip(pools, shares)]
-    spare = sample_size - sum(taken)
-    for i, pool in enumerate(pools):
-        extra = min(spare, len(pool) - taken[i])
-        taken[i] += extra
-        spare -= extra
-
-    return np.sort(np.concatenate([pool[:count] for pool, count in zip(pools, taken)]))
-
-
-def _error_lists(state, columns, ids):
-    """{row_id: sorted error types flagged on the compared columns} for the given rows."""
-    flags = state.errors[state.errors["column_id"].isin(columns) & state.errors["row_id"].isin(ids)]
-    if flags.empty:
-        return {}
-    return flags.groupby("row_id")["error_type"].agg(lambda types: sorted(set(types))).to_dict()
-
-
-def compare_scatter(base, other, x_column, y_column, sample_size, seed=0):
-    """
-    One sample of rows, placed as they stand in each state.
-
-    Rows are matched by ID, so a point can be followed from one state to the other: an imputed value
-    moves, a deleted row has no position on the comparator's side. The sample leans towards rows that
-    changed or carry errors, since those are what a comparison is for, but keeps a share of untouched
-    rows as context. The seed is fixed so re-plotting the same pair does not reshuffle the points.
-
-    :return: {"scaleX", "scaleY", "points": [{"ID", "status", "base", "other"}], "population",
-              "sampled"}. status is "same", "changed", "removed" or "added"; a side is None when the
-              row does not exist in that state.
-    """
-    columns = list(dict.fromkeys([x_column, y_column]))
-    x_axis = Axis.shared(base.data[x_column], other.data[x_column], 1)
-    y_axis = Axis.shared(base.data[y_column], other.data[y_column], 1)
-
-    matched = _matched(base.data, other.data, columns, "outer")
-    in_base = matched["ID"].isin(base.data["ID"]).to_numpy()
-    in_other = matched["ID"].isin(other.data["ID"]).to_numpy()
-
-    changed = np.zeros(len(matched), dtype=bool)
-    for column in columns:
-        changed |= _differs(matched[f"{column}_base"], matched[f"{column}_other"])
-
-    status = np.select([~in_other, ~in_base, changed], ["removed", "added", "changed"], default="same")
-
-    flagged_ids = (set(base.errors.loc[base.errors["column_id"].isin(columns), "row_id"])
-                   | set(other.errors.loc[other.errors["column_id"].isin(columns), "row_id"]))
-    flagged = matched["ID"].isin(flagged_ids).to_numpy()
-
-    chosen = _sample_rows(status != "same", flagged, sample_size, seed)
-    sample = matched.iloc[chosen]
-    ids = [int(row_id) for row_id in sample["ID"]]
-
-    def side(suffix, present, errors):
-        x_types, x_positions = x_axis.place(sample[f"{x_column}_{suffix}"])
-        y_types, y_positions = y_axis.place(sample[f"{y_column}_{suffix}"])
-        return [{"xType": x_type, "x": x, "yType": y_type, "y": y, "errors": errors.get(row_id, [])}
-                if here else None
-                for x_type, x, y_type, y, here, row_id
-                in zip(x_types, x_positions, y_types, y_positions, present[chosen], ids)]
-
-    base_side = side("base", in_base, _error_lists(base, columns, ids))
-    other_side = side("other", in_other, _error_lists(other, columns, ids))
-
-    return {
-        "scaleX": x_axis.point_scale(),
-        "scaleY": y_axis.point_scale(),
-        "points": [{"ID": row_id, "status": str(row_status), "base": before, "other": after}
-                   for row_id, row_status, before, after
-                   in zip(ids, status[chosen], base_side, other_side)],
-        "population": len(matched),
-        "sampled": len(chosen),
-    }

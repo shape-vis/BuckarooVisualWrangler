@@ -339,13 +339,14 @@ export async function getBranchTrajectory(source, target, destination){
 /**
  * GET /api/pgraph/compare
  * Plot data for two nodes' tables, binned on axes they share so a bin means the same range on both
- * sides. kind is "histogram" | "heatmap" | "scatter"; y is only sent for the 2D kinds.
+ * sides. kind is "histogram" | "heatmap"; y is only sent for a heatmap. The bin count is the server's
+ * default.
  *
  * Takes an AbortSignal so a superseded request - the user switching attribute mid-flight - is
  * dropped rather than raced. Rejects with an AbortError when that happens.
  */
-export async function getNodeComparison({ base, other, kind, x, y, bins }, signal) {
-    const params = new URLSearchParams({ base, other, kind, x, bins });
+export async function getNodeComparison({ base, other, kind, x, y }, signal) {
+    const params = new URLSearchParams({ base, other, kind, x });
     if (y) params.set("y", y);
     const response = await fetch(`/api/pgraph/compare?${params}`, { method: "GET", signal });
     return await response.json();
@@ -366,12 +367,11 @@ export async function getDriftNull(node, columns = [], signal) {
 
 /**
  * GET /api/pgraph/drift_detail
- * What the compare modal's Drift views draw for one node and one column: the quantile shift or share
- * changes, the ridgeline curves or the Sankey flows, the null test and an annotation. grid is "tail" or
- * "uniform". Takes an AbortSignal, as getNodeComparison does.
+ * What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
+ * Sankey flows, the null test and an annotation. Takes an AbortSignal, as getNodeComparison does.
  */
-export async function getDriftDetail({ node, column, grid = "tail" }, signal) {
-    const params = new URLSearchParams({ node, column, grid });
+export async function getDriftDetail({ node, column }, signal) {
+    const params = new URLSearchParams({ node, column });
     const response = await fetch(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
     return await response.json();
 }

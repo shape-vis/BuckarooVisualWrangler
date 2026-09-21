@@ -36,11 +36,9 @@ STATS = {NUMERIC: "W1/IQR", CATEGORICAL: "TVD"}
 # skips. Leaving them out keeps drift over the same columns the error metrics cover.
 SKIPPED_COLUMNS = (*ID_COLUMNS, "index", "level_0")
 
-# The quantile grids for the shift view. The default oversamples the tails, because that is where a delete
-# of outliers moves mass - a grid of deciles understates such a change badly.
+# The grid the annotation reads a numeric column's movement off. It oversamples the tails, because that is
+# where a delete of outliers moves mass - a grid of deciles understates such a change badly.
 TAIL_GRID = (0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
-UNIFORM_GRID = (0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90)
-GRIDS = {"tail": TAIL_GRID, "uniform": UNIFORM_GRID}
 
 # The most a numeric column counts for in a node's number. A guess, like the column weights - both are
 # reserved decisions in doc 02, so both stay parameters rather than being settled here.
@@ -58,16 +56,16 @@ TOP_CHANGES = 8
 
 # A Sankey keeps this many categories, by root share, plus a catch-all
 SANKEY_TOP = 5
-# Past this many categories the ribbons are unreadable even folded, so the change table opens first
-SANKEY_MAX_CATEGORIES = 8
 REMOVED_LABEL = "(removed)"
 
 # Both Pareto axes are rounded to this many places, so float noise cannot make equal nodes dominate
 PARETO_PRECISION = 6
 
-# The ridgeline's smoothing, as gaussian_kde's factor on root, and how many points each curve has
+# The ridgeline's smoothing, as gaussian_kde's factor on root, and how many points each curve has. The
+# points are dense because the compare modal zooms into a slice of the grid in the browser, and a zoomed
+# window still needs enough of them to draw a smooth curve.
 KDE_FACTOR = 0.30
-KDE_POINTS = 200
+KDE_POINTS = 1000
 
 
 class RowIdentityError(ValueError):
@@ -291,8 +289,8 @@ def column_detail(root, node, kind, grid=TAIL_GRID):
     The breakdown behind one column's number: where in the distribution its mass moved.
 
     Numeric: the node's quantiles against root's on the grid, and the shift between them in root IQRs. The
-    shift at q is the integrand of W1 at q, so the bars and the number measure the same thing - but no
-    finite grid averages back to the number, and nothing drawn from this may suggest one does.
+    shift at q is the integrand of W1 at q, so the shifts and the number measure the same thing - but no
+    finite grid averages back to the number, and nothing said from this may suggest one does.
     Categorical: each category's share of root and of the node in percent, the TOP_CHANGES categories that
     moved most by name and the rest summed into one row.
 
@@ -410,39 +408,14 @@ def category_flows(root_frame, node_frame, column, top=SANKEY_TOP):
     }
 
 
-def targeted_removals(path_nodes, column):
+def acted_on_column(path_nodes, column):
     """
-    How many rows were deleted along a path by steps that acted on this column. Read off each step's own
-    record - the columns it acted on and how many rows it removed - rather than its operation's name.
+    Whether any step along a path acted on this column. Read off each step's own record of the columns it
+    acted on rather than its operation's name, so a new kind of repair needs no change here.
 
     :param path_nodes: GraphNodes from root down to the node
-    :return: (rows removed by steps that acted on the column, whether any step acted on it at all)
     """
-    removed, acted = 0, False
-    for parent, child in zip(path_nodes, path_nodes[1:]):
-        if column not in child.wrangle_summary()["columns"]:
-            continue
-        acted = True
-        if parent.metrics is not None and child.metrics is not None:
-            removed += max(0, int(parent.metrics.row_count) - int(child.metrics.row_count))
-    return removed, acted
-
-
-def detail_route(cells_changed, removed_by_column, n_categories):
-    """
-    Which categorical view opens first (doc 03 §3.7). Keyed on what happened to the column rather than on
-    operation names, so a new kind of repair needs no change here.
-
-    A Sankey draws rows moving: recoded cells, or rows deleted by a step that acted on this column. A column
-    where neither happened drifted only because rows were lost to steps acting on other columns - the
-    collateral case - and there is no mapping to draw, so the share-change table opens first. So does a
-    column with too many categories for its ribbons to be legible. Either view can still be switched to.
-
-    :return: "flows" or "change"
-    """
-    if n_categories > SANKEY_MAX_CATEGORIES:
-        return "change"
-    return "flows" if (cells_changed or removed_by_column) else "change"
+    return any(column in child.wrangle_summary()["columns"] for child in path_nodes[1:])
 
 
 # ── The null test ────────────────────────────────────────────────────────────
@@ -788,13 +761,12 @@ def drift_null(pgraph, node_table, columns=None, draws=NULL_DRAWS):
     return results
 
 
-def drift_detail(pgraph, node_table, column, grid="tail"):
+def drift_detail(pgraph, node_table, column):
     """
-    Everything the compare modal's Drift views draw for one node and one column: the shift or share-change
-    breakdown, the ridgeline curves or the Sankey flows, the null test and the annotation. Read-only.
+    Everything the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
+    Sankey flows, the null test and the annotation. Read-only.
 
-    :param grid: "tail" or "uniform" - which quantile grid the shift view uses
-    :return: the payload, with "detail" None when the column has nothing to break down
+    :return: the payload, with "density", "flows" and "annotation" None when the column was dropped
     """
     from app import engine
 
@@ -810,8 +782,7 @@ def drift_detail(pgraph, node_table, column, grid="tail"):
     payload = {"node": node_table, "column": column, "kind": kind, "distortion": result,
                "rows_root": facts["rows_root"], "rows_removed": facts["rows_removed"],
                "cells_changed": facts["cells_changed"].get(column, 0),
-               "detail": None, "null": None, "density": None, "flows": None, "route": None,
-               "annotation": None}
+               "null": None, "density": None, "flows": None, "annotation": None}
     if column in distortion["structural"]["removed"]:
         return payload
 
@@ -819,13 +790,13 @@ def drift_detail(pgraph, node_table, column, grid="tail"):
                   else load_node_data(engine, node_table, [column]))
     root_values, node_values = root_frame[column], node_frame[column]
 
-    detail = column_detail(root_values, node_values, kind, GRIDS.get(grid, TAIL_GRID))
+    detail = column_detail(root_values, node_values, kind)
     applicable, reason = null_applicability(facts, column, result)
     null = null_result((root_table, column), root_values, kind, facts["rows_root"] - facts["rows_removed"],
                        result["value"], applicable, reason)
 
     path = [pgraph.node_map[table] for table in pgraph.path_between(root_table, node_table)]
-    removed_by_column, acted_on = targeted_removals(path, column)
+    acted_on = acted_on_column(path, column)
 
     flows = None
     if kind == NUMERIC:
@@ -841,8 +812,7 @@ def drift_detail(pgraph, node_table, column, grid="tail"):
     else:
         flows = category_flows(root_frame, node_frame, column)
         payload["flows"] = flows
-        payload["route"] = detail_route(payload["cells_changed"], removed_by_column, flows["categories"])
 
-    payload.update(detail=detail, null=null,
-                   annotation=annotation(column, result, facts, detail, null, acted_on, flows))
+    # The breakdown is what the annotation is written from; no view draws it, so it never travels
+    payload.update(null=null, annotation=annotation(column, result, facts, detail, null, acted_on, flows))
     return payload

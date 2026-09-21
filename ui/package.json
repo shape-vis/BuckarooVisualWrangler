@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@visx/brush": "^4.0.0",
     "@xyflow/react": "^12.10.0",
     "d3": "^7.9.0",
     "react": "^19.2.0",

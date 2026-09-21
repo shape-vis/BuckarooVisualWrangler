@@ -3,8 +3,7 @@ import unittest
 import pandas as pd
 
 from app.pgraph.compare import (Axis, MAX_CATEGORIES, NULL_LABEL, NodeState, OTHER_LABEL,
-                                compare_heatmap, compare_histogram, compare_scatter,
-                                summarize_changes)
+                                compare_heatmap, compare_histogram)
 
 
 def state(rows, errors=()):
@@ -114,78 +113,6 @@ class CompareHeatmapTests(unittest.TestCase):
         tiles = compare_heatmap(base, base, "a", "a", bin_count=2)["tiles"]
 
         self.assertEqual([(t["xBin"], t["yBin"]) for t in tiles], [(0, 0), (1, 1)])
-
-
-class SummarizeChangesTests(unittest.TestCase):
-    def test_rows_are_matched_by_id(self):
-        base = state({"ID": [1, 2, 3], "age": [None, 20, 30]})
-        other = state({"ID": [1, 2, 4], "age": [25, 20, 40]})
-
-        changes = summarize_changes(base, other, ["age"])
-
-        self.assertEqual(changes["removed"], 1)                # row 3
-        self.assertEqual(changes["added"], 1)                  # row 4
-        self.assertEqual(changes["shared"], 2)
-        self.assertEqual(changes["changed"], {"age": 1})       # row 1, imputed
-        self.assertEqual(changes["changed_rows"], 1)
-
-    def test_numbers_compare_as_numbers_and_nulls_match(self):
-        base = state({"ID": [1, 2], "v": [3, None]})
-        other = state({"ID": [1, 2], "v": ["3.0", None]})
-
-        self.assertEqual(summarize_changes(base, other, ["v"])["changed"], {"v": 0})
-
-    def test_changed_rows_counts_a_row_once_across_columns(self):
-        base = state({"ID": [1], "a": [1], "b": [1]})
-        other = state({"ID": [1], "a": [2], "b": [2]})
-
-        changes = summarize_changes(base, other, ["a", "b"])
-
-        self.assertEqual(changes["changed"], {"a": 1, "b": 1})
-        self.assertEqual(changes["changed_rows"], 1)
-
-
-class CompareScatterTests(unittest.TestCase):
-    def test_points_follow_rows_between_states(self):
-        base = state({"ID": [1, 2, 3], "x": [1, 2, 3], "y": [1, 2, 3]})
-        other = state({"ID": [1, 2], "x": [1, 5], "y": [1, 2]})
-
-        points = {p["ID"]: p for p in compare_scatter(base, other, "x", "y", 50)["points"]}
-
-        self.assertEqual(points[1]["status"], "same")
-        self.assertEqual(points[2]["status"], "changed")
-        self.assertEqual(points[2]["base"]["x"], 2.0)
-        self.assertEqual(points[2]["other"]["x"], 5.0)
-        self.assertEqual(points[3]["status"], "removed")
-        self.assertIsNone(points[3]["other"])
-
-    def test_sample_keeps_every_changed_row_and_fills_its_budget(self):
-        ids = list(range(1, 201))
-        base = state({"ID": ids, "x": ids, "y": ids})
-        other = state({"ID": ids, "x": [i + 1000 if i <= 5 else i for i in ids], "y": ids})
-
-        result = compare_scatter(base, other, "x", "y", sample_size=50)
-
-        self.assertEqual(result["sampled"], 50)
-        self.assertEqual(result["population"], 200)
-        self.assertEqual(sum(p["status"] == "changed" for p in result["points"]), 5)
-
-    def test_each_side_carries_its_own_errors(self):
-        base = state({"ID": [1], "x": [None], "y": [1]}, [(1, "x", "missing")])
-        other = state({"ID": [1], "x": [4], "y": [1]})
-
-        point = compare_scatter(base, other, "x", "y", 50)["points"][0]
-
-        self.assertEqual(point["base"], {"xType": "categorical", "x": NULL_LABEL,
-                                         "yType": "numeric", "y": 1.0, "errors": ["missing"]})
-        self.assertEqual(point["other"]["errors"], [])
-
-    def test_same_column_on_both_axes(self):
-        base = state({"ID": [1, 2], "x": [1, 2]})
-
-        points = compare_scatter(base, base, "x", "x", 50)["points"]
-
-        self.assertEqual([(p["base"]["x"], p["base"]["y"]) for p in points], [(1.0, 1.0), (2.0, 2.0)])
 
 
 if __name__ == '__main__':

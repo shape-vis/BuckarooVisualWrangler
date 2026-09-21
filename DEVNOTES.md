@@ -326,9 +326,9 @@ The `wrangle_op` string is extracted from the chosen preview's suffix via `extra
 
 Shift-clicking a node pins it as the comparison **baseline** against the current node (the **comparator**). While that pair exists, `comparisonPair` in `PGraphContext` is set and the header shows a **Compare** button to the left of the view tabs. It opens `ui/src/elements/CompareModal.jsx`, which has plot options on the left and the plot (`ui/src/visualizations/ComparisonPlot.jsx`) on the right.
 
-The plot data comes from `GET /api/pgraph/compare?base=&other=&kind=histogram|heatmap|scatter&x=&y=&bins=`, backed by `app/pgraph/compare.py`. It deliberately does **not** reuse the `DBOperations` histogram SQL. That SQL bins each table across its own min/max, so two nodes' bins would not line up. Instead:
+The plot data comes from `GET /api/pgraph/compare?base=&other=&kind=histogram|heatmap&x=&y=&bins=`, backed by `app/pgraph/compare.py`. It deliberately does **not** reuse the `DBOperations` histogram SQL. That SQL bins each table across its own min/max, so two nodes' bins would not line up. Instead:
 - Both states are binned on one shared axis (`Axis.shared`). Every histogram bin is listed for both sides, empty bins included, so side-by-side, overlay and difference views all come from one payload.
-- Rows are matched by `ID`, which survives every wrangle. The response therefore carries `changes`: rows removed, rows added, and values changed per compared column. A scatter follows the same sampled rows across both states.
+- Rows can be matched by `ID`, which survives every wrangle. `_matched` and `_differs` do that, and the distortion metric reuses both — see `app/pgraph/distortion.py`.
 - A categorical axis keeps at most `MAX_CATEGORIES` bands and folds the long tail into `(other)`. `null` is always kept.
 - The endpoint is read-only. It never changes the session's current table, and it only reads tables that are nodes in the session graph.
 

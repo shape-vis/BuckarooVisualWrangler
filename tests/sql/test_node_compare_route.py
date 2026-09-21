@@ -70,27 +70,10 @@ def test_histogram_compares_the_two_tables(graph, client):
 
     assert status == 200, body
     assert body["rows"] == {"base": 5, "other": 5}
-    # The imputed row changed; nothing was deleted
-    assert body["changes"]["removed"] == 0
-    assert body["changes"]["changed"] == {"a": 1}
 
     null_bin = next(b for b in body["bins"] if b["xType"] == "categorical" and b["xBin"] == "null")
     assert null_bin["base"] == {"items": 1, "missing": 1}
     assert null_bin["other"] == {"items": 0}
-
-
-@pytest.mark.sql
-def test_scatter_follows_the_imputed_row(graph, client):
-    root, child = graph
-
-    status, body = _compare(client, base=root, other=child, kind="scatter", x="a", y="b")
-
-    assert status == 200, body
-    moved = [point for point in body["points"] if point["status"] == "changed"]
-    assert [point["ID"] for point in moved] == [3]
-    assert moved[0]["base"]["x"] == "null"
-    assert moved[0]["base"]["errors"] == ["missing"]
-    assert moved[0]["other"]["xType"] == "numeric"
 
 
 @pytest.mark.sql

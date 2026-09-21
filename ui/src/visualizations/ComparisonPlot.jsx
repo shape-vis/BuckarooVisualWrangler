@@ -3,8 +3,9 @@
 // /api/pgraph/compare already binned on axes both states share - see app/pgraph/compare.py - so every
 // view here can put the two on the same scales.
 
-import {useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useId, useMemo, useRef, useState} from "react";
 import * as d3 from "d3";
+import RidgelineBrush from "./RidgelineBrush.jsx";
 import {createHybridScales} from "../utils/visCommon.jsx";
 import {ERROR_DIMENSIONS, errorColors} from "../store/errorColors.js";
 import {MEASURES, ROLE_COLORS, ROLE_NAMES, measureOf} from "../utils/comparison.js";
@@ -19,15 +20,6 @@ const DIFFERENCE_COLORS = {
 
 // A tile that exists but measures zero - distinct from the white of no data at all
 const NEUTRAL = "#eef0f2";
-
-// How a scatter point's row fared between the two states
-const STATUS_COLORS = {changed: "#f59e0b", added: "#7c3aed", removed: "#8a8d91"};
-const STATUS_TEXT = {
-    same: "unchanged",
-    changed: "value changed",
-    removed: "removed in the comparator",
-    added: "added in the comparator",
-};
 
 const MARGIN = {top: 34, right: 18, bottom: 72, left: 76};
 const PANEL_GAP = 28;
@@ -126,18 +118,6 @@ function differenceTooltip(title, datum, ctx) {
         + `${countLine("base", ctx, datum.base)}<br>${countLine("other", ctx, datum.other)}`;
 }
 
-function pointTooltip(point, ctx) {
-    const position = (value) => (typeof value === "number" ? formatValue(value) : value);
-    const describe = (side) => (side
-        ? `${escapeHtml(position(side.x))}, ${escapeHtml(position(side.y))}`
-        + (side.errors.length ? ` · ${escapeHtml(side.errors.join(", "))}` : "")
-        : "<em>not in this state</em>");
-
-    return `<strong>Row ${escapeHtml(point.ID)}</strong> · ${STATUS_TEXT[point.status]}<br>`
-        + `${swatch(ROLE_COLORS.base)}${ROLE_NAMES.base} ${escapeHtml(ctx.labels.base)}: ${describe(point.base)}<br>`
-        + `${swatch(ROLE_COLORS.other)}${ROLE_NAMES.other} ${escapeHtml(ctx.labels.other)}: ${describe(point.other)}`;
-}
-
 // ── Scales and geometry ──────────────────────────────────────────────────────
 
 /* The shared hybrid scale, fed the shape the backend sends for binned axes: numeric bin edges, then
@@ -148,23 +128,6 @@ function binScale(scale, size, direction) {
     const numericDomain = numeric.length ? [numeric[0].x0, numeric[numeric.length - 1].x1] : null;
     return createHybridScales(size, numeric, categorical, numericDomain,
         categorical.length ? categorical : null, direction);
-}
-
-/* The same for a scatterplot, which sends a numeric domain rather than bins. Only bands some point
-   actually uses are drawn, as the main scatterplot does. */
-function pointScales(data, w, h) {
-    const sides = data.points.flatMap((point) => [point.base, point.other]).filter(Boolean);
-
-    const scaleFor = (axis, size, direction) => {
-        const scale = axis === "x" ? data.scaleX : data.scaleY;
-        const used = new Set(sides.filter((side) => side[`${axis}Type`] === "categorical").map((side) => side[axis]));
-        const categories = (scale.categorical ?? []).filter((label) => used.has(label));
-        const numeric = scale.numeric ?? [];
-        return createHybridScales(size, numeric, categories, numeric.length ? numeric : null,
-            categories.length ? categories : null, direction);
-    };
-
-    return {xScale: scaleFor("x", w, "horizontal"), yScale: scaleFor("y", h, "vertical")};
 }
 
 function spanX(xScale, scale, datum) {
@@ -192,9 +155,6 @@ function binLabel(scale, type, bin) {
 
 const tileLabel = (data, tile) => `${data.x}: ${binLabel(data.scaleX, tile.xType, tile.xBin)} · `
     + `${data.y}: ${binLabel(data.scaleY, tile.yType, tile.yBin)}`;
-
-const position = (scale, side, axis) => scale.apply(side[axis], side[`${axis}Type`], true);
-const pointFill = (side) => errorColors(side.errors[0] ?? "none");
 
 // ── Frames ───────────────────────────────────────────────────────────────────
 
@@ -414,94 +374,6 @@ function drawHeatmapDifference(svg, data, ctx) {
     axisLabels(g, w, h, data.x, data.y);
 }
 
-// ── Scatterplots ─────────────────────────────────────────────────────────────
-
-// Ghosts last so their dashed rings stay visible; changed rows above the unchanged ones
-const markOrder = (mark) => (mark.ghost ? 2 : mark.point.status === "same" ? 0 : 1);
-
-function drawScatterSide(svg, data, ctx) {
-    layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "base" : "other";
-        const counterpart = i === 0 ? "other" : "base";
-        const {xScale, yScale} = pointScales(data, w, h);
-
-        /* A row missing from this state is drawn as a dashed ghost where it stands in the other, so a
-           delete reads as points vanishing rather than as nothing at all. */
-        const marks = data.points
-            .map((point) => (point[role]
-                ? {point, side: point[role], ghost: false}
-                : {point, side: point[counterpart], ghost: true}))
-            .sort((a, b) => markOrder(a) - markOrder(b));
-
-        const circles = g.append("g").selectAll("circle").data(marks).join("circle")
-            .attr("class", "compare-mark")
-            .attr("cx", (d) => position(xScale, d.side, "x"))
-            .attr("cy", (d) => position(yScale, d.side, "y"))
-            .attr("r", 4)
-            .attr("fill", (d) => (d.ghost ? "none" : pointFill(d.side)))
-            .attr("fill-opacity", 0.75)
-            .attr("pointer-events", "all")
-            .attr("stroke", (d) => (d.ghost ? STATUS_COLORS.removed : (STATUS_COLORS[d.point.status] ?? "none")))
-            .attr("stroke-width", (d) => (d.ghost || d.point.status !== "same" ? 1.75 : 0))
-            .attr("stroke-dasharray", (d) => (d.ghost ? "2 2" : null));
-        ctx.tooltip.attach(circles, (d) => pointTooltip(d.point, ctx));
-
-        drawXAxis(g, xScale, w, h);
-        drawYAxis(g, yScale);
-        panelTitle(g, role, ctx);
-        axisLabels(g, w, h, data.x, data.y);
-    });
-}
-
-function drawScatterOverlay(svg, data, ctx) {
-    const [{g, w, h}] = layoutPanels(svg, ctx.width, ctx.height, 1);
-    const {xScale, yScale} = pointScales(data, w, h);
-    const at = (side) => [position(xScale, side, "x"), position(yScale, side, "y")];
-
-    svg.append("defs").append("marker")
-        .attr("id", "compare-arrow")
-        .attr("viewBox", "0 0 10 10").attr("refX", 9).attr("refY", 5)
-        .attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto")
-        .append("path").attr("d", "M 0 0 L 10 5 L 0 10 z").attr("fill", STATUS_COLORS.changed);
-
-    // A changed row is drawn as a move: from where it stood in the baseline to where it stands now
-    g.append("g").selectAll("line").data(data.points.filter((point) => point.status === "changed")).join("line")
-        .attr("x1", (point) => at(point.base)[0])
-        .attr("y1", (point) => at(point.base)[1])
-        .attr("x2", (point) => at(point.other)[0])
-        .attr("y2", (point) => at(point.other)[1])
-        .attr("stroke", STATUS_COLORS.changed)
-        .attr("stroke-width", 1.25)
-        .attr("stroke-opacity", 0.85)
-        .attr("marker-end", "url(#compare-arrow)");
-
-    const before = g.append("g").selectAll("circle").data(data.points.filter((point) => point.base)).join("circle")
-        .attr("class", "compare-mark")
-        .attr("cx", (point) => at(point.base)[0])
-        .attr("cy", (point) => at(point.base)[1])
-        .attr("r", 4.5)
-        .attr("fill", "none")
-        .attr("pointer-events", "all")
-        .attr("stroke", ROLE_COLORS.base)
-        .attr("stroke-width", 1.5);
-
-    const after = g.append("g").selectAll("circle").data(data.points.filter((point) => point.other)).join("circle")
-        .attr("class", "compare-mark")
-        .attr("cx", (point) => at(point.other)[0])
-        .attr("cy", (point) => at(point.other)[1])
-        .attr("r", 3.5)
-        .attr("fill", ROLE_COLORS.other)
-        .attr("fill-opacity", 0.7);
-
-    ctx.tooltip.attach(before, (point) => pointTooltip(point, ctx));
-    ctx.tooltip.attach(after, (point) => pointTooltip(point, ctx));
-
-    drawXAxis(g, xScale, w, h);
-    drawYAxis(g, yScale);
-    pairTitle(g, ctx);
-    axisLabels(g, w, h, data.x, data.y);
-}
-
 // ── Drift ────────────────────────────────────────────────────────────────────
 // Each node against root, from /api/pgraph/drift_detail - see app/pgraph/distortion.py. Drift is a cost,
 // not an error, so none of these views colors it good or bad: red is kept for the null test's flag.
@@ -516,16 +388,82 @@ const REMOVED_LABEL = "(removed)";
 const DRIFT_GUTTER = 72;
 
 // Which kind of column each drift view draws, so a result for the last column is never drawn as the next
-const DRIFT_VIEW_KINDS = {shift: "numeric", ridgeline: "numeric", change: "categorical", flows: "categorical"};
+const DRIFT_VIEW_KINDS = {ridgeline: "numeric", flows: "categorical"};
 
-const formatShift = d3.format("+.3f");
-const formatPoints = d3.format("+.2f");
 const formatShare = d3.format(".1%");
 
-function ordinal(quantile) {
-    const n = Math.round(quantile * 100);
-    const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({1: "st", 2: "nd", 3: "rd"}[n % 10] ?? "th");
-    return `${n}${suffix}`;
+// The annotation bubble's radius, and how far it sits from the spot it points at
+const BUBBLE_R = 11;
+const BUBBLE_REACH = 34;
+
+/* Where a node's rows changed most - the grid index its annotation bubble points at.
+
+   A node's curve is kept at its share of root's rows rather than rescaled, so root's curve minus the node's
+   is the smoothed shape of the rows removed - and, below zero, of the values filled in. Its peak is where
+   most rows changed. Rescaling the two to one total first would ask where the shape changed instead, and
+   that lands on the peak whenever rows leave a thin tail: the bulk lifts a little, and a little on the
+   tallest part of the curve outweighs the whole tail.
+
+   Thinning the whole column shared - rows lost to a step on another column, say - is taken out first, or
+   it would win at the peak every time. It is the smallest share any well-populated part of the column
+   lost. A node that changed nothing points at its own peak. */
+function mostChanged(root, curve) {
+    const peak = d3.max(root) || 1;
+    const gap = curve.map((value, i) => root[i] - value);
+    if (d3.max(gap, (value) => Math.abs(value)) < 1e-9 * peak) return d3.maxIndex(curve);
+
+    const busy = d3.range(root.length).filter((i) => root[i] >= 0.01 * peak);
+    const shared = Math.min(Math.max(d3.min(busy, (i) => gap[i] / root[i]) ?? 0, 0), 1);
+    return d3.maxIndex(gap, (value, i) => Math.abs(value - shared * root[i]));
+}
+
+/* A thought bubble pinned beside the place a node's data actually moved, with an arrow to that place. The
+   annotation used to be a paragraph under the plot, which left the reader to work out which part of the
+   picture it described; hovering the bubble puts it next to that part instead. aside is appended to the
+   sentences - a zoomed ridgeline uses it to say the spot is outside the range shown. */
+function drawAnnotationBubble(g, {ax, ay, bounds, aside}, role, side, ctx) {
+    const sentences = side?.annotation?.sentences ?? [];
+    if (!sentences.length) return;
+
+    const color = ROLE_COLORS[role];
+    // Up and to the right of the spot, but never outside the panel it belongs to
+    const bx = Math.min(Math.max(ax + BUBBLE_REACH, bounds.left + BUBBLE_R), bounds.right - BUBBLE_R);
+    const by = Math.min(Math.max(ay - BUBBLE_REACH, bounds.top + BUBBLE_R), bounds.bottom - BUBBLE_R);
+    const at = (t) => [bx + (ax - bx) * t, by + (ay - by) * t];
+    const angle = Math.atan2(ay - by, ax - bx);
+    const back = [ax - Math.cos(angle) * 9, ay - Math.sin(angle) * 9];
+    const corner = (turn) => [back[0] + Math.cos(angle + turn) * 4.5, back[1] + Math.sin(angle + turn) * 4.5];
+
+    const group = g.append("g").attr("class", "compare-bubble");
+    group.append("line")
+        .attr("x1", at(0.62)[0]).attr("y1", at(0.62)[1]).attr("x2", back[0]).attr("y2", back[1])
+        .attr("stroke", color).attr("stroke-width", 1.4);
+    group.append("polygon")
+        .attr("points", [[ax, ay], corner(Math.PI / 2), corner(-Math.PI / 2)].map((point) => point.join(",")).join(" "))
+        .attr("fill", color);
+    // The two puffs that make it a thought bubble rather than a speech balloon
+    [[0.26, 4], [0.46, 2.5]].forEach(([t, r]) => {
+        const [px, py] = at(t);
+        group.append("circle").attr("cx", px).attr("cy", py).attr("r", r)
+            .attr("fill", "#ffffff").attr("stroke", color).attr("stroke-width", 1.2);
+    });
+    group.append("circle").attr("cx", bx).attr("cy", by).attr("r", BUBBLE_R)
+        .attr("fill", "#ffffff").attr("stroke", color).attr("stroke-width", 1.6);
+    group.append("text").attr("class", "compare-bubble-mark")
+        .attr("x", bx).attr("y", by).attr("text-anchor", "middle").attr("dominant-baseline", "central")
+        .attr("fill", color).text("i");
+
+    /* The sentences go to the readout under the plot rather than to a tooltip over it: they run to a few
+       lines, and a floating panel would cover the very spot the bubble is pointing at. */
+    group
+        .on("mouseover", () => {
+            group.classed("compare-bubble--hover", true);
+            ctx.showNote?.({role, label: ctx.labels[role], text: [...sentences, aside].filter(Boolean).join(" ")});
+        })
+        .on("mouseout", () => {
+            group.classed("compare-bubble--hover", false);
+            ctx.showNote?.(null);
+        });
 }
 
 /* A panel's title for one node, with its drift for the column and the null test's flag when it fired */
@@ -538,49 +476,14 @@ function driftPanelTitle(g, role, ctx, side) {
     }
 }
 
-/* Where each node's mass moved against root, quantile by quantile, in root IQRs. The grid oversamples the
-   tails, where a delete of outliers does its work, so the bars do not average to the drift number. */
-function drawShift(svg, data, ctx) {
-    const roles = ["base", "other"].filter((role) => data[role].detail?.shift);
-    if (roles.length === 0) return drawEmpty(svg, ctx, "Neither node has enough values to compare with root");
-
-    const grid = data[roles[0]].detail.grid;
-    const [{g, w, h}] = layoutPanels(svg, ctx.width, ctx.height, 1);
-    const x = d3.scaleBand().domain(grid.map(ordinal)).range([0, w]).paddingInner(0.25).paddingOuter(0.1);
-    const inner = d3.scaleBand().domain(roles).range([0, x.bandwidth()]).padding(0.08);
-    const extent = d3.max(roles.flatMap((role) => data[role].detail.shift.map(Math.abs))) || 0.01;
-    const y = d3.scaleLinear().domain([-extent, extent]).nice().range([h, 0]);
-
-    const bars = roles.flatMap((role) => grid.map((quantile, i) => ({
-        role,
-        quantile,
-        shift: data[role].detail.shift[i],
-        root: data[role].detail.root[i],
-        node: data[role].detail.node[i],
-    })));
-    const marks = g.append("g").selectAll("rect").data(bars).join("rect")
-        .attr("class", "compare-mark")
-        .attr("x", (d) => x(ordinal(d.quantile)) + inner(d.role))
-        .attr("width", inner.bandwidth())
-        .attr("y", (d) => y(Math.max(0, d.shift)))
-        .attr("height", (d) => Math.abs(y(d.shift) - y(0)))
-        .attr("fill", (d) => ROLE_COLORS[d.role]);
-    ctx.tooltip.attach(marks, (d) => `<strong>${ordinal(d.quantile)} percentile</strong><br>`
-        + `${swatch(ROLE_COLORS[d.role])}${ROLE_NAMES[d.role]} ${escapeHtml(ctx.labels[d.role])}: `
-        + `${formatValue(d.root)} in root → ${formatValue(d.node)}<br>shift <strong>${formatShift(d.shift)}</strong> IQR`);
-
-    g.append("line").attr("class", "compare-zero").attr("x1", 0).attr("x2", w).attr("y1", y(0)).attr("y2", y(0));
-    g.append("g").attr("class", "compare-axis").attr("transform", `translate(0, ${h})`)
-        .call(d3.axisBottom(x)).selectAll("text").attr("class", "bottom-axis-text");
-    drawCountAxis(g, y, d3.format("+.2~f"));
-    pairTitle(g, ctx);
-    axisLabels(g, w, h, `Percentile of ${data.x}`, "Shift from root (× root IQR)");
-}
-
 /* The column's shape in root, the baseline and the comparator: one row each on a shared axis. Every row is
    smoothed with the bandwidth fitted on root, and root is drawn dashed over every row - where the dashed
    line vanishes under the fill, nothing moved. The rows share one vertical scale too, so a node that lost
-   rows draws a smaller curve rather than a renormalised one. */
+   rows draws a smaller curve rather than a renormalised one.
+
+   ctx.range zooms the plot to part of the column, chosen on the overview strip beneath it. The vertical
+   scale then fits the tallest curve inside the window rather than the column's, which is what makes a
+   change in a thin tail visible - all three rows still share it, so they stay comparable. */
 function drawRidgeline(svg, data, ctx) {
     const density = data.base.density ?? data.other.density;
     if (!density) return drawEmpty(svg, ctx, "This column has too few distinct values to draw its shape");
@@ -599,10 +502,18 @@ function drawRidgeline(svg, data, ctx) {
 
     const [{g, w, h}] = layoutPanels(svg, ctx.width - DRIFT_GUTTER, ctx.height, 1);
     const grid = density.grid;
-    const x = d3.scaleLinear().domain([grid[0], grid[grid.length - 1]]).range([0, w]);
+    const [lo, hi] = ctx.range ?? [grid[0], grid[grid.length - 1]];
+    const x = d3.scaleLinear().domain([lo, hi]).range([0, w]);
     const band = d3.scaleBand().domain(rows.map((row) => row.key)).range([0, h]).paddingInner(0.12);
-    const peak = d3.max(rows.flatMap((row) => row.curve ?? [])) || 1;
+
+    // The grid points inside the window, and one either side so each curve runs to the window's edges
+    const visible = d3.range(Math.max(0, d3.bisectLeft(grid, lo) - 1), Math.min(grid.length, d3.bisectRight(grid, hi) + 1));
+    const peak = d3.max(rows.flatMap((row) => (row.curve ? visible.map((i) => row.curve[i]) : []))) || 1;
     const rise = (value) => (value / peak) * band.bandwidth();
+
+    // The points either side of the window would otherwise draw into the margins
+    const clip = `url(#${ctx.clipId})`;
+    g.append("clipPath").attr("id", ctx.clipId).append("rect").attr("width", w).attr("height", h);
 
     rows.forEach((row) => {
         const floor = band(row.key) + band.bandwidth();
@@ -611,13 +522,15 @@ function drawRidgeline(svg, data, ctx) {
 
         rowGroup.append("line").attr("class", "compare-ridge-floor").attr("x1", 0).attr("x2", w).attr("y1", floor).attr("y2", floor);
         if (row.curve) {
-            rowGroup.append("path").datum(row.curve)
-                .attr("d", d3.area().x((_, i) => x(grid[i])).y0(floor).y1((value) => floor - rise(value)))
+            rowGroup.append("path").datum(visible)
+                .attr("d", d3.area().x((i) => x(grid[i])).y0(floor).y1((i) => floor - rise(row.curve[i])))
+                .attr("clip-path", clip)
                 .attr("fill", row.color).attr("fill-opacity", 0.5)
                 .attr("stroke", row.color).attr("stroke-width", 1.2);
         }
-        rowGroup.append("path").datum(density.root)
-            .attr("d", d3.line().x((_, i) => x(grid[i])).y((value) => floor - rise(value)))
+        rowGroup.append("path").datum(visible)
+            .attr("d", d3.line().x((i) => x(grid[i])).y((i) => floor - rise(density.root[i])))
+            .attr("clip-path", clip)
             .attr("class", "compare-ridge-root");
 
         rowGroup.append("text").attr("class", "compare-ridge-label")
@@ -626,62 +539,58 @@ function drawRidgeline(svg, data, ctx) {
         const drift = rowGroup.append("text").attr("class", "compare-ridge-drift")
             .attr("x", w + 10).attr("y", middle).attr("dominant-baseline", "middle").text(formatDrift(row.drift));
         if (row.flag?.flagged) drift.append("tspan").attr("fill", FLAG_COLOR).text(" ▲").append("title").text(NULL_FLAG_TITLE);
+
+        /* Root is the reference, so only the nodes measured against it carry an annotation. The spot is found
+           on the whole curve, zoomed or not; when the window leaves it out, the bubble is pinned to the edge
+           of the row nearest it, pointing off the plot. The arrow meets whichever curve is higher there - root's
+           dashed line where rows were removed, the node's own where values were filled in. */
+        if (row.key !== "root" && row.curve) {
+            const spot = mostChanged(density.root, row.curve);
+            const at = grid[spot];
+            const shown = at >= lo && at <= hi;
+            drawAnnotationBubble(rowGroup, {
+                ax: shown ? x(at) : (at < lo ? 0 : w),
+                ay: shown ? floor - rise(Math.max(row.curve[spot], density.root[spot])) : middle,
+                bounds: {left: 0, right: w, top: band(row.key), bottom: floor},
+                aside: shown ? null : `(That spot, near ${formatValue(at)}, is ${at < lo ? "left" : "right"} of the range shown.)`,
+            }, row.key, data[row.key], ctx);
+        }
     });
 
     g.append("text").attr("class", "compare-axis-label").attr("x", w + 10).attr("y", -14).text("drift");
     g.append("g").attr("class", "compare-axis").attr("transform", `translate(0, ${h})`)
         .call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(".3~s"))).selectAll("text").attr("class", "bottom-axis-text");
-    axisLabels(g, w, h, data.x, null);
+    axisLabels(g, w, h, ctx.range ? `${data.x} · zoomed to ${formatValue(lo)} – ${formatValue(hi)}` : data.x, null);
 }
 
-/* Each node's category shares against root, in percentage points: the categories that moved most and the
-   rest summed into one row. Each panel lists its own node's largest movers, and both share one scale. */
-function drawChange(svg, data, ctx) {
-    const extent = d3.max(["base", "other"].flatMap((role) => (data[role].detail?.categories ?? [])
-        .map((row) => Math.abs(row.change_pct)))) || 0.1;
-
-    layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "base" : "other";
-        const rows = data[role].detail?.categories ?? [];
-        const y = d3.scaleBand().domain(rows.map((row) => row.category)).range([0, h]).padding(0.2);
-        const x = d3.scaleLinear().domain([-extent, extent]).nice().range([0, w]);
-
-        const bars = g.append("g").selectAll("rect").data(rows).join("rect")
-            .attr("class", "compare-mark")
-            .attr("x", (row) => x(Math.min(0, row.change_pct)))
-            .attr("width", (row) => Math.abs(x(row.change_pct) - x(0)))
-            .attr("y", (row) => y(row.category))
-            .attr("height", y.bandwidth())
-            .attr("fill", ROLE_COLORS[role])
-            .attr("fill-opacity", 0.8);
-        ctx.tooltip.attach(bars, (row) => `<strong>${escapeHtml(row.category)}</strong><br>`
-            + `share ${row.root_pct.toFixed(2)}% in root → ${row.node_pct.toFixed(2)}%<br>`
-            + `change <strong>${formatPoints(row.change_pct)}</strong> points`);
-
-        g.append("g").selectAll("text").data(rows).join("text")
-            .attr("class", "compare-change-value")
-            .attr("x", (row) => x(row.change_pct) + (row.change_pct < 0 ? -4 : 4))
-            .attr("y", (row) => y(row.category) + y.bandwidth() / 2)
-            .attr("text-anchor", (row) => (row.change_pct < 0 ? "end" : "start"))
-            .attr("dominant-baseline", "middle")
-            .text((row) => formatPoints(row.change_pct));
-
-        g.append("line").attr("class", "compare-zero").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", h);
-        g.append("g").attr("class", "compare-axis")
-            .call(d3.axisLeft(y).tickFormat((label) => (label.length > 12 ? `${label.slice(0, 12)}…` : label)))
-            .selectAll("text").attr("class", "left-axis-text");
-        g.append("g").attr("class", "compare-axis").attr("transform", `translate(0, ${h})`)
-            .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format("+.1~f"))).selectAll("text").attr("class", "bottom-axis-text");
-        driftPanelTitle(g, role, ctx, data[role]);
-        axisLabels(g, w, h, "Change in share (percentage points)", null);
-    });
+/* Where the ridgeline's panel sits in a canvas this wide - the same panel layoutPanels gives drawRidgeline,
+   so the overview strip beneath lines up with it exactly */
+function ridgelineFrame(width) {
+    return {left: MARGIN.left, width: Math.max(10, width - DRIFT_GUTTER - MARGIN.left - MARGIN.right), total: width};
 }
 
-/* One Sankey: root's categories on the left, the node's on the right plus the deleted rows' sink. At
-   square-root width small categories stay legible, but a ribbon's width no longer reads as its count -
-   so every node is labelled with its count either way. */
+/* What the overview strip draws for a drift result: the whole column's curves, and the spots the bubbles
+   point at. Null for anything the ridgeline does not draw. */
+function ridgelineOverview(data) {
+    const density = data?.kind === "drift" ? (data.base.density ?? data.other.density) : null;
+    if (!density) return null;
+    const curves = {base: data.base.density?.node ?? null, other: data.other.density?.node ?? null};
+    const spots = {
+        base: curves.base && mostChanged(density.root, curves.base),
+        other: curves.other && mostChanged(density.root, curves.other),
+    };
+    return {density, curves, spots};
+}
+
+/* One Sankey: root's categories on the left, the node's on the right plus the deleted rows' sink.
+   Ribbons are always square-root width: at true width a category holding a handful of rows is a hairline,
+   and these columns usually hold most of their mass in one category. The trade is that a ribbon's width no
+   longer reads as its count, so every node carries its count as a label.
+
+   Returns where the panel's annotation should point: the biggest ribbon that actually moved - recoded or
+   removed - or failing that the biggest ribbon of all, so a column where nothing moved can still say so. */
 function drawSankey(g, flows, w, h, ctx) {
-    const widthOf = ctx.flowScale === "sqrt" ? Math.sqrt : (rows) => rows;
+    const widthOf = Math.sqrt;
     const LABEL = Math.min(120, w * 0.3);
     const NODE = 10;
     const PAD = 6;
@@ -765,6 +674,10 @@ function drawSankey(g, flows, w, h, ctx) {
     };
     drawColumn(sources, x0 - NODE, "end", x0 - NODE - 6);
     drawColumn(targets, x1, "start", x1 + NODE + 6);
+
+    const moved = placed.filter((ribbon) => kindOf(ribbon) !== "stayed");
+    const marked = d3.greatest(moved.length ? moved : placed, (ribbon) => ribbon.rows);
+    return marked ? {ax: middle, ay: (marked.ya + marked.yb + marked.thickness) / 2} : null;
 }
 
 /* Where root's rows went in this column, for each node: into the same category, into another, or out of
@@ -777,48 +690,30 @@ function drawFlows(svg, data, ctx) {
         driftPanelTitle(g, role, ctx, side);
         if (!side.flows) return;
 
-        drawSankey(g, side.flows, w, h, ctx);
+        const anchor = drawSankey(g, side.flows, w, h, ctx);
+        if (anchor) {
+            drawAnnotationBubble(g, {...anchor, bounds: {left: 0, right: w, top: 0, bottom: h}}, role, side, ctx);
+        }
+
         g.append("text").attr("class", "compare-axis-label")
             .attr("x", w / 2).attr("y", h + 28).attr("text-anchor", "middle")
             .text(`churn ${formatShare(side.flows.churn)} of rows · TVD ${formatDrift(side.distortion?.value)}`);
     });
 }
 
-/* What the drift views cannot say on their own: that the shift bars do not average to the number, and each
-   node's annotation - facts read off the provenance and the diff, never a guessed cause. */
-function DriftNotes({data, view, labels}) {
-    return (
-        <div className="compare-drift-notes">
-            {view === "shift" && (
-                <div className="compare-caption">
-                    Bars are the shift at each quantile shown, in root IQRs. The grid oversamples the tails, so
-                    the bars do not average to the drift number.
-                </div>
-            )}
-            <div className="compare-annotations">
-                {["base", "other"].map((role) => (
-                    <div key={role}>
-                        <span className="compare-annotation-role" style={{color: ROLE_COLORS[role]}}>
-                            {ROLE_NAMES[role]} {labels[role]}
-                        </span>
-                        {(data[role].annotation?.sentences ?? []).join(" ")}
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
 const DRAWERS = {
     histogram: {side: drawHistogramSide, overlay: drawHistogramOverlay, difference: drawHistogramDifference},
     heatmap: {side: drawHeatmapSide, difference: drawHeatmapDifference},
-    scatter: {side: drawScatterSide, overlay: drawScatterOverlay},
-    drift: {shift: drawShift, ridgeline: drawRidgeline, change: drawChange, flows: drawFlows},
+    drift: {ridgeline: drawRidgeline, flows: drawFlows},
 };
 
 function isEmpty(data) {
-    if (data.kind === "drift") return !data.base?.detail && !data.other?.detail;
-    const marks = data.kind === "histogram" ? data.bins : data.kind === "heatmap" ? data.tiles : data.points;
+    // A categorical column is drawn as its flows, a numeric one as its curves
+    if (data.kind === "drift") {
+        const drawable = (side) => (side?.kind === "categorical" ? side?.flows : side?.density);
+        return !drawable(data.base) && !drawable(data.other);
+    }
+    const marks = data.kind === "histogram" ? data.bins : data.tiles;
     return !marks?.length;
 }
 
@@ -841,14 +736,9 @@ function legendItems(kind, view, measure, labels) {
                 {label: "Row removed", style: {background: FLOW_COLORS.removed}},
             ];
         }
-        const roles = ["base", "other"].map((role) => ({
-            label: roleLabel(role),
-            style: {background: ROLE_COLORS[role]}
-        }));
-        if (view !== "ridgeline") return roles;
         return [
             {label: "Root", style: {background: ROOT_COLOR}},
-            ...roles,
+            ...["base", "other"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}})),
             {
                 label: "Root's shape, dashed on every row", shape: "line",
                 style: {background: "repeating-linear-gradient(to right, #1c1e21 0 4px, transparent 4px 7px)"}
@@ -881,27 +771,11 @@ function legendItems(kind, view, measure, labels) {
         return items;
     }
 
-    if (kind === "histogram") {
-        return view === "overlay"
-            ? ["base", "other"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}}))
-            : errorItems;
+    if (kind === "histogram" && view === "overlay") {
+        return ["base", "other"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}}));
     }
 
-    if (view === "overlay") {
-        return [
-            {label: roleLabel("base"), shape: "ring", style: {borderColor: ROLE_COLORS.base}},
-            {label: roleLabel("other"), shape: "dot", style: {background: ROLE_COLORS.other}},
-            {label: "Value changed", shape: "line", style: {background: STATUS_COLORS.changed}},
-        ];
-    }
-
-    return [
-        ...errorItems,
-        {label: "Changed", shape: "ring", style: {borderColor: STATUS_COLORS.changed}},
-        {label: "Added", shape: "ring", style: {borderColor: STATUS_COLORS.added}},
-        {label: "Removed", shape: "ring", style: {borderColor: STATUS_COLORS.removed}},
-        {label: "Not in this state", shape: "ghost"},
-    ];
+    return errorItems;
 }
 
 /**
@@ -909,17 +783,34 @@ function legendItems(kind, view, measure, labels) {
  *
  * Props:
  *  - data: a /api/pgraph/compare response, or null while there is none to show
- *  - view: "side" | "overlay" | "difference", or for drift "shift" | "ridgeline" | "change" | "flows" -
+ *  - view: "side" | "overlay" | "difference", or for drift "ridgeline" | "flows" -
  *    which the kind supports is the modal's call
  *  - measure: a MEASURES key, read by difference views and heatmaps
- *  - flowScale: "linear" | "sqrt" - how wide a Sankey's ribbons are drawn
  *  - baseLabel, otherLabel: short names for the two nodes
  */
-export default function ComparisonPlot({data, view, measure, flowScale = "linear", baseLabel, otherLabel}) {
+export default function ComparisonPlot({data, view, measure, baseLabel, otherLabel}) {
     const canvasRef = useRef(null);
     const svgRef = useRef(null);
     const tooltipRef = useRef(null);
     const [size, setSize] = useState({width: 0, height: 0});
+    // What the hovered annotation bubble says, shown under the plot rather than over it
+    const [note, setNote] = useState(null);
+
+    /* The part of the column a zoomed ridgeline shows, stamped with the column and nodes it was chosen for.
+       Another column or node pair reads it as unzoomed, so a stale zoom lapses without an effect to reset it. */
+    const zoomKey = data?.kind === "drift" ? `${data.x}|${data.base.node}|${data.other.node}` : null;
+    const [zoom, setZoom] = useState({key: null, range: null});
+    const range = zoom.key === zoomKey ? zoom.range : null;
+    // The brush reports on every move, often the same range; only a new one is worth a redraw
+    const zoomTo = useCallback((next) => setZoom((previous) => (
+        previous.key === zoomKey && String(previous.range) === String(next) ? previous : {key: zoomKey, range: next}
+    )), [zoomKey]);
+
+    // Ids are unique per page, and useId's own characters are not all safe in a url(#...) reference
+    const clipId = `compare-ridge-clip${useId().replace(/[^\w-]/g, "")}`;
+    const overview = useMemo(() => ridgelineOverview(data), [data]);
+    // While the next column loads, the last one's drift result stays up - but only under a view for its kind
+    const stale = data?.kind === "drift" && (data.base.kind ?? data.other.kind) !== DRIFT_VIEW_KINDS[view];
 
     // The canvas takes whatever room the modal gives it, and the plot is laid out from that
     useEffect(() => {
@@ -933,22 +824,24 @@ export default function ComparisonPlot({data, view, measure, flowScale = "linear
     useEffect(() => {
         const svg = d3.select(svgRef.current);
         const draw = data && DRAWERS[data.kind]?.[view];
-        // While the next column loads, the last one's drift result stays up - but only under a view for its kind
-        const stale = data?.kind === "drift" && (data.base.kind ?? data.other.kind) !== DRIFT_VIEW_KINDS[view];
         if (!draw || stale || size.width < MIN_CANVAS || size.height < MIN_CANVAS) return;
 
         const tooltip = makeTooltip(tooltipRef.current, canvasRef.current);
         if (isEmpty(data)) {
             drawEmpty(svg, size);
         } else {
-            draw(svg, data, {...size, measure, flowScale, tooltip, labels: {base: baseLabel, other: otherLabel}});
+            draw(svg, data, {
+                ...size, measure, tooltip, range, clipId, showNote: setNote,
+                labels: {base: baseLabel, other: otherLabel},
+            });
         }
 
         return () => {
             tooltip.hide();
+            setNote(null);
             svg.selectAll("*").remove();
         };
-    }, [data, view, measure, flowScale, baseLabel, otherLabel, size]);
+    }, [data, view, measure, baseLabel, otherLabel, size, stale, range, clipId]);
 
     return (
         <div className="compare-plot-frame">
@@ -956,6 +849,31 @@ export default function ComparisonPlot({data, view, measure, flowScale = "linear
                 <svg ref={svgRef} width={size.width} height={size.height}/>
                 <div ref={tooltipRef} className="compare-tooltip"/>
             </div>
+            {view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && (
+                // Keyed on the column and nodes, so a new pair starts with a fresh brush rather than the last box
+                <RidgelineBrush
+                    key={zoomKey}
+                    {...overview}
+                    frame={ridgelineFrame(size.width)}
+                    rootColor={ROOT_COLOR}
+                    range={range}
+                    onRange={zoomTo}
+                />
+            )}
+            {data?.kind === "drift" && (
+                <div className="compare-note" aria-live="polite">
+                    {note ? (
+                        <>
+                            <span className="compare-note-role" style={{color: ROLE_COLORS[note.role]}}>
+                                {ROLE_NAMES[note.role]} · {note.label}
+                            </span>
+                            {note.text}
+                        </>
+                    ) : (
+                        <span className="compare-note-hint">Hover a bubble for what changed where it points.</span>
+                    )}
+                </div>
+            )}
             {data && (
                 <div className="compare-legend">
                     {legendItems(data.kind, view, measure, {base: baseLabel, other: otherLabel}).map((item) => (
@@ -969,14 +887,6 @@ export default function ComparisonPlot({data, view, measure, flowScale = "linear
                     ))}
                 </div>
             )}
-            {data?.kind === "scatter" && (
-                <div className="compare-caption">
-                    Showing {data.sampled.toLocaleString()} of {data.population.toLocaleString()} rows.
-                    Rows that changed or carry errors are sampled first.
-                </div>
-            )}
-            {data?.kind === "drift" &&
-                <DriftNotes data={data} view={view} labels={{base: baseLabel, other: otherLabel}}/>}
         </div>
     );
 }

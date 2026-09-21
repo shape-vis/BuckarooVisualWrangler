@@ -143,24 +143,26 @@ def test_trajectory_deltas_are_differences_of_root_referenced_values(survey, cli
 
 
 @pytest.mark.sql
-def test_numeric_detail_carries_the_shift_and_the_ridgeline(survey, client):
+def test_a_numeric_column_is_drawn_as_its_ridgeline(survey, client):
     status, body = _get(client, "/api/pgraph/drift_detail", node=survey["clean"], column="ConvertedSalary")
 
     assert status == 200, body
-    assert len(body["detail"]["shift"]) == len(body["detail"]["grid"])
     assert body["density"]["bandwidth"] > 0
     assert len(body["density"]["node"]) == len(body["density"]["root"])
     assert body["annotation"]["sentences"]
 
 
 @pytest.mark.sql
-def test_collateral_drift_opens_on_the_change_table_and_a_targeted_delete_on_flows(survey, client):
+def test_a_categorical_column_is_drawn_as_its_flows(survey, client):
     _, collateral = _get(client, "/api/pgraph/drift_detail", node=survey["clean"], column="Gender")
     _, targeted = _get(client, "/api/pgraph/drift_detail", node=survey["gender"], column="Gender")
 
-    assert collateral["route"] == "change"
-    assert targeted["route"] == "flows"
+    # Both nodes deleted rows, whether or not a step acted on Gender, so both have a sink to draw
     assert REMOVED_LABEL in collateral["flows"]["targets"]
+    assert REMOVED_LABEL in targeted["flows"]["targets"]
+    # The share-change breakdown is only written from, never drawn, so it stays on the server
+    assert "detail" not in collateral
+    assert collateral["annotation"]["sentences"]
 
 
 @pytest.mark.sql
@@ -168,7 +170,6 @@ def test_collateral_drift_opens_on_the_change_table_and_a_targeted_delete_on_flo
     ({"column": "ConvertedSalary"}, "missing node"),
     ({"node": "nope", "column": "ConvertedSalary"}, "not a node"),
     ({"node": "<root>", "column": "nope"}, "not a data column"),
-    ({"node": "<root>", "column": "ConvertedSalary", "grid": "wobbly"}, "unknown grid"),
 ])
 def test_bad_detail_requests_are_refused(survey, client, params, message):
     # The root's table name is only known once the survey is uploaded

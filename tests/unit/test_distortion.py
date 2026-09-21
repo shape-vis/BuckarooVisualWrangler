@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, RowIdentityError,
                                    annotation, category_flows, column_detail, column_distortion,
-                                   detail_route, distortion_trajectory, edit_facts, node_density,
+                                   distortion_trajectory, edit_facts, node_density,
                                    node_distortion, null_applicability, null_distribution, null_result,
                                    pareto_frontier, root_density_params, root_distortion, summarize)
 
@@ -316,12 +316,6 @@ class FlowTests(unittest.TestCase):
 
         self.assertEqual(flows["sources"], ["c0", "c1", "c2", "c3", "c4", OTHER_LABEL])
         self.assertEqual(flows["categories"], 7)
-
-    def test_the_view_opened_first_follows_what_happened_to_the_column(self):
-        self.assertEqual(detail_route(0, 0, 3), "change")    # drifted only through other columns' deletes
-        self.assertEqual(detail_route(2, 0, 3), "flows")     # recoded cells
-        self.assertEqual(detail_route(0, 5, 3), "flows")     # rows deleted by a step on this column
-        self.assertEqual(detail_route(2, 0, 20), "change")   # too many categories for ribbons
 
 
 class AcrossNodesTests(unittest.TestCase):

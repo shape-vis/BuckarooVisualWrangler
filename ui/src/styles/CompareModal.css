@@ -174,11 +174,6 @@
     color: #65676b;
 }
 
-.compare-section-value {
-    color: #1c1e21;
-    letter-spacing: 0;
-}
-
 .compare-muted {
     font-size: 12px;
     font-style: italic;
@@ -222,36 +217,6 @@
     font-size: 12px;
     color: #65676b;
     white-space: nowrap;
-}
-
-.compare-pair-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.compare-row-change {
-    font-size: 12px;
-    font-weight: 600;
-    color: #3c4043;
-}
-
-.compare-swap {
-    margin-left: auto;
-    padding: 4px 10px;
-    border: 1px solid #dddfe2;
-    border-radius: 6px;
-    background: #ffffff;
-    font: inherit;
-    font-size: 12px;
-    color: #1c1e21;
-    cursor: pointer;
-    transition: background-color 0.15s ease;
-}
-
-.compare-swap:hover {
-    background: #f0f2f5;
 }
 
 /* ── Controls ─────────────────────────────────────────────────────── */
@@ -313,21 +278,16 @@
     color: #1c1e21;
 }
 
-.compare-range {
-    width: 100%;
-    accent-color: #1877F2;
-}
-
 .compare-segment:focus-visible,
 .compare-select:focus-visible,
-.compare-swap:focus-visible,
+.compare-brush-reset:focus-visible,
 .compare-close:focus-visible,
 .compare-ranked-item:focus-visible {
     outline: 2px solid #1877F2;
     outline-offset: 1px;
 }
 
-/* ── What changed ─────────────────────────────────────────────────── */
+/* ── Drift summary and ranked attributes ──────────────────────────── */
 
 .compare-changes {
     display: flex;
@@ -599,20 +559,6 @@
     border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.compare-legend-mark--dot {
-    border-radius: 50%;
-}
-
-.compare-legend-mark--ring {
-    border: 2px solid;
-    border-radius: 50%;
-}
-
-.compare-legend-mark--ghost {
-    border: 1.5px dashed #8a8d91;
-    border-radius: 50%;
-}
-
 .compare-legend-mark--ramp {
     width: 44px;
 }
@@ -623,25 +569,11 @@
     border-radius: 1px;
 }
 
-.compare-caption {
-    font-size: 11px;
-    color: #65676b;
-}
-
 /* ── Drift ────────────────────────────────────────────────────────── */
 
-/* Ruled off below the pair's own changes, since each figure is a node against root rather than against
-   the other node. Teal, like every other drift figure - never red. */
-.compare-drift-summary {
-    margin-top: 6px;
-    padding-top: 6px;
-    border-top: 1px dashed #dddfe2;
-}
-
-.compare-drift-title {
-    margin-bottom: 4px;
-    font-size: 11px;
-    font-weight: 700;
+/* Each figure is a node against root rather than against the other node. Teal, like every other drift
+   figure - never red. */
+.compare-section-title--drift {
     color: #0f766e;
 }
 
@@ -667,7 +599,6 @@
     fill: #3c4043;
 }
 
-.compare-change-value,
 .compare-flow-count {
     font-size: 10px;
     fill: #65676b;
@@ -682,26 +613,113 @@
     font-weight: 700;
 }
 
-.compare-drift-notes {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+/* The ridgeline's overview strip: the whole column, with the brush that picks what the plot above shows.
+   Fixed height, so the canvas above gives up exactly its room. */
+.compare-brush {
+    position: relative;
+    flex: none;
 }
 
-.compare-annotations {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    max-height: 96px;
+.compare-brush > svg {
+    display: block;
+    overflow: visible;
+}
+
+.compare-brush-label {
+    font-size: 11px;
+    font-style: italic;
+    fill: #8a8d91;
+}
+
+.compare-brush-tick {
+    font-size: 10px;
+    fill: #65676b;
+    font-variant-numeric: tabular-nums;
+}
+
+.compare-brush-floor {
+    stroke: #dddfe2;
+}
+
+.compare-brush-grip {
+    cursor: ew-resize;
+}
+
+.compare-brush-grip-hit {
+    fill: transparent;
+}
+
+.compare-brush-grip rect:not(.compare-brush-grip-hit) {
+    fill: #ffffff;
+    stroke: #0f766e;
+}
+
+.compare-brush-grip path {
+    stroke: #0f766e;
+}
+
+/* In the gutter right of the strip, where the ridgeline prints each row's drift */
+.compare-brush-reset,
+.compare-brush-hint {
+    position: absolute;
+    top: 14px;
+    right: 4px;
+    font-size: 11px;
+}
+
+.compare-brush-reset {
+    padding: 2px 8px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    background: #ffffff;
+    font-family: inherit;
+    color: #0f766e;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.compare-brush-reset:hover {
+    background: #f0f2f5;
+}
+
+.compare-brush-hint {
+    font-style: italic;
+    color: #8a8d91;
+}
+
+/* A thought bubble pointing at where a node moved; hovering it fills the readout under the plot */
+.compare-bubble {
+    cursor: help;
+}
+
+.compare-bubble-mark {
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.compare-bubble--hover circle {
+    fill: #f0f2f5;
+}
+
+/* Fixed height, so the plot above does not jump as bubbles are hovered on and off */
+.compare-note {
+    height: 2.9em;
     overflow-y: auto;
+    padding-top: 6px;
+    border-top: 1px solid #eef0f2;
     font-size: 12px;
     line-height: 1.45;
     color: #3c4043;
 }
 
-.compare-annotation-role {
+.compare-note-role {
     margin-right: 6px;
     font-weight: 700;
+}
+
+.compare-note-hint {
+    font-style: italic;
+    color: #8a8d91;
 }
 
 @media (max-width: 760px) {
