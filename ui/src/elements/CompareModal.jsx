@@ -2,11 +2,13 @@
 // Opened from the header's Compare button while two nodes are paired in the graph: a shift-clicked
 // baseline and the current node. Plot options down the left, the plot itself on the right.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePgraph } from "../store/PGraphContext.jsx";
-import { getDriftDetail, getNodeComparison } from "../utils/serverCalls.jsx";
-import { MEASURES, describeWrangle, nodeName } from "../utils/comparison.js";
+import { getDriftDetail, getFlowPair, getNodeComparison } from "../utils/serverCalls.jsx";
+import {
+    MEASURES, OTHER_LABEL, describeWrangle, flowCategories, nodeName, otherCategories,
+} from "../utils/comparison.js";
 import { formatDrift, useDriftNull } from "../utils/drift.js";
 import DriftFlag from "./DriftFlag.jsx";
 import ComparisonPlot from "../visualizations/ComparisonPlot.jsx";
@@ -37,6 +39,28 @@ const RANKED_LIMIT = 8;
 // Options can be changed in quick succession, so a request waits for them to settle
 const FETCH_DELAY_MS = 150;
 
+/* The window's edges and corners, each with the way it moves the width and height. The window stays
+   centred, so it grows on both sides at once: an edge pulled by d changes its side by 2d, which keeps the
+   edge under the pointer. */
+const EDGES = {
+    n: { dx: 0, dy: -1, cursor: "ns-resize" },
+    s: { dx: 0, dy: 1, cursor: "ns-resize" },
+    e: { dx: 1, dy: 0, cursor: "ew-resize" },
+    w: { dx: -1, dy: 0, cursor: "ew-resize" },
+    ne: { dx: 1, dy: -1, cursor: "nesw-resize" },
+    sw: { dx: -1, dy: 1, cursor: "nesw-resize" },
+    nw: { dx: -1, dy: -1, cursor: "nwse-resize" },
+    se: { dx: 1, dy: 1, cursor: "nwse-resize" },
+};
+// Below this the options column and the plot crowd each other out
+const MIN_WINDOW = { width: 760, height: 520 };
+
+// The size the window was last pulled to, kept for the next time it opens; null is the stylesheet's default
+let rememberedSize = null;
+
+// One empty list, so a column with nothing hidden hands the plot the same array every render
+const NO_CATEGORIES = [];
+
 /* A folded run stands in for its last node - the state the run arrives at, and whose metrics it
    already reports - so that is the table it is compared as. */
 function tableOf(node, id) {
@@ -49,15 +73,21 @@ function formatRate(rate) {
 
 const signedRows = (change) => `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString()} rows`;
 
-/* The Drift kind's data: each node's breakdown against root, the two fetched side by side */
-async function getDriftComparison({ base, other, x }, signal) {
-    const [baseDetail, otherDetail] = await Promise.all([
-        getDriftDetail({ node: base, column: x }, signal),
-        getDriftDetail({ node: other, column: x }, signal),
+/* The Drift kind's data: each node's breakdown against root, and for a categorical column the step from the
+   baseline to the comparator as well - the Flows view draws all three. The pair is its own request, so a
+   failure of that one alone still leaves the two the modal has always drawn. */
+async function getDriftComparison({ base, other, x, keep }, signal) {
+    const [baseDetail, otherDetail, pair] = await Promise.all([
+        getDriftDetail({ node: base, column: x, keep }, signal),
+        getDriftDetail({ node: other, column: x, keep }, signal),
+        getFlowPair({ base, other, column: x, keep }, signal),
     ]);
     const failed = [baseDetail, otherDetail].find((response) => !response?.success);
     if (failed) return { success: false, error: failed?.error };
-    return { success: true, kind: "drift", x, base: baseDetail, other: otherDetail };
+    return {
+        success: true, kind: "drift", x, base: baseDetail, other: otherDetail,
+        pair: pair?.success ? pair : null,
+    };
 }
 
 /* A change in error rate, in percentage points. Errors going down is an improvement. */
@@ -118,6 +148,113 @@ function AttributeSelect({ label, value, onChange, attributes }) {
     );
 }
 
+/* Which of a column's categories the Sankeys draw. Everything the server sent is listed and ticked by
+   default; unticking one hides its band, which is the same thing the plot's own bar-and-Delete does. The
+   long tail the server folded into "(other)" is listed under it with each category's rows - ticking one of
+   those asks the server for it as a band of its own, so those cost a request and the rest do not. */
+function CategoryPicker({ categories, hidden, other, onHidden, onKeep }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const boxRef = useRef(null);
+
+    // A click anywhere else closes the list, as a select would
+    useEffect(() => {
+        if (!open) return undefined;
+        const onDown = (event) => {
+            if (!boxRef.current?.contains(event.target)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDown);
+        return () => document.removeEventListener("mousedown", onDown);
+    }, [open]);
+
+    const matches = (label) => label.toLowerCase().includes(query.trim().toLowerCase());
+    const shownCount = categories.filter((label) => !hidden.includes(label)).length;
+    const toggle = (label) => onHidden(hidden.includes(label)
+        ? hidden.filter((name) => name !== label)
+        : [...hidden, label]);
+
+    /* Select and deselect all work on what the search leaves listed, so a search plus one click covers a
+       run of categories. They leave the catch-all's own list alone: each of those costs a request. */
+    const listed = categories.filter(matches);
+    const noneHidden = listed.every((label) => !hidden.includes(label));
+    const allHidden = listed.every((label) => hidden.includes(label));
+    const selectAll = () => onHidden(hidden.filter((label) => !listed.includes(label)));
+    const deselectAll = () => onHidden([...new Set([...hidden, ...listed])]);
+
+    return (
+        <div className="compare-picker" ref={boxRef}>
+            <button
+                type="button"
+                className="compare-picker-summary"
+                aria-expanded={open}
+                onClick={() => setOpen((was) => !was)}
+            >
+                <span>{shownCount} of {categories.length} shown</span>
+                <span aria-hidden="true">▾</span>
+            </button>
+            {open && (
+                <div className="compare-picker-list">
+                    <input
+                        className="compare-picker-search"
+                        type="search"
+                        value={query}
+                        placeholder="Search categories"
+                        aria-label="Search categories"
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                    <div className="compare-picker-actions">
+                        <button
+                            type="button"
+                            className="compare-picker-action"
+                            disabled={noneHidden}
+                            title="Show every category listed here"
+                            onClick={selectAll}
+                        >
+                            Select all
+                        </button>
+                        <button
+                            type="button"
+                            className="compare-picker-action"
+                            disabled={allHidden}
+                            title="Hide every category listed here"
+                            onClick={deselectAll}
+                        >
+                            Deselect all
+                        </button>
+                    </div>
+                    <div className="compare-picker-scroll">
+                        {listed.map((label) => (
+                            <label key={label} className="compare-picker-item">
+                                <input
+                                    type="checkbox"
+                                    checked={!hidden.includes(label)}
+                                    onChange={() => toggle(label)}
+                                />
+                                <span className="compare-picker-name" title={label}>{label}</span>
+                            </label>
+                        ))}
+                        {other.categories.length > 0 && (
+                            <>
+                                <div className="compare-picker-group">
+                                    In {OTHER_LABEL}
+                                    {other.more > 0 && <span> · {other.more} more not listed</span>}
+                                </div>
+                                {other.categories.filter((row) => matches(row.category)).map((row) => (
+                                    <label key={row.category} className="compare-picker-item">
+                                        <input type="checkbox" checked={false} onChange={() => onKeep(row.category)} />
+                                        <span className="compare-picker-name" title={row.category}>{row.category}</span>
+                                        <span className="compare-picker-rows">{row.rows.toLocaleString()}</span>
+                                    </label>
+                                ))}
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function NodeRow({ role, table, rows }) {
     return (
         <div className="compare-node-row">
@@ -147,6 +284,48 @@ function DriftSummary({ baseTable, otherTable, baseDrift, otherDrift }) {
 export default function CompareModal({ pair, onClose }) {
     const { nodes, serverNodesById } = usePgraph();
     const dialogRef = useRef(null);
+
+    /* The window's size once pulled by an edge, or null for the stylesheet's. The plot measures its own
+       canvas, so it redraws to fit as the window changes. */
+    const [size, setSize] = useState(() => rememberedSize);
+    // The edge being pulled, whose cursor the whole page shows until it is let go
+    const [resizing, setResizing] = useState(null);
+    useEffect(() => {
+        rememberedSize = size;
+    }, [size]);
+
+    /* Pulls the window by one edge. The pointer is captured, so a drag that ends over the backdrop is not a
+       click on it. The window can grow to fill the overlay, but not past it. */
+    const startResize = (edge) => (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        const handle = event.currentTarget;
+        const { dx, dy } = EDGES[edge];
+        const overlay = dialogRef.current.parentElement;
+        const style = getComputedStyle(overlay);
+        const room = {
+            width: overlay.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+            height: overlay.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+        };
+        const box = dialogRef.current.getBoundingClientRect();
+        const clamp = (value, key) => Math.round(Math.min(room[key], Math.max(Math.min(MIN_WINDOW[key], room[key]), value)));
+
+        const move = (moveEvent) => setSize({
+            width: clamp(box.width + 2 * dx * (moveEvent.clientX - event.clientX), "width"),
+            height: clamp(box.height + 2 * dy * (moveEvent.clientY - event.clientY), "height"),
+        });
+        const end = () => {
+            handle.removeEventListener("pointermove", move);
+            handle.removeEventListener("pointerup", end);
+            handle.removeEventListener("pointercancel", end);
+            setResizing(null);
+        };
+        handle.setPointerCapture(event.pointerId);
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", end);
+        handle.addEventListener("pointercancel", end);
+        setResizing(edge);
+    };
 
     const nodesById = useMemo(() => Object.fromEntries(nodes.map((node) => [node.id, node])), [nodes]);
 
@@ -207,6 +386,20 @@ export default function CompareModal({ pair, onClose }) {
     const [measure, setMeasure] = useState("items");
     const [result, setResult] = useState({ key: null, data: null, error: null });
 
+    /* Which of a categorical column's categories the Sankeys draw. hidden is the reader's own doing and
+       costs nothing - the rows are already here, so the bands simply go. kept names categories the server
+       would otherwise fold into its catch-all, so changing it asks for the flows again. Both belong to one
+       column of one pair: the choice is stamped with that, and another column reads it as never made. */
+    const columnKey = [baseTable, otherTable, x].join("|");
+    const [choice, setChoice] = useState({ key: null, hidden: NO_CATEGORIES, kept: null });
+    const chosen = choice.key === columnKey ? choice : { hidden: NO_CATEGORIES, kept: null };
+    const { hidden, kept } = chosen;
+    const setHidden = useCallback((next) => setChoice((was) => ({
+        key: columnKey,
+        hidden: typeof next === "function" ? next(was.key === columnKey ? was.hidden : NO_CATEGORIES) : next,
+        kept: was.key === columnKey ? was.kept : null,
+    })), [columnKey]);
+
     const spec = PLOT_KINDS.find((plotKind) => plotKind.id === kind);
     // Drift's views follow the column - numeric or categorical, as root decided it
     const columnKind = (baseDistortion?.columns?.[x] ?? otherDistortion?.columns?.[x])?.kind;
@@ -218,11 +411,28 @@ export default function CompareModal({ pair, onClose }) {
 
     /* Names the request the current options call for. A result is only current when it carries this
        key, which is how loading is known without any state of its own. */
-    const requestKey = [baseTable, otherTable, kind, x, yColumn].join("|");
+    const requestKey = [baseTable, otherTable, kind, x, yColumn, kept?.join(",") ?? ""].join("|");
     const loading = Boolean(x) && result.key !== requestKey;
     const current = result.key === requestKey ? result : null;
     // While the next result loads, the last one of the same kind stays up, dimmed
     const plotData = result.data?.kind === kind ? result.data : null;
+
+    // The Sankeys' categories as the current result has them, and what its catch-all holds
+    const plotCategories = useMemo(
+        () => (plotData?.kind === "drift" ? flowCategories(plotData) : []), [plotData]);
+    const plotOther = useMemo(
+        () => (plotData?.kind === "drift" ? otherCategories(plotData) : { categories: [], more: 0 }), [plotData]);
+
+    const hideCategory = useCallback((category) => setHidden((was) => (
+        was.includes(category) ? was : [...was, category])), [setHidden]);
+
+    /* Taking a category back out of the catch-all: the server has to redraw the flows for it, so the ask is
+       the categories it already draws plus this one. It comes back shown, whatever it was before. */
+    const keepCategory = (category) => setChoice({
+        key: columnKey,
+        hidden: hidden.filter((label) => label !== category),
+        kept: [...(kept ?? plotCategories.filter((label) => label !== OTHER_LABEL)), category],
+    });
 
     useEffect(() => {
         if (!x) return;
@@ -231,7 +441,7 @@ export default function CompareModal({ pair, onClose }) {
         const timer = setTimeout(async () => {
             try {
                 const response = kind === "drift"
-                    ? await getDriftComparison({ base: baseTable, other: otherTable, x }, controller.signal)
+                    ? await getDriftComparison({ base: baseTable, other: otherTable, x, keep: kept }, controller.signal)
                     : await getNodeComparison(
                         { base: baseTable, other: otherTable, kind, x, y: yColumn },
                         controller.signal,
@@ -251,7 +461,7 @@ export default function CompareModal({ pair, onClose }) {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [requestKey, baseTable, otherTable, kind, x, yColumn]);
+    }, [requestKey, baseTable, otherTable, kind, x, yColumn, kept]);
 
     useEffect(() => {
         dialogRef.current?.focus();
@@ -268,12 +478,14 @@ export default function CompareModal({ pair, onClose }) {
     // Portaled to <body> so it sits above the fixed header, whose stacking context would trap it
     return createPortal(
         <div
-            className="compare-overlay"
+            className={`compare-overlay ${resizing ? "compare-overlay--resizing" : ""}`}
+            style={resizing ? { "--compare-resize-cursor": EDGES[resizing].cursor } : undefined}
             onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
         >
             <div
                 ref={dialogRef}
                 className="compare-window"
+                style={size ?? undefined}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="compare-title"
@@ -344,6 +556,20 @@ export default function CompareModal({ pair, onClose }) {
                                     options={views.map((id) => ({ id, label: VIEW_LABELS[id] }))}
                                     value={activeView}
                                     onChange={setView}
+                                />
+                            </section>
+                        )}
+
+                        {/* The Sankeys' own categories: which ones they draw, and what the catch-all holds */}
+                        {kind === "drift" && activeView === "flows" && plotCategories.length > 0 && (
+                            <section className="compare-section">
+                                <h3 className="compare-section-title">Categories</h3>
+                                <CategoryPicker
+                                    categories={plotCategories}
+                                    hidden={hidden}
+                                    other={plotOther}
+                                    onHidden={setHidden}
+                                    onKeep={keepCategory}
                                 />
                             </section>
                         )}
@@ -420,6 +646,8 @@ export default function CompareModal({ pair, onClose }) {
                             measure={measure}
                             baseLabel={nodeName(baseTable)}
                             otherLabel={nodeName(otherTable)}
+                            hidden={hidden}
+                            onHide={hideCategory}
                         />
                         {loading && (
                             <div className="compare-plot-status"><span className="compare-plot-pill">Loading…</span></div>
@@ -434,6 +662,18 @@ export default function CompareModal({ pair, onClose }) {
                         )}
                     </section>
                 </div>
+
+                {/* Every edge and corner pulls the window; a double-click puts it back to its usual size */}
+                {Object.entries(EDGES).map(([edge, { cursor }]) => (
+                    <div
+                        key={edge}
+                        className={`compare-resize compare-resize--${edge}`}
+                        style={{ cursor }}
+                        aria-hidden="true"
+                        onPointerDown={startResize(edge)}
+                        onDoubleClick={() => setSize(null)}
+                    />
+                ))}
             </div>
         </div>,
         document.body,

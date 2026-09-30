@@ -69,7 +69,7 @@ class Doc02FixtureTests(unittest.TestCase):
                 self.assertAlmostEqual(change[category], value, places=2)
 
     def test_gender_flows(self):
-        flows = category_flows(self.root, self.n1, "Gender", top=10)
+        flows = category_flows(self.root, self.n1, "Gender", limit=10)
         rows = {(flow["source"], flow["target"]): flow["rows"] for flow in flows["flows"]}
 
         self.assertEqual(rows[("Male", "Male")], 342)

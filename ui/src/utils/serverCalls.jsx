@@ -370,9 +370,23 @@ export async function getDriftNull(node, columns = [], signal) {
  * What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
  * Sankey flows, the null test and an annotation. Takes an AbortSignal, as getNodeComparison does.
  */
-export async function getDriftDetail({ node, column }, signal) {
+export async function getDriftDetail({ node, column, keep }, signal) {
     const params = new URLSearchParams({ node, column });
+    // The categories to keep out of the Sankey's catch-all, when the modal has been told to keep any
+    keep?.forEach((category) => params.append("keep", category));
     const response = await fetch(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
+    return await response.json();
+}
+
+/**
+ * GET /api/pgraph/flow_pair
+ * The Sankey between the two compared nodes themselves - where the baseline's rows sit in the comparator -
+ * for the middle panel of the Flows view. Takes an AbortSignal, as getDriftDetail does.
+ */
+export async function getFlowPair({ base, other, column, keep }, signal) {
+    const params = new URLSearchParams({ base, other, column });
+    keep?.forEach((category) => params.append("keep", category));
+    const response = await fetch(`/api/pgraph/flow_pair?${params}`, { method: "GET", signal });
     return await response.json();
 }
 

@@ -312,10 +312,63 @@ class FlowTests(unittest.TestCase):
         values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
         root = frame({"ID": list(range(len(values))), "g": values})
 
-        flows = category_flows(root, root.copy(), "g", top=5)
+        flows = category_flows(root, root.copy(), "g", limit=6)
 
         self.assertEqual(flows["sources"], ["c0", "c1", "c2", "c3", "c4", OTHER_LABEL])
         self.assertEqual(flows["categories"], 7)
+
+    def test_a_column_within_the_limit_keeps_every_category(self):
+        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
+        root = frame({"ID": list(range(len(values))), "g": values})
+
+        flows = category_flows(root, root.copy(), "g", limit=7)
+
+        self.assertEqual(flows["sources"], [f"c{i}" for i in range(7)])
+
+    def test_null_is_kept_when_the_tail_folds(self):
+        values = [f"c{i}" for i in range(7) for _ in range(8 - i)] + [None]
+        root = frame({"ID": list(range(len(values))), "g": values})
+
+        flows = category_flows(root, root.copy(), "g", limit=6)
+
+        self.assertEqual(flows["sources"], ["c0", "c1", "c2", "c3", "null", OTHER_LABEL])
+
+    def test_the_catch_all_names_what_it_holds(self):
+        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
+        root = frame({"ID": list(range(len(values))), "g": values})
+
+        other = category_flows(root, root.copy(), "g", limit=4)["other"]
+
+        # c3 down, biggest first, with the rows each one took into the catch-all
+        self.assertEqual(other["categories"], [{"category": "c3", "rows": 4}, {"category": "c4", "rows": 3},
+                                               {"category": "c5", "rows": 2}, {"category": "c6", "rows": 1}])
+        self.assertEqual(other["rows"], 10)
+        self.assertEqual(other["more"], 0)
+
+    def test_named_categories_are_kept_whatever_their_size(self):
+        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
+        root = frame({"ID": list(range(len(values))), "g": values})
+
+        flows = category_flows(root, root.copy(), "g", keep=["c0", "c6"])
+
+        self.assertEqual(flows["sources"], ["c0", "c6", OTHER_LABEL])
+        self.assertEqual([row["category"] for row in flows["other"]["categories"]], ["c1", "c2", "c3", "c4", "c5"])
+
+    def test_nothing_folded_means_no_catch_all_to_look_into(self):
+        root = frame({"ID": [1, 2, 3], "g": ["a", "a", "b"]})
+
+        self.assertIsNone(category_flows(root, root.copy(), "g")["other"])
+
+    def test_flows_between_two_nodes_read_from_the_first(self):
+        """The pair Sankey's data: the baseline is the left side, and its deletes are the sink."""
+        base = frame({"ID": [1, 2, 3, 4], "g": ["a", "a", "b", "b"]})
+        other = frame({"ID": [1, 2, 3], "g": ["a", "b", "b"]})
+
+        flows = category_flows(base, other, "g")
+
+        self.assertIn({"source": "a", "target": "b", "rows": 1}, flows["flows"])
+        self.assertIn({"source": "b", "target": REMOVED_LABEL, "rows": 1}, flows["flows"])
+        self.assertAlmostEqual(flows["churn"], 0.5)
 
 
 class AcrossNodesTests(unittest.TestCase):

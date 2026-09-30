@@ -5,10 +5,14 @@
 
 import {useCallback, useEffect, useId, useMemo, useRef, useState} from "react";
 import * as d3 from "d3";
-import RidgelineBrush from "./RidgelineBrush.jsx";
+import RidgelineBrush, {RIDGE_HEADROOM, STRIP_CHROME} from "./RidgelineBrush.jsx";
+import SankeyBrush from "./SankeyBrush.jsx";
 import {createHybridScales} from "../utils/visCommon.jsx";
 import {ERROR_DIMENSIONS, errorColors} from "../store/errorColors.js";
-import {MEASURES, ROLE_COLORS, ROLE_NAMES, measureOf} from "../utils/comparison.js";
+import {
+    FLOW_PANELS, MEASURES, OTHER_LABEL, REMOVED_LABEL, ROLE_COLORS, ROLE_NAMES,
+    flowCategories, flowSides, measureOf,
+} from "../utils/comparison.js";
 import {NULL_FLAG_TITLE, formatDrift} from "../utils/drift.js";
 
 /* A difference is colored by what it means. Rows gained or lost are neither good nor bad, so they get
@@ -77,6 +81,12 @@ function makeTooltip(element, container) {
 
     return {
         hide,
+        // For content that follows the pointer, as a crosshair's does, rather than one mark's fixed text
+        show(event, html) {
+            element.innerHTML = html;
+            element.style.display = "block";
+            place(event);
+        },
         attach(selection, html) {
             selection
                 .on("mouseover", (event, d) => {
@@ -382,10 +392,25 @@ function drawHeatmapDifference(svg, data, ctx) {
 const FLOW_COLORS = {stayed: "#94a3b8", recoded: "#f59e0b", removed: "#4b5563"};
 const ROOT_COLOR = "#8c939d";
 const FLAG_COLOR = "#d1242f";
-// The server's name for the deleted rows' sink
-const REMOVED_LABEL = "(removed)";
 // Room at the right of a ridgeline for each row's drift
 const DRIFT_GUTTER = 72;
+// How tall the other node, and root beside it, stand on a ridgeline row, against the row's own node
+const OVERLAY_SCALE = 0.5;
+// The gap between the ridgeline's rows, as a share of a row - root's row below is sized to match one
+const RIDGE_PADDING = 0.12;
+// The gap between the canvas and the strip under it, as .compare-plot-body sets it
+const BODY_GAP = 8;
+// Root's row never shrinks below this, however small the modal
+const MIN_STRIP_CURVE = 40;
+/* Where a curve is under this share of root's peak, it is too thin to divide by: out in the empty tails every
+   curve is near zero, and a ratio of two near-zeros is noise */
+const THIN_SHARE = 0.005;
+// Room kept for the removed sink under a Sankey's window, however little of it the window shows
+const REMOVED_ROOM = 14;
+// How far a ribbon to a hidden category runs before it stops, as a share of its full span
+const STUB = 0.5;
+// How many of the catch-all's categories its tooltip names before summing up the rest
+const OTHER_LISTED = 12;
 
 // Which kind of column each drift view draws, so a result for the last column is never drawn as the next
 const DRIFT_VIEW_KINDS = {ridgeline: "numeric", flows: "categorical"};
@@ -466,30 +491,24 @@ function drawAnnotationBubble(g, {ax, ay, bounds, aside}, role, side, ctx) {
         });
 }
 
-/* A panel's title for one node, with its drift for the column and the null test's flag when it fired */
-function driftPanelTitle(g, role, ctx, side) {
-    const title = g.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -14)");
-    const next = titleChip(title, 0, role, `${ROLE_NAMES[role]} · ${ctx.labels[role]} · drift ${formatDrift(side.distortion?.value)}`);
-    if (side.null?.flagged) {
-        title.append("text").attr("x", next - 12).attr("fill", FLAG_COLOR).text("▲")
-            .append("title").text(NULL_FLAG_TITLE);
-    }
-}
+/* The column's shape in the baseline and the comparator: one row each on a shared axis, with root's own row
+   in the strip beneath, which is also the zoom control. Every curve is smoothed with the bandwidth fitted on
+   root, and root is drawn dashed over every row - where the dashed line vanishes under the fill, nothing
+   moved. The rows share one vertical scale too, so a node that lost rows draws a smaller curve rather than a
+   renormalised one.
 
-/* The column's shape in root, the baseline and the comparator: one row each on a shared axis. Every row is
-   smoothed with the bandwidth fitted on root, and root is drawn dashed over every row - where the dashed
-   line vanishes under the fill, nothing moved. The rows share one vertical scale too, so a node that lost
-   rows draws a smaller curve rather than a renormalised one.
+   Each row carries the other node as well, at half that scale so it stays out of the main curve's way, with
+   root's dashed line at the same half scale beside it. A row is then two pairs, each read at one size: its
+   own node against the full-size root, and the other node against the half-size one.
 
-   ctx.range zooms the plot to part of the column, chosen on the overview strip beneath it. The vertical
-   scale then fits the tallest curve inside the window rather than the column's, which is what makes a
-   change in a thin tail visible - all three rows still share it, so they stay comparable. */
+   ctx.range zooms the plot to part of the column, chosen on the strip beneath it. The vertical scale then
+   fits the tallest curve inside the window rather than the column's, which is what makes a change in a thin
+   tail visible - both rows still share it, so they stay comparable. */
 function drawRidgeline(svg, data, ctx) {
     const density = data.base.density ?? data.other.density;
     if (!density) return drawEmpty(svg, ctx, "This column has too few distinct values to draw its shape");
 
     const rows = [
-        {key: "root", label: "root", curve: density.root, color: ROOT_COLOR, drift: 0},
         {
             key: "base", label: ctx.labels.base, curve: data.base.density?.node, color: ROLE_COLORS.base,
             drift: data.base.distortion?.value, flag: data.base.null
@@ -499,28 +518,49 @@ function drawRidgeline(svg, data, ctx) {
             drift: data.other.distortion?.value, flag: data.other.null
         },
     ];
+    // What each row overlays: the row that is not its own
+    const otherRow = (row) => rows.find((candidate) => candidate.key !== row.key);
 
     const [{g, w, h}] = layoutPanels(svg, ctx.width - DRIFT_GUTTER, ctx.height, 1);
     const grid = density.grid;
     const [lo, hi] = ctx.range ?? [grid[0], grid[grid.length - 1]];
     const x = d3.scaleLinear().domain([lo, hi]).range([0, w]);
-    const band = d3.scaleBand().domain(rows.map((row) => row.key)).range([0, h]).paddingInner(0.12);
+    const band = d3.scaleBand().domain(rows.map((row) => row.key)).range([0, h]).paddingInner(RIDGE_PADDING);
 
     // The grid points inside the window, and one either side so each curve runs to the window's edges
     const visible = d3.range(Math.max(0, d3.bisectLeft(grid, lo) - 1), Math.min(grid.length, d3.bisectRight(grid, hi) + 1));
-    const peak = d3.max(rows.flatMap((row) => (row.curve ? visible.map((i) => row.curve[i]) : []))) || 1;
-    const rise = (value) => (value / peak) * band.bandwidth();
+    // Root is still drawn full size on every row, so it has a say in the scale though it has no row
+    const curves = [density.root, ...rows.map((row) => row.curve).filter(Boolean)];
+    const peak = d3.max(curves.flatMap((curve) => visible.map((i) => curve[i]))) || 1;
+    const rise = (value) => (value / peak) * band.bandwidth() * RIDGE_HEADROOM;
+    const half = (value) => rise(value) * OVERLAY_SCALE;
 
     // The points either side of the window would otherwise draw into the margins
     const clip = `url(#${ctx.clipId})`;
     g.append("clipPath").attr("id", ctx.clipId).append("rect").attr("width", w).attr("height", h);
 
+    /* The hover surface, as the visx areas demo builds it: a transparent bar over the plot takes the pointer.
+       It goes in first, under the rows, whose curves let the pointer through to it - so the annotation bubbles,
+       drawn with the rows, stay on top and keep their own hover. */
+    const hover = g.append("rect").attr("class", "compare-ridge-hover").attr("width", w).attr("height", h);
+
+    /* Each row sits on a faint wash of its own node's colour, under everything else. Zoomed in, the curves run
+       flat and the lines crowd, and a row can hold no fill at all - the wash still shows where it ends. */
+    rows.forEach((row) => {
+        g.insert("rect", ".compare-ridge-hover").attr("class", "compare-ridge-band")
+            .attr("y", band(row.key)).attr("width", w).attr("height", band.bandwidth())
+            .attr("fill", row.color);
+    });
+
     rows.forEach((row) => {
         const floor = band(row.key) + band.bandwidth();
         const middle = floor - band.bandwidth() / 2;
-        const rowGroup = g.append("g");
+        const rowGroup = g.append("g").attr("class", "compare-ridge-row");
 
         rowGroup.append("line").attr("class", "compare-ridge-floor").attr("x1", 0).attr("x2", w).attr("y1", floor).attr("y2", floor);
+        const lineAt = (curve, scaled) => d3.line().x((i) => x(grid[i])).y((i) => floor - scaled(curve[i]));
+
+        // Back to front: the row's own node, filled
         if (row.curve) {
             rowGroup.append("path").datum(visible)
                 .attr("d", d3.area().x((i) => x(grid[i])).y0(floor).y1((i) => floor - rise(row.curve[i])))
@@ -528,8 +568,24 @@ function drawRidgeline(svg, data, ctx) {
                 .attr("fill", row.color).attr("fill-opacity", 0.5)
                 .attr("stroke", row.color).attr("stroke-width", 1.2);
         }
+        // The other node and root at half scale, both in the other node's colour, so they read as one pair
+        const overlay = otherRow(row);
+        if (overlay.curve) {
+            rowGroup.append("path").datum(visible)
+                .attr("d", lineAt(overlay.curve, half))
+                .attr("clip-path", clip)
+                .attr("class", "compare-ridge-overlay")
+                .style("stroke", overlay.color);
+            rowGroup.append("path").datum(visible)
+                .attr("d", lineAt(density.root, half))
+                .attr("clip-path", clip)
+                .attr("class", "compare-ridge-root compare-ridge-root--half")
+                // Inline, since the dashed class sets root's own colour in the stylesheet
+                .style("stroke", overlay.color);
+        }
+        // Root at full scale last, so it is never lost under a fill
         rowGroup.append("path").datum(visible)
-            .attr("d", d3.line().x((i) => x(grid[i])).y((i) => floor - rise(density.root[i])))
+            .attr("d", lineAt(density.root, rise))
             .attr("clip-path", clip)
             .attr("class", "compare-ridge-root");
 
@@ -540,11 +596,11 @@ function drawRidgeline(svg, data, ctx) {
             .attr("x", w + 10).attr("y", middle).attr("dominant-baseline", "middle").text(formatDrift(row.drift));
         if (row.flag?.flagged) drift.append("tspan").attr("fill", FLAG_COLOR).text(" ▲").append("title").text(NULL_FLAG_TITLE);
 
-        /* Root is the reference, so only the nodes measured against it carry an annotation. The spot is found
-           on the whole curve, zoomed or not; when the window leaves it out, the bubble is pinned to the edge
-           of the row nearest it, pointing off the plot. The arrow meets whichever curve is higher there - root's
-           dashed line where rows were removed, the node's own where values were filled in. */
-        if (row.key !== "root" && row.curve) {
+        /* Each row's annotation is about its own node, at full scale. The spot is found on the whole curve,
+           zoomed or not; when the window leaves it out, the bubble is pinned to the edge of the row nearest it,
+           pointing off the plot. The arrow meets whichever curve is higher there - root's dashed line where
+           rows were removed, the node's own where values were filled in. */
+        if (row.curve) {
             const spot = mostChanged(density.root, row.curve);
             const at = grid[spot];
             const shown = at >= lo && at <= hi;
@@ -561,12 +617,106 @@ function drawRidgeline(svg, data, ctx) {
     g.append("g").attr("class", "compare-axis").attr("transform", `translate(0, ${h})`)
         .call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(".3~s"))).selectAll("text").attr("class", "bottom-axis-text");
     axisLabels(g, w, h, ctx.range ? `${data.x} · zoomed to ${formatValue(lo)} – ${formatValue(hi)}` : data.x, null);
+
+    drawRidgeCrosshair(g, hover, {rows, density, x, band, rise, w, h, lo, hi}, ctx);
+}
+
+/* The crosshair over the ridgeline, piece for piece as the visx areas demo builds its own: the pointer's x is
+   turned back into a value and snapped by a bisector to the nearest grid point; a dashed line runs down both
+   rows there; each row's own curve gets the demo's shadowed circle, and root's full-size dash a small hollow
+   one; the value sits in a label pinned to the axis, and the shares at it in the tooltip beside the pointer.
+   It is drawn last, over the curves, and never takes the pointer itself. */
+function drawRidgeCrosshair(g, hover, {rows, density, x, band, rise, w, h, lo, hi}, ctx) {
+    const grid = density.grid;
+    const bisect = d3.bisector((value) => value).left;
+    // Only grid points inside the window can be snapped to, so the crosshair never leaves the plot
+    const first = d3.bisectLeft(grid, lo);
+    const last = Math.max(first, d3.bisectRight(grid, hi) - 1);
+    const rootPeak = d3.max(density.root) || 1;
+
+    const crosshair = g.append("g").attr("class", "compare-ridge-crosshair").attr("display", "none");
+    const line = crosshair.append("line").attr("y1", 0).attr("y2", h);
+    const marks = rows.filter((row) => row.curve).map((row) => {
+        const floor = band(row.key) + band.bandwidth();
+        const root = crosshair.append("circle").attr("class", "compare-ridge-crosshair-root").attr("r", 3);
+        const shadow = crosshair.append("circle").attr("class", "compare-ridge-crosshair-shadow").attr("r", 4);
+        const dot = crosshair.append("circle").attr("class", "compare-ridge-crosshair-dot").attr("r", 4)
+            .attr("fill", row.color);
+        return {row, floor, root, shadow, dot};
+    });
+    const label = crosshair.append("g").attr("transform", `translate(0, ${h})`);
+    const labelBox = label.append("rect").attr("class", "compare-ridge-crosshair-box").attr("y", 2).attr("height", 18).attr("rx", 4);
+    const labelText = label.append("text").attr("class", "compare-ridge-crosshair-value")
+        .attr("y", 11).attr("text-anchor", "middle").attr("dominant-baseline", "middle");
+
+    hover
+        .on("pointermove", (event) => {
+            // The nearer of the two grid points either side of the pointer, as the demo picks its data point
+            const x0 = x.invert(d3.pointer(event, g.node())[0]);
+            const index = bisect(grid, x0, 1);
+            const nearer = index >= grid.length || x0 - grid[index - 1] < grid[index] - x0 ? index - 1 : index;
+            const i = Math.min(Math.max(nearer, first), last);
+            const cx = x(grid[i]);
+
+            crosshair.attr("display", null);
+            line.attr("x1", cx).attr("x2", cx);
+            marks.forEach(({row, floor, root, shadow, dot}) => {
+                const cy = floor - rise(row.curve[i]);
+                root.attr("cx", cx).attr("cy", floor - rise(density.root[i]));
+                shadow.attr("cx", cx).attr("cy", cy + 1);
+                dot.attr("cx", cx).attr("cy", cy);
+            });
+            labelText.attr("x", cx).text(formatValue(grid[i]));
+            const width = labelText.node().getComputedTextLength() + 12;
+            // Centred on the line, as the demo's date is, but kept inside the plot's width
+            const left = Math.min(Math.max(cx - width / 2, 0), w - width);
+            labelBox.attr("x", left).attr("width", width);
+            labelText.attr("x", left + width / 2);
+
+            ctx.tooltip.show(event, ridgeShares({
+                i, rootPeak, root: density.root,
+                base: rows.find((row) => row.key === "base").curve,
+                other: rows.find((row) => row.key === "other").curve,
+                labels: ctx.labels,
+            }));
+        })
+        .on("pointerleave", () => {
+            crosshair.attr("display", "none");
+            ctx.tooltip.hide();
+        });
+}
+
+/* The tooltip beside the crosshair: each node's density as a share of root's there, and each node's as a share
+   of the other's. The curves are kept at their share of root's rows, so "61% of root" reads as having 61% as
+   many rows as root near this value. A share whose denominator is too thin to divide by shows as a dash. */
+function ridgeShares({i, rootPeak, root, base, other, labels}) {
+    const share = (part, whole) => (whole >= THIN_SHARE * rootPeak ? formatShare(part / whole) : "—");
+    const line = (html) => `${html}<br>`;
+    let html = "";
+    if (base) html += line(`${swatch(ROLE_COLORS.base)}${escapeHtml(labels.base)} · <strong>${share(base[i], root[i])}</strong> of root`);
+    if (other) html += line(`${swatch(ROLE_COLORS.other)}${escapeHtml(labels.other)} · <strong>${share(other[i], root[i])}</strong> of root`);
+    if (base && other) {
+        html += line(`${escapeHtml(labels.other)} · <strong>${share(other[i], base[i])}</strong> of ${escapeHtml(labels.base)}`);
+        html += `${escapeHtml(labels.base)} · <strong>${share(base[i], other[i])}</strong> of ${escapeHtml(labels.other)}`;
+    }
+    return html.replace(/<br>$/, "");
 }
 
 /* Where the ridgeline's panel sits in a canvas this wide - the same panel layoutPanels gives drawRidgeline,
    so the overview strip beneath lines up with it exactly */
 function ridgelineFrame(width) {
     return {left: MARGIN.left, width: Math.max(10, width - DRIFT_GUTTER - MARGIN.left - MARGIN.right), total: width};
+}
+
+/* How tall root's curves stand in the strip, so root's row matches each ridgeline row above it. The strip and the
+   canvas share the body's height T. The canvas takes what the strip leaves, less its margins, and splits that
+   between two rows and the gap between them, so a row is k·h with k = (1 − p) / (2 − p). With the strip's
+   curve c set equal to a row:
+       c = k·(T − gap − margins − chrome − c)   →   c = k·(T − gap − margins − chrome) / (1 + k) */
+function ridgelineCurve(bodyHeight) {
+    const k = (1 - RIDGE_PADDING) / (2 - RIDGE_PADDING);
+    const room = bodyHeight - BODY_GAP - MARGIN.top - MARGIN.bottom - STRIP_CHROME;
+    return Math.max(MIN_STRIP_CURVE, (k * room) / (1 + k));
 }
 
 /* What the overview strip draws for a drift result: the whole column's curves, and the spots the bubbles
@@ -582,122 +732,339 @@ function ridgelineOverview(data) {
     return {density, curves, spots};
 }
 
-/* One Sankey: root's categories on the left, the node's on the right plus the deleted rows' sink.
-   Ribbons are always square-root width: at true width a category holding a handful of rows is a hairline,
-   and these columns usually hold most of their mass in one category. The trade is that a ribbon's width no
-   longer reads as its count, so every node carries its count as a label.
+/* Where the Sankeys' panels sit in a canvas this tall, so the strip beside them lines up */
+function flowsFrame(height) {
+    return {top: MARGIN.top, height: Math.max(10, height - MARGIN.top - MARGIN.bottom), total: height};
+}
 
-   Returns where the panel's annotation should point: the biggest ribbon that actually moved - recoded or
-   removed - or failing that the biggest ribbon of all, so a column where nothing moved can still say so. */
-function drawSankey(g, flows, w, h, ctx) {
+/* What the strip beside the Sankeys draws for a drift result: every category, a bar per Sankey for the share
+   of that category's rows it moved, and the category each annotation bubble points from. Null for anything
+   the Sankeys do not draw. */
+function flowsOverview(data, hidden) {
+    if (data?.kind !== "drift") return null;
+    const sides = flowSides(data);
+    if (!FLOW_PANELS.some((panel) => sides[panel.id]?.flows)) return null;
+    const categories = shownCategories(data, hidden);
+    if (!categories.length) return null;
+
+    const series = [];
+    const spots = [];
+    FLOW_PANELS.forEach((panel) => {
+        const flows = sides[panel.id]?.flows;
+        if (!flows) return;
+        series.push({
+            id: panel.id,
+            color: panel.color,
+            shares: categories.map((label) => {
+                const out = flows.flows.filter((flow) => flow.source === label);
+                const rows = d3.sum(out, (flow) => flow.rows);
+                return rows ? d3.sum(out.filter((flow) => flow.target !== label), (flow) => flow.rows) / rows : 0;
+            }),
+        });
+        // Only the panels with an annotation have a spot worth pinning
+        const spot = panel.role ? categories.indexOf(markedFlow(flows)?.source) : -1;
+        if (spot >= 0) spots.push({id: panel.id, color: panel.color, index: spot});
+    });
+    return {categories, series, spots};
+}
+
+/* The categories the Sankeys draw: the ones the server sent, less any the reader has hidden. A hidden
+   category keeps no band and takes no room; the ribbons that reached it are cut short instead. */
+function shownCategories(data, hidden) {
+    return flowCategories(data).filter((label) => !hidden.includes(label));
+}
+
+/* The flow a panel's annotation points at: the biggest that actually moved - recoded or removed - or failing
+   that the biggest of all, so a column where nothing moved can still say so */
+function markedFlow(flows) {
+    const moved = flows.flows.filter((flow) => flow.target !== flow.source);
+    return d3.greatest(moved.length ? moved : flows.flows, (flow) => flow.rows);
+}
+
+/* What the catch-all band holds, for its tooltip: the biggest categories folded into it with their rows, and
+   a count of the rest. It is the one band that stands for several categories, so this is the only way to see
+   what is inside it short of taking one back out. */
+function otherTooltip(other) {
+    const listed = other.categories.slice(0, OTHER_LISTED);
+    const rest = other.categories.length - listed.length + other.more;
+    return `<strong>${OTHER_LABEL}</strong> · ${formatCount(other.rows)} rows in `
+        + `${formatCount(other.categories.length + other.more)} categories<br>`
+        + listed.map((row) => `${escapeHtml(row.category)} · ${formatCount(row.rows)}`).join("<br>")
+        + (rest > 0 ? `<br>and ${formatCount(rest)} more` : "");
+}
+
+/* A point along a ribbon's centre line, t running from its source (0) to its target (1) */
+function ribbonPoint(ribbon, x0, x1, t) {
+    const middle = (x0 + x1) / 2;
+    const [ya, yb] = [ribbon.ya + ribbon.thickness / 2, ribbon.yb + ribbon.thickness / 2];
+    const [a, b, c, d] = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3];
+    return [a * x0 + (b + c) * middle + d * x1, (a + b) * ya + (c + d) * yb];
+}
+
+// Along a ribbon from its middle outward, the order its annotation looks for a point still in sight
+const RIBBON_STEPS = d3.range(11).flatMap((k) => (k ? [0.5 - k * 0.05, 0.5 + k * 0.05] : [0.5]));
+
+/* One Sankey: the earlier state's categories on the left, the later state's on the right, and the deleted
+   rows' sink under them. Ribbons are always square-root width: at true width a category holding a handful of
+   rows is a hairline, and these columns usually hold most of their mass in one category. The trade is that a
+   ribbon's width no longer reads as its count, so every node carries its count as a label.
+
+   The plot is one tall stack of categories, each a band holding its node on both sides, so a category that
+   kept its rows is a level ribbon. window picks the bands that fill the panel; the rest sit above and below
+   it out of sight, and a ribbon to one of them runs off the edge toward it. The sink is not a band. It stays
+   under the window whatever the window holds, and takes the ribbons from the categories shown.
+
+   Returns where the panel's annotation should point - at markedFlow's ribbon, or the nearest part of it the
+   window keeps - and, when the window leaves part of that ribbon out, a sentence saying where. */
+function drawSankey(g, flows, categories, window, w, h, ctx) {
     const widthOf = Math.sqrt;
     const LABEL = Math.min(120, w * 0.3);
     const NODE = 10;
     const PAD = 6;
 
-    const ribbons = flows.flows.map((flow) => ({...flow, size: widthOf(flow.rows)}));
-    const total = d3.sum(ribbons, (ribbon) => ribbon.size) || 1;
-    const column = (labels, key) => labels.map((label) => ({
-        label,
-        size: d3.sum(ribbons.filter((ribbon) => ribbon[key] === label), (ribbon) => ribbon.size),
-        rows: d3.sum(ribbons.filter((ribbon) => ribbon[key] === label), (ribbon) => ribbon.rows),
-    }));
-    const left = column(flows.sources, "source");
-    const right = column(flows.targets, "target");
-    const scale = (h - PAD * (Math.max(left.length, right.length) - 1)) / total;
-
-    // Stack a column's nodes top to bottom, centred in the panel
-    const stack = (nodes) => {
-        let y = 0;
-        nodes.forEach((node) => {
-            node.y0 = y;
-            node.y1 = y + node.size * scale;
-            y = node.y1 + PAD;
-        });
-        const offset = (h - (y - PAD)) / 2;
-        nodes.forEach((node) => {
-            node.y0 += offset;
-            node.y1 += offset;
-        });
-        return Object.fromEntries(nodes.map((node) => [node.label, node]));
+    const [first, last] = window ?? [0, categories.length];
+    const position = new Map(categories.map((label, i) => [label, i]));
+    /* Where a category is, if it is not in sight: hidden outright, or above or below the window. The sink is
+       always in sight, and a label with no position at all was hidden. */
+    const where = (label) => {
+        if (label === REMOVED_LABEL) return null;
+        const at = position.get(label);
+        if (at === undefined) return "hidden";
+        return at < first ? "above" : at >= last ? "below" : null;
     };
-    const sources = stack(left);
-    const targets = stack(right);
+    const inWindow = (label) => !where(label);
+
+    const ribbons = flows.flows.map((flow) => ({...flow, size: widthOf(flow.rows)}));
+    const sum = (key, label, value) => d3.sum(ribbons.filter((ribbon) => ribbon[key] === label), (ribbon) => ribbon[value]);
+    const bands = categories.map((label) => {
+        const left = sum("source", label, "size");
+        const right = sum("target", label, "size");
+        return {label, left, right, size: Math.max(left, right)};
+    });
+
+    const pinned = flows.targets.includes(REMOVED_LABEL);
+    const sunk = ribbons.filter((ribbon) => ribbon.target === REMOVED_LABEL && inWindow(ribbon.source));
+    const sinkSize = d3.sum(sunk, (ribbon) => ribbon.size);
+
+    /* The scale that fills the panel with the window's bands and the sink, a gap between each. A sink the
+       window sends few rows to still gets room for its label. */
+    const shown = bands.filter((band) => inWindow(band.label) && band.size > 0);
+    const shownSize = d3.sum(shown, (band) => band.size);
+    const gaps = PAD * (Math.max(0, shown.length - 1) + (pinned ? 1 : 0));
+    let scale = Math.max(0, (h - gaps) / ((shownSize + sinkSize) || 1));
+    if (pinned && sinkSize * scale < REMOVED_ROOM) scale = Math.max(0, (h - gaps - REMOVED_ROOM) / (shownSize || 1));
+    const sinkTop = h - (pinned ? Math.max(sinkSize * scale, REMOVED_ROOM) : 0);
+
+    /* The window's bands start at the panel's top. Those after it start below the panel's floor, so ribbons to
+       them leave through the bottom; those before it stack upward from above its top. */
+    const place = (band, top) => Object.assign(band, {y0: top, y1: top + band.size * scale});
+    let below = 0;
+    for (let i = first; i < bands.length; i += 1) {
+        if (i === last) below = h + PAD;
+        place(bands[i], below);
+        if (bands[i].size) below = bands[i].y1 + PAD;
+    }
+    let above = -PAD;
+    for (let i = first - 1; i >= 0; i -= 1) {
+        place(bands[i], above - bands[i].size * scale);
+        if (bands[i].size) above = bands[i].y0 - PAD;
+    }
+
+    // Each side's node sits in the middle of its band
+    const node = (band, side, key) => {
+        const top = band.y0 + (band.size - band[side]) * scale / 2;
+        return {label: band.label, y0: top, y1: top + band[side] * scale, rows: sum(key, band.label, "rows")};
+    };
+    const sources = new Map(bands.filter((band) => band.left).map((band) => [band.label, node(band, "left", "source")]));
+    const targets = new Map(bands.filter((band) => band.right).map((band) => [band.label, node(band, "right", "target")]));
+    if (pinned) {
+        targets.set(REMOVED_LABEL, {
+            label: REMOVED_LABEL, y0: sinkTop, y1: sinkTop + sinkSize * scale,
+            rows: d3.sum(sunk, (ribbon) => ribbon.rows), total: sum("target", REMOVED_LABEL, "rows"),
+        });
+    }
     const x0 = LABEL + NODE;
     const x1 = w - LABEL - NODE;
 
     /* Ribbons leave each source in target order and arrive at each target in source order, which keeps
-       them from crossing more than the flows themselves require */
-    const sourceOrder = new Map(flows.sources.map((label, i) => [label, i]));
-    const targetOrder = new Map(flows.targets.map((label, i) => [label, i]));
-    const leftCursor = Object.fromEntries(left.map((node) => [node.label, node.y0]));
-    const rightCursor = Object.fromEntries(right.map((node) => [node.label, node.y0]));
-    const placed = [...ribbons]
-        .sort((a, b) => (sourceOrder.get(a.source) - sourceOrder.get(b.source))
-            || (targetOrder.get(a.target) - targetOrder.get(b.target)))
+       them from crossing more than the flows themselves require. A ribbon whose category was hidden keeps
+       only the end that is still drawn - ya or yb is null, and it is cut short there. A ribbon to the sink
+       from a category out of the window has nowhere in it to land, and is left out. */
+    const order = new Map([...new Set([...categories, ...flows.sources, ...flows.targets, REMOVED_LABEL])]
+        .map((label, i) => [label, i]));
+    const leftCursor = new Map([...sources].map(([label, n]) => [label, n.y0]));
+    const rightCursor = new Map([...targets].map(([label, n]) => [label, n.y0]));
+    const placed = ribbons
+        .filter((ribbon) => ribbon.target !== REMOVED_LABEL || inWindow(ribbon.source))
+        // Neither end still drawn leaves nothing to hang a ribbon from
+        .filter((ribbon) => sources.has(ribbon.source) || targets.has(ribbon.target))
+        .sort((a, b) => (order.get(a.source) - order.get(b.source)) || (order.get(a.target) - order.get(b.target)))
         .map((ribbon) => {
             const thickness = ribbon.size * scale;
-            const placedRibbon = {...ribbon, thickness, ya: leftCursor[ribbon.source], yb: rightCursor[ribbon.target]};
-            leftCursor[ribbon.source] += thickness;
-            rightCursor[ribbon.target] += thickness;
-            return placedRibbon;
+            const ya = leftCursor.get(ribbon.source);
+            const yb = rightCursor.get(ribbon.target);
+            if (ya !== undefined) leftCursor.set(ribbon.source, ya + thickness);
+            if (yb !== undefined) rightCursor.set(ribbon.target, yb + thickness);
+            return {...ribbon, thickness, ya: ya ?? null, yb: yb ?? null};
         });
 
+    // The ribbons into the bands out of sight would otherwise draw over the title and the numbers beneath
+    g.append("clipPath").attr("id", ctx.clipId).append("rect").attr("width", w).attr("height", h);
+
     const middle = (x0 + x1) / 2;
-    const path = (r) => `M${x0},${r.ya} C${middle},${r.ya} ${middle},${r.yb} ${x1},${r.yb} `
-        + `L${x1},${r.yb + r.thickness} C${middle},${r.yb + r.thickness} ${middle},${r.ya + r.thickness} ${x0},${r.ya + r.thickness} Z`;
+    /* A ribbon with both ends drawn runs the full span. One whose other end was hidden is a stub: it leaves
+       the end that remains, runs part of the way and stops, so a reader can see that rows went somewhere
+       without the category being in the picture. */
+    const path = (r) => {
+        if (r.ya === null) {
+            const from = x1 - STUB * (x1 - x0);
+            return `M${from},${r.yb} H${x1} V${r.yb + r.thickness} H${from} Z`;
+        }
+        if (r.yb === null) {
+            const to = x0 + STUB * (x1 - x0);
+            return `M${x0},${r.ya} H${to} V${r.ya + r.thickness} H${x0} Z`;
+        }
+        return `M${x0},${r.ya} C${middle},${r.ya} ${middle},${r.yb} ${x1},${r.yb} `
+            + `L${x1},${r.yb + r.thickness} C${middle},${r.yb + r.thickness} ${middle},${r.ya + r.thickness} ${x0},${r.ya + r.thickness} Z`;
+    };
+    const cut = (r) => r.ya === null || r.yb === null;
     const kindOf = (r) => (r.target === REMOVED_LABEL ? "removed" : r.target === r.source ? "stayed" : "recoded");
 
-    const paths = g.append("g").selectAll("path").data(placed).join("path")
-        .attr("class", "compare-mark")
+    const paths = g.append("g").attr("clip-path", `url(#${ctx.clipId})`)
+        .selectAll("path").data(placed).join("path")
+        .attr("class", (r) => `compare-mark ${cut(r) ? "compare-flow-stub" : ""}`)
         .attr("d", path)
         .attr("fill", (r) => FLOW_COLORS[kindOf(r)])
-        .attr("fill-opacity", (r) => (kindOf(r) === "stayed" ? 0.35 : 0.7));
-    ctx.tooltip.attach(paths, (r) => `<strong>${escapeHtml(r.source)} → ${escapeHtml(r.target)}</strong><br>`
-        + `${formatCount(r.rows)} rows · ${formatShare(r.rows / (sources[r.source]?.rows || 1))} of ${escapeHtml(r.source)}`);
+        .attr("fill-opacity", (r) => (cut(r) ? 0.3 : kindOf(r) === "stayed" ? 0.35 : 0.7));
+    ctx.tooltip.attach(paths, (r) => {
+        const gone = [r.source, r.target].filter((label) => where(label) === "hidden");
+        // A hidden source draws no band, so there is no total to take a share of
+        const out = sources.get(r.source)?.rows;
+        return `<strong>${escapeHtml(r.source)} → ${escapeHtml(r.target)}</strong><br>`
+            + `${formatCount(r.rows)} rows${out ? ` · ${formatShare(r.rows / out)} of ${escapeHtml(r.source)}` : ""}`
+            + (gone.length ? `<br>${escapeHtml(gone.join(" and "))} hidden — add back from Categories` : "");
+    });
 
+    /* Only the nodes in the window are drawn; the rest are out of sight. A category's bar is what the reader
+       clicks to pick it out, on either side, and Delete then hides it - the modal owns both, so the click
+       only reports which category it was. The sink is not a category and is not selectable. */
     const drawColumn = (nodes, x, anchor, labelX) => {
         const group = g.append("g");
-        Object.values(nodes).forEach((node) => {
-            const removed = node.label === REMOVED_LABEL;
-            group.append("rect").attr("x", x).attr("y", node.y0).attr("width", NODE)
-                .attr("height", Math.max(1, node.y1 - node.y0))
+        [...nodes.values()].filter((n) => inWindow(n.label)).forEach((n) => {
+            const removed = n.label === REMOVED_LABEL;
+            const item = group.append("g").datum(n);
+            const bar = item.append("rect").attr("x", x).attr("y", n.y0).attr("width", NODE)
+                .attr("height", Math.max(1, n.y1 - n.y0))
                 .attr("fill", removed ? FLOW_COLORS.removed : "#475569");
-            const centre = (node.y0 + node.y1) / 2;
-            const text = group.append("text").attr("class", "compare-flow-label")
-                .attr("x", labelX).attr("y", centre).attr("text-anchor", anchor).attr("dominant-baseline", "middle")
+            if (!removed) {
+                bar.attr("class", `compare-flow-node ${ctx.selected === n.label ? "compare-flow-node--selected" : ""}`)
+                    .on("click", (event) => {
+                        // The canvas clears the selection, so a click that makes one must stop there
+                        event.stopPropagation();
+                        ctx.onSelect?.(ctx.selected === n.label ? null : n.label);
+                    })
+                    .append("title").text(`${n.label} — click to select, then press Delete to hide it`);
+            }
+            const text = item.append("text").attr("class", "compare-flow-label")
+                .attr("x", labelX).attr("y", (n.y0 + n.y1) / 2).attr("text-anchor", anchor).attr("dominant-baseline", "middle")
                 .classed("compare-flow-label--removed", removed);
-            text.append("tspan").text(node.label.length > 16 ? `${node.label.slice(0, 16)}…` : node.label)
-                .append("title").text(node.label);
-            text.append("tspan").attr("class", "compare-flow-count").text(` ${formatCount(node.rows)}`);
+            text.append("tspan").text(n.label.length > 16 ? `${n.label.slice(0, 16)}…` : n.label)
+                .append("title").text(n.label);
+            text.append("tspan").attr("class", "compare-flow-count").text(` ${formatCount(n.rows)}`);
+
+            // The sink counts only the rows it takes from the window, so it says when there are more
+            if (removed && n.total > n.rows) {
+                ctx.tooltip.attach(item, () => `<strong>${REMOVED_LABEL}</strong><br>`
+                    + `${formatCount(n.rows)} rows from the categories shown · ${formatCount(n.total)} removed in all`);
+            }
+            // The catch-all is the one band that stands for other categories, so it names them on hover
+            if (n.label === OTHER_LABEL && flows.other) {
+                ctx.tooltip.attach(item, () => otherTooltip(flows.other));
+            }
         });
     };
     drawColumn(sources, x0 - NODE, "end", x0 - NODE - 6);
     drawColumn(targets, x1, "start", x1 + NODE + 6);
 
-    const moved = placed.filter((ribbon) => kindOf(ribbon) !== "stayed");
-    const marked = d3.greatest(moved.length ? moved : placed, (ribbon) => ribbon.rows);
-    return marked ? {ax: middle, ay: (marked.ya + marked.yb + marked.thickness) / 2} : null;
+    const marked = markedFlow(flows);
+    if (!marked) return null;
+    const off = [...new Set([marked.source, marked.target])]
+        .map((label) => [label, where(label)])
+        .filter(([, side]) => side);
+    const aside = off.length
+        ? `(${off.map(([label, side]) => (side === "hidden"
+            ? `${label} is hidden`
+            : `${label} is ${side} the categories shown`)).join(" and ")}.)`
+        : null;
+
+    /* The middle of the ribbon, or the nearest part of it still in sight. A ribbon wholly out of sight - or
+       one to the sink from out of the window, which is not drawn - gets the edge it lies beyond. */
+    const ribbon = placed.find((r) => r.source === marked.source && r.target === marked.target);
+    const inSight = ribbon && RIBBON_STEPS.map((t) => ribbonPoint(ribbon, x0, x1, t)).find(([, y]) => y >= 0 && y <= h);
+    if (inSight) return {ax: inSight[0], ay: inSight[1], aside};
+    const beyond = ribbon ? ribbonPoint(ribbon, x0, x1, 0.5)[1] < 0 : where(marked.source) === "above";
+    return {ax: middle, ay: beyond ? 0 : h, aside};
 }
 
-/* Where root's rows went in this column, for each node: into the same category, into another, or out of
-   the table. This is churn's picture rather than TVD's - rows swapping between two categories are ribbons
-   here while leaving the shares, and so the drift number, unchanged - so both numbers sit beneath it. */
-function drawFlows(svg, data, ctx) {
-    layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "base" : "other";
-        const side = data[role];
-        driftPanelTitle(g, role, ctx, side);
-        if (!side.flows) return;
+/* A flows panel's title, on two lines: whose rows the panel follows on the first, what they are followed
+   against on the second. Three panels side by side leave no room for one long line. The pair's chips name
+   both nodes, since neither of them is root. */
+function flowPanelTitle(g, panel, side, ctx) {
+    const title = g.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)");
+    const against = (text) => g.append("text").attr("class", "compare-panel-subtitle").attr("y", -10).text(text);
 
-        const anchor = drawSankey(g, side.flows, w, h, ctx);
-        if (anchor) {
-            drawAnnotationBubble(g, {...anchor, bounds: {left: 0, right: w, top: 0, bottom: h}}, role, side, ctx);
+    if (panel.id === "pair") {
+        const next = titleChip(title, 0, "base", `${ctx.labels.base} →`);
+        titleChip(title, next - 8, "other", ctx.labels.other);
+        against("the step between them");
+        return;
+    }
+    const next = titleChip(title, 0, panel.role, `${ROLE_NAMES[panel.role]} · ${ctx.labels[panel.role]}`);
+    if (side.null?.flagged) {
+        title.append("text").attr("x", next - 12).attr("fill", FLAG_COLOR).text("▲")
+            .append("title").text(NULL_FLAG_TITLE);
+    }
+    against(`vs root · drift ${formatDrift(side.distortion?.value)}`);
+}
+
+// What each panel prints under its plot: churn always, and the rows the pair's later node holds on its own
+function flowFooter(panel, side, ctx) {
+    const numbers = `churn ${formatShare(side.flows.churn)} of rows · TVD ${formatDrift(side.distortion?.value)}`;
+    return panel.id === "pair" && side.added
+        ? `${numbers} · ${formatCount(side.added)} rows only in ${ctx.labels.other}`
+        : numbers;
+}
+
+/* Where the rows went in this column: into the same category, into another, or out of the table. Three
+   Sankeys share the categories and the window - each node against root, and the step between the two nodes
+   in the middle, which is the one the wrangles between them actually made.
+
+   This is churn's picture rather than TVD's - rows swapping between two categories are ribbons here while
+   leaving the shares, and so the drift number, unchanged - so both numbers sit beneath each one.
+   ctx.range is the window of categories the strip beside the plot shows, or null for all of them. */
+function drawFlows(svg, data, ctx) {
+    const categories = shownCategories(data, ctx.hidden);
+    if (!categories.length) {
+        return drawEmpty(svg, ctx, "Every category is hidden — bring some back from the Categories list");
+    }
+    const sides = flowSides(data);
+    const panels = FLOW_PANELS.filter((panel) => sides[panel.id]?.flows);
+
+    layoutPanels(svg, ctx.width, ctx.height, panels.length).forEach(({g, w, h}, i) => {
+        const panel = panels[i];
+        const side = sides[panel.id];
+        flowPanelTitle(g, panel, side, ctx);
+
+        const anchor = drawSankey(g, side.flows, categories, ctx.range, w, h,
+            {...ctx, clipId: `${ctx.clipId}-${panel.id}`});
+        // Only the panels drawn against root carry an annotation; the pair has none to show
+        if (anchor && panel.role) {
+            drawAnnotationBubble(g, {...anchor, bounds: {left: 0, right: w, top: 0, bottom: h}}, panel.role, side, ctx);
         }
 
         g.append("text").attr("class", "compare-axis-label")
             .attr("x", w / 2).attr("y", h + 28).attr("text-anchor", "middle")
-            .text(`churn ${formatShare(side.flows.churn)} of rows · TVD ${formatDrift(side.distortion?.value)}`);
+            .text(flowFooter(panel, side, ctx));
     });
 }
 
@@ -743,6 +1110,10 @@ function legendItems(kind, view, measure, labels) {
                 label: "Root's shape, dashed on every row", shape: "line",
                 style: {background: "repeating-linear-gradient(to right, #1c1e21 0 4px, transparent 4px 7px)"}
             },
+            {
+                label: "The other node, and root beside it, at half height", shape: "line",
+                style: {background: "#65676b"}
+            },
         ];
     }
     const errorItems = [
@@ -787,8 +1158,10 @@ function legendItems(kind, view, measure, labels) {
  *    which the kind supports is the modal's call
  *  - measure: a MEASURES key, read by difference views and heatmaps
  *  - baseLabel, otherLabel: short names for the two nodes
+ *  - hidden: the Sankeys' categories the reader has taken out of the view, by name
+ *  - onHide: called with a category when its bar is selected and Delete pressed
  */
-export default function ComparisonPlot({data, view, measure, baseLabel, otherLabel}) {
+export default function ComparisonPlot({data, view, measure, baseLabel, otherLabel, hidden = [], onHide}) {
     const canvasRef = useRef(null);
     const svgRef = useRef(null);
     const tooltipRef = useRef(null);
@@ -809,6 +1182,25 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
     // Ids are unique per page, and useId's own characters are not all safe in a url(#...) reference
     const clipId = `compare-ridge-clip${useId().replace(/[^\w-]/g, "")}`;
     const overview = useMemo(() => ridgelineOverview(data), [data]);
+    const flowsView = useMemo(() => flowsOverview(data, hidden), [data, hidden]);
+
+    /* The category whose bar was last clicked, waiting for Delete to hide it. It is stamped with the column
+       and nodes it was picked in, so another column reads it as no selection at all and a stale name cannot
+       be hidden by a later keystroke. */
+    const [selection, setSelection] = useState({key: null, category: null});
+    const selected = selection.key === zoomKey ? selection.category : null;
+    const setSelected = useCallback((category) => setSelection({key: zoomKey, category}), [zoomKey]);
+    useEffect(() => {
+        if (!selected) return undefined;
+        const onKeyDown = (event) => {
+            if (event.key !== "Delete" && event.key !== "Backspace") return;
+            event.preventDefault();
+            onHide?.(selected);
+            setSelected(null);
+        };
+        document.addEventListener("keydown", onKeyDown);
+        return () => document.removeEventListener("keydown", onKeyDown);
+    }, [selected, onHide, setSelected]);
     // While the next column loads, the last one's drift result stays up - but only under a view for its kind
     const stale = data?.kind === "drift" && (data.base.kind ?? data.other.kind) !== DRIFT_VIEW_KINDS[view];
 
@@ -818,6 +1210,16 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
             setSize({width: entry.contentRect.width, height: entry.contentRect.height});
         });
         observer.observe(canvasRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    /* The height the canvas and the ridgeline's strip share. It does not change as they split it, so the strip
+       can be sized from it without the canvas's answer feeding back into the strip's - see ridgelineCurve. */
+    const bodyRef = useRef(null);
+    const [bodyHeight, setBodyHeight] = useState(0);
+    useEffect(() => {
+        const observer = new ResizeObserver(([entry]) => setBodyHeight(entry.contentRect.height));
+        observer.observe(bodyRef.current);
         return () => observer.disconnect();
     }, []);
 
@@ -832,6 +1234,7 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
         } else {
             draw(svg, data, {
                 ...size, measure, tooltip, range, clipId, showNote: setNote,
+                hidden, selected, onSelect: setSelected,
                 labels: {base: baseLabel, other: otherLabel},
             });
         }
@@ -841,28 +1244,51 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
             setNote(null);
             svg.selectAll("*").remove();
         };
-    }, [data, view, measure, baseLabel, otherLabel, size, stale, range, clipId]);
+    }, [data, view, measure, baseLabel, otherLabel, size, stale, range, clipId, hidden, selected, setSelected]);
 
     return (
         <div className="compare-plot-frame">
-            <div ref={canvasRef} className="compare-plot-canvas">
-                <svg ref={svgRef} width={size.width} height={size.height}/>
-                <div ref={tooltipRef} className="compare-tooltip"/>
+            <div ref={bodyRef} className="compare-plot-body">
+                <div className="compare-plot-stage">
+                    {/* A click that misses a category's bar clears the selection */}
+                    <div ref={canvasRef} className="compare-plot-canvas" onClick={() => setSelected(null)}>
+                        <svg ref={svgRef} width={size.width} height={size.height}/>
+                        <div ref={tooltipRef} className="compare-tooltip"/>
+                    </div>
+                    {view === "flows" && flowsView && !stale && size.height >= MIN_CANVAS && (
+                        // Keyed like the ridgeline's strip, so a new pair starts with no window rather than the last one
+                        <SankeyBrush
+                            key={zoomKey}
+                            categories={flowsView.categories}
+                            series={flowsView.series}
+                            spots={flowsView.spots}
+                            frame={flowsFrame(size.height)}
+                            range={range}
+                            onRange={zoomTo}
+                        />
+                    )}
+                </div>
+                {view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && (
+                    // Keyed on the column and nodes, so a new pair starts with a fresh brush rather than the last box
+                    <RidgelineBrush
+                        key={zoomKey}
+                        {...overview}
+                        frame={ridgelineFrame(size.width)}
+                        rootColor={ROOT_COLOR}
+                        curve={ridgelineCurve(bodyHeight)}
+                        range={range}
+                        onRange={zoomTo}
+                    />
+                )}
             </div>
-            {view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && (
-                // Keyed on the column and nodes, so a new pair starts with a fresh brush rather than the last box
-                <RidgelineBrush
-                    key={zoomKey}
-                    {...overview}
-                    frame={ridgelineFrame(size.width)}
-                    rootColor={ROOT_COLOR}
-                    range={range}
-                    onRange={zoomTo}
-                />
-            )}
             {data?.kind === "drift" && (
                 <div className="compare-note" aria-live="polite">
-                    {note ? (
+                    {selected ? (
+                        <>
+                            <span className="compare-note-role">{selected}</span>
+                            selected — press Delete to hide it. It stays in the Categories list to bring back.
+                        </>
+                    ) : note ? (
                         <>
                             <span className="compare-note-role" style={{color: ROLE_COLORS[note.role]}}>
                                 {ROLE_NAMES[note.role]} · {note.label}
@@ -870,7 +1296,11 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
                             {note.text}
                         </>
                     ) : (
-                        <span className="compare-note-hint">Hover a bubble for what changed where it points.</span>
+                        <span className="compare-note-hint">
+                            {view === "flows"
+                                ? "Hover a bubble for what changed where it points. Click a category's bar to select it."
+                                : "Hover a bubble for what changed where it points, or the curves for each node's share at that value."}
+                        </span>
                     )}
                 </div>
             )}

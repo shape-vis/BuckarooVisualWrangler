@@ -20,11 +20,16 @@
     to { opacity: 1; }
 }
 
+/* The default size; pulling an edge sets one inline, and the max keeps either inside the overlay when the
+   browser window shrinks */
 .compare-window {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: min(1320px, 100%);
     height: min(860px, 100%);
+    max-width: 100%;
+    max-height: 100%;
     background: #ffffff;
     border: 1px solid #dddfe2;
     border-radius: 12px;
@@ -33,6 +38,62 @@
     color: #1c1e21;
     overflow: hidden;
     outline: none;
+}
+
+/* ── Resizing ─────────────────────────────────────────────────────── */
+
+/* Thin strips along the window's edges and squares at its corners, over the content's own padding. Each
+   carries its cursor inline. */
+.compare-resize {
+    position: absolute;
+    z-index: 2;
+    touch-action: none;
+}
+
+.compare-resize--n,
+.compare-resize--s {
+    left: 12px;
+    right: 12px;
+    height: 6px;
+}
+
+.compare-resize--e,
+.compare-resize--w {
+    top: 12px;
+    bottom: 12px;
+    width: 6px;
+}
+
+.compare-resize--ne,
+.compare-resize--nw,
+.compare-resize--se,
+.compare-resize--sw {
+    width: 14px;
+    height: 14px;
+}
+
+.compare-resize--n, .compare-resize--ne, .compare-resize--nw { top: 0; }
+.compare-resize--s, .compare-resize--se, .compare-resize--sw { bottom: 0; }
+.compare-resize--e, .compare-resize--ne, .compare-resize--se { right: 0; }
+.compare-resize--w, .compare-resize--nw, .compare-resize--sw { left: 0; }
+
+/* The one visible grip, where a resizable window usually has it */
+.compare-resize--se::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 9px;
+    height: 9px;
+    background: linear-gradient(135deg,
+        transparent 0 40%, #bcc0c4 40% 50%, transparent 50% 65%, #bcc0c4 65% 75%, transparent 75%);
+}
+
+/* While an edge is pulled its cursor holds everywhere, and nothing underneath gets selected */
+.compare-overlay--resizing,
+.compare-overlay--resizing * {
+    cursor: var(--compare-resize-cursor) !important;
+    user-select: none;
 }
 
 /* ── Header ───────────────────────────────────────────────────────── */
@@ -421,10 +482,28 @@
     opacity: 0.4;
 }
 
+/* The canvas and the ridgeline's strip under it, sharing the frame's free height. The plot measures this, and
+   sizes the strip from it so root's row matches the ridgeline's - its gap is BODY_GAP in ComparisonPlot. */
+.compare-plot-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* The canvas, and beside the Sankeys the strip that picks their categories */
+.compare-plot-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 8px;
+}
+
 .compare-plot-canvas {
     position: relative;
     flex: 1;
-    min-height: 0;
+    min-width: 0;
 }
 
 /* Out of flow, so the svg's own size never feeds back into the canvas the ResizeObserver measures */
@@ -477,6 +556,151 @@
     font-size: 12px;
     font-weight: 600;
     fill: #1c1e21;
+}
+
+/* What a Sankey's panel is drawn against, under its title */
+.compare-panel-subtitle {
+    font-size: 11px;
+    fill: #65676b;
+}
+
+/* A category's bar: what a reader clicks to pick the category out, on either side of a Sankey */
+.compare-flow-node {
+    cursor: pointer;
+}
+
+.compare-flow-node:hover {
+    stroke: #0f766e;
+    stroke-width: 2;
+}
+
+.compare-flow-node--selected {
+    stroke: #0f766e;
+    stroke-width: 2.5;
+}
+
+/* A ribbon whose other end was hidden, cut short where that category would have been */
+.compare-flow-stub {
+    stroke: none;
+}
+
+/* ── The Sankeys' category list ───────────────────────────────────── */
+
+.compare-picker {
+    position: relative;
+}
+
+.compare-picker-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    background: #ffffff;
+    font: inherit;
+    font-size: 13px;
+    color: #1c1e21;
+    cursor: pointer;
+}
+
+.compare-picker-summary:hover {
+    background: #f0f2f5;
+}
+
+/* Over the options beneath rather than pushing them down, as a select's list would be */
+.compare-picker-list {
+    position: absolute;
+    z-index: 3;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    padding: 6px;
+    background: #ffffff;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+
+.compare-picker-search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12px;
+}
+
+/* Both act on whatever the search has left listed */
+.compare-picker-actions {
+    display: flex;
+    gap: 12px;
+    padding: 6px 4px 0;
+}
+
+.compare-picker-action {
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    color: #0f766e;
+    cursor: pointer;
+}
+
+.compare-picker-action:hover:not(:disabled) {
+    text-decoration: underline;
+}
+
+.compare-picker-action:disabled {
+    color: #bec3c9;
+    cursor: default;
+}
+
+.compare-picker-scroll {
+    max-height: 240px;
+    overflow-y: auto;
+    margin-top: 6px;
+}
+
+.compare-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.compare-picker-item:hover {
+    background: #f0f2f5;
+}
+
+.compare-picker-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.compare-picker-rows {
+    color: #65676b;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The catch-all's own heading, above the categories folded into it */
+.compare-picker-group {
+    margin: 8px 0 2px;
+    padding: 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #65676b;
+    border-top: 1px solid #eef0f2;
+    padding-top: 6px;
 }
 
 .compare-axis-label {
@@ -588,6 +812,83 @@
     stroke-dasharray: 4 3;
 }
 
+/* The other node on a ridgeline row, at half height: a line rather than a fill, so the row's own node stays
+   the shape that reads first. Its colour is set inline. */
+.compare-ridge-overlay {
+    fill: none;
+    stroke-width: 1.6;
+}
+
+/* A ridgeline row's wash, in its own node's colour (root's grey in the strip) - faint enough that the curves
+   still read over it, strong enough to show where the row ends once zoomed in */
+.compare-ridge-band {
+    fill-opacity: 0.07;
+    pointer-events: none;
+}
+
+/* The ridgeline's hover surface sits under the rows, so their curves let the pointer through to it; only
+   the annotation bubbles, nested a level down, keep their own */
+.compare-ridge-hover {
+    fill: transparent;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.compare-ridge-row > path,
+.compare-ridge-row > line,
+.compare-ridge-row > text {
+    pointer-events: none;
+}
+
+/* The crosshair, after the visx areas demo: a dashed line down both rows, a shadowed dot on each row's own
+   curve, and the value pinned to the axis */
+.compare-ridge-crosshair {
+    pointer-events: none;
+}
+
+.compare-ridge-crosshair line {
+    stroke: #0f766e;
+    stroke-width: 2;
+    stroke-dasharray: 5 2;
+}
+
+.compare-ridge-crosshair-shadow {
+    fill: #000000;
+    fill-opacity: 0.1;
+}
+
+.compare-ridge-crosshair-dot {
+    stroke: #ffffff;
+    stroke-width: 2;
+}
+
+.compare-ridge-crosshair-root {
+    fill: #ffffff;
+    stroke: #1c1e21;
+    stroke-width: 1.2;
+}
+
+.compare-ridge-crosshair-box {
+    fill: #ffffff;
+    stroke: #0f766e;
+    stroke-width: 1;
+}
+
+.compare-ridge-crosshair-value {
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    fill: #0f766e;
+}
+
+/* Root at the same half height, beside it - a shorter, lighter dash than the full-size one, so the two
+   dashed lines on a row are told apart */
+.compare-ridge-root--half {
+    stroke-width: 4;
+    stroke-dasharray: 2 2;
+    opacity: 0.85;
+}
+
 .compare-ridge-label,
 .compare-ridge-drift {
     font-size: 12px;
@@ -596,7 +897,7 @@
 }
 
 .compare-ridge-drift {
-    fill: #3c4043;
+    fill: #878889;
 }
 
 .compare-flow-count {
@@ -685,6 +986,27 @@
 .compare-brush-hint {
     font-style: italic;
     color: #8a8d91;
+}
+
+/* The Sankeys' strip runs down their right: a row per category, and its button under it rather than in a
+   gutter. The top is set inline, to land under the panels. */
+.compare-brush--rows .compare-brush-reset,
+.compare-brush--rows .compare-brush-hint {
+    left: 0;
+    right: auto;
+}
+
+.compare-brush-grip--rows {
+    cursor: ns-resize;
+}
+
+.compare-brush-name {
+    font-size: 10px;
+    fill: #1c1e21;
+}
+
+.compare-brush-track {
+    fill: #eef0f2;
 }
 
 /* A thought bubble pointing at where a node moved; hovering it fills the readout under the plot */

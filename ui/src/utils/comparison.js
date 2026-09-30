@@ -27,6 +27,60 @@ export function describeWrangle(wrangle) {
 export const ROLE_COLORS = { base: "#1877F2", other: "#1a7f37" };
 export const ROLE_NAMES = { base: "Baseline", other: "Comparator" };
 
+// The server's name for the deleted rows' sink, and for the catch-all the long tail folds into
+export const REMOVED_LABEL = "(removed)";
+export const OTHER_LABEL = "(other)";
+// The step between the two nodes is neither node's own colour, so it takes drift's teal
+export const PAIR_COLOR = "#0f766e";
+
+/* The three Sankeys the Flows view draws, left to right: the comparator against root, the step from the
+   baseline to the comparator, and the baseline against root. The middle one has no drift from root to
+   report - it carries the pair's own TVD instead. */
+export const FLOW_PANELS = [
+    { id: "other", role: "other", color: ROLE_COLORS.other },
+    { id: "pair", role: null, color: PAIR_COLOR },
+    { id: "base", role: "base", color: ROLE_COLORS.base },
+];
+
+/* Each Sankey's data, by panel: the two nodes against root, and the step between them */
+export function flowSides(data) {
+    return { other: data?.other, pair: data?.pair, base: data?.base };
+}
+
+/* The categories the Sankeys lay out, in the server's order - the most common first. All three share one
+   list, so one window and one choice of categories covers them all. The removed sink is not among them: it
+   is pinned under whatever the plot shows. */
+export function flowCategories(data) {
+    const sides = flowSides(data);
+    const labels = FLOW_PANELS
+        .map((panel) => sides[panel.id]?.flows)
+        .filter(Boolean)
+        .flatMap((flows) => [...flows.sources, ...flows.targets]);
+    return [...new Set(labels)].filter((label) => label !== REMOVED_LABEL);
+}
+
+/* What the catch-all holds, gathered across the three Sankeys: each category the server folded, with the
+   most rows any of them folded for it. Biggest first, as the server sends them.
+   :return: {categories: [{category, rows}], more} - more counts the ones past the server's list */
+export function otherCategories(data) {
+    const sides = flowSides(data);
+    const rows = new Map();
+    let more = 0;
+    FLOW_PANELS.forEach((panel) => {
+        const other = sides[panel.id]?.flows?.other;
+        if (!other) return;
+        more = Math.max(more, other.more);
+        other.categories.forEach(({ category, rows: count }) => {
+            rows.set(category, Math.max(rows.get(category) ?? 0, count));
+        });
+    });
+    return {
+        categories: [...rows].map(([category, count]) => ({ category, rows: count }))
+            .sort((a, b) => b.rows - a.rows),
+        more,
+    };
+}
+
 /* What a difference plot, or a heatmap tile, measures: rows, or error flags of some kind. The label
    names the option; the noun is how the plot talks about it on an axis or in a tooltip. */
 export const MEASURES = {

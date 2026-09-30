@@ -25,7 +25,8 @@ import pandas as pd
 from scipy.stats import gaussian_kde, wasserstein_distance
 
 from detectors.missing_value import missing_mask
-from app.pgraph.compare import OTHER_LABEL, _differs, _labels, _matched, _numbers, load_node_data
+from app.pgraph.compare import (MAX_CATEGORIES, NULL_LABEL, OTHER_LABEL, _differs, _labels, _matched, _numbers,
+                                load_node_data)
 from app.pgraph.metrics import ID_COLUMNS
 
 NUMERIC = "numeric"
@@ -54,9 +55,12 @@ LOW_CONFIDENCE_N = 30
 # A share-change table names this many categories and sums the rest into one row
 TOP_CHANGES = 8
 
-# A Sankey keeps this many categories, by root share, plus a catch-all
-SANKEY_TOP = 5
 REMOVED_LABEL = "(removed)"
+
+# How many of the categories folded into the catch-all are named back, for the modal to list and offer
+OTHER_LISTED = 200
+# The most bands a Sankey will draw when the modal names the categories itself
+MAX_KEPT = 100
 
 # Both Pareto axes are rounded to this many places, so float noise cannot make equal nodes dominate
 PARETO_PRECISION = 6
@@ -364,26 +368,53 @@ def node_density(node_values, params):
     return (curve * len(n) / params["n_root"]).tolist()
 
 
-def category_flows(root_frame, node_frame, column, top=SANKEY_TOP):
+def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep=None):
     """
-    Where each of root's rows went in one categorical column: to a category in the node, or to the removed
-    sink when the node no longer has the row. Rows are matched by "ID", and given the row-identity
-    invariant a failed match can only mean a delete.
+    Where each of the earlier state's rows sits in the later one, for one categorical column: in a category,
+    or in the removed sink when the later state no longer has the row. Rows are matched by "ID", and given
+    the row-identity invariant a failed match can only mean a delete.
 
     This is the Sankey's data, and churn is the number it decomposes. TVD is the net change in shares, so
     five rows moving each way between two categories moves ten rows and leaves TVD at zero - the two answer
     different questions, and both are reported.
 
-    :param top: categories kept by root share; the rest fold into OTHER_LABEL
+    :param before_frame: the state the rows start in - root for a node's own Sankey, the baseline for the
+                         pair's - as a frame with "ID" and the column
+    :param after_frame: the state they end in
+    :param limit: the most categories kept, the compare axes' limit by default. A column with more keeps its
+                  most common in before_frame, and null whenever it occurs, as those axes do, and folds the
+                  rest into OTHER_LABEL.
+    :param keep: the categories to keep as themselves, naming them outright instead of by the limit - the
+                 modal sends this when the reader pulls one back out of the catch-all
     :return: {"flows": [{"source", "target", "rows"}], "sources", "targets", "churn", "removal_rates",
-              "categories"}. churn and the category count are over the unfolded labels.
+              "categories", "other"}. Sources and targets run from the most common category down, so a plot
+              can open on the top few. "other" names what the catch-all holds, so the reader can look inside
+              it and take a category back out. churn and the category count are over the unfolded labels.
     """
-    matched = _matched(root_frame, node_frame, [column], "left")
+    matched = _matched(before_frame, after_frame, [column], "left")
     source = _labels(matched[f"{column}_base"])
-    target = _labels(matched[f"{column}_other"]).where(matched["ID"].isin(node_frame["ID"]), REMOVED_LABEL)
+    target = _labels(matched[f"{column}_other"]).where(matched["ID"].isin(after_frame["ID"]), REMOVED_LABEL)
     churn = float((source != target).mean()) if len(source) else 0.0
 
-    kept = list(source.value_counts().index[:top])
+    counts = source.value_counts()
+    if keep is not None:
+        # The modal named them, so size does not come into it - only the order, which stays by count
+        kept = [label for label in counts.index if label in set(keep)][:MAX_KEPT]
+    else:
+        kept = list(counts.index)
+        if len(kept) > limit:
+            kept = kept[:limit - 1]
+            # Null is the rarest kept, so it takes the last place and the order still runs by count
+            if NULL_LABEL in counts.index and NULL_LABEL not in kept:
+                kept[-1] = NULL_LABEL
+
+    # What the catch-all holds, biggest first: the modal lists these and offers them back
+    tail = [label for label in counts.index if label not in set(kept)]
+    other = None if not tail else {
+        "categories": [{"category": str(label), "rows": int(counts[label])} for label in tail[:OTHER_LISTED]],
+        "more": max(0, len(tail) - OTHER_LISTED),
+        "rows": int(counts[tail].sum()),
+    }
 
     def fold(labels):
         return labels.where(labels.isin(kept) | (labels == REMOVED_LABEL), OTHER_LABEL)
@@ -405,6 +436,7 @@ def category_flows(root_frame, node_frame, column, top=SANKEY_TOP):
         "removal_rates": {str(label): float(rate)
                           for label, rate in removed.groupby(folded["source"]).mean().items()},
         "categories": int(source.nunique()),
+        "other": other,
     }
 
 
@@ -761,11 +793,53 @@ def drift_null(pgraph, node_table, columns=None, draws=NULL_DRAWS):
     return results
 
 
-def drift_detail(pgraph, node_table, column):
+def pair_flows(pgraph, base_table, other_table, column, keep=None):
+    """
+    The Sankey between two nodes rather than between a node and root: where the baseline's rows sit in the
+    comparator. The compare modal draws it between the two node-against-root Sankeys, so the step from one
+    node to the other can be read on its own.
+
+    Both nodes descend from root, but not from each other, so the comparator can hold rows the baseline
+    deleted. Those have no category to leave from and are not in the flows; their count is reported as
+    "added" instead, and the churn is over the baseline's rows.
+
+    :return: {"base", "other", "column", "kind", "flows", "distortion", "added"}, with "flows" None for a
+             numeric column or one either node dropped. Read-only.
+    """
+    from app import engine
+
+    root_frame, kinds = root_state(pgraph.root_node)
+    if column not in kinds:
+        raise ValueError(f"{column!r} is not a data column of the root table")
+
+    kind = kinds[column]
+    payload = {"base": base_table, "other": other_table, "column": column, "kind": kind,
+               "flows": None, "distortion": None, "added": 0}
+    if kind != CATEGORICAL:
+        return payload
+
+    def frame_of(table):
+        return root_frame[["ID", column]] if table == pgraph.root_node else load_node_data(engine, table, [column])
+
+    try:
+        base_frame, other_frame = frame_of(base_table), frame_of(other_table)
+    except ValueError:
+        # The column was dropped along one of the two branches, so there is nothing to draw
+        return payload
+
+    payload["flows"] = category_flows(base_frame, other_frame, column, keep=keep)
+    # Measured between the two nodes, not against root: the pair's own TVD
+    payload["distortion"] = column_distortion(base_frame[column], other_frame[column], kind)
+    payload["added"] = int((~other_frame["ID"].isin(base_frame["ID"])).sum())
+    return payload
+
+
+def drift_detail(pgraph, node_table, column, keep=None):
     """
     Everything the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
     Sankey flows, the null test and the annotation. Read-only.
 
+    :param keep: for a categorical column, the categories to keep out of the catch-all - see category_flows
     :return: the payload, with "density", "flows" and "annotation" None when the column was dropped
     """
     from app import engine
@@ -810,7 +884,7 @@ def drift_detail(pgraph, node_table, column):
             payload["density"] = {"grid": params["grid"], "bandwidth": params["bandwidth"],
                                   "root": params["root_curve"], "node": _density_cache[curve_key]}
     else:
-        flows = category_flows(root_frame, node_frame, column)
+        flows = category_flows(root_frame, node_frame, column, keep=keep)
         payload["flows"] = flows
 
     # The breakdown is what the annotation is written from; no view draws it, so it never travels

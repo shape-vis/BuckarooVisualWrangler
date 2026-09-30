@@ -6,7 +6,7 @@ from app import app, db_operations, engine
 from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
 from app.pgraph.compare import PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap
-from app.pgraph.distortion import NULL_DRAWS, distortion_trajectory, drift_detail, drift_null
+from app.pgraph.distortion import NULL_DRAWS, distortion_trajectory, drift_detail, drift_null, pair_flows
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
 
 
@@ -190,7 +190,7 @@ def drift_detail_view():
     What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
     Sankey flows, the null test and a plain-language annotation.
 
-    Query: ?node=<node>&column=<column>
+    Query: ?node=<node>&column=<column>[&keep=<category>&keep=<category>...]
     Read-only: the node does not become the session's current table.
     """
     try:
@@ -206,6 +206,39 @@ def drift_detail_view():
         if not column:
             return {"success": False, "error": "missing column"}, 400
 
-        return {"success": True, **drift_detail(pgraph, node, column)}
+        # The categories the modal wants kept out of the catch-all, when the reader has chosen any
+        keep = request.args.getlist("keep") or None
+        return {"success": True, **drift_detail(pgraph, node, column, keep)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.get("/api/pgraph/flow_pair")
+def flow_pair_view():
+    """
+    The Sankey between the two compared nodes themselves - where the baseline's rows sit in the comparator -
+    for the middle panel of the modal's Flows view.
+
+    Query: ?base=<node>&other=<node>&column=<column>[&keep=<category>&keep=<category>...]
+    Read-only: neither node becomes the session's current table.
+    """
+    try:
+        pgraph = app_package.pgraph_for_session
+        if pgraph is None:
+            return {"success": False, "error": "no graph in this session"}, 400
+
+        nodes = [request.args.get("base"), request.args.get("other")]
+        if not all(nodes):
+            return {"success": False, "error": "missing node"}, 400
+        for node in nodes:
+            if node not in pgraph.node_map:
+                return {"success": False, "error": f"{node} is not a node in this graph"}, 400
+
+        column = request.args.get("column")
+        if not column:
+            return {"success": False, "error": "missing column"}, 400
+
+        keep = request.args.getlist("keep") or None
+        return {"success": True, **pair_flows(pgraph, nodes[0], nodes[1], column, keep)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400
