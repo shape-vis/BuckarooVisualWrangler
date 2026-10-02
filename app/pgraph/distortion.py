@@ -274,7 +274,7 @@ def edit_facts(root_frame, node_frame, columns):
     """
     shared = [column for column in columns if column in node_frame.columns]
     matched = _matched(root_frame, node_frame, shared, "inner")
-    changed = {column: int(np.count_nonzero(_differs(matched[f"{column}_base"], matched[f"{column}_other"])))
+    changed = {column: int(np.count_nonzero(_differs(matched[f"{column}_a"], matched[f"{column}_b"])))
                for column in shared}
     return {"rows_root": len(root_frame),
             "rows_removed": len(set(root_frame["ID"]) - set(node_frame["ID"])),
@@ -378,7 +378,7 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
     five rows moving each way between two categories moves ten rows and leaves TVD at zero - the two answer
     different questions, and both are reported.
 
-    :param before_frame: the state the rows start in - root for a node's own Sankey, the baseline for the
+    :param before_frame: the state the rows start in - root for a node's own Sankey, selection A for the
                          pair's - as a frame with "ID" and the column
     :param after_frame: the state they end in
     :param limit: the most categories kept, the compare axes' limit by default. A column with more keeps its
@@ -392,8 +392,8 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
               it and take a category back out. churn and the category count are over the unfolded labels.
     """
     matched = _matched(before_frame, after_frame, [column], "left")
-    source = _labels(matched[f"{column}_base"])
-    target = _labels(matched[f"{column}_other"]).where(matched["ID"].isin(after_frame["ID"]), REMOVED_LABEL)
+    source = _labels(matched[f"{column}_a"])
+    target = _labels(matched[f"{column}_b"]).where(matched["ID"].isin(after_frame["ID"]), REMOVED_LABEL)
     churn = float((source != target).mean()) if len(source) else 0.0
 
     counts = source.value_counts()
@@ -793,17 +793,17 @@ def drift_null(pgraph, node_table, columns=None, draws=NULL_DRAWS):
     return results
 
 
-def pair_flows(pgraph, base_table, other_table, column, keep=None):
+def pair_flows(pgraph, table_a, table_b, column, keep=None):
     """
-    The Sankey between two nodes rather than between a node and root: where the baseline's rows sit in the
-    comparator. The compare modal draws it between the two node-against-root Sankeys, so the step from one
+    The Sankey between two nodes rather than between a node and root: where selection A's rows sit in
+    selection B. The compare modal draws it between the two node-against-root Sankeys, so the step from one
     node to the other can be read on its own.
 
-    Both nodes descend from root, but not from each other, so the comparator can hold rows the baseline
+    Both nodes descend from root, but not from each other, so selection B can hold rows selection A
     deleted. Those have no category to leave from and are not in the flows; their count is reported as
-    "added" instead, and the churn is over the baseline's rows.
+    "added" instead, and the churn is over selection A's rows.
 
-    :return: {"base", "other", "column", "kind", "flows", "distortion", "added"}, with "flows" None for a
+    :return: {"a", "b", "column", "kind", "flows", "distortion", "added"}, with "flows" None for a
              numeric column or one either node dropped. Read-only.
     """
     from app import engine
@@ -813,7 +813,7 @@ def pair_flows(pgraph, base_table, other_table, column, keep=None):
         raise ValueError(f"{column!r} is not a data column of the root table")
 
     kind = kinds[column]
-    payload = {"base": base_table, "other": other_table, "column": column, "kind": kind,
+    payload = {"a": table_a, "b": table_b, "column": column, "kind": kind,
                "flows": None, "distortion": None, "added": 0}
     if kind != CATEGORICAL:
         return payload
@@ -822,15 +822,15 @@ def pair_flows(pgraph, base_table, other_table, column, keep=None):
         return root_frame[["ID", column]] if table == pgraph.root_node else load_node_data(engine, table, [column])
 
     try:
-        base_frame, other_frame = frame_of(base_table), frame_of(other_table)
+        frame_a, frame_b = frame_of(table_a), frame_of(table_b)
     except ValueError:
         # The column was dropped along one of the two branches, so there is nothing to draw
         return payload
 
-    payload["flows"] = category_flows(base_frame, other_frame, column, keep=keep)
+    payload["flows"] = category_flows(frame_a, frame_b, column, keep=keep)
     # Measured between the two nodes, not against root: the pair's own TVD
-    payload["distortion"] = column_distortion(base_frame[column], other_frame[column], kind)
-    payload["added"] = int((~other_frame["ID"].isin(base_frame["ID"])).sum())
+    payload["distortion"] = column_distortion(frame_a[column], frame_b[column], kind)
+    payload["added"] = int((~frame_b["ID"].isin(frame_a["ID"])).sum())
     return payload
 
 

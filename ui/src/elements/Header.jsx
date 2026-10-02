@@ -70,12 +70,12 @@ export function BuckarooHeader( { onReset} ) {
                 />
             </h1>
             <TableStatus />
-            {/* Only offered while two nodes are paired: a shift-clicked baseline and the current node */}
+            {/* Only offered while two nodes are paired: a shift-clicked selection A and the current node */}
             {comparisonPair && (
                 <button
                     className="header-action-btn header-compare-btn"
                     onClick={() => setOpenPair(comparisonPair)}
-                    title={`Compare ${comparisonPair.baseline} (baseline) with ${comparisonPair.comparator}`}
+                    title={`Compare ${comparisonPair.a} (selection A) with ${comparisonPair.b} (selection B)`}
                 >
                     <img src="/images/icons/compare.svg" alt="" className="btn-svg-icon" />
                     Compare

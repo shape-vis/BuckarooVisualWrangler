@@ -149,28 +149,28 @@ export function PGraphProvider({children}) {
     const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
-    // The node the attribute summary panel compares the current node against. null means "fall back
-    // to the current node's parent".
-    const [baselineNodeId, setBaselineNodeId] = useState(null);
+    // Selection A: the node the attribute summary panel compares the current node (selection B)
+    // against. null means "fall back to the current node's parent".
+    const [selectionAId, setSelectionAId] = useState(null);
 
-    // Which node the comparison actually resolves to. Lives here rather than in the panel so the
+    // Which node selection A actually resolves to. Lives here rather than in the panel so the
     // graph marks the same pair the panel is reporting on, including the un-pinned parent default.
-    const resolvedBaselineId = useMemo(() => {
-        if (baselineNodeId && baselineNodeId !== tableName) return baselineNodeId;
+    const resolvedSelectionAId = useMemo(() => {
+        if (selectionAId && selectionAId !== tableName) return selectionAId;
 
         const parent = nodes.find((node) => node.id === tableName)?.data?.parent;
-        // The root's parent is the string "root", which is not a node, so the root has no baseline
+        // The root's parent is the string "root", which is not a node, so the root has no selection A
         return (parent && parent !== "root") ? parent : null;
-    }, [baselineNodeId, tableName, nodes]);
+    }, [selectionAId, tableName, nodes]);
 
-    /* The pair the user set up on purpose: a shift-clicked baseline against the current node. Only
-       this pair is badged in the graph and offered to the header's Compare button - the panel's
-       fallback to the parent is a default, not a selection. */
+    /* The pair the user set up on purpose: a shift-clicked selection A against the current node as
+       selection B. Only this pair is badged in the graph and offered to the header's Compare button -
+       the panel's fallback to the parent is a default, not a selection. */
     const comparisonPair = useMemo(() => (
-        (baselineNodeId && baselineNodeId !== tableName)
-            ? {baseline: baselineNodeId, comparator: tableName}
+        (selectionAId && selectionAId !== tableName)
+            ? {a: selectionAId, b: tableName}
             : null
-    ), [baselineNodeId, tableName]);
+    ), [selectionAId, tableName]);
 
     /* The branch the user is picking out of the graph: an edge fixes where it starts and which way it
        leaves that node, a destination fixes where it stops. Both are chosen by clicking the graph. */
@@ -191,15 +191,15 @@ export function PGraphProvider({children}) {
         setBranchSelection({source: null, target: null, destination: null});
     }, []);
 
-    /* Clears every selection the graph holds at once - the comparison baseline and the branch alike.
+    /* Clears every selection the graph holds at once - the comparison's selection A and the branch alike.
        They are picked with overlapping gestures (shift-click, click, edge click), so a single way out
        matters more than being able to clear them individually. */
     const clearAllSelections = useCallback(() => {
-        setBaselineNodeId(null);
+        setSelectionAId(null);
         setBranchSelection({source: null, target: null, destination: null});
     }, []);
 
-    const hasAnySelection = Boolean(baselineNodeId || branchSelection.target);
+    const hasAnySelection = Boolean(selectionAId || branchSelection.target);
 
     // Choosing an edge always restarts the branch, since the old destination may not lie beyond it
     const pickBranchEdge = useCallback((source, target) => {
@@ -444,7 +444,7 @@ export function PGraphProvider({children}) {
             await setGraphToClickedNode(node.id);
             setTableName(node.id);
             /* Navigating picks a new current node, so the comparison falls back to that node's own
-               parent rather than keeping a baseline chosen for somewhere else in the graph. The
+               parent rather than keeping a selection A chosen for somewhere else in the graph. The
                branch goes with it: React Flow fires onNodeClick on the first click of a double
                click, so without this, double-clicking a node while choosing where a branch ends
                would both end the branch there and navigate away from it. */
@@ -458,7 +458,7 @@ export function PGraphProvider({children}) {
         }, [setTableName, viewContext, clearAllSelections]
     )
 
-    /* Shift-click re-targets the delta baseline. A plain click ends a branch that is mid-selection,
+    /* Shift-click re-targets selection A. A plain click ends a branch that is mid-selection,
        and otherwise does nothing so it does not compete with double-click navigation. Cmd/Ctrl-click
        stays free for React Flow's multi-select. */
     const onNodeClick = useCallback(
@@ -471,9 +471,9 @@ export function PGraphProvider({children}) {
                 return;
             }
             event.stopPropagation();
-            // Same reason: a suggestion cannot be a comparison baseline
+            // Same reason: a suggestion cannot be selection A
             if (isProspectiveId(node.id)) return;
-            setBaselineNodeId(current => (current === node.id ? null : node.id));
+            setSelectionAId(current => (current === node.id ? null : node.id));
         }, [selectionStage, eligibleDestinations, pickBranchDestination]
     )
 
@@ -494,7 +494,7 @@ export function PGraphProvider({children}) {
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
             getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
-            baselineNodeId, setBaselineNodeId, resolvedBaselineId, comparisonPair, serverNodesById,
+            selectionAId, setSelectionAId, resolvedSelectionAId, comparisonPair, serverNodesById,
             pareto: serverGraph.pareto,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             prospectiveNodes, setProspectiveNodes, clearProspectiveNodes,

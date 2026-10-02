@@ -1,13 +1,13 @@
 // CompareModal.jsx
 // Opened from the header's Compare button while two nodes are paired in the graph: a shift-clicked
-// baseline and the current node. Plot options down the left, the plot itself on the right.
+// selection A and the current node as selection B. Plot options down the left, the plot itself on the right.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { getDriftDetail, getFlowPair, getNodeComparison } from "../utils/serverCalls.jsx";
 import {
-    MEASURES, OTHER_LABEL, describeWrangle, flowCategories, nodeName, otherCategories,
+    MEASURES, OTHER_LABEL, ROLE_NAMES, describeWrangle, flowCategories, nodeName, otherCategories,
 } from "../utils/comparison.js";
 import { formatDrift, useDriftNull } from "../utils/drift.js";
 import DriftFlag from "./DriftFlag.jsx";
@@ -74,18 +74,18 @@ function formatRate(rate) {
 const signedRows = (change) => `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString()} rows`;
 
 /* The Drift kind's data: each node's breakdown against root, and for a categorical column the step from the
-   baseline to the comparator as well - the Flows view draws all three. The pair is its own request, so a
+   selection A to selection B as well - the Flows view draws all three. The pair is its own request, so a
    failure of that one alone still leaves the two the modal has always drawn. */
-async function getDriftComparison({ base, other, x, keep }, signal) {
-    const [baseDetail, otherDetail, pair] = await Promise.all([
-        getDriftDetail({ node: base, column: x, keep }, signal),
-        getDriftDetail({ node: other, column: x, keep }, signal),
-        getFlowPair({ base, other, column: x, keep }, signal),
+async function getDriftComparison({ a, b, x, keep }, signal) {
+    const [detailA, detailB, pair] = await Promise.all([
+        getDriftDetail({ node: a, column: x, keep }, signal),
+        getDriftDetail({ node: b, column: x, keep }, signal),
+        getFlowPair({ a, b, column: x, keep }, signal),
     ]);
-    const failed = [baseDetail, otherDetail].find((response) => !response?.success);
+    const failed = [detailA, detailB].find((response) => !response?.success);
     if (failed) return { success: false, error: failed?.error };
     return {
-        success: true, kind: "drift", x, base: baseDetail, other: otherDetail,
+        success: true, kind: "drift", x, a: detailA, b: detailB,
         pair: pair?.success ? pair : null,
     };
 }
@@ -258,7 +258,7 @@ function CategoryPicker({ categories, hidden, other, onHidden, onKeep }) {
 function NodeRow({ role, table, rows }) {
     return (
         <div className="compare-node-row">
-            <span className={`compare-role compare-role--${role}`}>{role === "base" ? "Baseline" : "Comparator"}</span>
+            <span className={`compare-role compare-role--${role}`}>{ROLE_NAMES[role]}</span>
             <span className="compare-node-name" title={table}>{nodeName(table)}</span>
             {rows != null && <span className="compare-node-rows">{rows.toLocaleString()} rows</span>}
         </div>
@@ -267,18 +267,18 @@ function NodeRow({ role, table, rows }) {
 
 /* Each node's drift from root. Both are measured against the same fixed reference rather than one against
    the other - that is what makes nodes on different branches comparable at all. */
-function DriftSummary({ baseTable, otherTable, baseDrift, otherDrift }) {
+function DriftSummary({ tableA, tableB, driftA, driftB }) {
     return (
         <dl className="compare-changes">
-            <div><dt title={baseTable}>{nodeName(baseTable)} · baseline</dt><dd>{formatDrift(baseDrift)}</dd></div>
-            <div><dt title={otherTable}>{nodeName(otherTable)} · comparator</dt><dd>{formatDrift(otherDrift)}</dd></div>
+            <div><dt title={tableA}>{nodeName(tableA)} · selection A</dt><dd>{formatDrift(driftA)}</dd></div>
+            <div><dt title={tableB}>{nodeName(tableB)} · selection B</dt><dd>{formatDrift(driftB)}</dd></div>
         </dl>
     );
 }
 
 /**
  * Props:
- *  - pair: {baseline, comparator} node ids, as PGraphContext's comparisonPair names them
+ *  - pair: {a, b} node ids for selection A and selection B, as PGraphContext's comparisonPair names them
  *  - onClose: called on the close button, a backdrop click or Escape
  */
 export default function CompareModal({ pair, onClose }) {
@@ -329,30 +329,30 @@ export default function CompareModal({ pair, onClose }) {
 
     const nodesById = useMemo(() => Object.fromEntries(nodes.map((node) => [node.id, node])), [nodes]);
 
-    const baseId = pair.baseline;
-    const otherId = pair.comparator;
-    const baseTable = tableOf(nodesById[baseId], baseId);
-    const otherTable = tableOf(nodesById[otherId], otherId);
+    const idA = pair.a;
+    const idB = pair.b;
+    const tableA = tableOf(nodesById[idA], idA);
+    const tableB = tableOf(nodesById[idB], idB);
 
     /* Read by the real table rather than by what is drawn, so a node folded out of view - the current
        node inside a collapsed run - still has its metrics and its wrangle. */
     const dataFor = (table, id) => (serverNodesById?.[table] ?? nodesById[id])?.data;
-    const baseData = dataFor(baseTable, baseId);
-    const otherData = dataFor(otherTable, otherId);
-    const baseMetrics = baseData?.metrics;
-    const otherMetrics = otherData?.metrics;
-    const baseDistortion = baseData?.distortion;
-    const otherDistortion = otherData?.distortion;
+    const dataA = dataFor(tableA, idA);
+    const dataB = dataFor(tableB, idB);
+    const metricsA = dataA?.metrics;
+    const metricsB = dataB?.metrics;
+    const distortionA = dataA?.distortion;
+    const distortionB = dataB?.distortion;
     // Fetched as the modal opens, for the flags beside each drift - only a node that lost rows can have any
-    const baseNull = useDriftNull(baseTable, baseDistortion?.facts?.rows_removed);
-    const otherNull = useDriftNull(otherTable, otherDistortion?.facts?.rows_removed);
+    const nullA = useDriftNull(tableA, distortionA?.facts?.rows_removed);
+    const nullB = useDriftNull(tableB, distortionB?.facts?.rows_removed);
     const foldedCount =(id) => (nodesById[id]?.type === "collapsedNode" ? nodesById[id].data.run?.length : null);
 
     // Every attribute either side knows of, in the order the metrics list them
     const attributes = useMemo(() => [...new Set([
-        ...Object.keys(baseMetrics?.columns ?? {}),
-        ...Object.keys(otherMetrics?.columns ?? {}),
-    ])], [baseMetrics, otherMetrics]);
+        ...Object.keys(metricsA?.columns ?? {}),
+        ...Object.keys(metricsB?.columns ?? {}),
+    ])], [metricsA, metricsB]);
 
     /* The same attributes ranked by how far their error rate moved, or by how far either node has drifted
        from root. Read from what each node already carries, so it costs no request - and ranked by error
@@ -362,20 +362,20 @@ export default function CompareModal({ pair, onClose }) {
     const [rankBy, setRankBy] = useState("error");
     const ranked = useMemo(() => attributes
         .map((name) => {
-            const before = baseMetrics?.columns?.[name]?.total ?? null;
-            const after = otherMetrics?.columns?.[name]?.total ?? null;
-            const driftBase = baseDistortion?.columns?.[name]?.value ?? null;
-            const driftOther = otherDistortion?.columns?.[name]?.value ?? null;
-            return { name, before, after, delta: (after ?? 0) - (before ?? 0), driftBase, driftOther };
+            const before = metricsA?.columns?.[name]?.total ?? null;
+            const after = metricsB?.columns?.[name]?.total ?? null;
+            const driftA = distortionA?.columns?.[name]?.value ?? null;
+            const driftB = distortionB?.columns?.[name]?.value ?? null;
+            return { name, before, after, delta: (after ?? 0) - (before ?? 0), driftA, driftB };
         })
         /* An attribute that neither node moved has nothing to say, so it is left out entirely. The test is
            for exactly zero rather than for what the row would print: a column no operation touched usually
            drifts by a fraction that shows as 0.000, and those are the rows the metric exists to surface. */
-        .filter((attribute) => attribute.delta !== 0 || attribute.driftBase || attribute.driftOther)
+        .filter((attribute) => attribute.delta !== 0 || attribute.driftA || attribute.driftB)
         .sort((a, b) => (rankBy === "drift"
-            ? Math.max(b.driftBase ?? 0, b.driftOther ?? 0) - Math.max(a.driftBase ?? 0, a.driftOther ?? 0)
+            ? Math.max(b.driftA ?? 0, b.driftB ?? 0) - Math.max(a.driftA ?? 0, a.driftB ?? 0)
             : Math.abs(b.delta) - Math.abs(a.delta))),
-    [attributes, baseMetrics, otherMetrics, baseDistortion, otherDistortion, rankBy]);
+    [attributes, metricsA, metricsB, distortionA, distortionB, rankBy]);
 
     const [kind, setKind] = useState("histogram");
     /* The plot opens on what moved most. When nothing moved the ranking is empty, so it falls back to the
@@ -390,7 +390,7 @@ export default function CompareModal({ pair, onClose }) {
        costs nothing - the rows are already here, so the bands simply go. kept names categories the server
        would otherwise fold into its catch-all, so changing it asks for the flows again. Both belong to one
        column of one pair: the choice is stamped with that, and another column reads it as never made. */
-    const columnKey = [baseTable, otherTable, x].join("|");
+    const columnKey = [tableA, tableB, x].join("|");
     const [choice, setChoice] = useState({ key: null, hidden: NO_CATEGORIES, kept: null });
     const chosen = choice.key === columnKey ? choice : { hidden: NO_CATEGORIES, kept: null };
     const { hidden, kept } = chosen;
@@ -402,7 +402,7 @@ export default function CompareModal({ pair, onClose }) {
 
     const spec = PLOT_KINDS.find((plotKind) => plotKind.id === kind);
     // Drift's views follow the column - numeric or categorical, as root decided it
-    const columnKind = (baseDistortion?.columns?.[x] ?? otherDistortion?.columns?.[x])?.kind;
+    const columnKind = (distortionA?.columns?.[x] ?? distortionB?.columns?.[x])?.kind;
     const views = kind === "drift" ? DRIFT_VIEWS[columnKind] ?? DRIFT_VIEWS.numeric : spec.views;
     // A view this kind does not offer falls back to its first, keeping the choice for later
     const activeView = views.includes(view) ? view : (kind === "drift" ? views[0] : "side");
@@ -411,7 +411,7 @@ export default function CompareModal({ pair, onClose }) {
 
     /* Names the request the current options call for. A result is only current when it carries this
        key, which is how loading is known without any state of its own. */
-    const requestKey = [baseTable, otherTable, kind, x, yColumn, kept?.join(",") ?? ""].join("|");
+    const requestKey = [tableA, tableB, kind, x, yColumn, kept?.join(",") ?? ""].join("|");
     const loading = Boolean(x) && result.key !== requestKey;
     const current = result.key === requestKey ? result : null;
     // While the next result loads, the last one of the same kind stays up, dimmed
@@ -441,9 +441,9 @@ export default function CompareModal({ pair, onClose }) {
         const timer = setTimeout(async () => {
             try {
                 const response = kind === "drift"
-                    ? await getDriftComparison({ base: baseTable, other: otherTable, x, keep: kept }, controller.signal)
+                    ? await getDriftComparison({ a: tableA, b: tableB, x, keep: kept }, controller.signal)
                     : await getNodeComparison(
-                        { base: baseTable, other: otherTable, kind, x, y: yColumn },
+                        { a: tableA, b: tableB, kind, x, y: yColumn },
                         controller.signal,
                     );
                 setResult(response?.success
@@ -461,7 +461,7 @@ export default function CompareModal({ pair, onClose }) {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [requestKey, baseTable, otherTable, kind, x, yColumn, kept]);
+    }, [requestKey, tableA, tableB, kind, x, yColumn, kept]);
 
     useEffect(() => {
         dialogRef.current?.focus();
@@ -472,8 +472,8 @@ export default function CompareModal({ pair, onClose }) {
         return () => document.removeEventListener("keydown", onKeyDown);
     }, [onClose]);
 
-    const baseRows = baseMetrics?.row_count;
-    const otherRows = otherMetrics?.row_count;
+    const rowsA = metricsA?.row_count;
+    const rowsB = metricsB?.row_count;
 
     // Portaled to <body> so it sits above the fixed header, whose stacking context would trap it
     return createPortal(
@@ -496,19 +496,19 @@ export default function CompareModal({ pair, onClose }) {
                         <h2 id="compare-title" className="compare-title">Compare nodes</h2>
                         <div className="compare-subtitle">
                             <NodeSummary
-                                role="base"
-                                table={baseTable}
-                                data={baseData}
-                                parentData={serverNodesById?.[baseData?.parent]?.data}
-                                foldedCount={foldedCount(baseId)}
+                                role="a"
+                                table={tableA}
+                                data={dataA}
+                                parentData={serverNodesById?.[dataA?.parent]?.data}
+                                foldedCount={foldedCount(idA)}
                             />
                             <span className="compare-subtitle-arrow" aria-hidden="true">→</span>
                             <NodeSummary
-                                role="other"
-                                table={otherTable}
-                                data={otherData}
-                                parentData={serverNodesById?.[otherData?.parent]?.data}
-                                foldedCount={foldedCount(otherId)}
+                                role="b"
+                                table={tableB}
+                                data={dataB}
+                                parentData={serverNodesById?.[dataB?.parent]?.data}
+                                foldedCount={foldedCount(idB)}
                             />
                         </div>
                     </div>
@@ -519,8 +519,8 @@ export default function CompareModal({ pair, onClose }) {
                     <aside className="compare-options" aria-label="Plot options">
                         <section className="compare-section">
                             <h3 className="compare-section-title">Nodes</h3>
-                            <NodeRow role="base" table={baseTable} rows={baseRows} />
-                            <NodeRow role="other" table={otherTable} rows={otherRows} />
+                            <NodeRow role="a" table={tableA} rows={rowsA} />
+                            <NodeRow role="b" table={tableB} rows={rowsB} />
                         </section>
 
                         <section className="compare-section">
@@ -595,10 +595,10 @@ export default function CompareModal({ pair, onClose }) {
                                 Distortion from root
                             </h3>
                             <DriftSummary
-                                baseTable={baseTable}
-                                otherTable={otherTable}
-                                baseDrift={baseDistortion?.overall}
-                                otherDrift={otherDistortion?.overall}
+                                tableA={tableA}
+                                tableB={tableB}
+                                driftA={distortionA?.overall}
+                                driftB={distortionB?.overall}
                             />
                         </section>
 
@@ -609,7 +609,7 @@ export default function CompareModal({ pair, onClose }) {
                                 <div className="compare-ranked-head" aria-hidden="true">
                                     <span>attribute</span>
                                     <span>error Δ</span>
-                                    <span>drift · base / comp</span>
+                                    <span>drift · A / B</span>
                                 </div>
                                 <ol className="compare-ranked">
                                     {ranked.slice(0, RANKED_LIMIT).map((attribute) => (
@@ -619,17 +619,17 @@ export default function CompareModal({ pair, onClose }) {
                                                 className={`compare-ranked-item ${attribute.name === x ? "compare-ranked-item--active" : ""}`}
                                                 onClick={() => setX(attribute.name)}
                                                 title={`${attribute.name}: error rate ${formatRate(attribute.before)} → ${formatRate(attribute.after)}; `
-                                                    + `drift from root ${formatDrift(attribute.driftBase)} in the baseline, `
-                                                    + `${formatDrift(attribute.driftOther)} in the comparator. Click to plot it.`}
+                                                    + `drift from root ${formatDrift(attribute.driftA)} in selection A, `
+                                                    + `${formatDrift(attribute.driftB)} in selection B. Click to plot it.`}
                                             >
                                                 <span className="compare-ranked-name">{attribute.name}</span>
                                                 <RateDelta delta={attribute.delta} />
                                                 <span className="compare-ranked-drift">
-                                                    {formatDrift(attribute.driftBase)}
-                                                    <DriftFlag result={baseNull[attribute.name]} />
+                                                    {formatDrift(attribute.driftA)}
+                                                    <DriftFlag result={nullA[attribute.name]} />
                                                     {" / "}
-                                                    {formatDrift(attribute.driftOther)}
-                                                    <DriftFlag result={otherNull[attribute.name]} />
+                                                    {formatDrift(attribute.driftB)}
+                                                    <DriftFlag result={nullB[attribute.name]} />
                                                 </span>
                                             </button>
                                         </li>
@@ -644,8 +644,8 @@ export default function CompareModal({ pair, onClose }) {
                             data={plotData}
                             view={activeView}
                             measure={measure}
-                            baseLabel={nodeName(baseTable)}
-                            otherLabel={nodeName(otherTable)}
+                            labelA={nodeName(tableA)}
+                            labelB={nodeName(tableB)}
                             hidden={hidden}
                             onHide={hideCategory}
                         />

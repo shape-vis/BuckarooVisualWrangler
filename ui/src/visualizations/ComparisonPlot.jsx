@@ -116,16 +116,16 @@ function countLine(role, ctx, count) {
 
 function countsTooltip(title, datum, ctx) {
     return `<strong>${escapeHtml(title)}</strong><br>`
-        + `${countLine("base", ctx, datum.base)}<br>${countLine("other", ctx, datum.other)}`;
+        + `${countLine("a", ctx, datum.a)}<br>${countLine("b", ctx, datum.b)}`;
 }
 
 function differenceTooltip(title, datum, ctx) {
-    const before = measureOf(datum.base, ctx.measure);
-    const after = measureOf(datum.other, ctx.measure);
+    const before = measureOf(datum.a, ctx.measure);
+    const after = measureOf(datum.b, ctx.measure);
     return `<strong>${escapeHtml(title)}</strong><br>`
         + `${MEASURES[ctx.measure].label}: ${formatCount(before)} → ${formatCount(after)} `
         + `(<strong>${formatDelta(after - before)}</strong>)<br>`
-        + `${countLine("base", ctx, datum.base)}<br>${countLine("other", ctx, datum.other)}`;
+        + `${countLine("a", ctx, datum.a)}<br>${countLine("b", ctx, datum.b)}`;
 }
 
 // ── Scales and geometry ──────────────────────────────────────────────────────
@@ -194,8 +194,8 @@ function panelTitle(g, role, ctx) {
 
 function pairTitle(g, ctx) {
     const title = g.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -14)");
-    const next = titleChip(title, 0, "base", `${ROLE_NAMES.base} · ${ctx.labels.base}`);
-    titleChip(title, next, "other", `${ROLE_NAMES.other} · ${ctx.labels.other}`);
+    const next = titleChip(title, 0, "a", `${ROLE_NAMES.a} · ${ctx.labels.a}`);
+    titleChip(title, next, "b", `${ROLE_NAMES.b} · ${ctx.labels.b}`);
 }
 
 /* createHybridScales draws its x axis at y = size, which assumes a square plot. These panels are not
@@ -244,10 +244,10 @@ function stackSegments(count) {
 
 function drawHistogramSide(svg, data, ctx) {
     // One y domain for both panels, or bars of equal height would not be equal counts
-    const peak = d3.max(data.bins, (bin) => Math.max(bin.base.items, bin.other.items)) || 1;
+    const peak = d3.max(data.bins, (bin) => Math.max(bin.a.items, bin.b.items)) || 1;
 
     layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "base" : "other";
+        const role = i === 0 ? "a" : "b";
         const xScale = binScale(data.scaleX, w, "horizontal");
         const y = d3.scaleLinear().domain([0, peak]).nice().range([h, 0]);
 
@@ -273,16 +273,16 @@ function drawHistogramSide(svg, data, ctx) {
 function drawHistogramOverlay(svg, data, ctx) {
     const [{g, w, h}] = layoutPanels(svg, ctx.width, ctx.height, 1);
     const xScale = binScale(data.scaleX, w, "horizontal");
-    const peak = d3.max(data.bins, (bin) => Math.max(bin.base.items, bin.other.items)) || 1;
+    const peak = d3.max(data.bins, (bin) => Math.max(bin.a.items, bin.b.items)) || 1;
     const y = d3.scaleLinear().domain([0, peak]).nice().range([h, 0]);
 
-    // Each bin is split down the middle: the baseline's bar on the left, the comparator's on the right
-    const bars = data.bins.flatMap((bin) => [{bin, role: "base"}, {bin, role: "other"}]);
+    // Each bin is split down the middle: selection A's bar on the left, selection B's on the right
+    const bars = data.bins.flatMap((bin) => [{bin, role: "a"}, {bin, role: "b"}]);
     const marks = g.append("g").selectAll("rect").data(bars).join("rect")
         .attr("class", "compare-mark")
         .attr("x", (d) => {
             const span = spanX(xScale, data.scaleX, d.bin);
-            return span.x + (d.role === "base" ? 1 : span.w / 2);
+            return span.x + (d.role === "a" ? 1 : span.w / 2);
         })
         .attr("width", (d) => Math.max(0, spanX(xScale, data.scaleX, d.bin).w / 2 - 1))
         .attr("y", (d) => y(d.bin[d.role].items))
@@ -302,7 +302,7 @@ function drawHistogramDifference(svg, data, ctx) {
     const xScale = binScale(data.scaleX, w, "horizontal");
     const deltas = data.bins.map((bin) => ({
         bin,
-        delta: measureOf(bin.other, ctx.measure) - measureOf(bin.base, ctx.measure),
+        delta: measureOf(bin.b, ctx.measure) - measureOf(bin.a, ctx.measure),
     }));
     // Symmetric about zero, so a gain and a loss of the same size are bars of the same length
     const extent = d3.max(deltas, (d) => Math.abs(d.delta)) || 1;
@@ -348,11 +348,11 @@ function drawTiles(g, data, xScale, yScale, tiles) {
 function drawHeatmapSide(svg, data, ctx) {
     // One color scale for both panels, so equal shades are equal counts
     const peak = d3.max(data.tiles, (tile) => Math.max(
-        measureOf(tile.base, ctx.measure), measureOf(tile.other, ctx.measure))) || 1;
+        measureOf(tile.a, ctx.measure), measureOf(tile.b, ctx.measure))) || 1;
     const fill = sequentialColor(ctx.measure, peak);
 
     layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "base" : "other";
+        const role = i === 0 ? "a" : "b";
         const xScale = binScale(data.scaleX, w, "horizontal");
         const yScale = binScale(data.scaleY, h, "vertical");
 
@@ -371,7 +371,7 @@ function drawHeatmapDifference(svg, data, ctx) {
     const [{g, w, h}] = layoutPanels(svg, ctx.width, ctx.height, 1);
     const xScale = binScale(data.scaleX, w, "horizontal");
     const yScale = binScale(data.scaleY, h, "vertical");
-    const delta = (tile) => measureOf(tile.other, ctx.measure) - measureOf(tile.base, ctx.measure);
+    const delta = (tile) => measureOf(tile.b, ctx.measure) - measureOf(tile.a, ctx.measure);
     const extent = d3.max(data.tiles, (tile) => Math.abs(delta(tile))) || 1;
     const fill = divergingColor(ctx.measure, extent);
 
@@ -394,8 +394,6 @@ const ROOT_COLOR = "#8c939d";
 const FLAG_COLOR = "#d1242f";
 // Room at the right of a ridgeline for each row's drift
 const DRIFT_GUTTER = 72;
-// How tall the other node, and root beside it, stand on a ridgeline row, against the row's own node
-const OVERLAY_SCALE = 0.5;
 // The gap between the ridgeline's rows, as a share of a row - root's row below is sized to match one
 const RIDGE_PADDING = 0.12;
 // The gap between the canvas and the strip under it, as .compare-plot-body sets it
@@ -491,35 +489,29 @@ function drawAnnotationBubble(g, {ax, ay, bounds, aside}, role, side, ctx) {
         });
 }
 
-/* The column's shape in the baseline and the comparator: one row each on a shared axis, with root's own row
+/* The column's shape in selection A and selection B: one row each on a shared axis, with root's own row
    in the strip beneath, which is also the zoom control. Every curve is smoothed with the bandwidth fitted on
    root, and root is drawn dashed over every row - where the dashed line vanishes under the fill, nothing
    moved. The rows share one vertical scale too, so a node that lost rows draws a smaller curve rather than a
    renormalised one.
 
-   Each row carries the other node as well, at half that scale so it stays out of the main curve's way, with
-   root's dashed line at the same half scale beside it. A row is then two pairs, each read at one size: its
-   own node against the full-size root, and the other node against the half-size one.
-
    ctx.range zooms the plot to part of the column, chosen on the strip beneath it. The vertical scale then
    fits the tallest curve inside the window rather than the column's, which is what makes a change in a thin
    tail visible - both rows still share it, so they stay comparable. */
 function drawRidgeline(svg, data, ctx) {
-    const density = data.base.density ?? data.other.density;
+    const density = data.a.density ?? data.b.density;
     if (!density) return drawEmpty(svg, ctx, "This column has too few distinct values to draw its shape");
 
     const rows = [
         {
-            key: "base", label: ctx.labels.base, curve: data.base.density?.node, color: ROLE_COLORS.base,
-            drift: data.base.distortion?.value, flag: data.base.null
+            key: "a", label: ctx.labels.a, curve: data.a.density?.node, color: ROLE_COLORS.a,
+            drift: data.a.distortion?.value, flag: data.a.null
         },
         {
-            key: "other", label: ctx.labels.other, curve: data.other.density?.node, color: ROLE_COLORS.other,
-            drift: data.other.distortion?.value, flag: data.other.null
+            key: "b", label: ctx.labels.b, curve: data.b.density?.node, color: ROLE_COLORS.b,
+            drift: data.b.distortion?.value, flag: data.b.null
         },
     ];
-    // What each row overlays: the row that is not its own
-    const otherRow = (row) => rows.find((candidate) => candidate.key !== row.key);
 
     const [{g, w, h}] = layoutPanels(svg, ctx.width - DRIFT_GUTTER, ctx.height, 1);
     const grid = density.grid;
@@ -533,7 +525,6 @@ function drawRidgeline(svg, data, ctx) {
     const curves = [density.root, ...rows.map((row) => row.curve).filter(Boolean)];
     const peak = d3.max(curves.flatMap((curve) => visible.map((i) => curve[i]))) || 1;
     const rise = (value) => (value / peak) * band.bandwidth() * RIDGE_HEADROOM;
-    const half = (value) => rise(value) * OVERLAY_SCALE;
 
     // The points either side of the window would otherwise draw into the margins
     const clip = `url(#${ctx.clipId})`;
@@ -558,9 +549,8 @@ function drawRidgeline(svg, data, ctx) {
         const rowGroup = g.append("g").attr("class", "compare-ridge-row");
 
         rowGroup.append("line").attr("class", "compare-ridge-floor").attr("x1", 0).attr("x2", w).attr("y1", floor).attr("y2", floor);
-        const lineAt = (curve, scaled) => d3.line().x((i) => x(grid[i])).y((i) => floor - scaled(curve[i]));
 
-        // Back to front: the row's own node, filled
+        // The row's own node, filled
         if (row.curve) {
             rowGroup.append("path").datum(visible)
                 .attr("d", d3.area().x((i) => x(grid[i])).y0(floor).y1((i) => floor - rise(row.curve[i])))
@@ -568,24 +558,9 @@ function drawRidgeline(svg, data, ctx) {
                 .attr("fill", row.color).attr("fill-opacity", 0.5)
                 .attr("stroke", row.color).attr("stroke-width", 1.2);
         }
-        // The other node and root at half scale, both in the other node's colour, so they read as one pair
-        const overlay = otherRow(row);
-        if (overlay.curve) {
-            rowGroup.append("path").datum(visible)
-                .attr("d", lineAt(overlay.curve, half))
-                .attr("clip-path", clip)
-                .attr("class", "compare-ridge-overlay")
-                .style("stroke", overlay.color);
-            rowGroup.append("path").datum(visible)
-                .attr("d", lineAt(density.root, half))
-                .attr("clip-path", clip)
-                .attr("class", "compare-ridge-root compare-ridge-root--half")
-                // Inline, since the dashed class sets root's own colour in the stylesheet
-                .style("stroke", overlay.color);
-        }
-        // Root at full scale last, so it is never lost under a fill
+        // Root's dashed line over it, so it is never lost under the fill
         rowGroup.append("path").datum(visible)
-            .attr("d", lineAt(density.root, rise))
+            .attr("d", d3.line().x((i) => x(grid[i])).y((i) => floor - rise(density.root[i])))
             .attr("clip-path", clip)
             .attr("class", "compare-ridge-root");
 
@@ -675,8 +650,8 @@ function drawRidgeCrosshair(g, hover, {rows, density, x, band, rise, w, h, lo, h
 
             ctx.tooltip.show(event, ridgeShares({
                 i, rootPeak, root: density.root,
-                base: rows.find((row) => row.key === "base").curve,
-                other: rows.find((row) => row.key === "other").curve,
+                curveA: rows.find((row) => row.key === "a").curve,
+                curveB: rows.find((row) => row.key === "b").curve,
                 labels: ctx.labels,
             }));
         })
@@ -689,15 +664,15 @@ function drawRidgeCrosshair(g, hover, {rows, density, x, band, rise, w, h, lo, h
 /* The tooltip beside the crosshair: each node's density as a share of root's there, and each node's as a share
    of the other's. The curves are kept at their share of root's rows, so "61% of root" reads as having 61% as
    many rows as root near this value. A share whose denominator is too thin to divide by shows as a dash. */
-function ridgeShares({i, rootPeak, root, base, other, labels}) {
+function ridgeShares({i, rootPeak, root, curveA, curveB, labels}) {
     const share = (part, whole) => (whole >= THIN_SHARE * rootPeak ? formatShare(part / whole) : "—");
     const line = (html) => `${html}<br>`;
     let html = "";
-    if (base) html += line(`${swatch(ROLE_COLORS.base)}${escapeHtml(labels.base)} · <strong>${share(base[i], root[i])}</strong> of root`);
-    if (other) html += line(`${swatch(ROLE_COLORS.other)}${escapeHtml(labels.other)} · <strong>${share(other[i], root[i])}</strong> of root`);
-    if (base && other) {
-        html += line(`${escapeHtml(labels.other)} · <strong>${share(other[i], base[i])}</strong> of ${escapeHtml(labels.base)}`);
-        html += `${escapeHtml(labels.base)} · <strong>${share(base[i], other[i])}</strong> of ${escapeHtml(labels.other)}`;
+    if (curveA) html += line(`${swatch(ROLE_COLORS.a)}${escapeHtml(labels.a)} · <strong>${share(curveA[i], root[i])}</strong> of root`);
+    if (curveB) html += line(`${swatch(ROLE_COLORS.b)}${escapeHtml(labels.b)} · <strong>${share(curveB[i], root[i])}</strong> of root`);
+    if (curveA && curveB) {
+        html += line(`${escapeHtml(labels.b)} · <strong>${share(curveB[i], curveA[i])}</strong> of ${escapeHtml(labels.a)}`);
+        html += `${escapeHtml(labels.a)} · <strong>${share(curveA[i], curveB[i])}</strong> of ${escapeHtml(labels.b)}`;
     }
     return html.replace(/<br>$/, "");
 }
@@ -722,12 +697,12 @@ function ridgelineCurve(bodyHeight) {
 /* What the overview strip draws for a drift result: the whole column's curves, and the spots the bubbles
    point at. Null for anything the ridgeline does not draw. */
 function ridgelineOverview(data) {
-    const density = data?.kind === "drift" ? (data.base.density ?? data.other.density) : null;
+    const density = data?.kind === "drift" ? (data.a.density ?? data.b.density) : null;
     if (!density) return null;
-    const curves = {base: data.base.density?.node ?? null, other: data.other.density?.node ?? null};
+    const curves = {a: data.a.density?.node ?? null, b: data.b.density?.node ?? null};
     const spots = {
-        base: curves.base && mostChanged(density.root, curves.base),
-        other: curves.other && mostChanged(density.root, curves.other),
+        a: curves.a && mostChanged(density.root, curves.a),
+        b: curves.b && mostChanged(density.root, curves.b),
     };
     return {density, curves, spots};
 }
@@ -1014,8 +989,8 @@ function flowPanelTitle(g, panel, side, ctx) {
     const against = (text) => g.append("text").attr("class", "compare-panel-subtitle").attr("y", -10).text(text);
 
     if (panel.id === "pair") {
-        const next = titleChip(title, 0, "base", `${ctx.labels.base} →`);
-        titleChip(title, next - 8, "other", ctx.labels.other);
+        const next = titleChip(title, 0, "a", `${ctx.labels.a} →`);
+        titleChip(title, next - 8, "b", ctx.labels.b);
         against("the step between them");
         return;
     }
@@ -1031,7 +1006,7 @@ function flowPanelTitle(g, panel, side, ctx) {
 function flowFooter(panel, side, ctx) {
     const numbers = `churn ${formatShare(side.flows.churn)} of rows · TVD ${formatDrift(side.distortion?.value)}`;
     return panel.id === "pair" && side.added
-        ? `${numbers} · ${formatCount(side.added)} rows only in ${ctx.labels.other}`
+        ? `${numbers} · ${formatCount(side.added)} rows only in ${ctx.labels.b}`
         : numbers;
 }
 
@@ -1078,7 +1053,7 @@ function isEmpty(data) {
     // A categorical column is drawn as its flows, a numeric one as its curves
     if (data.kind === "drift") {
         const drawable = (side) => (side?.kind === "categorical" ? side?.flows : side?.density);
-        return !drawable(data.base) && !drawable(data.other);
+        return !drawable(data.a) && !drawable(data.b);
     }
     const marks = data.kind === "histogram" ? data.bins : data.tiles;
     return !marks?.length;
@@ -1105,14 +1080,10 @@ function legendItems(kind, view, measure, labels) {
         }
         return [
             {label: "Root", style: {background: ROOT_COLOR}},
-            ...["base", "other"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}})),
+            ...["a", "b"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}})),
             {
                 label: "Root's shape, dashed on every row", shape: "line",
                 style: {background: "repeating-linear-gradient(to right, #1c1e21 0 4px, transparent 4px 7px)"}
-            },
-            {
-                label: "The other node, and root beside it, at half height", shape: "line",
-                style: {background: "#65676b"}
             },
         ];
     }
@@ -1126,8 +1097,8 @@ function legendItems(kind, view, measure, labels) {
         const noun = MEASURES[measure].noun;
         const [better, worse] = measure === "items" ? ["", ""] : [" (better)", " (worse)"];
         return [
-            {label: `Fewer ${noun} in the comparator${better}`, style: {background: fewer}},
-            {label: `More ${noun} in the comparator${worse}`, style: {background: more}},
+            {label: `Fewer ${noun} in selection B${better}`, style: {background: fewer}},
+            {label: `More ${noun} in selection B${worse}`, style: {background: more}},
         ];
     }
 
@@ -1143,7 +1114,7 @@ function legendItems(kind, view, measure, labels) {
     }
 
     if (kind === "histogram" && view === "overlay") {
-        return ["base", "other"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}}));
+        return ["a", "b"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}}));
     }
 
     return errorItems;
@@ -1157,11 +1128,11 @@ function legendItems(kind, view, measure, labels) {
  *  - view: "side" | "overlay" | "difference", or for drift "ridgeline" | "flows" -
  *    which the kind supports is the modal's call
  *  - measure: a MEASURES key, read by difference views and heatmaps
- *  - baseLabel, otherLabel: short names for the two nodes
+ *  - labelA, labelB: short names for selection A and selection B
  *  - hidden: the Sankeys' categories the reader has taken out of the view, by name
  *  - onHide: called with a category when its bar is selected and Delete pressed
  */
-export default function ComparisonPlot({data, view, measure, baseLabel, otherLabel, hidden = [], onHide}) {
+export default function ComparisonPlot({data, view, measure, labelA, labelB, hidden = [], onHide}) {
     const canvasRef = useRef(null);
     const svgRef = useRef(null);
     const tooltipRef = useRef(null);
@@ -1171,7 +1142,7 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
 
     /* The part of the column a zoomed ridgeline shows, stamped with the column and nodes it was chosen for.
        Another column or node pair reads it as unzoomed, so a stale zoom lapses without an effect to reset it. */
-    const zoomKey = data?.kind === "drift" ? `${data.x}|${data.base.node}|${data.other.node}` : null;
+    const zoomKey = data?.kind === "drift" ? `${data.x}|${data.a.node}|${data.b.node}` : null;
     const [zoom, setZoom] = useState({key: null, range: null});
     const range = zoom.key === zoomKey ? zoom.range : null;
     // The brush reports on every move, often the same range; only a new one is worth a redraw
@@ -1202,7 +1173,7 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
         return () => document.removeEventListener("keydown", onKeyDown);
     }, [selected, onHide, setSelected]);
     // While the next column loads, the last one's drift result stays up - but only under a view for its kind
-    const stale = data?.kind === "drift" && (data.base.kind ?? data.other.kind) !== DRIFT_VIEW_KINDS[view];
+    const stale = data?.kind === "drift" && (data.a.kind ?? data.b.kind) !== DRIFT_VIEW_KINDS[view];
 
     // The canvas takes whatever room the modal gives it, and the plot is laid out from that
     useEffect(() => {
@@ -1235,7 +1206,7 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
             draw(svg, data, {
                 ...size, measure, tooltip, range, clipId, showNote: setNote,
                 hidden, selected, onSelect: setSelected,
-                labels: {base: baseLabel, other: otherLabel},
+                labels: {a: labelA, b: labelB},
             });
         }
 
@@ -1244,7 +1215,7 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
             setNote(null);
             svg.selectAll("*").remove();
         };
-    }, [data, view, measure, baseLabel, otherLabel, size, stale, range, clipId, hidden, selected, setSelected]);
+    }, [data, view, measure, labelA, labelB, size, stale, range, clipId, hidden, selected, setSelected]);
 
     return (
         <div className="compare-plot-frame">
@@ -1306,7 +1277,7 @@ export default function ComparisonPlot({data, view, measure, baseLabel, otherLab
             )}
             {data && (
                 <div className="compare-legend">
-                    {legendItems(data.kind, view, measure, {base: baseLabel, other: otherLabel}).map((item) => (
+                    {legendItems(data.kind, view, measure, {a: labelA, b: labelB}).map((item) => (
                         <span key={item.label} className="compare-legend-item">
                             <span
                                 className={`compare-legend-mark compare-legend-mark--${item.shape ?? "box"}`}

@@ -57,19 +57,19 @@ const styledNodes = useMemo(() => {
     // Only a comparison the user set up with shift-click is signposted. The panel also falls back to
     // comparing against the parent, but that default is between adjacent nodes and needs no marking -
     // labelling it would badge a lone root node that has nothing to compare against.
-    const comparisonBaselineId = comparisonPair?.baseline ?? null;
+    const selectionAId = comparisonPair?.a ?? null;
 
     // While the branch's end is being chosen, the nodes it may end on are marked as pickable
     const markEligible = selectionStage === "destination";
 
     return nodes.map((node) => {
         const isCurrent = node.id === tableName;
-        const isBaseline = node.id === comparisonBaselineId;
+        const isSelectionA = node.id === selectionAId;
         const isEligible = markEligible && eligibleDestinations.has(node.id);
         const isDominated = Boolean(dominatorOf(node));
-        if (!isCurrent && !isBaseline && !isEligible && !isDominated) return node;
+        if (!isCurrent && !isSelectionA && !isEligible && !isDominated) return node;
 
-        const role = isCurrent ? "current" : isBaseline ? "baseline" : null;
+        const role = isCurrent ? "current" : isSelectionA ? "selection-a" : null;
         const classes = [
             role ? `pgraph-node--${role}` : "",
             isEligible ? "pgraph-node--eligible" : "",
@@ -81,7 +81,7 @@ const styledNodes = useMemo(() => {
             ...node,
             className: classes,
             // The node components render a badge from this, so the pair is readable in a large graph
-            data: (role && comparisonBaselineId) ? {...node.data, comparisonRole: role} : node.data,
+            data: (role && selectionAId) ? {...node.data, comparisonRole: role} : node.data,
         };
     });
 }, [nodes, tableName, comparisonPair, selectionStage, eligibleDestinations, dominatorOf]);
@@ -156,7 +156,7 @@ const onSelectionEnd = useCallback(() => {
         onSelectionChange={onSelectionChange}
         onSelectionEnd={onSelectionEnd}
         /* Hold "c" and drag to lasso a run to collapse. Shift is deliberately not the lasso key -
-           it already re-targets the comparison baseline. */
+           it already re-targets the comparison's selection A. */
         selectionKeyCode={"c"}
       >
         {/* The selections are made by clicking the graph, so the way out of them belongs here too */}
@@ -175,7 +175,7 @@ const onSelectionEnd = useCallback(() => {
               <button
                 className="pgraph-action-button"
                 onClick={clearAllSelections}
-                title="Clear the comparison baseline and the selected branch"
+                title="Clear selection A and the selected branch"
               >
                 Clear selections
               </button>

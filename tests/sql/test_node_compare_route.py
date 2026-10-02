@@ -17,7 +17,7 @@ from app.server_utils import ai_wrangle as aw
 from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 ROOT = "n0a_cmpnodes"
-COLUMNS = ["a", "b"]
+COLUMNS = ["height", "weight"]
 
 
 def _drop_all(*tables):
@@ -29,20 +29,20 @@ def _drop_all(*tables):
 
 @pytest.fixture
 def graph():
-    """A root whose row 3 is missing a, and a child node that imputed it."""
-    pd.DataFrame({"ID": [1, 2, 3, 4, 5], "a": [10.0, 20.0, None, 60.0, 30.0],
-                  "b": [1.0, 2.0, 3.0, 4.0, 5.0]}).to_sql(ROOT, engine, if_exists="replace", index=False)
+    """A root whose row 3 is missing height, and a child node that imputed it."""
+    pd.DataFrame({"ID": [1, 2, 3, 4, 5], "height": [10.0, 20.0, None, 60.0, 30.0],
+                  "weight": [1.0, 2.0, 3.0, 4.0, 5.0]}).to_sql(ROOT, engine, if_exists="replace", index=False)
     update_errors_table(ROOT)
     # Take control of exactly which flags exist, so the assertions are about this layout rather than
     # about whatever the detectors happened to find
-    pd.DataFrame([(3, "a", "missing")], columns=["row_id", "column_id", "error_type"]).astype(
+    pd.DataFrame([(3, "height", "missing")], columns=["row_id", "column_id", "error_type"]).astype(
         {"row_id": "int64"}
     ).to_sql(f"errors_{ROOT}", engine, if_exists="replace", index=False)
     build_data_profile_table(ROOT)
     init_pgraph_for_session(ROOT)
     db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
 
-    result = aw.apply_suggestion(ROOT, {"op": "impute_rows", "column": "a", "error_type": "missing"}, COLUMNS)
+    result = aw.apply_suggestion(ROOT, {"op": "impute_rows", "column": "height", "error_type": "missing"}, COLUMNS)
     assert result["success"] is True, result
     child = result["table"]
 
@@ -66,38 +66,38 @@ def _compare(client, **params):
 def test_histogram_compares_the_two_tables(graph, client):
     root, child = graph
 
-    status, body = _compare(client, base=root, other=child, kind="histogram", x="a", bins=5)
+    status, body = _compare(client, a=root, b=child, kind="histogram", x="height", bins=5)
 
     assert status == 200, body
-    assert body["rows"] == {"base": 5, "other": 5}
+    assert body["rows"] == {"a": 5, "b": 5}
 
     null_bin = next(b for b in body["bins"] if b["xType"] == "categorical" and b["xBin"] == "null")
-    assert null_bin["base"] == {"items": 1, "missing": 1}
-    assert null_bin["other"] == {"items": 0}
+    assert null_bin["a"] == {"items": 1, "missing": 1}
+    assert null_bin["b"] == {"items": 0}
 
 
 @pytest.mark.sql
 def test_heatmap_accounts_for_every_row(graph, client):
     root, child = graph
 
-    status, body = _compare(client, base=root, other=child, kind="heatmap", x="a", y="b", bins=2)
+    status, body = _compare(client, a=root, b=child, kind="heatmap", x="height", y="weight", bins=2)
 
     assert status == 200, body
-    assert sum(tile["base"]["items"] for tile in body["tiles"]) == 5
-    assert sum(tile["other"]["items"] for tile in body["tiles"]) == 5
+    assert sum(tile["a"]["items"] for tile in body["tiles"]) == 5
+    assert sum(tile["b"]["items"] for tile in body["tiles"]) == 5
 
 
 @pytest.mark.sql
 @pytest.mark.parametrize("params, message", [
-    ({"other": "n9z_not_a_node", "x": "a"}, "not a node"),
+    ({"b": "n9z_not_a_node", "x": "height"}, "not a node"),
     ({"x": "nope"}, "no column"),
-    ({"x": "a", "kind": "heatmap"}, "needs a y column"),
-    ({"x": "a", "kind": "pie"}, "unknown plot kind"),
+    ({"x": "height", "kind": "heatmap"}, "needs a y column"),
+    ({"x": "height", "kind": "pie"}, "unknown plot kind"),
 ])
 def test_bad_requests_are_refused(graph, client, params, message):
     root, child = graph
 
-    status, body = _compare(client, **{"base": root, "other": child, **params})
+    status, body = _compare(client, **{"a": root, "b": child, **params})
 
     assert status == 400
     assert body["success"] is False

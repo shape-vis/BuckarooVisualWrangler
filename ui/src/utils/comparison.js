@@ -24,8 +24,8 @@ export function describeWrangle(wrangle) {
 }
 
 // The pair's colors, matching the graph's comparison rings (Nodes.css) and the attribute summary strip
-export const ROLE_COLORS = { base: "#1877F2", other: "#1a7f37" };
-export const ROLE_NAMES = { base: "Baseline", other: "Comparator" };
+export const ROLE_COLORS = { a: "#1877F2", b: "#1a7f37" };
+export const ROLE_NAMES = { a: "Selection A", b: "Selection B" };
 
 // The server's name for the deleted rows' sink, and for the catch-all the long tail folds into
 export const REMOVED_LABEL = "(removed)";
@@ -33,18 +33,18 @@ export const OTHER_LABEL = "(other)";
 // The step between the two nodes is neither node's own colour, so it takes drift's teal
 export const PAIR_COLOR = "#0f766e";
 
-/* The three Sankeys the Flows view draws, left to right: the comparator against root, the step from the
-   baseline to the comparator, and the baseline against root. The middle one has no drift from root to
+/* The three Sankeys the Flows view draws, left to right: selection B against root, the step from
+   selection A to selection B, and selection A against root. The middle one has no drift from root to
    report - it carries the pair's own TVD instead. */
 export const FLOW_PANELS = [
-    { id: "other", role: "other", color: ROLE_COLORS.other },
+    { id: "b", role: "b", color: ROLE_COLORS.b },
     { id: "pair", role: null, color: PAIR_COLOR },
-    { id: "base", role: "base", color: ROLE_COLORS.base },
+    { id: "a", role: "a", color: ROLE_COLORS.a },
 ];
 
 /* Each Sankey's data, by panel: the two nodes against root, and the step between them */
 export function flowSides(data) {
-    return { other: data?.other, pair: data?.pair, base: data?.base };
+    return { b: data?.b, pair: data?.pair, a: data?.a };
 }
 
 /* The categories the Sankeys lay out, in the server's order - the most common first. All three share one

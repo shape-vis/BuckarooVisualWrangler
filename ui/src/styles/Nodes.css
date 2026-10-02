@@ -1,4 +1,4 @@
-/* Nodes are white at rest. Which node is current and which is the comparison baseline are states, so
+/* Nodes are white at rest. Which node is current and which is the comparison's selection A are states, so
    they are modifier classes set from the node data rather than inline styles written by an effect. */
 .react-flow__node-noteNode,
 .react-flow__node-rootNoteNode {
@@ -13,14 +13,14 @@
 
 /* The two nodes the attribute summary panel is comparing. Both get a matching solid ring so they read
    as a pair against everything else in the graph, and the colors match the panel's strip: green for
-   the wrangled node, blue for the baseline. */
+   the current node (selection B), blue for selection A. */
 .react-flow__node.pgraph-node--current {
   background-color: #64ea96;
   border: 2px solid #1a7f37;
   box-shadow: 0 0 0 3px rgba(26, 127, 55, 0.25);
 }
 
-.react-flow__node.pgraph-node--baseline {
+.react-flow__node.pgraph-node--selection-a {
   background-color: #e7f0fd;
   border: 2px dashed #1877F2;
   box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
@@ -129,7 +129,7 @@
 }
 
 /* A leaf another leaf beats on both error and drift - never the right choice, whatever the analyst
-   values. Faded and struck through in place rather than hidden, and combined with the current / baseline
+   values. Faded and struck through in place rather than hidden, and combined with the current / selection A
    marks rather than replacing them. Hovering it names what beats it. */
 .react-flow__node.pgraph-node--dominated {
   opacity: 0.5;
@@ -161,8 +161,8 @@
   pointer-events: none;
 }
 
-.node-comparison-badge--current  { background-color: #1a7f37; }
-.node-comparison-badge--baseline { background-color: #1877F2; }
+.node-comparison-badge--current     { background-color: #1a7f37; }
+.node-comparison-badge--selection-a { background-color: #1877F2; }
 .react-flow__node-input.selectable.selected,
     .react-flow__node-input.selectable:focus,
     .react-flow__node-input.selectable:focus-visible,
@@ -203,7 +203,7 @@
 }
 /* ── Prospective nodes ───────────────────────────────────────────────────────
    A wrangle the AI is proposing, drawn where the resulting node would sit. Dashed and violet, so
-   it cannot be mistaken for a real node: the baseline marker is dashed blue and a folded run is
+   it cannot be mistaken for a real node: the selection A marker is dashed blue and a folded run is
    dashed grey, and both of those stand for something that exists. This one does not - yet. */
 .react-flow__node-prospectiveNode {
   background-color: #faf5ff;

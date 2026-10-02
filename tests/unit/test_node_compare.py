@@ -19,7 +19,7 @@ def state(rows, errors=()):
 
 class SharedAxisTests(unittest.TestCase):
     def test_numeric_range_spans_both_states(self):
-        # The comparator lost its outlier, but its bins still have to line up with the baseline's
+        # Selection B lost its outlier, but its bins still have to line up with selection A's
         axis = Axis.shared(pd.Series([0, 5, 100]), pd.Series([0, 5]), bin_count=10)
 
         self.assertEqual((axis.lo, axis.hi), (0.0, 100.0))
@@ -61,56 +61,56 @@ class SharedAxisTests(unittest.TestCase):
 
 class CompareHistogramTests(unittest.TestCase):
     def test_every_bin_lists_both_sides(self):
-        base = state({"ID": [1, 2, 3, 4], "age": [0, 0, 10, 10]},
+        state_a = state({"ID": [1, 2, 3, 4], "age": [0, 0, 10, 10]},
                      [(1, "age", "missing"), (3, "age", "anomaly")])
-        other = state({"ID": [1, 2], "age": [0, 0]})
+        state_b = state({"ID": [1, 2], "age": [0, 0]})
 
-        bins = compare_histogram(base, other, "age", bin_count=2)["bins"]
+        bins = compare_histogram(state_a, state_b, "age", bin_count=2)["bins"]
 
         self.assertEqual([(b["xType"], b["xBin"]) for b in bins], [("numeric", 0), ("numeric", 1)])
-        self.assertEqual(bins[0]["base"], {"items": 2, "missing": 1})
-        self.assertEqual(bins[0]["other"], {"items": 2})
-        # The comparator has nothing in the top bin, but the bin is still there to measure against
-        self.assertEqual(bins[1]["base"], {"items": 2, "anomaly": 1})
-        self.assertEqual(bins[1]["other"], {"items": 0})
+        self.assertEqual(bins[0]["a"], {"items": 2, "missing": 1})
+        self.assertEqual(bins[0]["b"], {"items": 2})
+        # Selection B has nothing in the top bin, but the bin is still there to measure against
+        self.assertEqual(bins[1]["a"], {"items": 2, "anomaly": 1})
+        self.assertEqual(bins[1]["b"], {"items": 0})
 
     def test_flags_on_other_columns_are_not_counted(self):
-        base = state({"ID": [1], "age": [3]}, [(1, "city", "missing")])
+        node = state({"ID": [1], "age": [3]}, [(1, "city", "missing")])
 
-        bins = compare_histogram(base, base, "age", bin_count=1)["bins"]
+        bins = compare_histogram(node, node, "age", bin_count=1)["bins"]
 
-        self.assertEqual(bins[0]["base"], {"items": 1})
+        self.assertEqual(bins[0]["a"], {"items": 1})
 
     def test_imputed_nulls_move_from_the_null_label_into_a_bin(self):
-        base = state({"ID": [1, 2], "age": [None, 4]})
-        other = state({"ID": [1, 2], "age": [4, 4]})
+        state_a = state({"ID": [1, 2], "age": [None, 4]})
+        state_b = state({"ID": [1, 2], "age": [4, 4]})
 
-        bins = {(b["xType"], b["xBin"]): b for b in compare_histogram(base, other, "age", 1)["bins"]}
+        bins = {(b["xType"], b["xBin"]): b for b in compare_histogram(state_a, state_b, "age", 1)["bins"]}
 
-        self.assertEqual(bins[("categorical", NULL_LABEL)]["base"]["items"], 1)
-        self.assertEqual(bins[("categorical", NULL_LABEL)]["other"]["items"], 0)
-        self.assertEqual(bins[("numeric", 0)]["other"]["items"], 2)
+        self.assertEqual(bins[("categorical", NULL_LABEL)]["a"]["items"], 1)
+        self.assertEqual(bins[("categorical", NULL_LABEL)]["b"]["items"], 0)
+        self.assertEqual(bins[("numeric", 0)]["b"]["items"], 2)
 
 
 class CompareHeatmapTests(unittest.TestCase):
     def test_only_occupied_tiles_are_listed(self):
-        base = state({"ID": [1, 2], "a": [0, 10], "b": [0, 10]})
+        node = state({"ID": [1, 2], "x": [0, 10], "y": [0, 10]})
 
-        tiles = compare_heatmap(base, base, "a", "b", bin_count=2)["tiles"]
+        tiles = compare_heatmap(node, node, "x", "y", bin_count=2)["tiles"]
 
         self.assertEqual([(t["xBin"], t["yBin"]) for t in tiles], [(0, 0), (1, 1)])
 
     def test_row_flagged_on_both_columns_counts_once(self):
-        base = state({"ID": [1], "a": [1], "b": [1]}, [(1, "a", "missing"), (1, "b", "missing")])
+        node = state({"ID": [1], "x": [1], "y": [1]}, [(1, "x", "missing"), (1, "y", "missing")])
 
-        tiles = compare_heatmap(base, base, "a", "b", bin_count=1)["tiles"]
+        tiles = compare_heatmap(node, node, "x", "y", bin_count=1)["tiles"]
 
-        self.assertEqual(tiles[0]["base"], {"items": 1, "missing": 1})
+        self.assertEqual(tiles[0]["a"], {"items": 1, "missing": 1})
 
     def test_same_column_on_both_axes(self):
-        base = state({"ID": [1, 2], "a": [0, 10]})
+        node = state({"ID": [1, 2], "x": [0, 10]})
 
-        tiles = compare_heatmap(base, base, "a", "a", bin_count=2)["tiles"]
+        tiles = compare_heatmap(node, node, "x", "x", bin_count=2)["tiles"]
 
         self.assertEqual([(t["xBin"], t["yBin"]) for t in tiles], [(0, 0), (1, 1)])
 

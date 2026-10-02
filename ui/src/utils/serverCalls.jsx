@@ -345,8 +345,8 @@ export async function getBranchTrajectory(source, target, destination){
  * Takes an AbortSignal so a superseded request - the user switching attribute mid-flight - is
  * dropped rather than raced. Rejects with an AbortError when that happens.
  */
-export async function getNodeComparison({ base, other, kind, x, y }, signal) {
-    const params = new URLSearchParams({ base, other, kind, x });
+export async function getNodeComparison({ a, b, kind, x, y }, signal) {
+    const params = new URLSearchParams({ a, b, kind, x });
     if (y) params.set("y", y);
     const response = await fetch(`/api/pgraph/compare?${params}`, { method: "GET", signal });
     return await response.json();
@@ -380,11 +380,11 @@ export async function getDriftDetail({ node, column, keep }, signal) {
 
 /**
  * GET /api/pgraph/flow_pair
- * The Sankey between the two compared nodes themselves - where the baseline's rows sit in the comparator -
+ * The Sankey between the two compared nodes themselves - where selection A's rows sit in selection B -
  * for the middle panel of the Flows view. Takes an AbortSignal, as getDriftDetail does.
  */
-export async function getFlowPair({ base, other, column, keep }, signal) {
-    const params = new URLSearchParams({ base, other, column });
+export async function getFlowPair({ a, b, column, keep }, signal) {
+    const params = new URLSearchParams({ a, b, column });
     keep?.forEach((category) => params.append("keep", category));
     const response = await fetch(`/api/pgraph/flow_pair?${params}`, { method: "GET", signal });
     return await response.json();

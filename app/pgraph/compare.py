@@ -239,26 +239,26 @@ def _histogram_counts(state, column, axis):
     return _counts(keyed, state.errors[state.errors["column_id"] == column], ["type", "bin"])
 
 
-def compare_histogram(base, other, column, bin_count):
+def compare_histogram(a, b, column, bin_count):
     """
     Both states' histograms of one column, binned on one shared axis.
 
-    :param base: the baseline's NodeState
-    :param other: the comparator's NodeState
+    :param a: selection A's NodeState
+    :param b: selection B's NodeState
     :param column: the column to bin
     :param bin_count: how many bins its numeric part is split into
-    :return: {"scaleX", "bins": [{"xType", "xBin", "base", "other"}]}. Every bin on the axis is
+    :return: {"scaleX", "bins": [{"xType", "xBin", "a", "b"}]}. Every bin on the axis is
              listed, empty ones included, so a difference plot has a zero to measure against.
     """
-    axis = Axis.shared(base.data[column], other.data[column], bin_count)
-    base_counts = _histogram_counts(base, column, axis)
-    other_counts = _histogram_counts(other, column, axis)
+    axis = Axis.shared(a.data[column], b.data[column], bin_count)
+    counts_a = _histogram_counts(a, column, axis)
+    counts_b = _histogram_counts(b, column, axis)
 
     return {
         "scaleX": axis.bin_scale(),
         "bins": [{"xType": x_type, "xBin": x_bin,
-                  "base": base_counts.get((x_type, x_bin), {"items": 0}),
-                  "other": other_counts.get((x_type, x_bin), {"items": 0})}
+                  "a": counts_a.get((x_type, x_bin), {"items": 0}),
+                  "b": counts_b.get((x_type, x_bin), {"items": 0})}
                  for x_type, x_bin in axis.keys()],
     }
 
@@ -275,30 +275,30 @@ def _heatmap_counts(state, x_column, y_column, x_axis, y_axis):
     return _counts(keyed, flags, ["xType", "xBin", "yType", "yBin"])
 
 
-def compare_heatmap(base, other, x_column, y_column, bin_count):
+def compare_heatmap(a, b, x_column, y_column, bin_count):
     """
     Both states' 2D histograms on shared axes.
 
-    :return: {"scaleX", "scaleY", "tiles": [{"xType", "xBin", "yType", "yBin", "base", "other"}]}.
+    :return: {"scaleX", "scaleY", "tiles": [{"xType", "xBin", "yType", "yBin", "a", "b"}]}.
              Only tiles holding rows on at least one side are listed - a grid of empties would be
              most of the payload.
     """
-    x_axis = Axis.shared(base.data[x_column], other.data[x_column], bin_count)
-    y_axis = Axis.shared(base.data[y_column], other.data[y_column], bin_count)
-    base_counts = _heatmap_counts(base, x_column, y_column, x_axis, y_axis)
-    other_counts = _heatmap_counts(other, x_column, y_column, x_axis, y_axis)
+    x_axis = Axis.shared(a.data[x_column], b.data[x_column], bin_count)
+    y_axis = Axis.shared(a.data[y_column], b.data[y_column], bin_count)
+    counts_a = _heatmap_counts(a, x_column, y_column, x_axis, y_axis)
+    counts_b = _heatmap_counts(b, x_column, y_column, x_axis, y_axis)
 
     x_order = {key: i for i, key in enumerate(x_axis.keys())}
     y_order = {key: i for i, key in enumerate(y_axis.keys())}
-    keys = sorted(set(base_counts) | set(other_counts),
+    keys = sorted(set(counts_a) | set(counts_b),
                   key=lambda key: (x_order[key[:2]], y_order[key[2:]]))
 
     tiles = []
     for key in keys:
         x_type, x_bin, y_type, y_bin = key
         tiles.append({"xType": x_type, "xBin": x_bin, "yType": y_type, "yBin": y_bin,
-                      "base": base_counts.get(key, {"items": 0}),
-                      "other": other_counts.get(key, {"items": 0})})
+                      "a": counts_a.get(key, {"items": 0}),
+                      "b": counts_b.get(key, {"items": 0})})
 
     return {"scaleX": x_axis.bin_scale(), "scaleY": y_axis.bin_scale(), "tiles": tiles}
 
@@ -322,8 +322,8 @@ def _differs(before, after):
     return (before_null != after_null) | (~before_null & ~after_null & (numbers_differ | text_differs))
 
 
-def _matched(base_data, other_data, columns, how):
-    """Two states' rows side by side, one row per ID, the compared columns suffixed _base and _other."""
+def _matched(data_a, data_b, columns, how):
+    """Two states' rows side by side, one row per ID, the compared columns suffixed _a and _b."""
     columns = list(dict.fromkeys(columns))
     selected = list(dict.fromkeys(["ID", *columns]))
-    return base_data[selected].merge(other_data[selected], on="ID", how=how, suffixes=("_base", "_other"))
+    return data_a[selected].merge(data_b[selected], on="ID", how=how, suffixes=("_a", "_b"))

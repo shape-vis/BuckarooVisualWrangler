@@ -87,7 +87,7 @@ class PGraph:
                     "id": key,
                     "data": {
                         "label": key,
-                        # The front end derives the default delta baseline, collapse validation and
+                        # The front end derives the default selection A, collapse validation and
                         # node highlighting from this, so none of them need a round trip
                         "parent": node.parent_table,
                         "metrics": node.metrics.__json__() if node.metrics is not None else None,

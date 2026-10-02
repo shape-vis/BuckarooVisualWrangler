@@ -92,8 +92,8 @@ def compare_nodes():
     """
     Plot data for comparing the data behind two nodes, binned on axes the two states share.
 
-    Query: ?base=<node>&other=<node>&kind=histogram|heatmap&x=<column>[&y=<column>][&bins=10]
-    base is the baseline and other the comparator; y is required for a heatmap. Returns the plot payload
+    Query: ?a=<node>&b=<node>&kind=histogram|heatmap&x=<column>[&y=<column>][&bins=10]
+    a is selection A and b selection B; y is required for a heatmap. Returns the plot payload
     for that kind plus each side's row count.
     Read-only: neither node becomes the session's current table. See app/pgraph/compare.py.
     """
@@ -102,10 +102,10 @@ def compare_nodes():
         if pgraph is None:
             return {"success": False, "error": "no graph in this session"}, 400
 
-        base_table = request.args.get("base")
-        other_table = request.args.get("other")
+        table_a = request.args.get("a")
+        table_b = request.args.get("b")
         # Only tables the graph owns can be read, so a request cannot name an arbitrary table
-        for name, value in (("base", base_table), ("other", other_table)):
+        for name, value in (("a", table_a), ("b", table_b)):
             if not value:
                 return {"success": False, "error": f"missing {name}"}, 400
             if value not in pgraph.node_map:
@@ -125,20 +125,20 @@ def compare_nodes():
         bin_count = _bounded_int("bins", 10, 1, 50)
 
         columns = [x_column] if y_column is None else [x_column, y_column]
-        base = load_node_state(engine, base_table, columns)
-        other = load_node_state(engine, other_table, columns)
+        state_a = load_node_state(engine, table_a, columns)
+        state_b = load_node_state(engine, table_b, columns)
 
-        plot = (compare_histogram(base, other, x_column, bin_count) if kind == "histogram"
-                else compare_heatmap(base, other, x_column, y_column, bin_count))
+        plot = (compare_histogram(state_a, state_b, x_column, bin_count) if kind == "histogram"
+                else compare_heatmap(state_a, state_b, x_column, y_column, bin_count))
 
         return {
             "success": True,
             "kind": kind,
-            "base": base_table,
-            "other": other_table,
+            "a": table_a,
+            "b": table_b,
             "x": x_column,
             "y": y_column,
-            "rows": {"base": len(base.data), "other": len(other.data)},
+            "rows": {"a": len(state_a.data), "b": len(state_b.data)},
             **plot,
         }
     except Exception as e:
@@ -216,10 +216,10 @@ def drift_detail_view():
 @app.get("/api/pgraph/flow_pair")
 def flow_pair_view():
     """
-    The Sankey between the two compared nodes themselves - where the baseline's rows sit in the comparator -
+    The Sankey between the two compared nodes themselves - where selection A's rows sit in selection B -
     for the middle panel of the modal's Flows view.
 
-    Query: ?base=<node>&other=<node>&column=<column>[&keep=<category>&keep=<category>...]
+    Query: ?a=<node>&b=<node>&column=<column>[&keep=<category>&keep=<category>...]
     Read-only: neither node becomes the session's current table.
     """
     try:
@@ -227,7 +227,7 @@ def flow_pair_view():
         if pgraph is None:
             return {"success": False, "error": "no graph in this session"}, 400
 
-        nodes = [request.args.get("base"), request.args.get("other")]
+        nodes = [request.args.get("a"), request.args.get("b")]
         if not all(nodes):
             return {"success": False, "error": "missing node"}, 400
         for node in nodes:

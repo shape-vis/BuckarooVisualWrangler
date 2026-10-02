@@ -360,11 +360,11 @@ class FlowTests(unittest.TestCase):
         self.assertIsNone(category_flows(root, root.copy(), "g")["other"])
 
     def test_flows_between_two_nodes_read_from_the_first(self):
-        """The pair Sankey's data: the baseline is the left side, and its deletes are the sink."""
-        base = frame({"ID": [1, 2, 3, 4], "g": ["a", "a", "b", "b"]})
-        other = frame({"ID": [1, 2, 3], "g": ["a", "b", "b"]})
+        """The pair Sankey's data: selection A is the left side, and its deletes are the sink."""
+        frame_a = frame({"ID": [1, 2, 3, 4], "g": ["a", "a", "b", "b"]})
+        frame_b = frame({"ID": [1, 2, 3], "g": ["a", "b", "b"]})
 
-        flows = category_flows(base, other, "g")
+        flows = category_flows(frame_a, frame_b, "g")
 
         self.assertIn({"source": "a", "target": "b", "rows": 1}, flows["flows"])
         self.assertIn({"source": "b", "target": REMOVED_LABEL, "rows": 1}, flows["flows"])

@@ -48,8 +48,8 @@ function Grip({x, y, width, height, isBrushActive}) {
  *
  * Props:
  *  - density: the drift detail's density - its grid and root's curve
- *  - curves: {base, other}, each node's curve on the same grid, or null
- *  - spots: {base, other}, the grid index each node's annotation bubble points at, or null
+ *  - curves: {a, b}, each selected node's curve on the same grid, or null
+ *  - spots: {a, b}, the grid index each node's annotation bubble points at, or null
  *  - frame: {left, width, total} - where the ridgeline's panel sits, so the two line up exactly
  *  - rootColor: root's colour in the ridgeline
  *  - curve: how tall the curves stand, so root's row can match the ridgeline's rows above it
@@ -67,13 +67,13 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
     const y = useMemo(() => d3.scaleLinear().domain([0, 1]).range([curve, 0]), [curve]);
 
     const paths = useMemo(() => {
-        const peak = d3.max([root, curves.base, curves.other].flatMap((values) => values ?? [])) || 1;
+        const peak = d3.max([root, curves.a, curves.b].flatMap((values) => values ?? [])) || 1;
         const rise = (value) => PIN + curve - (value / peak) * curve * RIDGE_HEADROOM;
         const line = d3.line().x((_, i) => x(grid[i])).y(rise);
         return {
             root: d3.area().x((_, i) => x(grid[i])).y0(PIN + curve).y1(rise)(root),
-            base: curves.base && line(curves.base),
-            other: curves.other && line(curves.other),
+            a: curves.a && line(curves.a),
+            b: curves.b && line(curves.b),
         };
     }, [grid, root, curves, x, curve]);
 
@@ -114,11 +114,11 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
                     {/* Root's row on a wash of its own grey, as the ridgeline's rows are on theirs */}
                     <rect className="compare-ridge-band" y={PIN} width={frame.width} height={curve} fill={rootColor}/>
                     <path d={paths.root} fill={rootColor} fillOpacity={0.35}/>
-                    {["base", "other"].map((role) => paths[role] && (
+                    {["a", "b"].map((role) => paths[role] && (
                         <path key={role} d={paths[role]} fill="none" stroke={ROLE_COLORS[role]} strokeWidth={1.2}/>
                     ))}
                     {/* Pins over the spots the bubbles point at, so there is somewhere to aim the brush */}
-                    {["base", "other"].map((role) => spots[role] != null && (
+                    {["a", "b"].map((role) => spots[role] != null && (
                         <path
                             key={`pin-${role}`}
                             d={`M${x(grid[spots[role]]) - 4},0 h8 l-4,${PIN} z`}

@@ -216,10 +216,10 @@
   z-index: 1000;
 }
 
-/* ── Baseline comparison ──────────────────────────────────────────────────── */
+/* ── Selection A / B comparison ───────────────────────────────────────────── */
 
 /* Names the node the deltas are measured against, and the row-count change on the way there */
-.baseline-strip {
+.selection-strip {
     border: 1px solid #dddfe2;
     border-radius: 8px;
     padding: 7px 8px;
@@ -231,24 +231,24 @@
     box-sizing: border-box;
 }
 
-.baseline-strip--empty {
+.selection-strip--empty {
     color: #65676b;
     font-style: italic;
 }
 
 /* Fixed label column so the two node names line up under each other */
-.baseline-strip-line {
+.selection-strip-line {
     display: grid;
     grid-template-columns: 102px 1fr auto;
     align-items: baseline;
     gap: 4px;
 }
 
-.baseline-strip-label {
+.selection-strip-label {
     color: #65676b;
 }
 
-.baseline-strip-node {
+.selection-strip-node {
     font-weight: 600;
     color: #1877F2;
     overflow: hidden;
@@ -256,12 +256,12 @@
     white-space: nowrap;
 }
 
-/* The node being wrangled is the one every other panel is showing, so it reads as the active state */
-.baseline-strip-node--current {
+/* Selection B is the node being wrangled, the one every other panel shows, so it reads as active */
+.selection-strip-node--b {
     color: #1a7f37;
 }
 
-.baseline-strip-reset {
+.selection-strip-reset {
     border: none;
     background: none;
     padding: 0;
@@ -271,17 +271,17 @@
     text-decoration: underline;
 }
 
-.baseline-strip-reset:hover {
+.selection-strip-reset:hover {
     color: #1c1e21;
 }
 
-.baseline-strip-rows {
+.selection-strip-rows {
     color: #65676b;
     font-size: 11px;
     margin-top: 3px;
 }
 
-.baseline-strip-rowdelta {
+.selection-strip-rowdelta {
     font-weight: 600;
 }
 

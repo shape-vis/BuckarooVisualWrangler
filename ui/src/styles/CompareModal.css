@@ -151,20 +151,20 @@
     color: #8a8d91;
 }
 
-/* The same pairing the graph draws: a dashed blue baseline and a solid green comparator */
+/* The same pairing the graph draws: a dashed blue selection A and a solid green selection B */
 .compare-node-chip {
     padding: 1px 8px;
     border-radius: 999px;
     font-weight: 600;
 }
 
-.compare-node-chip--base {
+.compare-node-chip--a {
     color: #1877F2;
     background: #e7f0fd;
     border: 1px dashed #1877F2;
 }
 
-.compare-node-chip--other {
+.compare-node-chip--b {
     color: #1a7f37;
     background: #e6f4ea;
     border: 1px solid #1a7f37;
@@ -263,8 +263,8 @@
     color: #ffffff;
 }
 
-.compare-role--base  { background: #1877F2; }
-.compare-role--other { background: #1a7f37; }
+.compare-role--a { background: #1877F2; }
+.compare-role--b { background: #1a7f37; }
 
 .compare-node-name {
     font-weight: 600;
@@ -812,13 +812,6 @@
     stroke-dasharray: 4 3;
 }
 
-/* The other node on a ridgeline row, at half height: a line rather than a fill, so the row's own node stays
-   the shape that reads first. Its colour is set inline. */
-.compare-ridge-overlay {
-    fill: none;
-    stroke-width: 1.6;
-}
-
 /* A ridgeline row's wash, in its own node's colour (root's grey in the strip) - faint enough that the curves
    still read over it, strong enough to show where the row ends once zoomed in */
 .compare-ridge-band {
@@ -879,14 +872,6 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     fill: #0f766e;
-}
-
-/* Root at the same half height, beside it - a shorter, lighter dash than the full-size one, so the two
-   dashed lines on a row are told apart */
-.compare-ridge-root--half {
-    stroke-width: 4;
-    stroke-dasharray: 2 2;
-    opacity: 0.85;
 }
 
 .compare-ridge-label,

@@ -17,7 +17,7 @@ function ComparisonBadge( { role } ){
 
     return (
         <div className={`node-comparison-badge node-comparison-badge--${role}`}>
-            {role === "current" ? "comparator" : "baseline"}
+            {role === "current" ? "selection B" : "selection A"}
         </div>
     );
 }
