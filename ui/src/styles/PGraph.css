@@ -3,9 +3,143 @@
   width: 100%;
 }
 
-.pgraph-actions {
+/* Top right of the graph: the mode toggle, analysis mode's choices under it, and the buttons that clear
+   what has been selected or folded */
+.pgraph-toolbar {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
+  /* In a narrow pane the controls wrap onto more rows rather than running off its left edge */
+  max-width: calc(100% - 30px);
+}
+
+.pgraph-toolbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.pgraph-segmented {
+  display: inline-flex;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.pgraph-segment {
+  border: none;
+  border-left: 1px solid #dddfe2;
+  background: transparent;
+  color: #3c4043;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pgraph-segment:first-child {
+  border-left: none;
+}
+
+.pgraph-segment:hover {
+  background: #f5f7fa;
+}
+
+.pgraph-segment--active,
+.pgraph-segment--active:hover {
+  background: #e7f0fd;
+  color: #1877F2;
+  font-weight: 600;
+}
+
+.pgraph-hint {
+  font-size: 11px;
+  font-style: italic;
+  color: #65676b;
+  background: rgba(240, 242, 245, 0.9);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* A shift-drag on the plot is a box to magnify, not a selection to move, so the frame React Flow draws around
+   the nodes it caught is left out */
+.pgraph-container--analysis .react-flow__nodesselection {
+  display: none;
+}
+
+.pgraph-axis-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #65676b;
+  background: #ffffff;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  padding: 2px 4px 2px 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.pgraph-axis-pick select {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  color: #1c1e21;
+  cursor: pointer;
+}
+
+/* ── Analysis mode's axes ───────────────────────────────────────────────── */
+
+/* The plot's gridlines, behind the edges and nodes where React Flow's own background would be */
+.analysis-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.analysis-grid line {
+  stroke: #dde1e6;
+}
+
+/* The axes, over the nodes so a node passing under them never hides the numbers */
+.analysis-axes {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.analysis-axis-strip {
+  fill: #f0f2f5;
+  fill-opacity: 0.94;
+}
+
+.analysis-axis-line {
+  stroke: #9ca3af;
+}
+
+.analysis-tick {
+  font-size: 11px;
+  fill: #4b5563;
+}
+
+.analysis-axis-title {
+  font-size: 12px;
+  font-weight: 600;
+  fill: #374151;
+}
+
+.analysis-hint {
+  color: #9ca3af;
+  font-size: 11px;
 }
 
 /* Sits over the graph, appearing only while something is selected or collapsed */
@@ -59,4 +193,149 @@
   font-size: 12px;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* Shares the main area with another view: grows into whatever that view leaves. The plot matrix beside it
+   draws with overflow visible, and in a narrow pane its last column spills over this one - so the graph sits
+   above it on its own background - the main area's grey, so the two views still read as one surface - and a
+   click on a node near its left edge reaches the node. */
+.svg-and-toolbox > .pgraph-container {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  background: #f0f2f5;
+}
+
+/* ── Analysis mode's detail inset ──────────────────────────────────────────
+   As a map draws one: a box on the plot, two leader lines, and the region drawn large in a framed panel */
+.analysis-inset-leaders {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.analysis-inset-leaders line,
+.analysis-inset-box {
+  stroke: #1d6f86;
+  stroke-width: 1.75;
+}
+
+.analysis-inset-box {
+  fill: #1d6f86;
+  fill-opacity: 0.06;
+  stroke-width: 2;
+}
+
+.analysis-inset {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 3px solid #1d6f86;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.analysis-inset-header {
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 0 10px;
+  background: #1d6f86;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.analysis-inset-close {
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.analysis-inset-close:hover {
+  color: #d6eef4;
+}
+
+.analysis-inset-tick line {
+  stroke: #eceef1;
+}
+
+.analysis-inset-tick text {
+  font-size: 10px;
+  fill: #4b5563;
+}
+
+.analysis-inset-link {
+  stroke-width: 1.5;
+  opacity: 0.8;
+}
+
+/* A fanned-out dot's line back to the point it shares with others, and that point */
+.analysis-inset-spoke {
+  stroke: #6b7280;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.analysis-inset-anchor {
+  fill: #374151;
+}
+
+.analysis-inset-node {
+  cursor: pointer;
+}
+
+.analysis-inset-node circle:not(.analysis-inset-ring) {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+.analysis-inset-node:hover circle:not(.analysis-inset-ring) {
+  stroke: #111827;
+}
+
+.analysis-inset-node text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: #111827;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.analysis-inset-ring {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.analysis-inset-ring--current {
+  stroke: #1a7f37;
+}
+
+.analysis-inset-ring--selection-a {
+  stroke: #1877F2;
+  stroke-dasharray: 3 2;
+}
+
+.analysis-inset-node--dominated {
+  opacity: 0.5;
+}
+
+.analysis-inset-node--dominated text {
+  text-decoration: line-through;
 }

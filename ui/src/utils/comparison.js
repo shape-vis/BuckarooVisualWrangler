@@ -23,51 +23,47 @@ export function describeWrangle(wrangle) {
     return columns ? `${wrangle.op} · ${columns}` : wrangle.op;
 }
 
-// The pair's colors, matching the graph's comparison rings (Nodes.css) and the attribute summary strip
+// The pair's colors, matching the graph's comparison rings (Nodes.css) in both its modes
 export const ROLE_COLORS = { a: "#1877F2", b: "#1a7f37" };
 export const ROLE_NAMES = { a: "Selection A", b: "Selection B" };
 
 // The server's name for the deleted rows' sink, and for the catch-all the long tail folds into
 export const REMOVED_LABEL = "(removed)";
 export const OTHER_LABEL = "(other)";
-// The step between the two nodes is neither node's own colour, so it takes drift's teal
-export const PAIR_COLOR = "#0f766e";
 
-/* The three Sankeys the Flows view draws, left to right: selection B against root, the step from
-   selection A to selection B, and selection A against root. The middle one has no drift from root to
-   report - it carries the pair's own TVD instead. */
-export const FLOW_PANELS = [
-    { id: "b", role: "b", color: ROLE_COLORS.b },
-    { id: "pair", role: null, color: PAIR_COLOR },
-    { id: "a", role: "a", color: ROLE_COLORS.a },
+/* The two sides of the Flows view's Sankey, left to right: root sits in the middle, with its rows' flows into
+   selection A drawn out to the left and into selection B out to the right. */
+export const FLOW_SIDES = [
+    { id: "a", color: ROLE_COLORS.a },
+    { id: "b", color: ROLE_COLORS.b },
 ];
 
-/* Each Sankey's data, by panel: the two nodes against root, and the step between them */
+/* Each side's data: that node's breakdown against root */
 export function flowSides(data) {
-    return { b: data?.b, pair: data?.pair, a: data?.a };
+    return { a: data?.a, b: data?.b };
 }
 
-/* The categories the Sankeys lay out, in the server's order - the most common first. All three share one
-   list, so one window and one choice of categories covers them all. The removed sink is not among them: it
+/* The categories the Sankey lays out, in the server's order - the most common first. Both sides share one
+   list, so one window and one choice of categories covers them both. The removed sink is not among them: it
    is pinned under whatever the plot shows. */
 export function flowCategories(data) {
     const sides = flowSides(data);
-    const labels = FLOW_PANELS
-        .map((panel) => sides[panel.id]?.flows)
+    const labels = FLOW_SIDES
+        .map((side) => sides[side.id]?.flows)
         .filter(Boolean)
         .flatMap((flows) => [...flows.sources, ...flows.targets]);
     return [...new Set(labels)].filter((label) => label !== REMOVED_LABEL);
 }
 
-/* What the catch-all holds, gathered across the three Sankeys: each category the server folded, with the
-   most rows any of them folded for it. Biggest first, as the server sends them.
+/* What the catch-all holds, gathered across both sides: each category the server folded, with the most rows
+   either of them folded for it. Biggest first, as the server sends them.
    :return: {categories: [{category, rows}], more} - more counts the ones past the server's list */
 export function otherCategories(data) {
     const sides = flowSides(data);
     const rows = new Map();
     let more = 0;
-    FLOW_PANELS.forEach((panel) => {
-        const other = sides[panel.id]?.flows?.other;
+    FLOW_SIDES.forEach((side) => {
+        const other = sides[side.id]?.flows?.other;
         if (!other) return;
         more = Math.max(more, other.more);
         other.categories.forEach(({ category, rows: count }) => {

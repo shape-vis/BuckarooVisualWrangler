@@ -378,8 +378,8 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
     five rows moving each way between two categories moves ten rows and leaves TVD at zero - the two answer
     different questions, and both are reported.
 
-    :param before_frame: the state the rows start in - root for a node's own Sankey, selection A for the
-                         pair's - as a frame with "ID" and the column
+    :param before_frame: the state the rows start in - root, for a node's Sankey - as a frame with "ID" and
+                         the column
     :param after_frame: the state they end in
     :param limit: the most categories kept, the compare axes' limit by default. A column with more keeps its
                   most common in before_frame, and null whenever it occurs, as those axes do, and folds the
@@ -791,47 +791,6 @@ def drift_null(pgraph, node_table, columns=None, draws=NULL_DRAWS):
         results[column] = null_result((root_table, column), root_frame[column], kinds[column], n_retained,
                                       result["value"], applicable, reason, draws)
     return results
-
-
-def pair_flows(pgraph, table_a, table_b, column, keep=None):
-    """
-    The Sankey between two nodes rather than between a node and root: where selection A's rows sit in
-    selection B. The compare modal draws it between the two node-against-root Sankeys, so the step from one
-    node to the other can be read on its own.
-
-    Both nodes descend from root, but not from each other, so selection B can hold rows selection A
-    deleted. Those have no category to leave from and are not in the flows; their count is reported as
-    "added" instead, and the churn is over selection A's rows.
-
-    :return: {"a", "b", "column", "kind", "flows", "distortion", "added"}, with "flows" None for a
-             numeric column or one either node dropped. Read-only.
-    """
-    from app import engine
-
-    root_frame, kinds = root_state(pgraph.root_node)
-    if column not in kinds:
-        raise ValueError(f"{column!r} is not a data column of the root table")
-
-    kind = kinds[column]
-    payload = {"a": table_a, "b": table_b, "column": column, "kind": kind,
-               "flows": None, "distortion": None, "added": 0}
-    if kind != CATEGORICAL:
-        return payload
-
-    def frame_of(table):
-        return root_frame[["ID", column]] if table == pgraph.root_node else load_node_data(engine, table, [column])
-
-    try:
-        frame_a, frame_b = frame_of(table_a), frame_of(table_b)
-    except ValueError:
-        # The column was dropped along one of the two branches, so there is nothing to draw
-        return payload
-
-    payload["flows"] = category_flows(frame_a, frame_b, column, keep=keep)
-    # Measured between the two nodes, not against root: the pair's own TVD
-    payload["distortion"] = column_distortion(frame_a[column], frame_b[column], kind)
-    payload["added"] = int((~frame_b["ID"].isin(frame_a["ID"])).sum())
-    return payload
 
 
 def drift_detail(pgraph, node_table, column, keep=None):

@@ -360,7 +360,7 @@ class FlowTests(unittest.TestCase):
         self.assertIsNone(category_flows(root, root.copy(), "g")["other"])
 
     def test_flows_between_two_nodes_read_from_the_first(self):
-        """The pair Sankey's data: selection A is the left side, and its deletes are the sink."""
+        """Flows between any two states: the first is the source side, and its deletes are the sink."""
         frame_a = frame({"ID": [1, 2, 3, 4], "g": ["a", "a", "b", "b"]})
         frame_b = frame({"ID": [1, 2, 3], "g": ["a", "b", "b"]})
 

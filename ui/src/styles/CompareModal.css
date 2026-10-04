@@ -445,7 +445,7 @@
     white-space: nowrap;
 }
 
-/* Matches the attribute summary panel's delta colors */
+/* Errors going down is an improvement: green, as elsewhere in the app */
 .compare-delta {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -492,7 +492,7 @@
     gap: 8px;
 }
 
-/* The canvas, and beside the Sankeys the strip that picks their categories */
+/* The canvas, and beside the Sankey the strip that picks its categories */
 .compare-plot-stage {
     flex: 1;
     min-height: 0;
@@ -564,7 +564,21 @@
     fill: #65676b;
 }
 
-/* A category's bar: what a reader clicks to pick the category out, on either side of a Sankey */
+/* Root's box for a category, in the middle of the Sankey. Light, so the name written in it reads. Set before
+   the node rules below, so their hover and selected outlines win over its own. */
+.compare-flow-root {
+    fill: #f1f5f9;
+    stroke: #94a3b8;
+    stroke-width: 1;
+}
+
+/* The name sits over root's box, and lets a click through to it */
+.compare-flow-root-label {
+    pointer-events: none;
+}
+
+/* A category's bar or root's box: what a reader clicks to pick the category out, in any of the Sankey's
+   three columns */
 .compare-flow-node {
     cursor: pointer;
 }
@@ -584,7 +598,7 @@
     stroke: none;
 }
 
-/* ── The Sankeys' category list ───────────────────────────────────── */
+/* ── The Sankey's category list ───────────────────────────────────── */
 
 .compare-picker {
     position: relative;
@@ -899,6 +913,12 @@
     font-weight: 700;
 }
 
+/* A category root never held - a recode into a new value - named on its band without a box */
+.compare-flow-label--new {
+    fill: #65676b;
+    font-style: italic;
+}
+
 /* The ridgeline's overview strip: the whole column, with the brush that picks what the plot above shows.
    Fixed height, so the canvas above gives up exactly its room. */
 .compare-brush {
@@ -973,8 +993,8 @@
     color: #8a8d91;
 }
 
-/* The Sankeys' strip runs down their right: a row per category, and its button under it rather than in a
-   gutter. The top is set inline, to land under the panels. */
+/* The Sankey's minimap runs down its right, with its button under it rather than in a gutter. The top is set
+   inline, to land under the plot. */
 .compare-brush--rows .compare-brush-reset,
 .compare-brush--rows .compare-brush-hint {
     left: 0;
@@ -983,6 +1003,46 @@
 
 .compare-brush-grip--rows {
     cursor: ns-resize;
+}
+
+/* The minimap's own pieces. Its grips only show where the edges are - the svg takes every press, and works
+   out from where it lands whether it grabs an edge, the box, or somewhere to jump to. */
+.compare-minimap .compare-brush-grip {
+    pointer-events: none;
+}
+
+.compare-minimap svg {
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+}
+
+.compare-minimap-root {
+    fill: #e2e8f0;
+    stroke: #94a3b8;
+    stroke-width: 0.5;
+}
+
+/* What the plot leaves out when zoomed, faded so the box reads as the part in view */
+.compare-minimap-shade {
+    fill: #ffffff;
+    fill-opacity: 0.55;
+    pointer-events: none;
+}
+
+.compare-minimap svg.compare-minimap--top,
+.compare-minimap svg.compare-minimap--bottom,
+.compare-minimap svg.compare-minimap--dragging-top,
+.compare-minimap svg.compare-minimap--dragging-bottom {
+    cursor: ns-resize;
+}
+
+.compare-minimap svg.compare-minimap--move {
+    cursor: grab;
+}
+
+.compare-minimap svg.compare-minimap--dragging-move {
+    cursor: grabbing;
 }
 
 .compare-brush-name {

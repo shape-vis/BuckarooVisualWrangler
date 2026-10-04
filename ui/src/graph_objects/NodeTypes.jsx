@@ -64,7 +64,7 @@ function NodeMetricsExpansion( { metrics } ){
  * down to the three-character node id - so the label is not a table name you can send anywhere.
  */
 function NodeTools( { nodeId, data } ){
-    const { startBranchSelection, hasProspectiveNodes } = usePgraph();
+    const { startBranchSelection, hasProspectiveNodes, graphMode } = usePgraph();
     const ai = useAISuggestions();
     const [expanded, setExpanded] = useState(false);
 
@@ -74,13 +74,17 @@ function NodeTools( { nodeId, data } ){
 
     /* One set of suggestions at a time. Rather than silently replacing the last node's, every AI
        button goes inert until the outstanding ones have been accepted or declined - so there is
-       never a second dashed forest, and never a question of which is stale. */
-    const aiBlocked = !ai?.configured || ai?.busy || hasProspectiveNodes;
+       never a second dashed forest, and never a question of which is stale. Suggestions have no
+       numbers to plot, so analysis mode hides them, and asking for one there would show nothing. */
+    const analysing = graphMode === "analysis";
+    const aiBlocked = !ai?.configured || ai?.busy || hasProspectiveNodes || analysing;
     const aiTitle = !ai?.configured
         ? "AI suggestions are not configured - add GEMINI_API_KEY to .env"
-        : hasProspectiveNodes
-            ? "Accept or decline the current suggestions first"
-            : ai?.busy ? "Working…" : "Suggest repairs for this node";
+        : analysing
+            ? "Switch to wrangling mode for suggestions"
+            : hasProspectiveNodes
+                ? "Accept or decline the current suggestions first"
+                : ai?.busy ? "Working…" : "Suggest repairs for this node";
 
     return (
         <>
@@ -197,6 +201,28 @@ return (
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
     </>
 )
+}
+
+/**
+ * A node in the graph's analysis mode, plotted as a dot at its drift and error. Its colour is its branch's,
+ * a ring marks the current node and selection A, and its id is shown for root and the pair and on hover for
+ * the rest. The label hangs outside the dot, so React Flow measures - and centres - the dot alone.
+ *
+ * The role comes in data rather than as the node's class: those classes style a card, and would paint a
+ * box around the dot. The handles are invisible; analysis edges run centre to centre and do not use them.
+ */
+export function AnalysisDotNode( { data } ){
+    const { color, role, label, showLabel } = data.analysis;
+    return (
+        <div
+            className={`analysis-dot ${role ? `analysis-dot--${role}` : ""} ${showLabel ? "analysis-dot--labelled" : ""}`}
+            style={{"--analysis-dot-color": color}}
+        >
+            <Handle type="target" position={Position.Top} className="analysis-handle" isConnectable={false}/>
+            <span className="analysis-dot-label">{label}</span>
+            <Handle type="source" position={Position.Bottom} className="analysis-handle" isConnectable={false}/>
+        </div>
+    );
 }
 
 export function RootNoteNode( { id, data, isConnectable } ){

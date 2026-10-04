@@ -19,6 +19,8 @@ import {DockProvider} from "../store/DockContext.jsx";
 
 export const ViewContext = createContext();
 
+const MAX_OPEN_VIEWS = 2;
+
 
 
 export default function Buckaroo({ onReset }) {
@@ -26,7 +28,18 @@ export default function Buckaroo({ onReset }) {
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const [activeView, setActiveView] = useState("plots");
+    /* The views on screen, oldest first. Both can sit side by side, and the last open view cannot be
+       closed, so the main area is never empty. MAX_OPEN_VIEWS keeps a later third view to two. */
+    const [openViews, setOpenViews] = useState(["plots"]);
+
+    const toggleView = useCallback((view) => {
+        setOpenViews((current) => {
+            if (current.includes(view)) {
+                return current.length > 1 ? current.filter((open) => open !== view) : current;
+            }
+            return [...current, view].slice(-MAX_OPEN_VIEWS);
+        });
+    }, []);
 
     const handleWrangleExecuted = useCallback(() => {
         clearScatterPlotCache();
@@ -37,7 +50,7 @@ export default function Buckaroo({ onReset }) {
 
     return (
         <>
-            <ViewContext.Provider value={{ activeView, setActiveView, refreshKey, setRefreshKey}}>
+            <ViewContext.Provider value={{ openViews, toggleView, refreshKey, setRefreshKey}}>
                 <SettingsProvider>
                 {/* Above PGraph and Repair: both ask the dock to show their tab */}
                 <DockProvider>
@@ -59,31 +72,20 @@ export default function Buckaroo({ onReset }) {
                         <div className="main-view">
                             <div className="svg-and-toolbox">
 
-                                {/*Plot view*/}
-                                {activeView === "plots" && (
+                                {/* Whichever views are open, always in this order, so the pair
+                                    does not swap sides depending on which was opened first */}
+                                {openViews.includes("plots") && (
                                     <MatrixView
                                         selectedAttributes={selectedAttributes}
                                     />
                                 )}
 
-                                {/*Plots and Graph view*/}
-                                {activeView === "both" && (
-                                    <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                        />
-                                        <PGraph />
-                                    </>
-                                )}
-
-                                {/*Graph View*/}
-                                {activeView === "graph" &&
-                                    <PGraph />}
+                                {openViews.includes("graph") && <PGraph />}
 
                                 {/*Repair and node details, as tabs in one resizable dock*/}
                                 <RightDock />
                             </div>
-                            <div className={`table-panel-wrapper ${activeView === "both" || activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
+                            <div className={`table-panel-wrapper ${openViews.includes("plots") ? "table-panel-wrapper--visible" : ""}`}>
                                 <TablePanel
                                     sortedAttributes={sortedAttributes}
                                 />

@@ -29,6 +29,14 @@
     box-sizing: border-box;
 }
 
+/* The plot matrix's svg is 100% wide, which as a flex item would claim the whole row and leave a view
+   opened beside it no room at all. Sized like the graph and the Trade-off plot instead, so whichever
+   two views are open split the area evenly. */
+.svg-and-toolbox > #main-svg {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 .table-panel-wrapper {
     display: none;
 }

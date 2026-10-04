@@ -378,18 +378,6 @@ export async function getDriftDetail({ node, column, keep }, signal) {
     return await response.json();
 }
 
-/**
- * GET /api/pgraph/flow_pair
- * The Sankey between the two compared nodes themselves - where selection A's rows sit in selection B -
- * for the middle panel of the Flows view. Takes an AbortSignal, as getDriftDetail does.
- */
-export async function getFlowPair({ a, b, column, keep }, signal) {
-    const params = new URLSearchParams({ a, b, column });
-    keep?.forEach((category) => params.append("keep", category));
-    const response = await fetch(`/api/pgraph/flow_pair?${params}`, { method: "GET", signal });
-    return await response.json();
-}
-
 export async function resetApp() {
     try {
         const response = await fetch("/api/reset", { method: "POST" });

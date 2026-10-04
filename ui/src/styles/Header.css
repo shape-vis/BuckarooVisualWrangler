@@ -145,6 +145,44 @@
     color: #333;
     white-space: nowrap;
     align-self: center;
+    /* When the Compare button and the view toggles need the room, the name shortens rather than they wrap */
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.table-status-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The view toggles keep their labels on one line; a crowded header gives way at the table name instead */
+#header .navButton {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* On a laptop-width screen the header's buttons would not all fit beside the Compare button at full
+   padding, so they tighten up and leave the table name some room */
+@media (max-width: 1500px) {
+    #header .navButton {
+        padding: 6px 14px;
+    }
+
+    #header .header-action-btn {
+        padding: 8px 12px;
+    }
+}
+
+@media (max-width: 1350px) {
+    #header .navButton {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+
+    #header .header-action-btn {
+        padding: 8px 9px;
+        gap: 6px;
+    }
 }
 
 .table-status-dot {

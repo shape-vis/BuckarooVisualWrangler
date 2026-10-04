@@ -5,7 +5,7 @@ import {
     useNodesState,
     useEdgesState
 } from "@xyflow/react";
-import {NoteNode, RootNoteNode, CollapsedNode} from "../graph_objects/NodeTypes.jsx";
+import {NoteNode, RootNoteNode, CollapsedNode, AnalysisDotNode} from "../graph_objects/NodeTypes.jsx";
 import {ProspectiveNode} from "../graph_objects/ProspectiveNode.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
@@ -54,7 +54,9 @@ const nodeTypes = {
     noteNode: NoteNode,
     rootNoteNode:  RootNoteNode,
     collapsedNode: CollapsedNode,
-    prospectiveNode: ProspectiveNode
+    prospectiveNode: ProspectiveNode,
+    // Analysis mode's simple view draws every node as one of these
+    analysisNode: AnalysisDotNode,
 };
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -149,23 +151,11 @@ export function PGraphProvider({children}) {
     const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
-    // Selection A: the node the attribute summary panel compares the current node (selection B)
-    // against. null means "fall back to the current node's parent".
+    // Selection A: the node shift-clicked to compare against the current node (selection B), or null
     const [selectionAId, setSelectionAId] = useState(null);
 
-    // Which node selection A actually resolves to. Lives here rather than in the panel so the
-    // graph marks the same pair the panel is reporting on, including the un-pinned parent default.
-    const resolvedSelectionAId = useMemo(() => {
-        if (selectionAId && selectionAId !== tableName) return selectionAId;
-
-        const parent = nodes.find((node) => node.id === tableName)?.data?.parent;
-        // The root's parent is the string "root", which is not a node, so the root has no selection A
-        return (parent && parent !== "root") ? parent : null;
-    }, [selectionAId, tableName, nodes]);
-
     /* The pair the user set up on purpose: a shift-clicked selection A against the current node as
-       selection B. Only this pair is badged in the graph and offered to the header's Compare button -
-       the panel's fallback to the parent is a default, not a selection. */
+       selection B. The graph badges it in both its modes, and the header's Compare button opens it. */
     const comparisonPair = useMemo(() => (
         (selectionAId && selectionAId !== tableName)
             ? {a: selectionAId, b: tableName}
@@ -266,6 +256,14 @@ export function PGraphProvider({children}) {
        never change a number - see §8(b)(ii) and (iii). */
     const [collapsedRuns, setCollapsedRuns] = useState([]);
     const [collapseError, setCollapseError] = useState(null);
+
+    /* How the graph is laid out. "wrangling" is the tree; "analysis" plots every node on drift from root
+       against its error - analysisMetric names which error - drawn as dots ("simple") or as the full
+       cards ("full"). Like collapsing, a way of looking at the graph: the tree layout underneath is
+       never touched, so switching back puts every node where it was. */
+    const [graphMode, setGraphMode] = useState("wrangling");
+    const [analysisStyle, setAnalysisStyle] = useState("full");
+    const [analysisMetric, setAnalysisMetric] = useState("total");
 
     /* The AI's suggestions, drawn as nodes hanging off the node they were asked for. Like
        collapsing, this is a way of looking at the graph rather than part of it: nothing here has
@@ -494,7 +492,7 @@ export function PGraphProvider({children}) {
             nodeTypes,
             onNodesChange, onEdgesChange, onConnect, onLayout,
             getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
-            selectionAId, setSelectionAId, resolvedSelectionAId, comparisonPair, serverNodesById,
+            selectionAId, setSelectionAId, comparisonPair, serverNodesById,
             pareto: serverGraph.pareto,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             prospectiveNodes, setProspectiveNodes, clearProspectiveNodes,
@@ -502,6 +500,7 @@ export function PGraphProvider({children}) {
             startBranchSelection, resetBranchSelection,
             clearAllSelections, hasAnySelection,
             collapsedRuns, collapseNodes, expandRun, expandAllRuns, selectRunBranch,
+            graphMode, setGraphMode, analysisStyle, setAnalysisStyle, analysisMetric, setAnalysisMetric,
             collapseError, setCollapseError,
             branchTrajectory, branchTrajectoryLoading,
             refreshGraph

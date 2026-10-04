@@ -6,11 +6,12 @@
 import {useCallback, useEffect, useId, useMemo, useRef, useState} from "react";
 import * as d3 from "d3";
 import RidgelineBrush, {RIDGE_HEADROOM, STRIP_CHROME} from "./RidgelineBrush.jsx";
-import SankeyBrush from "./SankeyBrush.jsx";
+import SankeyMinimap from "./SankeyMinimap.jsx";
+import {FLOW_COLORS, flowKind, isStub, layoutFlows, markedFlow, panRange, ribbonPath, ribbonPoint, zoomFlows} from "./flowLayout.js";
 import {createHybridScales} from "../utils/visCommon.jsx";
 import {ERROR_DIMENSIONS, errorColors} from "../store/errorColors.js";
 import {
-    FLOW_PANELS, MEASURES, OTHER_LABEL, REMOVED_LABEL, ROLE_COLORS, ROLE_NAMES,
+    FLOW_SIDES, MEASURES, OTHER_LABEL, REMOVED_LABEL, ROLE_COLORS, ROLE_NAMES,
     flowCategories, flowSides, measureOf,
 } from "../utils/comparison.js";
 import {NULL_FLAG_TITLE, formatDrift} from "../utils/drift.js";
@@ -388,8 +389,6 @@ function drawHeatmapDifference(svg, data, ctx) {
 // Each node against root, from /api/pgraph/drift_detail - see app/pgraph/distortion.py. Drift is a cost,
 // not an error, so none of these views colors it good or bad: red is kept for the null test's flag.
 
-// Rows that stayed in their category, were recoded into another, or were deleted
-const FLOW_COLORS = {stayed: "#94a3b8", recoded: "#f59e0b", removed: "#4b5563"};
 const ROOT_COLOR = "#8c939d";
 const FLAG_COLOR = "#d1242f";
 // Room at the right of a ridgeline for each row's drift
@@ -403,10 +402,14 @@ const MIN_STRIP_CURVE = 40;
 /* Where a curve is under this share of root's peak, it is too thin to divide by: out in the empty tails every
    curve is near zero, and a ratio of two near-zeros is noise */
 const THIN_SHARE = 0.005;
-// Room kept for the removed sink under a Sankey's window, however little of it the window shows
-const REMOVED_ROOM = 14;
-// How far a ribbon to a hidden category runs before it stops, as a share of its full span
-const STUB = 0.5;
+// Root's box in the middle of the flows, which carries each category's name and root's count
+const ROOT_BOX = 140;
+// Room beside each node's column for its counts, and its removed sink's label
+const COUNT_ROOM = 96;
+// A node's category bars
+const FLOW_NODE = 10;
+// A label is kept this far inside the visible part of its band, so a category cut by the plot's edge is named
+const LABEL_INSET = 7;
 // How many of the catch-all's categories its tooltip names before summing up the rest
 const OTHER_LISTED = 12;
 
@@ -707,53 +710,15 @@ function ridgelineOverview(data) {
     return {density, curves, spots};
 }
 
-/* Where the Sankeys' panels sit in a canvas this tall, so the strip beside them lines up */
+/* Where the Sankey sits in a canvas this tall, so the minimap beside it lines up */
 function flowsFrame(height) {
     return {top: MARGIN.top, height: Math.max(10, height - MARGIN.top - MARGIN.bottom), total: height};
 }
 
-/* What the strip beside the Sankeys draws for a drift result: every category, a bar per Sankey for the share
-   of that category's rows it moved, and the category each annotation bubble points from. Null for anything
-   the Sankeys do not draw. */
-function flowsOverview(data, hidden) {
-    if (data?.kind !== "drift") return null;
-    const sides = flowSides(data);
-    if (!FLOW_PANELS.some((panel) => sides[panel.id]?.flows)) return null;
-    const categories = shownCategories(data, hidden);
-    if (!categories.length) return null;
-
-    const series = [];
-    const spots = [];
-    FLOW_PANELS.forEach((panel) => {
-        const flows = sides[panel.id]?.flows;
-        if (!flows) return;
-        series.push({
-            id: panel.id,
-            color: panel.color,
-            shares: categories.map((label) => {
-                const out = flows.flows.filter((flow) => flow.source === label);
-                const rows = d3.sum(out, (flow) => flow.rows);
-                return rows ? d3.sum(out.filter((flow) => flow.target !== label), (flow) => flow.rows) / rows : 0;
-            }),
-        });
-        // Only the panels with an annotation have a spot worth pinning
-        const spot = panel.role ? categories.indexOf(markedFlow(flows)?.source) : -1;
-        if (spot >= 0) spots.push({id: panel.id, color: panel.color, index: spot});
-    });
-    return {categories, series, spots};
-}
-
-/* The categories the Sankeys draw: the ones the server sent, less any the reader has hidden. A hidden
+/* The categories the Sankey draws: the ones the server sent, less any the reader has hidden. A hidden
    category keeps no band and takes no room; the ribbons that reached it are cut short instead. */
 function shownCategories(data, hidden) {
     return flowCategories(data).filter((label) => !hidden.includes(label));
-}
-
-/* The flow a panel's annotation points at: the biggest that actually moved - recoded or removed - or failing
-   that the biggest of all, so a column where nothing moved can still say so */
-function markedFlow(flows) {
-    const moved = flows.flows.filter((flow) => flow.target !== flow.source);
-    return d3.greatest(moved.length ? moved : flows.flows, (flow) => flow.rows);
 }
 
 /* What the catch-all band holds, for its tooltip: the biggest categories folded into it with their rows, and
@@ -768,278 +733,253 @@ function otherTooltip(other) {
         + (rest > 0 ? `<br>and ${formatCount(rest)} more` : "");
 }
 
-/* A point along a ribbon's centre line, t running from its source (0) to its target (1) */
-function ribbonPoint(ribbon, x0, x1, t) {
-    const middle = (x0 + x1) / 2;
-    const [ya, yb] = [ribbon.ya + ribbon.thickness / 2, ribbon.yb + ribbon.thickness / 2];
-    const [a, b, c, d] = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3];
-    return [a * x0 + (b + c) * middle + d * x1, (a + b) * ya + (c + d) * yb];
-}
-
 // Along a ribbon from its middle outward, the order its annotation looks for a point still in sight
 const RIBBON_STEPS = d3.range(11).flatMap((k) => (k ? [0.5 - k * 0.05, 0.5 + k * 0.05] : [0.5]));
 
-/* One Sankey: the earlier state's categories on the left, the later state's on the right, and the deleted
-   rows' sink under them. Ribbons are always square-root width: at true width a category holding a handful of
-   rows is a hairline, and these columns usually hold most of their mass in one category. The trade is that a
-   ribbon's width no longer reads as its count, so every node carries its count as a label.
-
-   The plot is one tall stack of categories, each a band holding its node on both sides, so a category that
-   kept its rows is a level ribbon. window picks the bands that fill the panel; the rest sit above and below
-   it out of sight, and a ribbon to one of them runs off the edge toward it. The sink is not a band. It stays
-   under the window whatever the window holds, and takes the ribbons from the categories shown.
-
-   Returns where the panel's annotation should point - at markedFlow's ribbon, or the nearest part of it the
-   window keeps - and, when the window leaves part of that ribbon out, a sentence saying where. */
-function drawSankey(g, flows, categories, window, w, h, ctx) {
-    const widthOf = Math.sqrt;
-    const LABEL = Math.min(120, w * 0.3);
-    const NODE = 10;
-    const PAD = 6;
-
-    const [first, last] = window ?? [0, categories.length];
-    const position = new Map(categories.map((label, i) => [label, i]));
-    /* Where a category is, if it is not in sight: hidden outright, or above or below the window. The sink is
-       always in sight, and a label with no position at all was hidden. */
-    const where = (label) => {
-        if (label === REMOVED_LABEL) return null;
-        const at = position.get(label);
-        if (at === undefined) return "hidden";
-        return at < first ? "above" : at >= last ? "below" : null;
-    };
-    const inWindow = (label) => !where(label);
-
-    const ribbons = flows.flows.map((flow) => ({...flow, size: widthOf(flow.rows)}));
-    const sum = (key, label, value) => d3.sum(ribbons.filter((ribbon) => ribbon[key] === label), (ribbon) => ribbon[value]);
-    const bands = categories.map((label) => {
-        const left = sum("source", label, "size");
-        const right = sum("target", label, "size");
-        return {label, left, right, size: Math.max(left, right)};
-    });
-
-    const pinned = flows.targets.includes(REMOVED_LABEL);
-    const sunk = ribbons.filter((ribbon) => ribbon.target === REMOVED_LABEL && inWindow(ribbon.source));
-    const sinkSize = d3.sum(sunk, (ribbon) => ribbon.size);
-
-    /* The scale that fills the panel with the window's bands and the sink, a gap between each. A sink the
-       window sends few rows to still gets room for its label. */
-    const shown = bands.filter((band) => inWindow(band.label) && band.size > 0);
-    const shownSize = d3.sum(shown, (band) => band.size);
-    const gaps = PAD * (Math.max(0, shown.length - 1) + (pinned ? 1 : 0));
-    let scale = Math.max(0, (h - gaps) / ((shownSize + sinkSize) || 1));
-    if (pinned && sinkSize * scale < REMOVED_ROOM) scale = Math.max(0, (h - gaps - REMOVED_ROOM) / (shownSize || 1));
-    const sinkTop = h - (pinned ? Math.max(sinkSize * scale, REMOVED_ROOM) : 0);
-
-    /* The window's bands start at the panel's top. Those after it start below the panel's floor, so ribbons to
-       them leave through the bottom; those before it stack upward from above its top. */
-    const place = (band, top) => Object.assign(band, {y0: top, y1: top + band.size * scale});
-    let below = 0;
-    for (let i = first; i < bands.length; i += 1) {
-        if (i === last) below = h + PAD;
-        place(bands[i], below);
-        if (bands[i].size) below = bands[i].y1 + PAD;
-    }
-    let above = -PAD;
-    for (let i = first - 1; i >= 0; i -= 1) {
-        place(bands[i], above - bands[i].size * scale);
-        if (bands[i].size) above = bands[i].y0 - PAD;
-    }
-
-    // Each side's node sits in the middle of its band
-    const node = (band, side, key) => {
-        const top = band.y0 + (band.size - band[side]) * scale / 2;
-        return {label: band.label, y0: top, y1: top + band[side] * scale, rows: sum(key, band.label, "rows")};
-    };
-    const sources = new Map(bands.filter((band) => band.left).map((band) => [band.label, node(band, "left", "source")]));
-    const targets = new Map(bands.filter((band) => band.right).map((band) => [band.label, node(band, "right", "target")]));
-    if (pinned) {
-        targets.set(REMOVED_LABEL, {
-            label: REMOVED_LABEL, y0: sinkTop, y1: sinkTop + sinkSize * scale,
-            rows: d3.sum(sunk, (ribbon) => ribbon.rows), total: sum("target", REMOVED_LABEL, "rows"),
-        });
-    }
-    const x0 = LABEL + NODE;
-    const x1 = w - LABEL - NODE;
-
-    /* Ribbons leave each source in target order and arrive at each target in source order, which keeps
-       them from crossing more than the flows themselves require. A ribbon whose category was hidden keeps
-       only the end that is still drawn - ya or yb is null, and it is cut short there. A ribbon to the sink
-       from a category out of the window has nowhere in it to land, and is left out. */
-    const order = new Map([...new Set([...categories, ...flows.sources, ...flows.targets, REMOVED_LABEL])]
-        .map((label, i) => [label, i]));
-    const leftCursor = new Map([...sources].map(([label, n]) => [label, n.y0]));
-    const rightCursor = new Map([...targets].map(([label, n]) => [label, n.y0]));
-    const placed = ribbons
-        .filter((ribbon) => ribbon.target !== REMOVED_LABEL || inWindow(ribbon.source))
-        // Neither end still drawn leaves nothing to hang a ribbon from
-        .filter((ribbon) => sources.has(ribbon.source) || targets.has(ribbon.target))
-        .sort((a, b) => (order.get(a.source) - order.get(b.source)) || (order.get(a.target) - order.get(b.target)))
-        .map((ribbon) => {
-            const thickness = ribbon.size * scale;
-            const ya = leftCursor.get(ribbon.source);
-            const yb = rightCursor.get(ribbon.target);
-            if (ya !== undefined) leftCursor.set(ribbon.source, ya + thickness);
-            if (yb !== undefined) rightCursor.set(ribbon.target, yb + thickness);
-            return {...ribbon, thickness, ya: ya ?? null, yb: yb ?? null};
-        });
-
-    // The ribbons into the bands out of sight would otherwise draw over the title and the numbers beneath
-    g.append("clipPath").attr("id", ctx.clipId).append("rect").attr("width", w).attr("height", h);
-
-    const middle = (x0 + x1) / 2;
-    /* A ribbon with both ends drawn runs the full span. One whose other end was hidden is a stub: it leaves
-       the end that remains, runs part of the way and stops, so a reader can see that rows went somewhere
-       without the category being in the picture. */
-    const path = (r) => {
-        if (r.ya === null) {
-            const from = x1 - STUB * (x1 - x0);
-            return `M${from},${r.yb} H${x1} V${r.yb + r.thickness} H${from} Z`;
-        }
-        if (r.yb === null) {
-            const to = x0 + STUB * (x1 - x0);
-            return `M${x0},${r.ya} H${to} V${r.ya + r.thickness} H${x0} Z`;
-        }
-        return `M${x0},${r.ya} C${middle},${r.ya} ${middle},${r.yb} ${x1},${r.yb} `
-            + `L${x1},${r.yb + r.thickness} C${middle},${r.yb + r.thickness} ${middle},${r.ya + r.thickness} ${x0},${r.ya + r.thickness} Z`;
-    };
-    const cut = (r) => r.ya === null || r.yb === null;
-    const kindOf = (r) => (r.target === REMOVED_LABEL ? "removed" : r.target === r.source ? "stayed" : "recoded");
-
-    const paths = g.append("g").attr("clip-path", `url(#${ctx.clipId})`)
-        .selectAll("path").data(placed).join("path")
-        .attr("class", (r) => `compare-mark ${cut(r) ? "compare-flow-stub" : ""}`)
-        .attr("d", path)
-        .attr("fill", (r) => FLOW_COLORS[kindOf(r)])
-        .attr("fill-opacity", (r) => (cut(r) ? 0.3 : kindOf(r) === "stayed" ? 0.35 : 0.7));
+/* One side's ribbons, from root's edge at x0 out to its own column at x1 - leftward for A. A ribbon cut short
+   because its other category is hidden is drawn as a stub - see ribbonPath. */
+function drawRibbons(g, side, {x0, x1, where, clip}, ctx) {
+    const paths = g.append("g").attr("clip-path", clip)
+        .selectAll("path").data(side.placed).join("path")
+        .attr("class", (r) => `compare-mark ${isStub(r) ? "compare-flow-stub" : ""}`)
+        .attr("d", (r) => ribbonPath(r, x0, x1))
+        .attr("fill", (r) => FLOW_COLORS[flowKind(r)])
+        .attr("fill-opacity", (r) => (isStub(r) ? 0.3 : flowKind(r) === "stayed" ? 0.35 : 0.7));
     ctx.tooltip.attach(paths, (r) => {
         const gone = [r.source, r.target].filter((label) => where(label) === "hidden");
         // A hidden source draws no band, so there is no total to take a share of
-        const out = sources.get(r.source)?.rows;
+        const out = side.sources.get(r.source)?.rows;
         return `<strong>${escapeHtml(r.source)} → ${escapeHtml(r.target)}</strong><br>`
-            + `${formatCount(r.rows)} rows${out ? ` · ${formatShare(r.rows / out)} of ${escapeHtml(r.source)}` : ""}`
+            + `${formatCount(r.rows)} rows from root into ${escapeHtml(ctx.labels[side.id])}`
+            + (out ? ` · ${formatShare(r.rows / out)} of root's ${escapeHtml(r.source)}` : "")
             + (gone.length ? `<br>${escapeHtml(gone.join(" and "))} hidden — add back from Categories` : "");
     });
+}
 
-    /* Only the nodes in the window are drawn; the rest are out of sight. A category's bar is what the reader
-       clicks to pick it out, on either side, and Delete then hides it - the modal owns both, so the click
-       only reports which category it was. The sink is not a category and is not selectable. */
-    const drawColumn = (nodes, x, anchor, labelX) => {
-        const group = g.append("g");
-        [...nodes.values()].filter((n) => inWindow(n.label)).forEach((n) => {
-            const removed = n.label === REMOVED_LABEL;
-            const item = group.append("g").datum(n);
-            const bar = item.append("rect").attr("x", x).attr("y", n.y0).attr("width", NODE)
-                .attr("height", Math.max(1, n.y1 - n.y0))
-                .attr("fill", removed ? FLOW_COLORS.removed : "#475569");
-            if (!removed) {
-                bar.attr("class", `compare-flow-node ${ctx.selected === n.label ? "compare-flow-node--selected" : ""}`)
-                    .on("click", (event) => {
-                        // The canvas clears the selection, so a click that makes one must stop there
-                        event.stopPropagation();
-                        ctx.onSelect?.(ctx.selected === n.label ? null : n.label);
-                    })
-                    .append("title").text(`${n.label} — click to select, then press Delete to hide it`);
-            }
-            const text = item.append("text").attr("class", "compare-flow-label")
-                .attr("x", labelX).attr("y", (n.y0 + n.y1) / 2).attr("text-anchor", anchor).attr("dominant-baseline", "middle")
-                .classed("compare-flow-label--removed", removed);
-            text.append("tspan").text(n.label.length > 16 ? `${n.label.slice(0, 16)}…` : n.label)
-                .append("title").text(n.label);
+/* A category's bar or box is what the reader clicks to pick it out, in any of the three columns, and Delete
+   then hides it - the modal owns both, so the click only reports which category it was */
+function pickable(rect, label, title, ctx) {
+    rect.classed("compare-flow-node", true)
+        .classed("compare-flow-node--selected", ctx.selected === label)
+        .on("click", (event) => {
+            // The canvas clears the selection, so a click that makes one must stop there
+            event.stopPropagation();
+            ctx.onSelect?.(ctx.selected === label ? null : label);
+        })
+        .append("title").text(`${title} — click to select, then press Delete to hide it`);
+}
+
+/* Where a node's label goes: the middle of its band, or of the part of it still in sight when the plot's edge
+   cuts it, so a category scrolled half out of view is still named */
+function labelY(n, h) {
+    const top = Math.max(n.y0, 0);
+    const bottom = Math.min(n.y1, h);
+    if (bottom - top < 2 * LABEL_INSET) return (top + bottom) / 2;
+    return Math.min(Math.max((n.y0 + n.y1) / 2, top + LABEL_INSET), bottom - LABEL_INSET);
+}
+
+/* A node's own column, out at the edge: a bar per category it holds, and its sink. Root's column names the
+   category on the same band, so a bar here carries only its count. Only the nodes in sight are drawn. */
+function drawNodeColumn(g, side, {bar, anchor, labelX, inView, width, h}, ctx) {
+    const group = g.append("g");
+    [...side.targets.values()].filter(inView).forEach((n) => {
+        const removed = n.label === REMOVED_LABEL;
+        const item = group.append("g");
+        const rect = item.append("rect").attr("x", bar).attr("y", n.y0).attr("width", FLOW_NODE)
+            .attr("height", Math.max(1, n.y1 - n.y0))
+            .attr("fill", removed ? FLOW_COLORS.removed : "#475569");
+        if (!removed) pickable(rect, n.label, `${n.label}: ${formatCount(n.rows)} rows in ${ctx.labels[side.id]}`, ctx);
+
+        const text = item.append("text").attr("class", "compare-flow-label")
+            .attr("x", labelX).attr("y", labelY(n, h)).attr("text-anchor", anchor).attr("dominant-baseline", "middle");
+        if (removed) {
+            text.classed("compare-flow-label--removed", true).append("tspan").text(REMOVED_LABEL);
             text.append("tspan").attr("class", "compare-flow-count").text(` ${formatCount(n.rows)}`);
-
-            // The sink counts only the rows it takes from the window, so it says when there are more
-            if (removed && n.total > n.rows) {
+            // Too long for the room beside the column, so the count goes under the name instead
+            const box = text.node().getBBox();
+            if (box.x < 0 || box.x + box.width > width) {
+                text.selectAll("tspan").remove();
+                text.append("tspan").attr("x", labelX).attr("dy", "-0.6em").text(REMOVED_LABEL);
+                text.append("tspan").attr("class", "compare-flow-count").attr("x", labelX).attr("dy", "1.2em")
+                    .text(formatCount(n.rows));
+            }
+            // The sink counts only the rows it takes from the categories shown, so it says when there are more
+            if (n.total > n.rows) {
                 ctx.tooltip.attach(item, () => `<strong>${REMOVED_LABEL}</strong><br>`
                     + `${formatCount(n.rows)} rows from the categories shown · ${formatCount(n.total)} removed in all`);
             }
-            // The catch-all is the one band that stands for other categories, so it names them on hover
-            if (n.label === OTHER_LABEL && flows.other) {
-                ctx.tooltip.attach(item, () => otherTooltip(flows.other));
-            }
-        });
-    };
-    drawColumn(sources, x0 - NODE, "end", x0 - NODE - 6);
-    drawColumn(targets, x1, "start", x1 + NODE + 6);
+        } else {
+            text.text(formatCount(n.rows));
+        }
+        // The catch-all is the one band that stands for other categories, so it names them on hover
+        if (n.label === OTHER_LABEL && side.flows.other) {
+            ctx.tooltip.attach(item, () => otherTooltip(side.flows.other));
+        }
+    });
+}
 
-    const marked = markedFlow(flows);
+/* Root's column in the middle: a box per category root holds, with the category's name and root's count in
+   it. The name goes here once rather than in all three columns, since a band is the same category across the
+   whole plot. A category only the nodes hold - a recode into a new value - has no box, but still has its name
+   on its band. */
+function drawRootColumn(g, layout, {left, width, h}, ctx) {
+    const group = g.append("g");
+    const other = layout.sides.find((side) => side.flows.other)?.flows.other;
+    layout.bands.filter((band) => band.size > 0 && layout.inView(band)).forEach((band) => {
+        const root = layout.roots.get(band.label);
+        const item = group.append("g");
+        if (root) {
+            const box = item.append("rect").attr("class", "compare-flow-root")
+                .attr("x", left).attr("y", root.y0).attr("width", width).attr("height", Math.max(1, root.y1 - root.y0));
+            pickable(box, band.label, `${band.label}: ${formatCount(root.rows)} rows in root`, ctx);
+        }
+
+        // As much of the name as the box has room for beside the count - about 6.5px a character
+        const count = root ? ` ${formatCount(root.rows)}` : "";
+        const fits = Math.max(3, Math.floor((width - 14) / 6.5) - count.length);
+        const at = root ?? band;
+        const text = item.append("text").attr("class", "compare-flow-label compare-flow-root-label")
+            .attr("x", left + width / 2).attr("y", labelY(at, h))
+            .attr("text-anchor", "middle").attr("dominant-baseline", "middle")
+            .classed("compare-flow-label--new", !root);
+        text.append("tspan").text(band.label.length > fits ? `${band.label.slice(0, fits)}…` : band.label);
+        if (count) text.append("tspan").attr("class", "compare-flow-count").text(count);
+
+        if (band.label === OTHER_LABEL && other) ctx.tooltip.attach(item, () => otherTooltip(other));
+    });
+}
+
+/* Where a side's annotation should point - at markedFlow's ribbon, or the nearest part of it in sight - and,
+   when part of that ribbon is out of sight, a sentence saying where */
+function flowAnchor(side, {x0, x1}, where, h) {
+    const marked = markedFlow(side.flows);
     if (!marked) return null;
     const off = [...new Set([marked.source, marked.target])]
         .map((label) => [label, where(label)])
-        .filter(([, side]) => side);
+        .filter(([, place]) => place);
     const aside = off.length
-        ? `(${off.map(([label, side]) => (side === "hidden"
+        ? `(${off.map(([label, place]) => (place === "hidden"
             ? `${label} is hidden`
-            : `${label} is ${side} the categories shown`)).join(" and ")}.)`
+            : `${label} is ${place} the categories shown`)).join(" and ")}.)`
         : null;
 
-    /* The middle of the ribbon, or the nearest part of it still in sight. A ribbon wholly out of sight - or
-       one to the sink from out of the window, which is not drawn - gets the edge it lies beyond. */
-    const ribbon = placed.find((r) => r.source === marked.source && r.target === marked.target);
+    /* The middle of the ribbon, or the nearest part of it still in sight. A ribbon wholly out of sight - or one
+       to the sink from a hidden category, which is not drawn - gets the edge it lies beyond. */
+    const ribbon = side.placed.find((r) => r.source === marked.source && r.target === marked.target);
     const inSight = ribbon && RIBBON_STEPS.map((t) => ribbonPoint(ribbon, x0, x1, t)).find(([, y]) => y >= 0 && y <= h);
     if (inSight) return {ax: inSight[0], ay: inSight[1], aside};
     const beyond = ribbon ? ribbonPoint(ribbon, x0, x1, 0.5)[1] < 0 : where(marked.source) === "above";
-    return {ax: middle, ay: beyond ? 0 : h, aside};
+    return {ax: (x0 + x1) / 2, ay: beyond ? 0 : h, aside};
 }
 
-/* A flows panel's title, on two lines: whose rows the panel follows on the first, what they are followed
-   against on the second. Three panels side by side leave no room for one long line. The pair's chips name
-   both nodes, since neither of them is root. */
-function flowPanelTitle(g, panel, side, ctx) {
-    const title = g.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)");
-    const against = (text) => g.append("text").attr("class", "compare-panel-subtitle").attr("y", -10).text(text);
-
-    if (panel.id === "pair") {
-        const next = titleChip(title, 0, "a", `${ctx.labels.a} →`);
-        titleChip(title, next - 8, "b", ctx.labels.b);
-        against("the step between them");
-        return;
-    }
-    const next = titleChip(title, 0, panel.role, `${ROLE_NAMES[panel.role]} · ${ctx.labels[panel.role]}`);
-    if (side.null?.flagged) {
+/* A side's title over its half, on two lines: whose rows the half follows, and that node's drift from root.
+   B's is set against the right edge, mirroring A's on the left. compact keeps to the node's name and its drift,
+   for a canvas too narrow for the full titles. */
+function flowSideTitle(g, side, detail, {align}, w, ctx, compact) {
+    const header = g.append("g");
+    const title = header.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)");
+    const name = compact ? ctx.labels[side.id] : `${ROLE_NAMES[side.id]} · ${ctx.labels[side.id]}`;
+    const next = titleChip(title, 0, side.id, name);
+    if (detail?.null?.flagged) {
         title.append("text").attr("x", next - 12).attr("fill", FLAG_COLOR).text("▲")
             .append("title").text(NULL_FLAG_TITLE);
     }
-    against(`vs root · drift ${formatDrift(side.distortion?.value)}`);
+    header.append("text").attr("class", "compare-panel-subtitle").attr("y", -10)
+        .text(`${compact ? "" : "vs root · "}drift ${formatDrift(detail?.distortion?.value)}`);
+    if (align === "end") header.attr("transform", `translate(${w - header.node().getBBox().width}, 0)`);
+    return header;
 }
 
-// What each panel prints under its plot: churn always, and the rows the pair's later node holds on its own
-function flowFooter(panel, side, ctx) {
-    const numbers = `churn ${formatShare(side.flows.churn)} of rows · TVD ${formatDrift(side.distortion?.value)}`;
-    return panel.id === "pair" && side.added
-        ? `${numbers} · ${formatCount(side.added)} rows only in ${ctx.labels.b}`
-        : numbers;
-}
-
-/* Where the rows went in this column: into the same category, into another, or out of the table. Three
-   Sankeys share the categories and the window - each node against root, and the step between the two nodes
-   in the middle, which is the one the wrangles between them actually made.
+/* Where the rows went in this column, from root out to each selected node: into the same category, into
+   another, or out of the table. Root sits in the middle with the category names; selection A's flows run out
+   to the left and selection B's to the right, so each half is one node's change from root, and the two share
+   root's categories and the window.
 
    This is churn's picture rather than TVD's - rows swapping between two categories are ribbons here while
-   leaving the shares, and so the drift number, unchanged - so both numbers sit beneath each one.
-   ctx.range is the window of categories the strip beside the plot shows, or null for all of them. */
+   leaving the shares, and so the drift number, unchanged - so both numbers sit beneath each half.
+   ctx.world is the whole Sankey laid out unzoomed, and ctx.range the slice of it the minimap beside the plot
+   shows - [f0, f1] as shares of its height - or null for all of it. */
 function drawFlows(svg, data, ctx) {
     const categories = shownCategories(data, ctx.hidden);
     if (!categories.length) {
         return drawEmpty(svg, ctx, "Every category is hidden — bring some back from the Categories list");
     }
-    const sides = flowSides(data);
-    const panels = FLOW_PANELS.filter((panel) => sides[panel.id]?.flows);
 
-    layoutPanels(svg, ctx.width, ctx.height, panels.length).forEach(({g, w, h}, i) => {
-        const panel = panels[i];
-        const side = sides[panel.id];
-        flowPanelTitle(g, panel, side, ctx);
+    // One panel across the canvas's full width: the outer columns' counts take the room an axis would
+    const w = ctx.width;
+    const h = Math.max(10, ctx.height - MARGIN.top - MARGIN.bottom);
+    const g = svg.append("g").attr("transform", `translate(0, ${MARGIN.top})`);
 
-        const anchor = drawSankey(g, side.flows, categories, ctx.range, w, h,
-            {...ctx, clipId: `${ctx.clipId}-${panel.id}`});
-        // Only the panels drawn against root carry an annotation; the pair has none to show
-        if (anchor && panel.role) {
-            drawAnnotationBubble(g, {...anchor, bounds: {left: 0, right: w, top: 0, bottom: h}}, panel.role, side, ctx);
+    // Never under enough for the removed sink's name, which a narrow canvas stacks over its count
+    const room = Math.max(64, Math.min(COUNT_ROOM, w * 0.14));
+    const rootWidth = Math.min(ROOT_BOX, w * 0.22);
+    const rootLeft = (w - rootWidth) / 2;
+    const rootRight = rootLeft + rootWidth;
+    // Each side runs from root's edge (x0) out to its own column (x1), and its bubble keeps to its own half
+    const frames = {
+        a: {x0: rootLeft, x1: room + FLOW_NODE, bar: room, anchor: "end", labelX: room - 6, align: "start",
+            bounds: {left: 0, right: rootLeft}},
+        b: {x0: rootRight, x1: w - room - FLOW_NODE, bar: w - room - FLOW_NODE, anchor: "start", labelX: w - room + 6,
+            align: "end", bounds: {left: rootRight, right: w}},
+    };
+
+    const layout = zoomFlows(ctx.world, ctx.range, h);
+    const detail = flowSides(data);
+    // Zoomed in, the ribbons and columns out of sight would otherwise draw over the titles and the numbers beneath
+    g.append("clipPath").attr("id", ctx.clipId).append("rect").attr("width", w).attr("height", h);
+    const clip = `url(#${ctx.clipId})`;
+
+    const rootHeader = g.append("g");
+    rootHeader.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)")
+        .append("text").attr("x", w / 2).attr("text-anchor", "middle").text("root");
+    const rootSubtitle = rootHeader.append("text").attr("class", "compare-panel-subtitle")
+        .attr("x", w / 2).attr("y", -10).attr("text-anchor", "middle").text("original upload");
+
+    /* Three titles share the line over the plot. Where the canvas is too narrow for them, each side drops to its
+       node's name and root to its own, rather than running into one another. */
+    const titles = (compact) => FLOW_SIDES.map((side) => flowSideTitle(g, side, detail[side.id], frames[side.id], w, ctx, compact));
+    const headers = titles(false);
+    const [boxA, boxRoot, boxB] = [headers[0], rootHeader, headers[1]].map((one) => one.node().getBoundingClientRect());
+    if (boxA.right + 8 > boxRoot.left || boxRoot.right + 8 > boxB.left) {
+        headers.forEach((one) => one.remove());
+        rootSubtitle.remove();
+        titles(true);
+    }
+
+    // Back to front: ribbons, then the columns over their ends, then the bubbles over everything
+    FLOW_SIDES.forEach((side) => {
+        const frame = frames[side.id];
+        const drawn = layout.sides.find((one) => one.id === side.id);
+        const middle = (frame.x0 + frame.x1) / 2;
+        if (!drawn) {
+            g.append("text").attr("class", "compare-axis-label")
+                .attr("x", middle).attr("y", h / 2).attr("text-anchor", "middle")
+                .text(`${data.x} was dropped on the way to ${ctx.labels[side.id]}`);
+            return;
         }
+        drawRibbons(g, drawn, {...frame, where: layout.where, clip}, ctx);
 
-        g.append("text").attr("class", "compare-axis-label")
-            .attr("x", w / 2).attr("y", h + 28).attr("text-anchor", "middle")
-            .text(flowFooter(panel, side, ctx));
+        // A narrow half takes its two numbers on two lines, and shorter, so the two footers stay apart
+        const churn = `churn ${formatShare(drawn.flows.churn)}`;
+        const tvd = `TVD ${formatDrift(detail[side.id].distortion?.value)}`;
+        const footer = g.append("text").attr("class", "compare-axis-label")
+            .attr("x", middle).attr("y", h + 28).attr("text-anchor", "middle");
+        if (Math.abs(frame.x0 - frame.x1) >= 200) {
+            footer.text(`${churn} of rows · ${tvd}`);
+        } else {
+            footer.append("tspan").attr("x", middle).text(churn);
+            footer.append("tspan").attr("x", middle).attr("dy", "1.2em").text(tvd);
+        }
+    });
+    const columns = g.append("g").attr("clip-path", clip);
+    drawRootColumn(columns, layout, {left: rootLeft, width: rootWidth, h}, ctx);
+    layout.sides.forEach((side) => drawNodeColumn(columns, side, {...frames[side.id], inView: layout.inView, width: w, h}, ctx));
+    layout.sides.forEach((side) => {
+        const frame = frames[side.id];
+        const anchor = flowAnchor(side, frame, layout.where, h);
+        if (anchor) {
+            drawAnnotationBubble(g, {...anchor, bounds: {...frame.bounds, top: 0, bottom: h}}, side.id, detail[side.id], ctx);
+        }
     });
 }
 
@@ -1129,7 +1069,7 @@ function legendItems(kind, view, measure, labels) {
  *    which the kind supports is the modal's call
  *  - measure: a MEASURES key, read by difference views and heatmaps
  *  - labelA, labelB: short names for selection A and selection B
- *  - hidden: the Sankeys' categories the reader has taken out of the view, by name
+ *  - hidden: the Sankey's categories the reader has taken out of the view, by name
  *  - onHide: called with a category when its bar is selected and Delete pressed
  */
 export default function ComparisonPlot({data, view, measure, labelA, labelB, hidden = [], onHide}) {
@@ -1140,12 +1080,12 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
     // What the hovered annotation bubble says, shown under the plot rather than over it
     const [note, setNote] = useState(null);
 
-    /* The part of the column a zoomed ridgeline shows, stamped with the column and nodes it was chosen for.
-       Another column or node pair reads it as unzoomed, so a stale zoom lapses without an effect to reset it. */
+    /* The part of the column a zoomed ridgeline or Sankey shows, stamped with the column and nodes it was chosen
+       for. Another column or node pair reads it as unzoomed, so a stale zoom lapses without an effect to reset it. */
     const zoomKey = data?.kind === "drift" ? `${data.x}|${data.a.node}|${data.b.node}` : null;
     const [zoom, setZoom] = useState({key: null, range: null});
     const range = zoom.key === zoomKey ? zoom.range : null;
-    // The brush reports on every move, often the same range; only a new one is worth a redraw
+    // The brush and the minimap report on every move, often the same range; only a new one is worth a redraw
     const zoomTo = useCallback((next) => setZoom((previous) => (
         previous.key === zoomKey && String(previous.range) === String(next) ? previous : {key: zoomKey, range: next}
     )), [zoomKey]);
@@ -1153,7 +1093,14 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
     // Ids are unique per page, and useId's own characters are not all safe in a url(#...) reference
     const clipId = `compare-ridge-clip${useId().replace(/[^\w-]/g, "")}`;
     const overview = useMemo(() => ridgelineOverview(data), [data]);
-    const flowsView = useMemo(() => flowsOverview(data, hidden), [data, hidden]);
+    /* The whole Sankey laid out unzoomed, once: the plot draws a magnified slice of it and the minimap draws all of
+       it, so the two always agree. Null for anything the Sankey does not draw. */
+    const flowsHeight = flowsFrame(size.height).height;
+    const flowsWorld = useMemo(() => {
+        if (data?.kind !== "drift" || !FLOW_SIDES.some((side) => flowSides(data)[side.id]?.flows)) return null;
+        const categories = shownCategories(data, hidden);
+        return categories.length ? layoutFlows(data, categories, flowsHeight) : null;
+    }, [data, hidden, flowsHeight]);
 
     /* The category whose bar was last clicked, waiting for Delete to hide it. It is stamped with the column
        and nodes it was picked in, so another column reads it as no selection at all and a stale name cannot
@@ -1204,7 +1151,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             drawEmpty(svg, size);
         } else {
             draw(svg, data, {
-                ...size, measure, tooltip, range, clipId, showNote: setNote,
+                ...size, measure, tooltip, range, clipId, showNote: setNote, world: flowsWorld,
                 hidden, selected, onSelect: setSelected,
                 labels: {a: labelA, b: labelB},
             });
@@ -1215,24 +1162,39 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             setNote(null);
             svg.selectAll("*").remove();
         };
-    }, [data, view, measure, labelA, labelB, size, stale, range, clipId, hidden, selected, setSelected]);
+    }, [data, view, measure, labelA, labelB, size, stale, range, clipId, hidden, selected, setSelected, flowsWorld]);
+
+    /* Over a zoomed Sankey the wheel scrolls it, as it would a long page. Attached by hand, since React's own wheel
+       handler is passive and could not keep the page from scrolling too. */
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (view !== "flows" || !range) return undefined;
+        const onWheel = (event) => {
+            // Firefox can report lines rather than pixels
+            const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : 1);
+            const next = panRange(range, (pixels / flowsHeight) * (range[1] - range[0]));
+            if (next === range) return;
+            event.preventDefault();
+            zoomTo(next);
+        };
+        canvas.addEventListener("wheel", onWheel, {passive: false});
+        return () => canvas.removeEventListener("wheel", onWheel);
+    }, [view, range, flowsHeight, zoomTo]);
 
     return (
         <div className="compare-plot-frame">
             <div ref={bodyRef} className="compare-plot-body">
                 <div className="compare-plot-stage">
-                    {/* A click that misses a category's bar clears the selection */}
+                    {/* A click that misses a category clears the selection */}
                     <div ref={canvasRef} className="compare-plot-canvas" onClick={() => setSelected(null)}>
                         <svg ref={svgRef} width={size.width} height={size.height}/>
                         <div ref={tooltipRef} className="compare-tooltip"/>
                     </div>
-                    {view === "flows" && flowsView && !stale && size.height >= MIN_CANVAS && (
-                        // Keyed like the ridgeline's strip, so a new pair starts with no window rather than the last one
-                        <SankeyBrush
+                    {view === "flows" && flowsWorld && !stale && size.height >= MIN_CANVAS && (
+                        // Keyed like the ridgeline's strip, so a new pair starts unzoomed rather than where the last was
+                        <SankeyMinimap
                             key={zoomKey}
-                            categories={flowsView.categories}
-                            series={flowsView.series}
-                            spots={flowsView.spots}
+                            world={flowsWorld}
                             frame={flowsFrame(size.height)}
                             range={range}
                             onRange={zoomTo}
@@ -1269,7 +1231,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                     ) : (
                         <span className="compare-note-hint">
                             {view === "flows"
-                                ? "Hover a bubble for what changed where it points. Click a category's bar to select it."
+                                ? "Hover a bubble for what changed where it points. Click a category to select it, or scroll to move when zoomed."
                                 : "Hover a bubble for what changed where it points, or the curves for each node's share at that value."}
                         </span>
                     )}

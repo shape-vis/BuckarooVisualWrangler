@@ -11,8 +11,8 @@
   min-width: 150px;
 }
 
-/* The two nodes the attribute summary panel is comparing. Both get a matching solid ring so they read
-   as a pair against everything else in the graph, and the colors match the panel's strip: green for
+/* The current node, and when a pair is set up, the two nodes being compared. Both get a ring so they read
+   as a pair against everything else in the graph, in the compare modal's colours: green for
    the current node (selection B), blue for selection A. */
 .react-flow__node.pgraph-node--current {
   background-color: #64ea96;
@@ -295,4 +295,62 @@
 
 .prospective-node-btn--accept:hover:not(:disabled) {
   background: #46d97e;
+}
+
+/* ── Analysis mode's dots ────────────────────────────────────────────────────
+   Each node plotted at its drift and error, in its branch's colour. The label hangs outside the dot, so
+   React Flow measures the dot alone and the dot is what sits on the node's point. */
+.analysis-dot {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--analysis-dot-color);
+  border: 1.5px solid #ffffff;
+  cursor: pointer;
+}
+
+.react-flow__node-analysisNode:hover .analysis-dot {
+  border-color: #111827;
+}
+
+/* The comparison's colours, as on the cards: green for the current node (selection B), dashed blue for A */
+.analysis-dot--current {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4.5px #1a7f37;
+}
+
+.analysis-dot--selection-a {
+  outline: 2.5px dashed #1877F2;
+  outline-offset: 2px;
+}
+
+.analysis-dot-label {
+  position: absolute;
+  left: 18px;
+  bottom: 12px;
+  display: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff, 0 0 2px #ffffff;
+}
+
+.analysis-dot--labelled .analysis-dot-label,
+.react-flow__node-analysisNode:hover .analysis-dot-label {
+  display: block;
+}
+
+/* The same verdict the cards show by greying and striking through */
+.react-flow__node-analysisNode.pgraph-node--dominated .analysis-dot-label {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+/* Analysis edges run centre to centre, so a dot's handles are only there for React Flow's bookkeeping */
+.react-flow__handle.analysis-handle {
+  opacity: 0;
+  pointer-events: none;
 }

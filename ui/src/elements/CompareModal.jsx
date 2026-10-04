@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePgraph } from "../store/PGraphContext.jsx";
-import { getDriftDetail, getFlowPair, getNodeComparison } from "../utils/serverCalls.jsx";
+import { getDriftDetail, getNodeComparison } from "../utils/serverCalls.jsx";
 import {
     MEASURES, OTHER_LABEL, ROLE_NAMES, describeWrangle, flowCategories, nodeName, otherCategories,
 } from "../utils/comparison.js";
@@ -73,21 +73,16 @@ function formatRate(rate) {
 
 const signedRows = (change) => `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString()} rows`;
 
-/* The Drift kind's data: each node's breakdown against root, and for a categorical column the step from the
-   selection A to selection B as well - the Flows view draws all three. The pair is its own request, so a
-   failure of that one alone still leaves the two the modal has always drawn. */
+/* The Drift kind's data: each node's breakdown against root. Both are measured from root, so a categorical
+   column's two Sankeys share root's categories - the Flows view draws them as one, root in the middle. */
 async function getDriftComparison({ a, b, x, keep }, signal) {
-    const [detailA, detailB, pair] = await Promise.all([
+    const [detailA, detailB] = await Promise.all([
         getDriftDetail({ node: a, column: x, keep }, signal),
         getDriftDetail({ node: b, column: x, keep }, signal),
-        getFlowPair({ a, b, column: x, keep }, signal),
     ]);
     const failed = [detailA, detailB].find((response) => !response?.success);
     if (failed) return { success: false, error: failed?.error };
-    return {
-        success: true, kind: "drift", x, a: detailA, b: detailB,
-        pair: pair?.success ? pair : null,
-    };
+    return { success: true, kind: "drift", x, a: detailA, b: detailB };
 }
 
 /* A change in error rate, in percentage points. Errors going down is an improvement. */
@@ -148,7 +143,7 @@ function AttributeSelect({ label, value, onChange, attributes }) {
     );
 }
 
-/* Which of a column's categories the Sankeys draw. Everything the server sent is listed and ticked by
+/* Which of a column's categories the Sankey draws. Everything the server sent is listed and ticked by
    default; unticking one hides its band, which is the same thing the plot's own bar-and-Delete does. The
    long tail the server folded into "(other)" is listed under it with each category's rows - ticking one of
    those asks the server for it as a band of its own, so those cost a request and the rest do not. */
@@ -386,7 +381,7 @@ export default function CompareModal({ pair, onClose }) {
     const [measure, setMeasure] = useState("items");
     const [result, setResult] = useState({ key: null, data: null, error: null });
 
-    /* Which of a categorical column's categories the Sankeys draw. hidden is the reader's own doing and
+    /* Which of a categorical column's categories the Sankey draws. hidden is the reader's own doing and
        costs nothing - the rows are already here, so the bands simply go. kept names categories the server
        would otherwise fold into its catch-all, so changing it asks for the flows again. Both belong to one
        column of one pair: the choice is stamped with that, and another column reads it as never made. */
@@ -417,7 +412,7 @@ export default function CompareModal({ pair, onClose }) {
     // While the next result loads, the last one of the same kind stays up, dimmed
     const plotData = result.data?.kind === kind ? result.data : null;
 
-    // The Sankeys' categories as the current result has them, and what its catch-all holds
+    // The Sankey's categories as the current result has them, and what its catch-all holds
     const plotCategories = useMemo(
         () => (plotData?.kind === "drift" ? flowCategories(plotData) : []), [plotData]);
     const plotOther = useMemo(
@@ -560,7 +555,7 @@ export default function CompareModal({ pair, onClose }) {
                             </section>
                         )}
 
-                        {/* The Sankeys' own categories: which ones they draw, and what the catch-all holds */}
+                        {/* The Sankey's own categories: which ones it draws, and what the catch-all holds */}
                         {kind === "drift" && activeView === "flows" && plotCategories.length > 0 && (
                             <section className="compare-section">
                                 <h3 className="compare-section-title">Categories</h3>
