@@ -4,9 +4,9 @@ The current working tree spans several independently reviewable systems. It is
 split into stacked merge requests so reviewers can validate one behavioral
 contract at a time. Merge them in the order below.
 
-## 1. `codex/adaptive-profiling-core`
+## 1. `profiling-core`
 
-Base: `codex/frontend-improvements`
+Base: `frontend-improvements`
 
 Scope:
 
@@ -20,9 +20,9 @@ Scope:
 It deliberately excludes semantic grouping, new grouping UI, and research
 result files.
 
-## 2. `codex/profiler-guided-clustering`
+## 2. `profiler-guided-clustering`
 
-Base: `codex/adaptive-profiling-core`
+Base: `profiling-core`
 
 Scope:
 
@@ -33,9 +33,9 @@ Scope:
 - grounded group descriptions and examples; and
 - clustering unit tests and implementation documentation.
 
-## 3. `codex/profiling-review-ui`
+## 3. `profiling-review-ui`
 
-Base: `codex/profiler-guided-clustering`
+Base: `profiler-guided-clustering`
 
 Scope:
 
@@ -45,9 +45,9 @@ Scope:
 - repair safeguards, filter/delete-column actions, and export visibility;
 - responsive styling and regenerated Vite distribution assets.
 
-## 4. `codex/profiling-evaluation-pipeline`
+## 4. `profiling-evaluations`
 
-Base: `codex/profiling-review-ui`
+Base: `profiling-review-ui`
 
 Scope:
 
@@ -59,9 +59,9 @@ Scope:
 Generated outputs are excluded. A reviewer can rerun the experiment from the
 committed driver and provide a dataset path explicitly.
 
-## 5. `codex/human-benchmark-tooling`
+## 5. `human-benchmark-tooling`
 
-Base: `codex/profiling-evaluation-pipeline`
+Base: `profiling-evaluations`
 
 Scope:
 
@@ -70,9 +70,9 @@ Scope:
 - DataProfiler and Deequ external-baseline adapters; and
 - portable output configuration for benchmark artifacts.
 
-## 6. `codex/clustering-evaluation-pipeline`
+## 6. `clustering-evaluation`
 
-Base: `codex/human-benchmark-tooling`
+Base: `human-benchmark-tooling`
 
 Scope:
 
