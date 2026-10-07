@@ -44,14 +44,6 @@ SKIPPED_COLUMNS = (*ID_COLUMNS, "index", "level_0")
 # where a delete of outliers moves mass - a grid of deciles understates such a change badly.
 TAIL_GRID = (0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
 
-# The most a numeric column counts for in a node's number. A guess, like the column weights - both are
-# reserved decisions in doc 02, so both stay parameters rather than being settled here.
-DEFAULT_CAP = 1.0
-
-NULL_DRAWS = 500
-NULL_SEED = 0
-FLAG_PERCENTILE = 95
-
 # Below this many values on either side, W1 and TVD are too noisy to lean on
 LOW_CONFIDENCE_N = 30
 
@@ -191,8 +183,7 @@ def column_distortion(root, node, kind):
 def check_row_identity(root_frame, node_frame):
     """
     Every wrangle edits cells or deletes rows, and none creates one - so a node's rows are always a subset
-    of root's, matched by "ID". The Sankey's removed sink, the null test's "random deletion of the same
-    size" and the removal rates all lean on that. A node that broke it would make every one of them wrong
+    of root's, matched by "ID". The Sankey's removed sink and the removal rates both lean on that. A node that broke it would make every one of them wrong
     without saying so, so this raises instead.
     """
     extra = set(node_frame["ID"]) - set(root_frame["ID"])
@@ -200,42 +191,41 @@ def check_row_identity(root_frame, node_frame):
         raise RowIdentityError(f"the node holds {len(extra)} row(s) that root does not, e.g. ID {min(extra)}")
 
 
-def summarize(columns, cap=DEFAULT_CAP, weights=None):
+def summarize(columns, weights=None):
     """
-    A node's single number: the mean of its columns' drift. A numeric column counts for at most `cap`,
-    since W1/IQR has no ceiling and one wildly shifted column would otherwise swamp the rest. Columns with
-    no value are left out rather than counted as unchanged.
+    A node's single number: the mean of its columns' drift. Columns with no value are left out rather than
+    counted as unchanged.
+
+    A numeric column's W1/IQR goes in uncapped, though it has no ceiling. The number is tracked along a
+    branch to see how bad drift is getting, and a ceiling would hide every shift past it - a column moved by
+    ten IQRs would read the same as one moved by one. The price is that one wildly shifted column can
+    dominate the mean, which its own value in the column breakdown shows.
 
     :param columns: {column: result}, as column_distortion returns them
-    :param weights: {column: weight}, or None for every column counting the same
-    :return: {"overall", "capped"} - overall is None when no column could be scored
+    :param weights: {column: weight}, or None for every column counting the same - a reserved decision in
+                    doc 02, so it stays a parameter rather than being settled here
+    :return: {"overall"} - None when no column could be scored
     """
     total = weight_sum = 0.0
-    capped = []
     for column, result in columns.items():
         if result["degenerate"]:
             continue
-        value = result["value"]
-        if result["kind"] == NUMERIC and value > cap:
-            value = cap
-            capped.append(column)
         weight = 1.0 if weights is None else weights.get(column, 1.0)
-        total += weight * value
+        total += weight * result["value"]
         weight_sum += weight
-    return {"overall": total / weight_sum if weight_sum else None, "capped": capped}
+    return {"overall": total / weight_sum if weight_sum else None}
 
 
-def node_distortion(root_frame, node_frame, kinds, cap=DEFAULT_CAP, weights=None):
+def node_distortion(root_frame, node_frame, kinds, weights=None):
     """
     Every column's drift from root, and the node's single number.
 
     :param root_frame: root's rows, "ID" plus its columns
     :param node_frame: the node's rows
     :param kinds: {column: kind} for root's data columns - see column_kinds
-    :param cap: the most a numeric column counts for in the node's number
     :param weights: {column: weight}, or None for every column counting the same
-    :return: {"overall", "capped", "columns", "structural"} - structural lists columns the node dropped or
-             gained, which have no drift and are reported as changes to the table's shape instead
+    :return: {"overall", "columns", "structural"} - structural lists columns the node dropped or gained,
+             which have no drift and are reported as changes to the table's shape instead
     """
     check_row_identity(root_frame, node_frame)
 
@@ -252,7 +242,7 @@ def node_distortion(root_frame, node_frame, kinds, cap=DEFAULT_CAP, weights=None
         columns[column] = _result(None, None, 0, node_frame[column].notna().sum(), "column added")
 
     removed = [column for column in kinds if column not in node_frame.columns]
-    return {**summarize(columns, cap, weights), "columns": columns,
+    return {**summarize(columns, weights), "columns": columns,
             "structural": {"removed": removed, "added": added}}
 
 
@@ -263,15 +253,15 @@ def root_distortion(root_frame, kinds):
         # A categorical column counts its missing cells, as column_distortion does
         present = len(root_frame) if kind == CATEGORICAL else root_frame[column].notna().sum()
         columns[column] = _result(kind, 0.0, present, present)
-    return {"overall": 0.0, "capped": [], "columns": columns, "structural": {"removed": [], "added": []}}
+    return {"overall": 0.0, "columns": columns, "structural": {"removed": [], "added": []}}
 
 
 def edit_facts(root_frame, node_frame, columns):
     """
     What the wrangles between root and this node did, read off the data: how many of root's rows are gone,
-    and per column how many of the surviving cells now hold a different value. The null test, the detail
-    views and the annotations are keyed on these rather than on operation names, so a new kind of repair
-    needs no change in any of them.
+    and per column how many of the surviving cells now hold a different value. The detail views and the
+    annotations are keyed on these rather than on operation names, so a new kind of repair needs no change
+    in any of them.
 
     :param columns: the data columns to count changed cells in
     :return: {"rows_root", "rows_removed", "cells_changed": {column: count}}
@@ -454,111 +444,6 @@ def acted_on_column(path_nodes, column):
     return any(column in child.wrangle_summary()["columns"] for child in path_nodes[1:])
 
 
-# ── The null test ────────────────────────────────────────────────────────────
-
-# Null draws keyed by (root table, column, rows kept, draws, seed). Computed lazily, when a view asks for
-# them, and never on a graph render.
-_null_cache = {}
-
-
-def _draw_null(root_values, kind, n_retained, draws, seed):
-    """draws random subsets of n_retained of root's rows, each scored against root like a real node."""
-    rng = np.random.default_rng(seed)
-    rows = len(root_values)
-    samples = [rng.choice(rows, n_retained, replace=False) for _ in range(draws)]
-
-    if kind == NUMERIC:
-        numbers = _numbers(root_values).to_numpy()
-        root_numbers = numbers[~np.isnan(numbers)]
-        scale = _scale(root_numbers) if len(root_numbers) >= 2 else None
-        if scale is None:
-            return np.full(draws, np.nan)
-
-        def score(sample):
-            kept = numbers[sample]
-            kept = kept[~np.isnan(kept)]
-            return wasserstein_distance(root_numbers, kept) / scale if len(kept) >= 2 else np.nan
-    else:
-        # The labels become integer codes once, so each draw is a bincount rather than a value_counts. Missing
-        # cells are coded as the null category, as column_distortion counts them.
-        codes = pd.factorize(_category_values(root_values))[0]
-        if len(codes) == 0:
-            return np.full(draws, np.nan)
-        categories = codes.max() + 1
-        root_shares = np.bincount(codes, minlength=categories) / len(codes)
-
-        def score(sample):
-            kept = codes[sample]
-            if len(kept) == 0:
-                return np.nan
-            return 0.5 * np.abs(np.bincount(kept, minlength=categories) / len(kept) - root_shares).sum()
-
-    return np.array([score(sample) for sample in samples])
-
-
-def null_distribution(cache_key, root_values, kind, n_retained, draws=NULL_DRAWS, seed=NULL_SEED):
-    """
-    The drift random deletion of the same size produces: n_retained of root's rows drawn uniformly without
-    replacement, draws times over.
-
-    Removing any rows at all moves every column a little by chance, so a raw drift means nothing until it is
-    set against this. It depends only on root's column and how many rows survive - not on which rows, and
-    not on the node - so it is cached on exactly that, and nodes that kept the same number of rows share one.
-
-    :param cache_key: (root table, column)
-    :return: each draw's drift, NaN where a draw had nothing to score
-    """
-    key = (*cache_key, int(n_retained), int(draws), seed)
-    if key not in _null_cache:
-        _null_cache[key] = _draw_null(root_values.reset_index(drop=True), kind, int(n_retained), draws, seed)
-    return _null_cache[key]
-
-
-def null_applicability(facts, column, result):
-    """
-    Whether the row-deletion null describes what happened to this column (doc 01 §1.5). It models rows
-    leaving at random, so it applies when rows were removed and none of the column's surviving cells were
-    edited. An edit in place - an impute, say - is a different mechanism with no null yet (reserved decision
-    3 in doc 02), so those columns go untested rather than tested against the wrong thing.
-
-    :return: (applicable, reason)
-    """
-    if result["degenerate"]:
-        return False, result["reason"]
-    if facts["rows_removed"] == 0:
-        return False, "no rows removed"
-    if facts["cells_changed"].get(column, 0):
-        return False, "values edited in place"
-    return True, None
-
-
-def null_result(cache_key, root_values, kind, n_retained, observed, applicable=True, reason=None,
-                draws=NULL_DRAWS, seed=NULL_SEED):
-    """
-    Where a column's observed drift sits among random deletions of the same size.
-
-    :param applicable: False when the row-deletion null does not describe what happened - see
-                       null_applicability. The result then has no percentile, and the UI draws nothing,
-                       rather than a marker that would read as "tested and passed".
-    :return: {"applicable", "reason", "percentile", "flagged", "null_mean", "null_p95", "draws"}
-    """
-    untested = {"applicable": False, "reason": reason, "percentile": None, "flagged": False,
-                "null_mean": None, "null_p95": None, "draws": draws}
-    if not applicable:
-        return untested
-
-    null = null_distribution(cache_key, root_values, kind, n_retained, draws, seed)
-    null = null[~np.isnan(null)]
-    if len(null) == 0:
-        return {**untested, "reason": "nothing to compare against"}
-
-    p95 = float(np.percentile(null, FLAG_PERCENTILE))
-    return {"applicable": True, "reason": None,
-            "percentile": float(100 * np.mean(null < observed)),
-            "flagged": bool(observed > p95),
-            "null_mean": float(null.mean()), "null_p95": p95, "draws": draws}
-
-
 # ── Across nodes ─────────────────────────────────────────────────────────────
 
 def distortion_trajectory(ordered):
@@ -642,24 +527,16 @@ def _sentences(record):
         sentences.append(f"Drift {record['drift']:.3f} ({record['stat']}).")
     if "churn" in record:
         sentences.append(f"{record['churn']:.1%} of rows changed category or were removed (churn).")
-
-    null = record["null"]
-    if null and null["applicable"]:
-        if null["flagged"]:
-            sentences.append(f"Drift exceeds {null['percentile']:.0f}% of random deletions of the same size.")
-        else:
-            sentences.append(f"Random deletions of the same size drift this much or more "
-                             f"{100 - null['percentile']:.0f}% of the time.")
     return sentences
 
 
-def annotation(column, result, facts, detail=None, null=None, acted_on=False, flows=None):
+def annotation(column, result, facts, detail=None, acted_on=False, flows=None):
     """
     Plain sentences explaining one column's drift, and the record every one of them is built from.
 
     Only two kinds of fact are stated (doc 03 §3.8): what the provenance records - which rows were removed,
     which cells changed, whether any step acted on the column - and what was measured - the drift, where it
-    moved, the null test, the removal rates. Never why. "Shifted because younger developers earn less"
+    moved, the removal rates. Never why. "Shifted because younger developers earn less"
     asserts a mechanism nothing measured, and in a tool for auditing a wrangle an invented explanation is
     worse than none. Every sentence reads fields of the record. If an LLM is ever asked to phrase these
     instead, it gets this record and nothing else, and every clause it writes has to trace to a field here.
@@ -675,7 +552,6 @@ def annotation(column, result, facts, detail=None, null=None, acted_on=False, fl
         "rows_removed": facts["rows_removed"],
         "cells_changed": facts["cells_changed"].get(column, 0),
         "acted_on": acted_on,
-        "null": null,
     }
 
     if detail and detail["kind"] == NUMERIC:
@@ -725,7 +601,6 @@ def root_state(root_table, reload=False):
         frame = load_node_data(engine, root_table)
         _root_cache.update(table=root_table, frame=frame,
                            kinds=column_kinds(ColumnTypes(root_table, engine), frame.columns))
-        _null_cache.clear()
         _density_cache.clear()
     return _root_cache["frame"], _root_cache["kinds"]
 
@@ -771,34 +646,10 @@ def _node_distortion_of(pgraph, node_table):
     return node.distortion
 
 
-def drift_null(pgraph, node_table, columns=None, draws=NULL_DRAWS):
-    """
-    The null test for some of a node's columns. Read-only, like the compare endpoint.
-
-    :param columns: the columns to test, or None for every data column
-    :return: {column: null result}
-    """
-    root_table = pgraph.root_node
-    root_frame, kinds = root_state(root_table)
-    distortion = _node_distortion_of(pgraph, node_table)
-    facts = distortion["facts"]
-    n_retained = facts["rows_root"] - facts["rows_removed"]
-
-    results = {}
-    for column in (columns or list(kinds)):
-        if column not in kinds:
-            raise ValueError(f"{column!r} is not a data column of the root table")
-        result = distortion["columns"][column]
-        applicable, reason = null_applicability(facts, column, result)
-        results[column] = null_result((root_table, column), root_frame[column], kinds[column], n_retained,
-                                      result["value"], applicable, reason, draws)
-    return results
-
-
 def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     """
     Everything the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
-    Sankey flows, the null test and the annotation. Read-only.
+    Sankey flows, and the annotation. Read-only.
 
     The reference is root unless a base is named. A base is one of the node's ancestors - the two selections'
     common ancestor, when the modal is asked to leave out the history they share - and every number here is
@@ -850,7 +701,7 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     payload = {"node": node_table, "base": base_table, "column": column, "kind": kind, "distortion": result,
                "rows_root": facts["rows_root"], "rows_removed": facts["rows_removed"],
                "cells_changed": facts["cells_changed"].get(column, 0),
-               "null": None, "density": None, "flows": None, "annotation": None}
+               "density": None, "flows": None, "annotation": None}
     if dropped:
         return payload
 
@@ -859,9 +710,6 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     base_values, node_values = base_frame[column], node_frame[column]
 
     detail = column_detail(base_values, node_values, kind)
-    applicable, reason = null_applicability(facts, column, result)
-    null = null_result((base_table, column), base_values, kind, facts["rows_root"] - facts["rows_removed"],
-                       result["value"], applicable, reason)
 
     path = [pgraph.node_map[table] for table in pgraph.path_between(base_table, node_table)]
     acted_on = acted_on_column(path, column)
@@ -883,5 +731,5 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
         payload["flows"] = flows
 
     # The breakdown is what the annotation is written from; no view draws it, so it never travels
-    payload.update(null=null, annotation=annotation(column, result, facts, detail, null, acted_on, flows))
+    payload["annotation"] = annotation(column, result, facts, detail, acted_on, flows)
     return payload

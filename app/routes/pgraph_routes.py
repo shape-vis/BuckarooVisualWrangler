@@ -6,7 +6,7 @@ from app import app, db_operations, engine
 from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
 from app.pgraph.compare import PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap
-from app.pgraph.distortion import NULL_DRAWS, distortion_trajectory, drift_detail, drift_null
+from app.pgraph.distortion import distortion_trajectory, drift_detail
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
 
 
@@ -158,37 +158,11 @@ def _requested_node(pgraph):
     return node, None
 
 
-@app.get("/api/pgraph/drift_null")
-def drift_null_test():
-    """
-    The null test for a node's columns: where each column's drift sits among random deletions of the same
-    size. Asked for on demand rather than sent with the graph, because it is the one expensive part of
-    distortion, and cached - see app/pgraph/distortion.py.
-
-    Query: ?node=<node>[&columns=<column>&columns=<column>...][&draws=500]
-    Returns {column: {applicable, reason, percentile, flagged, null_mean, null_p95, draws}}. Read-only.
-    """
-    try:
-        pgraph = app_package.pgraph_for_session
-        if pgraph is None:
-            return {"success": False, "error": "no graph in this session"}, 400
-
-        node, error = _requested_node(pgraph)
-        if error:
-            return error
-
-        columns = request.args.getlist("columns") or None
-        draws = _bounded_int("draws", NULL_DRAWS, 100, 5000)
-        return {"success": True, "node": node, "columns": drift_null(pgraph, node, columns, draws)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}, 400
-
-
 @app.get("/api/pgraph/drift_detail")
 def drift_detail_view():
     """
     What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
-    Sankey flows, the null test and a plain-language annotation.
+    Sankey flows, and a plain-language annotation.
 
     Query: ?node=<node>&column=<column>[&keep=<category>&keep=<category>...][&base=<node>]
     base measures from one of the node's ancestors instead of root - the modal sends the two selections'

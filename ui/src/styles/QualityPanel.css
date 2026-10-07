@@ -230,8 +230,8 @@
 }
 
 /* Drift from root. Ruled off from the error cards and given its own colour, because it is a cost rather
-   than an error - a fifth error card would invert what it means. Never red: red is kept for the
-   null-test flag. The teal matches DRIFT_COLOR in errorColors.js. */
+   than an error - a fifth error card would invert what it means. Never red. The teal matches DRIFT_COLOR
+   in errorColors.js. */
 .quality-drift {
     margin-top: 0.5em;
     border-top: 3px solid #0f766e;

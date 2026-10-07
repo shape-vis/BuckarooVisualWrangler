@@ -114,25 +114,6 @@ def test_only_leaves_are_ranked(survey, client):
 
 
 @pytest.mark.sql
-def test_the_null_test_flags_gender_and_not_the_larger_raw_drifts(survey, client):
-    """The README's key test, on the node Buckaroo's own detectors produce."""
-    status, body = _get(client, "/api/pgraph/drift_null", node=survey["clean"],
-                        columns=["Gender", "Country", "DevType", "YearsCoding", "Age"])
-
-    assert status == 200, body
-    assert body["columns"]["Gender"]["flagged"], body["columns"]["Gender"]
-    for column in ["Country", "DevType", "YearsCoding", "Age"]:
-        assert not body["columns"][column]["flagged"], (column, body["columns"][column])
-
-
-@pytest.mark.sql
-def test_an_imputed_node_is_not_null_tested(survey, client):
-    _, body = _get(client, "/api/pgraph/drift_null", node=survey["impute"])
-
-    assert not any(result["applicable"] for result in body["columns"].values())
-
-
-@pytest.mark.sql
 def test_trajectory_deltas_are_differences_of_root_referenced_values(survey, client):
     _, body = _get(client, "/api/pgraph/branch_trajectory", source=survey["root"],
                    target=survey["anomalies"], destination=survey["clean"])
@@ -207,9 +188,6 @@ GOLDEN_COLUMNS = {
     "impute": {"ConvertedSalary": 0.0243},
     "gender": {"ConvertedSalary": 0.0267, "Gender": 0.0200},
 }
-# Salary is flagged because the deletes selected on it. Continent, GDP and UndergradMajor are flagged
-# because the outliers removed were the highest earners, who cluster by region and country wealth.
-GOLDEN_FLAGGED = {"ConvertedSalary", "Continent", "GDP", "Gender", "UndergradMajor"}
 
 
 @pytest.mark.sql
@@ -222,13 +200,6 @@ def test_golden_drift(survey, client):
         drift = _drift(graph, survey[name])["columns"]
         for column, value in columns.items():
             assert drift[column]["value"] == pytest.approx(value, abs=5e-5), (name, column)
-
-
-@pytest.mark.sql
-def test_golden_null_flags(survey, client):
-    _, body = _get(client, "/api/pgraph/drift_null", node=survey["clean"])
-
-    assert {column for column, result in body["columns"].items() if result["flagged"]} == GOLDEN_FLAGGED
 
 
 @pytest.mark.sql

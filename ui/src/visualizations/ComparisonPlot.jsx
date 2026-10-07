@@ -14,7 +14,7 @@ import {
     FLOW_SIDES, MEASURES, OTHER_LABEL, REMOVED_LABEL, ROLE_COLORS, ROLE_NAMES,
     flowCategories, flowSides, measureOf, nodeName,
 } from "../utils/comparison.js";
-import {NULL_FLAG_TITLE, formatDrift} from "../utils/drift.js";
+import {formatDrift} from "../utils/drift.js";
 
 /* A difference is colored by what it means. Rows gained or lost are neither good nor bad, so they get
    a neutral pair; errors going down is an improvement, and gets the attribute panel's green. */
@@ -387,12 +387,11 @@ function drawHeatmapDifference(svg, data, ctx) {
 
 // ── Drift ────────────────────────────────────────────────────────────────────
 // Each node against root, from /api/pgraph/drift_detail - see app/pgraph/distortion.py. Drift is a cost,
-// not an error, so none of these views colors it good or bad: red is kept for the null test's flag.
+// not an error, so none of these views colors it good or bad.
 // The modal can measure from the two selections' common ancestor instead, so the reference is named by
 // ctx.labels.base wherever the reader sees it; "root" in the code below means whichever state that is.
 
 const ROOT_COLOR = "#8c939d";
-const FLAG_COLOR = "#d1242f";
 // Room at the right of a ridgeline for each row's drift
 const DRIFT_GUTTER = 72;
 // The gap between the ridgeline's rows, as a share of a row - root's row below is sized to match one
@@ -510,11 +509,11 @@ function drawRidgeline(svg, data, ctx) {
     const rows = [
         {
             key: "a", label: ctx.labels.a, curve: data.a.density?.node, color: ROLE_COLORS.a,
-            drift: data.a.distortion?.value, flag: data.a.null
+            drift: data.a.distortion?.value
         },
         {
             key: "b", label: ctx.labels.b, curve: data.b.density?.node, color: ROLE_COLORS.b,
-            drift: data.b.distortion?.value, flag: data.b.null
+            drift: data.b.distortion?.value
         },
     ];
 
@@ -572,9 +571,8 @@ function drawRidgeline(svg, data, ctx) {
         rowGroup.append("text").attr("class", "compare-ridge-label")
             .attr("x", -8).attr("y", middle).attr("text-anchor", "end").attr("dominant-baseline", "middle")
             .attr("fill", row.color).text(row.label);
-        const drift = rowGroup.append("text").attr("class", "compare-ridge-drift")
+        rowGroup.append("text").attr("class", "compare-ridge-drift")
             .attr("x", w + 10).attr("y", middle).attr("dominant-baseline", "middle").text(formatDrift(row.drift));
-        if (row.flag?.flagged) drift.append("tspan").attr("fill", FLAG_COLOR).text(" ▲").append("title").text(NULL_FLAG_TITLE);
 
         /* Each row's annotation is about its own node, at full scale. The spot is found on the whole curve,
            zoomed or not; when the window leaves it out, the bubble is pinned to the edge of the row nearest it,
@@ -882,11 +880,7 @@ function flowSideTitle(g, side, detail, {align}, w, ctx, compact) {
     const header = g.append("g");
     const title = header.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)");
     const name = compact ? ctx.labels[side.id] : `${ROLE_NAMES[side.id]} · ${ctx.labels[side.id]}`;
-    const next = titleChip(title, 0, side.id, name);
-    if (detail?.null?.flagged) {
-        title.append("text").attr("x", next - 12).attr("fill", FLAG_COLOR).text("▲")
-            .append("title").text(NULL_FLAG_TITLE);
-    }
+    titleChip(title, 0, side.id, name);
     header.append("text").attr("class", "compare-panel-subtitle").attr("y", -10)
         .text(`${compact ? "" : `vs ${ctx.labels.base} · `}drift ${formatDrift(detail?.distortion?.value)}`);
     if (align === "end") header.attr("transform", `translate(${w - header.node().getBBox().width}, 0)`);

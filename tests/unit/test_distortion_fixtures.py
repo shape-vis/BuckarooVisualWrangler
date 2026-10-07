@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from app.pgraph.distortion import (CATEGORICAL, NUMERIC, REMOVED_LABEL, category_flows, column_detail,
-                                   column_distortion, node_distortion, null_result)
+                                   column_distortion, node_distortion)
 
 SURVEY = Path(__file__).resolve().parents[2] / "provided_datasets" / "stackoverflow_db_uncleaned.csv"
 
@@ -81,19 +81,6 @@ class Doc02FixtureTests(unittest.TestCase):
         self.assertEqual(rows[(NON_BINARY, REMOVED_LABEL)], 1)
         self.assertEqual(rows[(MALE_NON_BINARY, REMOVED_LABEL)], 1)
         self.assertAlmostEqual(flows["churn"], 0.065)
-
-    def test_null_test_flags_gender_and_not_the_larger_raw_drifts(self):
-        # The README's key test: Country has twice Gender's raw drift, and only Gender is real
-        percentiles = {}
-        for column in ["Gender", "Country", "DevType", "YearsCoding", "Age", "Continent"]:
-            observed = column_distortion(self.root[column], self.n1[column], CATEGORICAL)["value"]
-            percentiles[column] = null_result(("survey", column), self.root[column], CATEGORICAL,
-                                              len(self.n1), observed)["percentile"]
-
-        self.assertGreater(percentiles["Gender"], 95, percentiles)
-        for column in ["Country", "DevType", "YearsCoding", "Age", "Continent"]:
-            with self.subTest(column=column):
-                self.assertLess(percentiles[column], 95, percentiles)
 
 
 if __name__ == "__main__":

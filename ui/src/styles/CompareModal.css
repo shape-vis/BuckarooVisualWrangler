@@ -394,8 +394,8 @@
     list-style: none;
 }
 
-/* Three columns, never merged: the attribute, its change in error rate between the two nodes, and each
-   node's drift from root */
+/* Three columns, never merged: the attribute, its change in error rate between the two states the
+   "Error Δ between" select names, and each node's drift from root */
 .compare-ranked-head,
 .compare-ranked-item {
     display: grid;

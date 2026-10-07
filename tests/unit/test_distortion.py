@@ -8,8 +8,8 @@ from app.pgraph import distortion
 from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, RowIdentityError,
                                    annotation, category_flows, column_detail, column_distortion,
                                    distortion_trajectory, drift_detail, edit_facts, node_density,
-                                   node_distortion, null_applicability, null_distribution, null_result,
-                                   pareto_frontier, root_density_params, root_distortion, summarize)
+                                   node_distortion, pareto_frontier, root_density_params, root_distortion,
+                                   summarize)
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
 
@@ -164,20 +164,20 @@ class NodeDistortionTests(unittest.TestCase):
         self.assertNotIn("index", result["columns"])
         self.assertNotIn("ID", result["columns"])
 
-    def test_numeric_columns_are_capped(self):
-        columns = {"num": {"value": 3.0, "kind": NUMERIC, "degenerate": False},
-                   "cat": {"value": 0.2, "kind": CATEGORICAL, "degenerate": False}}
+    def test_numeric_columns_are_not_capped(self):
+        # A shift of ten IQRs has to read worse than a shift of one, so nothing is clipped
+        one = {"num": {"value": 1.0, "kind": NUMERIC, "degenerate": False},
+               "cat": {"value": 0.2, "kind": CATEGORICAL, "degenerate": False}}
+        ten = {**one, "num": {**one["num"], "value": 10.0}}
 
-        result = summarize(columns)
-
-        self.assertAlmostEqual(result["overall"], 0.6)
-        self.assertEqual(result["capped"], ["num"])
+        self.assertAlmostEqual(summarize(one)["overall"], 0.6)
+        self.assertAlmostEqual(summarize(ten)["overall"], 5.1)
 
     def test_weights(self):
         columns = {"num": {"value": 3.0, "kind": NUMERIC, "degenerate": False},
                    "cat": {"value": 0.2, "kind": CATEGORICAL, "degenerate": False}}
 
-        self.assertAlmostEqual(summarize(columns, weights={"num": 3})["overall"], 0.8)
+        self.assertAlmostEqual(summarize(columns, weights={"num": 3})["overall"], 2.3)
 
     def test_columns_without_a_value_are_left_out_not_counted_as_zero(self):
         columns = {"a": {"value": 0.4, "kind": CATEGORICAL, "degenerate": False},
@@ -250,61 +250,6 @@ class DetailTests(unittest.TestCase):
         params = root_density_params(pd.Series([1.0, 2.0, 3.0, 4.0]))
 
         self.assertIsNotNone(node_density(pd.Series([2.0, 2.0, 2.0]), params))
-
-
-class NullTests(unittest.TestCase):
-    def test_draws_are_seeded_and_shared(self):
-        values = labels(["a"] * 50 + ["b"] * 50)
-
-        first = null_distribution(("t", "seeded"), values, CATEGORICAL, 80, draws=50, seed=1)
-        again = null_distribution(("t", "seeded"), values, CATEGORICAL, 80, draws=50, seed=1)
-
-        self.assertIs(first, again)
-        self.assertEqual(len(first), 50)
-
-    def test_deleting_one_category_selectively_is_flagged(self):
-        root = labels(["a"] * 50 + ["b"] * 50)
-        node = root.iloc[:80]
-        observed = column_distortion(root, node, CATEGORICAL)["value"]
-
-        result = null_result(("t", "selective"), root, CATEGORICAL, len(node), observed)
-
-        self.assertTrue(result["flagged"])
-        self.assertGreater(result["percentile"], 95)
-
-    def test_deleting_evenly_is_not_flagged(self):
-        root = labels(["a", "b"] * 50)
-        node = root.iloc[20:]
-        observed = column_distortion(root, node, CATEGORICAL)["value"]
-
-        result = null_result(("t", "even"), root, CATEGORICAL, len(node), observed)
-
-        self.assertFalse(result["flagged"])
-
-    def test_deleting_a_numeric_tail_is_flagged(self):
-        root = numeric([float(value) for value in range(100)])
-        node = root.iloc[:80]
-        observed = column_distortion(root, node, NUMERIC)["value"]
-
-        self.assertTrue(null_result(("t", "tail"), root, NUMERIC, len(node), observed)["flagged"])
-
-    def test_applies_only_to_rows_leaving_a_column_no_one_edited(self):
-        scored = {"degenerate": False, "reason": None}
-        removed = {"rows_removed": 3, "cells_changed": {"a": 0, "b": 2}}
-
-        self.assertEqual(null_applicability(removed, "a", scored), (True, None))
-        self.assertEqual(null_applicability(removed, "b", scored), (False, "values edited in place"))
-        self.assertEqual(null_applicability({"rows_removed": 0, "cells_changed": {}}, "a", scored),
-                         (False, "no rows removed"))
-        self.assertEqual(null_applicability(removed, "a", {"degenerate": True, "reason": "no values"}),
-                         (False, "no values"))
-
-    def test_an_untested_column_carries_no_percentile(self):
-        result = null_result(("t", "untested"), labels(["a"]), CATEGORICAL, 1, 0.0,
-                             applicable=False, reason="no rows removed")
-
-        self.assertIsNone(result["percentile"])
-        self.assertFalse(result["flagged"])
 
 
 class FlowTests(unittest.TestCase):
@@ -420,16 +365,14 @@ class AnnotationTests(unittest.TestCase):
     def test_a_collateral_column_is_described_by_facts_alone(self):
         result = {"kind": CATEGORICAL, "stat": "TVD", "value": 0.0105}
         facts = {"rows_root": 400, "rows_removed": 26, "cells_changed": {"Gender": 0}}
-        null = {"applicable": True, "flagged": True, "percentile": 98.6}
         flows = {"churn": 0.065, "removal_rates": {"Male": 0.055, "Female": 0.133}}
 
-        sentences = annotation("Gender", result, facts, null=null, acted_on=False, flows=flows)["sentences"]
+        sentences = annotation("Gender", result, facts, acted_on=False, flows=flows)["sentences"]
         text = " ".join(sentences)
 
         self.assertIn("26 of 400 rows were removed.", sentences)
         self.assertIn("No operation acted on Gender", text)
         self.assertIn("Female rows were removed at 13.3%, against 5.5% of Male.", sentences)
-        self.assertIn("Drift exceeds 99% of random deletions of the same size.", sentences)
         self.assertNotIn("because", text)
 
 
@@ -467,9 +410,8 @@ class DriftFromAnAncestorTests(unittest.TestCase):
         saved = dict(distortion._root_cache)
         distortion._root_cache.update(table="root", frame=root, kinds=self.KINDS)
         self.addCleanup(distortion._root_cache.update, saved)
-        for cache in (distortion._density_cache, distortion._null_cache):
-            cache.clear()
-            self.addCleanup(cache.clear)
+        distortion._density_cache.clear()
+        self.addCleanup(distortion._density_cache.clear)
         loader = mock.patch.object(distortion, "load_node_data",
                                    lambda _engine, table, columns: self.frames[table][["ID", *columns]])
         loader.start()

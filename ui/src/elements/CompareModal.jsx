@@ -9,8 +9,7 @@ import { getDriftDetail, getNodeComparison } from "../utils/serverCalls.jsx";
 import {
     MEASURES, OTHER_LABEL, ROLE_NAMES, commonAncestor, describeWrangle, flowCategories, nodeName, otherCategories,
 } from "../utils/comparison.js";
-import { formatDrift, useDriftNull } from "../utils/drift.js";
-import DriftFlag from "./DriftFlag.jsx";
+import { formatDrift } from "../utils/drift.js";
 import ComparisonPlot from "../visualizations/ComparisonPlot.jsx";
 import "../styles/CompareModal.css";
 
@@ -32,6 +31,16 @@ const VIEW_LABELS = {
 };
 
 const RANKINGS = [{ id: "error", label: "Error change" }, { id: "drift", label: "Drift" }];
+
+/* The two states the most-changed list's error change runs between. A → B compares the selections
+   directly; the root options show how far one selection has come from the upload, so a change both
+   selections share does not cancel out of the column. */
+const ERROR_DELTAS = [
+    { id: "ab", label: "Selection A → Selection B", from: "a", to: "b" },
+    { id: "rootA", label: "Root → Selection A", from: "root", to: "a" },
+    { id: "rootB", label: "Root → Selection B", from: "root", to: "b" },
+];
+const STATE_NAMES = { root: "root", a: "selection A", b: "selection B" };
 
 // How many attributes the most-changed list offers
 const RANKED_LIMIT = 8;
@@ -342,9 +351,6 @@ export default function CompareModal({ pair, onClose }) {
     const metricsB = dataB?.metrics;
     const distortionA = dataA?.distortion;
     const distortionB = dataB?.distortion;
-    // Fetched as the modal opens, for the flags beside each drift - only a node that lost rows can have any
-    const nullA = useDriftNull(tableA, distortionA?.facts?.rows_removed);
-    const nullB = useDriftNull(tableB, distortionB?.facts?.rows_removed);
     const foldedCount =(id) => (nodesById[id]?.type === "collapsedNode" ? nodesById[id].data.run?.length : null);
 
     // Every attribute either side knows of, in the order the metrics list them
@@ -353,16 +359,23 @@ export default function CompareModal({ pair, onClose }) {
         ...Object.keys(metricsB?.columns ?? {}),
     ])], [metricsA, metricsB]);
 
-    /* The same attributes ranked by how far their error rate moved, or by how far either node has drifted
-       from root. Read from what each node already carries, so it costs no request - and ranked by error
-       it gives the plot a sensible first attribute: the one the wrangles between these two touched most.
-       Error and drift stay two numbers: a column no operation touched can show no error change and still
-       have drifted, which is exactly what this list is for. */
+    // Root is the node whose parent is the "root" sentinel, found by table so a folded root still has its metrics
+    const metricsRoot = useMemo(() => Object.values(serverNodesById ?? {})
+        .find((node) => node.data?.parent === "root")?.data?.metrics, [serverNodesById]);
+
+    /* The same attributes ranked by how far their error rate moved between the two states errorDelta names,
+       or by how far either node has drifted from root. Read from what each node already carries, so it costs
+       no request - and ranked by error it gives the plot a sensible first attribute: the one the wrangles
+       between these two touched most. Error and drift stay two numbers: a column no operation touched can
+       show no error change and still have drifted, which is exactly what this list is for. */
     const [rankBy, setRankBy] = useState("error");
+    const [errorDeltaId, setErrorDeltaId] = useState("ab");
+    const errorDelta = ERROR_DELTAS.find((option) => option.id === errorDeltaId);
     const ranked = useMemo(() => attributes
         .map((name) => {
-            const before = metricsA?.columns?.[name]?.total ?? null;
-            const after = metricsB?.columns?.[name]?.total ?? null;
+            const metricsOf = { root: metricsRoot, a: metricsA, b: metricsB };
+            const before = metricsOf[errorDelta.from]?.columns?.[name]?.total ?? null;
+            const after = metricsOf[errorDelta.to]?.columns?.[name]?.total ?? null;
             const driftA = distortionA?.columns?.[name]?.value ?? null;
             const driftB = distortionB?.columns?.[name]?.value ?? null;
             return { name, before, after, delta: (after ?? 0) - (before ?? 0), driftA, driftB };
@@ -374,7 +387,7 @@ export default function CompareModal({ pair, onClose }) {
         .sort((a, b) => (rankBy === "drift"
             ? Math.max(b.driftA ?? 0, b.driftB ?? 0) - Math.max(a.driftA ?? 0, a.driftB ?? 0)
             : Math.abs(b.delta) - Math.abs(a.delta))),
-    [attributes, metricsA, metricsB, distortionA, distortionB, rankBy]);
+    [attributes, metricsRoot, metricsA, metricsB, distortionA, distortionB, rankBy, errorDelta]);
 
     const [kind, setKind] = useState("histogram");
     /* What the Drift views measure from: root, or the two selections' common ancestor - which leaves out the
@@ -635,6 +648,16 @@ export default function CompareModal({ pair, onClose }) {
                             <section className="compare-section">
                                 <h3 className="compare-section-title">Most changed attributes</h3>
                                 <Segmented label="Rank attributes by" options={RANKINGS} value={rankBy} onChange={setRankBy} />
+                                <label className="compare-field">
+                                    <span className="compare-field-label">Error Δ between</span>
+                                    <select
+                                        className="compare-select"
+                                        value={errorDeltaId}
+                                        onChange={(event) => setErrorDeltaId(event.target.value)}
+                                    >
+                                        {ERROR_DELTAS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                                    </select>
+                                </label>
                                 <div className="compare-ranked-head" aria-hidden="true">
                                     <span>attribute</span>
                                     <span>error Δ</span>
@@ -647,7 +670,9 @@ export default function CompareModal({ pair, onClose }) {
                                                 type="button"
                                                 className={`compare-ranked-item ${attribute.name === x ? "compare-ranked-item--active" : ""}`}
                                                 onClick={() => setX(attribute.name)}
-                                                title={`${attribute.name}: error rate ${formatRate(attribute.before)} → ${formatRate(attribute.after)}; `
+                                                title={`${attribute.name}: error rate ${formatRate(attribute.before)} in `
+                                                    + `${STATE_NAMES[errorDelta.from]} → ${formatRate(attribute.after)} in `
+                                                    + `${STATE_NAMES[errorDelta.to]}; `
                                                     + `drift from root ${formatDrift(attribute.driftA)} in selection A, `
                                                     + `${formatDrift(attribute.driftB)} in selection B. Click to plot it.`}
                                             >
@@ -655,10 +680,8 @@ export default function CompareModal({ pair, onClose }) {
                                                 <RateDelta delta={attribute.delta} />
                                                 <span className="compare-ranked-drift">
                                                     {formatDrift(attribute.driftA)}
-                                                    <DriftFlag result={nullA[attribute.name]} />
                                                     {" / "}
                                                     {formatDrift(attribute.driftB)}
-                                                    <DriftFlag result={nullB[attribute.name]} />
                                                 </span>
                                             </button>
                                         </li>

@@ -2,9 +2,8 @@ import { useMemo, useState } from "react";
 
 import { NavButton, StandardButton } from "../elements/Buttons.jsx";
 import Sparkline from "../visualizations/Sparkline.jsx";
-import DriftFlag from "../elements/DriftFlag.jsx";
 import { ERROR_TYPES, ERROR_DIMENSIONS, errorColors, DRIFT_COLOR } from "../store/errorColors.js";
-import { formatDrift, useDriftNull } from "../utils/drift.js";
+import { formatDrift } from "../utils/drift.js";
 import { describeWrangle, nodeName } from "../utils/comparison.js";
 import { truncateText } from "../utils/textUtils.js";
 import { usePgraph } from "../store/PGraphContext.jsx";
@@ -222,8 +221,8 @@ function DriftCard({ series, nodeIds, foldedNodeIds }) {
   );
 }
 
-/** One column's drift, with the null test's flag when it fired. A column with no value says why. */
-function DriftCell({ drift, nullResult }) {
+/** One column's drift. A column with no value says why. */
+function DriftCell({ drift }) {
   if (!drift) return <td className="columns-table-drift columns-table-zero">—</td>;
   if (drift.degenerate) {
     return <td className="columns-table-drift columns-table-reason" title={drift.reason}>{drift.reason}</td>;
@@ -235,7 +234,6 @@ function DriftCell({ drift, nullResult }) {
       title={drift.low_confidence ? "Fewer than 30 values on one side, so this is a noisy estimate" : undefined}
     >
       {formatDrift(drift.value)}
-      <DriftFlag result={nullResult} />
     </td>
   );
 }
@@ -247,7 +245,6 @@ function DriftCell({ drift, nullResult }) {
 function ColumnsView({ metrics, distortion, nodeId }) {
   const [sortBy, setSortBy] = useState("total");
   const rows = useMemo(() => columnRows(metrics, distortion, sortBy), [metrics, distortion, sortBy]);
-  const nullResults = useDriftNull(nodeId, distortion?.facts?.rows_removed);
 
   if (rows.length === 0) return <div className="quality-empty">No column metrics.</div>;
 
@@ -292,7 +289,7 @@ function ColumnsView({ metrics, distortion, nodeId }) {
                 </td>
               ))}
               <td className="columns-table-total">{asPercent(rates.total)}</td>
-              <DriftCell drift={drift} nullResult={nullResults[name]} />
+              <DriftCell drift={drift} />
             </tr>
           ))}
         </tbody>
