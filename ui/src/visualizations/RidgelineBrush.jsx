@@ -52,11 +52,12 @@ function Grip({x, y, width, height, isBrushActive}) {
  *  - spots: {a, b}, the grid index each node's annotation bubble points at, or null
  *  - frame: {left, width, total} - where the ridgeline's panel sits, so the two line up exactly
  *  - rootColor: root's colour in the ridgeline
+ *  - baseLabel: what the row is named - "root", or the common ancestor's node when the drift is measured from it
  *  - curve: how tall the curves stand, so root's row can match the ridgeline's rows above it
  *  - range: [lo, hi] the ridgelines show, or null for the whole column
  *  - onRange: called with the new range, or null
  */
-export default function RidgelineBrush({density, curves, spots, frame, rootColor, curve = DEFAULT_CURVE, range, onRange}) {
+export default function RidgelineBrush({density, curves, spots, frame, rootColor, baseLabel = "root", curve = DEFAULT_CURVE, range, onRange}) {
     const brushRef = useRef(null);
     const {grid, root} = density;
     const lo = grid[0];
@@ -109,7 +110,7 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
                 <g transform={`translate(${frame.left}, 0)`}>
                     <text className="compare-ridge-label" x={-8} y={PIN + curve / 2}
                           textAnchor="end" dominantBaseline="middle" fill={rootColor}>
-                        root
+                        {baseLabel}
                     </text>
                     {/* Root's row on a wash of its own grey, as the ridgeline's rows are on theirs */}
                     <rect className="compare-ridge-band" y={PIN} width={frame.width} height={curve} fill={rootColor}/>

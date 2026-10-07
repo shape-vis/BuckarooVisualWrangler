@@ -1,13 +1,17 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
 
+from app.pgraph import distortion
 from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, RowIdentityError,
                                    annotation, category_flows, column_detail, column_distortion,
-                                   distortion_trajectory, edit_facts, node_density,
+                                   distortion_trajectory, drift_detail, edit_facts, node_density,
                                    node_distortion, null_applicability, null_distribution, null_result,
                                    pareto_frontier, root_density_params, root_distortion, summarize)
+from app.pgraph.node import GraphNode
+from app.pgraph.pgraph import PGraph
 
 
 def numeric(values):
@@ -91,17 +95,31 @@ class CategoricalDistortionTests(unittest.TestCase):
 
         self.assertAlmostEqual(result["value"], 0.25)
 
-    def test_missing_cells_are_left_out_on_both_sides(self):
-        # A node identical to root scores zero even though root has missing cells
+    def test_missing_cells_are_one_category(self):
+        # A node identical to root scores zero, and every spelling of missing is the same category
         values = labels(["a", "b", None, "null", "undefined"])
 
         self.assertEqual(column_distortion(values, values.copy(), CATEGORICAL)["value"], 0.0)
+        self.assertEqual(column_distortion(values, labels(["a", "b", None, None, None]), CATEGORICAL)["value"],
+                         0.0)
 
-    def test_imputation_registers(self):
-        # Root's clean values are half a, half b; filling both gaps with a makes a three quarters
+    def test_imputation_registers_in_full(self):
+        # Root is a quarter a, a quarter b and half null; filling both gaps with a moves that half to a
         result = column_distortion(labels(["a", "b", None, None]), labels(["a", "b", "a", "a"]), CATEGORICAL)
 
-        self.assertAlmostEqual(result["value"], 0.25)
+        self.assertAlmostEqual(result["value"], 0.5)
+
+    def test_deleting_the_missing_rows_registers(self):
+        # Null's half of root is gone, and a and b take a half each instead of a quarter
+        result = column_distortion(labels(["a", "b", None, None]), labels(["a", "b"]), CATEGORICAL)
+
+        self.assertAlmostEqual(result["value"], 0.5)
+
+    def test_an_all_missing_column_still_has_a_value(self):
+        result = column_distortion(labels([None, None]), labels([None]), CATEGORICAL)
+
+        self.assertEqual(result["value"], 0.0)
+        self.assertFalse(result["degenerate"])
 
 
 def frame(rows):
@@ -413,6 +431,93 @@ class AnnotationTests(unittest.TestCase):
         self.assertIn("Female rows were removed at 13.3%, against 5.5% of Male.", sentences)
         self.assertIn("Drift exceeds 99% of random deletions of the same size.", sentences)
         self.assertNotIn("because", text)
+
+
+class DriftFromAnAncestorTests(unittest.TestCase):
+    """
+    drift_detail measured from a common ancestor rather than root, on a graph held in memory:
+
+        root ── mid (deletes 7, 8 on num) ─┬─ left  (deletes 1 on cat)
+                                           └─ right (deletes 3, 4 on cat)
+
+    The tables are read through load_node_data, which is pointed at frames here instead of the database.
+    """
+    KINDS = {"num": NUMERIC, "cat": CATEGORICAL}
+
+    def setUp(self):
+        root = frame({"ID": list(range(1, 9)), "num": [float(i) for i in range(1, 9)], "cat": list("aabbccdd")})
+        mid = root[root["ID"] <= 6].reset_index(drop=True)
+        self.frames = {
+            "root": root,
+            "mid": mid,
+            "left": mid[mid["ID"] != 1].reset_index(drop=True),
+            "right": mid[~mid["ID"].isin([3, 4])].reset_index(drop=True),
+        }
+
+        self.graph = PGraph()
+        self.graph.add_root_node(GraphNode("root", "root", "root", "errors_root"))
+        for table, parent, column in (("mid", "root", "num"), ("left", "mid", "cat"), ("right", "mid", "cat")):
+            self.graph.add_node(GraphNode(parent, "delete", table, f"errors_{table}", [column]))
+        for table, node in self.graph.node_map.items():
+            drift = (root_distortion(root, self.KINDS) if table == "root"
+                     else node_distortion(root, self.frames[table], self.KINDS))
+            node.set_distortion({**drift, "facts": edit_facts(root, self.frames[table], self.KINDS)})
+
+        # Root as the session would have cached it, and every other table read from the frames above
+        saved = dict(distortion._root_cache)
+        distortion._root_cache.update(table="root", frame=root, kinds=self.KINDS)
+        self.addCleanup(distortion._root_cache.update, saved)
+        for cache in (distortion._density_cache, distortion._null_cache):
+            cache.clear()
+            self.addCleanup(cache.clear)
+        loader = mock.patch.object(distortion, "load_node_data",
+                                   lambda _engine, table, columns: self.frames[table][["ID", *columns]])
+        loader.start()
+        self.addCleanup(loader.stop)
+
+    def test_without_a_base_it_is_measured_from_root(self):
+        detail = drift_detail(self.graph, "left", "cat")
+
+        self.assertEqual(detail["base"], "root")
+        self.assertEqual(detail["distortion"], self.graph.node_map["left"].distortion["columns"]["cat"])
+        self.assertEqual(detail["rows_root"], 8)
+        self.assertEqual(detail["rows_removed"], 3)
+
+    def test_from_an_ancestor_it_is_as_if_that_ancestor_were_root(self):
+        mid, left = self.frames["mid"], self.frames["left"]
+
+        detail = drift_detail(self.graph, "left", "cat", base_table="mid")
+
+        self.assertEqual(detail["base"], "mid")
+        self.assertEqual(detail["distortion"]["value"], column_distortion(mid["cat"], left["cat"], CATEGORICAL)["value"])
+        self.assertEqual(detail["flows"], category_flows(mid, left, "cat"))
+        # Only the row deleted below mid is counted, out of mid's rows
+        self.assertEqual(detail["rows_root"], 6)
+        self.assertEqual(detail["rows_removed"], 1)
+
+    def test_a_numeric_column_is_smoothed_on_the_ancestor(self):
+        detail = drift_detail(self.graph, "right", "num", base_table="mid")
+
+        params = root_density_params(self.frames["mid"]["num"])
+        self.assertEqual(detail["density"]["grid"], params["grid"])
+        self.assertEqual(detail["density"]["root"], params["root_curve"])
+        self.assertEqual(detail["density"]["node"], node_density(self.frames["right"]["num"], params))
+
+    def test_only_the_steps_below_the_ancestor_count_as_acting_on_a_column(self):
+        # mid's delete acted on num, but it is above the ancestor, so from there num only lost rows to cat's
+        from_root = drift_detail(self.graph, "left", "num")["annotation"]["record"]
+        from_mid = drift_detail(self.graph, "left", "num", base_table="mid")["annotation"]["record"]
+
+        self.assertTrue(from_root["acted_on"])
+        self.assertFalse(from_mid["acted_on"])
+
+    def test_the_ancestor_against_itself_has_not_drifted(self):
+        detail = drift_detail(self.graph, "mid", "num", base_table="mid")
+
+        self.assertEqual(detail["distortion"]["value"], 0.0)
+        self.assertEqual(detail["rows_removed"], 0)
+        # The same curve up to float noise: the node's fit lands on the ancestor's bandwidth by way of a factor
+        np.testing.assert_allclose(detail["density"]["node"], detail["density"]["root"])
 
 
 if __name__ == "__main__":

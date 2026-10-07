@@ -310,6 +310,13 @@
     background: #e8eaed;
 }
 
+.compare-segment:disabled,
+.compare-segment:disabled:hover {
+    background: #f7f9fa;
+    color: #9aa0a6;
+    cursor: not-allowed;
+}
+
 .compare-segment--active,
 .compare-segment--active:hover {
     background: #e7f0fd;

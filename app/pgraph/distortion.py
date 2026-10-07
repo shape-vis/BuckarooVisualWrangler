@@ -14,8 +14,11 @@ small edits would vanish, and nodes on different branches would have nothing in 
 against. Root is the dirty data rather than the truth, so drift is a cost to be spent knowingly, not an
 error - it is kept apart from the error metrics everywhere and never folded into their totals.
 
-Missing cells are left out on both sides, by the Missing detector's own rule, so the two panels always agree
-about which cells are missing. An imputed cell is no longer missing, which is how imputation still registers.
+In a categorical column, missing cells - by the Missing detector's own rule, so the two panels always agree
+about which cells are missing - are a category of their own, labelled null as churn labels them. Deleting the
+rows with missing cells and filling those cells both move rows out of that category, so both register in
+full, and a node identical to root still scores zero. A numeric column leaves its missing cells out, since a
+null has no place on the number line W1 is measured along.
 
 The spec is the fidelity proposal's docs 01-03. As in compare.py, the loaders touch the database and
 everything else is plain pandas over frames it is handed, so it is testable without one.
@@ -109,8 +112,8 @@ def _numeric_values(values):
 
 
 def _category_values(values):
-    """The column's labels, with missing cells left out by the Missing detector's own rule."""
-    return values[~missing_mask(values)].astype(str)
+    """The column's labels, every cell the Missing detector's rule calls missing labelled null."""
+    return values.astype(str).where(~missing_mask(values), NULL_LABEL)
 
 
 def _scale(root_numbers):
@@ -257,7 +260,8 @@ def root_distortion(root_frame, kinds):
     """Root against itself: exactly zero on every column, without computing anything."""
     columns = {}
     for column, kind in kinds.items():
-        present = root_frame[column].notna().sum()
+        # A categorical column counts its missing cells, as column_distortion does
+        present = len(root_frame) if kind == CATEGORICAL else root_frame[column].notna().sum()
         columns[column] = _result(kind, 0.0, present, present)
     return {"overall": 0.0, "capped": [], "columns": columns, "structural": {"removed": [], "added": []}}
 
@@ -475,18 +479,16 @@ def _draw_null(root_values, kind, n_retained, draws, seed):
             kept = kept[~np.isnan(kept)]
             return wasserstein_distance(root_numbers, kept) / scale if len(kept) >= 2 else np.nan
     else:
-        # The labels become integer codes once, so each draw is a bincount rather than a value_counts
-        present = ~missing_mask(root_values).to_numpy()
-        if not present.any():
+        # The labels become integer codes once, so each draw is a bincount rather than a value_counts. Missing
+        # cells are coded as the null category, as column_distortion counts them.
+        codes = pd.factorize(_category_values(root_values))[0]
+        if len(codes) == 0:
             return np.full(draws, np.nan)
-        codes = pd.factorize(root_values.astype(str))[0]
-        codes[~present] = -1
         categories = codes.max() + 1
-        root_shares = np.bincount(codes[present], minlength=categories) / present.sum()
+        root_shares = np.bincount(codes, minlength=categories) / len(codes)
 
         def score(sample):
             kept = codes[sample]
-            kept = kept[kept >= 0]
             if len(kept) == 0:
                 return np.nan
             return 0.5 * np.abs(np.bincount(kept, minlength=categories) / len(kept) - root_shares).sum()
@@ -793,49 +795,83 @@ def drift_null(pgraph, node_table, columns=None, draws=NULL_DRAWS):
     return results
 
 
-def drift_detail(pgraph, node_table, column, keep=None):
+def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     """
     Everything the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
     Sankey flows, the null test and the annotation. Read-only.
 
+    The reference is root unless a base is named. A base is one of the node's ancestors - the two selections'
+    common ancestor, when the modal is asked to leave out the history they share - and every number here is
+    then measured from it exactly as it would be from root: the node's rows are a subset of any ancestor's,
+    for the same reason they are of root's. The payload's "root" keys (rows_root, density.root) name that
+    reference state, whichever it is.
+
     :param keep: for a categorical column, the categories to keep out of the catch-all - see category_flows
+    :param base_table: the ancestor to measure from, or None for root. The route checks it is an ancestor.
     :return: the payload, with "density", "flows" and "annotation" None when the column was dropped
     """
     from app import engine
 
     root_table = pgraph.root_node
+    base_table = base_table or root_table
     root_frame, kinds = root_state(root_table)
     if column not in kinds:
         raise ValueError(f"{column!r} is not a data column of the root table")
 
+    def column_frame(table):
+        """One table's "ID" and the column - root's out of the cache, any other read from the database."""
+        return root_frame[["ID", column]] if table == root_table else load_node_data(engine, table, [column])
+
+    # Kinds stay root's for every reference, so a column cannot switch statistics with the reference
     kind = kinds[column]
     distortion = _node_distortion_of(pgraph, node_table)
-    result, facts = distortion["columns"][column], distortion["facts"]
+    dropped = (column in distortion["structural"]["removed"]
+               or column in _node_distortion_of(pgraph, base_table)["structural"]["removed"])
 
-    payload = {"node": node_table, "column": column, "kind": kind, "distortion": result,
+    base_frame = node_frame = None
+    if base_table == root_table:
+        # Read off what the node already carries, so these match the drift shown everywhere else
+        result, facts = distortion["columns"][column], distortion["facts"]
+    elif dropped:
+        result = _result(kind, None, 0, 0, "column removed")
+        facts = {"rows_root": 0, "rows_removed": 0, "cells_changed": {}}
+    else:
+        base_frame = column_frame(base_table)
+        node_frame = base_frame if node_table == base_table else column_frame(node_table)
+        check_row_identity(base_frame, node_frame)
+        if node_table == base_table:
+            # Measured against itself: exactly zero, as root is against root
+            present = base_frame[column].notna().sum()
+            result = _result(kind, 0.0, present, present)
+        else:
+            result = column_distortion(base_frame[column], node_frame[column], kind)
+        facts = edit_facts(base_frame, node_frame, [column])
+
+    payload = {"node": node_table, "base": base_table, "column": column, "kind": kind, "distortion": result,
                "rows_root": facts["rows_root"], "rows_removed": facts["rows_removed"],
                "cells_changed": facts["cells_changed"].get(column, 0),
                "null": None, "density": None, "flows": None, "annotation": None}
-    if column in distortion["structural"]["removed"]:
+    if dropped:
         return payload
 
-    node_frame = (root_frame[["ID", column]] if node_table == root_table
-                  else load_node_data(engine, node_table, [column]))
-    root_values, node_values = root_frame[column], node_frame[column]
+    if base_frame is None:
+        base_frame, node_frame = root_frame, column_frame(node_table)
+    base_values, node_values = base_frame[column], node_frame[column]
 
-    detail = column_detail(root_values, node_values, kind)
+    detail = column_detail(base_values, node_values, kind)
     applicable, reason = null_applicability(facts, column, result)
-    null = null_result((root_table, column), root_values, kind, facts["rows_root"] - facts["rows_removed"],
+    null = null_result((base_table, column), base_values, kind, facts["rows_root"] - facts["rows_removed"],
                        result["value"], applicable, reason)
 
-    path = [pgraph.node_map[table] for table in pgraph.path_between(root_table, node_table)]
+    path = [pgraph.node_map[table] for table in pgraph.path_between(base_table, node_table)]
     acted_on = acted_on_column(path, column)
 
     flows = None
     if kind == NUMERIC:
-        params_key, curve_key = ("params", root_table, column), ("curve", node_table, column)
+        # The curve is drawn on the grid fitted to its reference, so it is cached per reference too
+        params_key, curve_key = ("params", base_table, column), ("curve", base_table, node_table, column)
         if params_key not in _density_cache:
-            _density_cache[params_key] = root_density_params(root_values)
+            _density_cache[params_key] = root_density_params(base_values)
         params = _density_cache[params_key]
         if params is not None:
             if curve_key not in _density_cache:
@@ -843,7 +879,7 @@ def drift_detail(pgraph, node_table, column, keep=None):
             payload["density"] = {"grid": params["grid"], "bandwidth": params["bandwidth"],
                                   "root": params["root_curve"], "node": _density_cache[curve_key]}
     else:
-        flows = category_flows(root_frame, node_frame, column, keep=keep)
+        flows = category_flows(base_frame, node_frame, column, keep=keep)
         payload["flows"] = flows
 
     # The breakdown is what the annotation is written from; no view draws it, so it never travels

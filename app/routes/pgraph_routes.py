@@ -190,8 +190,9 @@ def drift_detail_view():
     What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
     Sankey flows, the null test and a plain-language annotation.
 
-    Query: ?node=<node>&column=<column>[&keep=<category>&keep=<category>...]
-    Read-only: the node does not become the session's current table.
+    Query: ?node=<node>&column=<column>[&keep=<category>&keep=<category>...][&base=<node>]
+    base measures from one of the node's ancestors instead of root - the modal sends the two selections'
+    common ancestor. Read-only: the node does not become the session's current table.
     """
     try:
         pgraph = app_package.pgraph_for_session
@@ -206,8 +207,16 @@ def drift_detail_view():
         if not column:
             return {"success": False, "error": "missing column"}, 400
 
+        # Only an ancestor's rows are sure to hold the node's, which every number in the detail leans on
+        base = request.args.get("base") or None
+        if base is not None:
+            if base not in pgraph.node_map:
+                return {"success": False, "error": f"{base} is not a node in this graph"}, 400
+            if pgraph.path_between(base, node) is None:
+                return {"success": False, "error": f"{base} is not an ancestor of {node}"}, 400
+
         # The categories the modal wants kept out of the catch-all, when the reader has chosen any
         keep = request.args.getlist("keep") or None
-        return {"success": True, **drift_detail(pgraph, node, column, keep)}
+        return {"success": True, **drift_detail(pgraph, node, column, keep, base)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400

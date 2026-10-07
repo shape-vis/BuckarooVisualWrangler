@@ -12,7 +12,7 @@ import {createHybridScales} from "../utils/visCommon.jsx";
 import {ERROR_DIMENSIONS, errorColors} from "../store/errorColors.js";
 import {
     FLOW_SIDES, MEASURES, OTHER_LABEL, REMOVED_LABEL, ROLE_COLORS, ROLE_NAMES,
-    flowCategories, flowSides, measureOf,
+    flowCategories, flowSides, measureOf, nodeName,
 } from "../utils/comparison.js";
 import {NULL_FLAG_TITLE, formatDrift} from "../utils/drift.js";
 
@@ -388,6 +388,8 @@ function drawHeatmapDifference(svg, data, ctx) {
 // ── Drift ────────────────────────────────────────────────────────────────────
 // Each node against root, from /api/pgraph/drift_detail - see app/pgraph/distortion.py. Drift is a cost,
 // not an error, so none of these views colors it good or bad: red is kept for the null test's flag.
+// The modal can measure from the two selections' common ancestor instead, so the reference is named by
+// ctx.labels.base wherever the reader sees it; "root" in the code below means whichever state that is.
 
 const ROOT_COLOR = "#8c939d";
 const FLAG_COLOR = "#d1242f";
@@ -670,9 +672,10 @@ function drawRidgeCrosshair(g, hover, {rows, density, x, band, rise, w, h, lo, h
 function ridgeShares({i, rootPeak, root, curveA, curveB, labels}) {
     const share = (part, whole) => (whole >= THIN_SHARE * rootPeak ? formatShare(part / whole) : "—");
     const line = (html) => `${html}<br>`;
+    const base = escapeHtml(labels.base);
     let html = "";
-    if (curveA) html += line(`${swatch(ROLE_COLORS.a)}${escapeHtml(labels.a)} · <strong>${share(curveA[i], root[i])}</strong> of root`);
-    if (curveB) html += line(`${swatch(ROLE_COLORS.b)}${escapeHtml(labels.b)} · <strong>${share(curveB[i], root[i])}</strong> of root`);
+    if (curveA) html += line(`${swatch(ROLE_COLORS.a)}${escapeHtml(labels.a)} · <strong>${share(curveA[i], root[i])}</strong> of ${base}`);
+    if (curveB) html += line(`${swatch(ROLE_COLORS.b)}${escapeHtml(labels.b)} · <strong>${share(curveB[i], root[i])}</strong> of ${base}`);
     if (curveA && curveB) {
         html += line(`${escapeHtml(labels.b)} · <strong>${share(curveB[i], curveA[i])}</strong> of ${escapeHtml(labels.a)}`);
         html += `${escapeHtml(labels.a)} · <strong>${share(curveA[i], curveB[i])}</strong> of ${escapeHtml(labels.b)}`;
@@ -750,8 +753,8 @@ function drawRibbons(g, side, {x0, x1, where, clip}, ctx) {
         // A hidden source draws no band, so there is no total to take a share of
         const out = side.sources.get(r.source)?.rows;
         return `<strong>${escapeHtml(r.source)} → ${escapeHtml(r.target)}</strong><br>`
-            + `${formatCount(r.rows)} rows from root into ${escapeHtml(ctx.labels[side.id])}`
-            + (out ? ` · ${formatShare(r.rows / out)} of root's ${escapeHtml(r.source)}` : "")
+            + `${formatCount(r.rows)} rows from ${escapeHtml(ctx.labels.base)} into ${escapeHtml(ctx.labels[side.id])}`
+            + (out ? ` · ${formatShare(r.rows / out)} of ${escapeHtml(ctx.labels.base)}'s ${escapeHtml(r.source)}` : "")
             + (gone.length ? `<br>${escapeHtml(gone.join(" and "))} hidden — add back from Categories` : "");
     });
 }
@@ -831,7 +834,7 @@ function drawRootColumn(g, layout, {left, width, h}, ctx) {
         if (root) {
             const box = item.append("rect").attr("class", "compare-flow-root")
                 .attr("x", left).attr("y", root.y0).attr("width", width).attr("height", Math.max(1, root.y1 - root.y0));
-            pickable(box, band.label, `${band.label}: ${formatCount(root.rows)} rows in root`, ctx);
+            pickable(box, band.label, `${band.label}: ${formatCount(root.rows)} rows in ${ctx.labels.base}`, ctx);
         }
 
         // As much of the name as the box has room for beside the count - about 6.5px a character
@@ -885,7 +888,7 @@ function flowSideTitle(g, side, detail, {align}, w, ctx, compact) {
             .append("title").text(NULL_FLAG_TITLE);
     }
     header.append("text").attr("class", "compare-panel-subtitle").attr("y", -10)
-        .text(`${compact ? "" : "vs root · "}drift ${formatDrift(detail?.distortion?.value)}`);
+        .text(`${compact ? "" : `vs ${ctx.labels.base} · `}drift ${formatDrift(detail?.distortion?.value)}`);
     if (align === "end") header.attr("transform", `translate(${w - header.node().getBBox().width}, 0)`);
     return header;
 }
@@ -931,9 +934,10 @@ function drawFlows(svg, data, ctx) {
 
     const rootHeader = g.append("g");
     rootHeader.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)")
-        .append("text").attr("x", w / 2).attr("text-anchor", "middle").text("root");
+        .append("text").attr("x", w / 2).attr("text-anchor", "middle").text(ctx.labels.base);
     const rootSubtitle = rootHeader.append("text").attr("class", "compare-panel-subtitle")
-        .attr("x", w / 2).attr("y", -10).attr("text-anchor", "middle").text("original upload");
+        .attr("x", w / 2).attr("y", -10).attr("text-anchor", "middle")
+        .text(data.base ? "common ancestor" : "original upload");
 
     /* Three titles share the line over the plot. Where the canvas is too narrow for them, each side drops to its
        node's name and root to its own, rather than running into one another. */
@@ -1018,11 +1022,13 @@ function legendItems(kind, view, measure, labels) {
                 {label: "Row removed", style: {background: FLOW_COLORS.removed}},
             ];
         }
+        // Named the way the plot names it, so a common ancestor reads as its node rather than as "Root"
+        const base = labels.base === "root" ? "Root" : labels.base;
         return [
-            {label: "Root", style: {background: ROOT_COLOR}},
+            {label: base, style: {background: ROOT_COLOR}},
             ...["a", "b"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}})),
             {
-                label: "Root's shape, dashed on every row", shape: "line",
+                label: `${base}'s shape, dashed on every row`, shape: "line",
                 style: {background: "repeating-linear-gradient(to right, #1c1e21 0 4px, transparent 4px 7px)"}
             },
         ];
@@ -1064,7 +1070,8 @@ function legendItems(kind, view, measure, labels) {
  * The compare modal's plot.
  *
  * Props:
- *  - data: a /api/pgraph/compare response, or null while there is none to show
+ *  - data: a /api/pgraph/compare response, or null while there is none to show. A drift result carries base,
+ *    the common ancestor its views are measured from, or null for root
  *  - view: "side" | "overlay" | "difference", or for drift "ridgeline" | "flows" -
  *    which the kind supports is the modal's call
  *  - measure: a MEASURES key, read by difference views and heatmaps
@@ -1080,9 +1087,10 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
     // What the hovered annotation bubble says, shown under the plot rather than over it
     const [note, setNote] = useState(null);
 
-    /* The part of the column a zoomed ridgeline or Sankey shows, stamped with the column and nodes it was chosen
-       for. Another column or node pair reads it as unzoomed, so a stale zoom lapses without an effect to reset it. */
-    const zoomKey = data?.kind === "drift" ? `${data.x}|${data.a.node}|${data.b.node}` : null;
+    /* The part of the column a zoomed ridgeline or Sankey shows, stamped with the column, nodes and reference it
+       was chosen for. Another column, node pair or reference reads it as unzoomed, so a stale zoom lapses without an
+       effect to reset it - a new reference refits the ridgeline's grid, so its old window means nothing. */
+    const zoomKey = data?.kind === "drift" ? `${data.x}|${data.a.node}|${data.b.node}|${data.base ?? ""}` : null;
     const [zoom, setZoom] = useState({key: null, range: null});
     const range = zoom.key === zoomKey ? zoom.range : null;
     // The brush and the minimap report on every move, often the same range; only a new one is worth a redraw
@@ -1093,6 +1101,8 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
     // Ids are unique per page, and useId's own characters are not all safe in a url(#...) reference
     const clipId = `compare-ridge-clip${useId().replace(/[^\w-]/g, "")}`;
     const overview = useMemo(() => ridgelineOverview(data), [data]);
+    // What the drift views measure from, read off the result so one still up while the next loads keeps its own
+    const labelBase = data?.base ? nodeName(data.base) : "root";
     /* The whole Sankey laid out unzoomed, once: the plot draws a magnified slice of it and the minimap draws all of
        it, so the two always agree. Null for anything the Sankey does not draw. */
     const flowsHeight = flowsFrame(size.height).height;
@@ -1153,7 +1163,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             draw(svg, data, {
                 ...size, measure, tooltip, range, clipId, showNote: setNote, world: flowsWorld,
                 hidden, selected, onSelect: setSelected,
-                labels: {a: labelA, b: labelB},
+                labels: {a: labelA, b: labelB, base: labelBase},
             });
         }
 
@@ -1162,7 +1172,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             setNote(null);
             svg.selectAll("*").remove();
         };
-    }, [data, view, measure, labelA, labelB, size, stale, range, clipId, hidden, selected, setSelected, flowsWorld]);
+    }, [data, view, measure, labelA, labelB, labelBase, size, stale, range, clipId, hidden, selected, setSelected, flowsWorld]);
 
     /* Over a zoomed Sankey the wheel scrolls it, as it would a long page. Attached by hand, since React's own wheel
        handler is passive and could not keep the page from scrolling too. */
@@ -1208,6 +1218,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         {...overview}
                         frame={ridgelineFrame(size.width)}
                         rootColor={ROOT_COLOR}
+                        baseLabel={labelBase}
                         curve={ridgelineCurve(bodyHeight)}
                         range={range}
                         onRange={zoomTo}
@@ -1239,7 +1250,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             )}
             {data && (
                 <div className="compare-legend">
-                    {legendItems(data.kind, view, measure, {a: labelA, b: labelB}).map((item) => (
+                    {legendItems(data.kind, view, measure, {a: labelA, b: labelB, base: labelBase}).map((item) => (
                         <span key={item.label} className="compare-legend-item">
                             <span
                                 className={`compare-legend-mark compare-legend-mark--${item.shape ?? "box"}`}

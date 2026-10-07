@@ -23,6 +23,20 @@ export function describeWrangle(wrangle) {
     return columns ? `${wrangle.op} · ${columns}` : wrangle.op;
 }
 
+/* The nearest node both tables descend from - the point their branches part. A node counts as its own
+   ancestor, so a pair where one descends from the other meets at the upper one. Walked on each node's parent,
+   which runs up to the "root" sentinel above the root node.
+   :param nodesByTable: the server's nodes keyed by table, as PGraphContext's serverNodesById holds them
+   :return: the table, or null when the two share none */
+export function commonAncestor(nodesByTable, a, b) {
+    const lineage = new Set();
+    for (let table = a; nodesByTable?.[table]; table = nodesByTable[table].data?.parent) lineage.add(table);
+    for (let table = b; nodesByTable?.[table]; table = nodesByTable[table].data?.parent) {
+        if (lineage.has(table)) return table;
+    }
+    return null;
+}
+
 // The pair's colors, matching the graph's comparison rings (Nodes.css) in both its modes
 export const ROLE_COLORS = { a: "#1877F2", b: "#1a7f37" };
 export const ROLE_NAMES = { a: "Selection A", b: "Selection B" };

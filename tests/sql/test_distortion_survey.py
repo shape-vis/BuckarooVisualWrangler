@@ -166,14 +166,32 @@ def test_a_categorical_column_is_drawn_as_its_flows(survey, client):
 
 
 @pytest.mark.sql
+def test_drift_can_be_measured_from_an_ancestor(survey, client):
+    removed_above = _drift(_graph(client), survey["anomalies"])["facts"]["rows_removed"]
+    _, from_root = _get(client, "/api/pgraph/drift_detail", node=survey["clean"], column="ConvertedSalary")
+    status, from_ancestor = _get(client, "/api/pgraph/drift_detail", node=survey["clean"], column="ConvertedSalary",
+                                 base=survey["anomalies"])
+
+    assert status == 200, from_ancestor
+    assert from_root["base"] == survey["root"]
+    assert from_ancestor["base"] == survey["anomalies"]
+    # Measured from the ancestor, the rows its own delete removed are no longer counted
+    assert from_ancestor["rows_root"] == from_root["rows_root"] - removed_above
+    assert from_ancestor["rows_removed"] == from_root["rows_removed"] - removed_above
+    assert len(from_ancestor["density"]["node"]) == len(from_ancestor["density"]["root"])
+
+
+@pytest.mark.sql
 @pytest.mark.parametrize("params, message", [
     ({"column": "ConvertedSalary"}, "missing node"),
     ({"node": "nope", "column": "ConvertedSalary"}, "not a node"),
     ({"node": "<root>", "column": "nope"}, "not a data column"),
+    ({"node": "<clean>", "column": "ConvertedSalary", "base": "nope"}, "not a node"),
+    ({"node": "<clean>", "column": "ConvertedSalary", "base": "<impute>"}, "not an ancestor"),
 ])
 def test_bad_detail_requests_are_refused(survey, client, params, message):
-    # The root's table name is only known once the survey is uploaded
-    params = {key: survey["root"] if value == "<root>" else value for key, value in params.items()}
+    # Node table names are only known once the survey is uploaded, so the params name them as <node>
+    params = {key: survey[value[1:-1]] if value.startswith("<") else value for key, value in params.items()}
     status, body = _get(client, "/api/pgraph/drift_detail", **params)
 
     assert status == 400

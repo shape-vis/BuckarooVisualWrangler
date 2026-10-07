@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { getDriftDetail, getNodeComparison } from "../utils/serverCalls.jsx";
 import {
-    MEASURES, OTHER_LABEL, ROLE_NAMES, describeWrangle, flowCategories, nodeName, otherCategories,
+    MEASURES, OTHER_LABEL, ROLE_NAMES, commonAncestor, describeWrangle, flowCategories, nodeName, otherCategories,
 } from "../utils/comparison.js";
 import { formatDrift, useDriftNull } from "../utils/drift.js";
 import DriftFlag from "./DriftFlag.jsx";
@@ -73,16 +73,18 @@ function formatRate(rate) {
 
 const signedRows = (change) => `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString()} rows`;
 
-/* The Drift kind's data: each node's breakdown against root. Both are measured from root, so a categorical
-   column's two Sankeys share root's categories - the Flows view draws them as one, root in the middle. */
-async function getDriftComparison({ a, b, x, keep }, signal) {
+/* The Drift kind's data: each node's breakdown against root, or against base - their common ancestor - when
+   one is given. Both are measured from the same state, so a categorical column's two Sankeys share its
+   categories - the Flows view draws them as one, that state in the middle. */
+async function getDriftComparison({ a, b, x, keep, base }, signal) {
     const [detailA, detailB] = await Promise.all([
-        getDriftDetail({ node: a, column: x, keep }, signal),
-        getDriftDetail({ node: b, column: x, keep }, signal),
+        getDriftDetail({ node: a, column: x, keep, base }, signal),
+        getDriftDetail({ node: b, column: x, keep, base }, signal),
     ]);
     const failed = [detailA, detailB].find((response) => !response?.success);
     if (failed) return { success: false, error: failed?.error };
-    return { success: true, kind: "drift", x, a: detailA, b: detailB };
+    // base travels with the result, so a result still up while the next loads is labelled by its own
+    return { success: true, kind: "drift", x, base: base ?? null, a: detailA, b: detailB };
 }
 
 /* A change in error rate, in percentage points. Errors going down is an improvement. */
@@ -123,6 +125,8 @@ function Segmented({ label, options, value, onChange }) {
                     role="radio"
                     aria-checked={value === option.id}
                     className={`compare-segment ${value === option.id ? "compare-segment--active" : ""}`}
+                    disabled={option.disabled}
+                    title={option.title}
                     onClick={() => onChange(option.id)}
                 >
                     {option.label}
@@ -373,6 +377,24 @@ export default function CompareModal({ pair, onClose }) {
     [attributes, metricsA, metricsB, distortionA, distortionB, rankBy]);
 
     const [kind, setKind] = useState("histogram");
+    /* What the Drift views measure from: root, or the two selections' common ancestor - which leaves out the
+       history they share, so only what happened after their branches parted is drawn. When they only meet at
+       root the two are the same, and the choice is kept for a pair where they are not. */
+    const [reference, setReference] = useState("root");
+    const ancestor = useMemo(() => commonAncestor(serverNodesById, tableA, tableB), [serverNodesById, tableA, tableB]);
+    const ancestorIsRoot = !ancestor || serverNodesById?.[ancestor]?.data?.parent === "root";
+    const base = kind === "drift" && reference === "ancestor" && !ancestorIsRoot ? ancestor : null;
+    const references = [
+        { id: "root", label: "Root" },
+        {
+            id: "ancestor",
+            label: ancestorIsRoot ? "Common ancestor" : `Common ancestor · ${nodeName(ancestor)}`,
+            disabled: ancestorIsRoot,
+            title: ancestorIsRoot
+                ? "These two selections only meet at root"
+                : `Measure from ${ancestor}, where these two selections' branches part`,
+        },
+    ];
     /* The plot opens on what moved most. When nothing moved the ranking is empty, so it falls back to the
        attributes themselves rather than leaving the modal with nothing to plot. */
     const [x, setX] = useState(() => ranked[0]?.name ?? attributes[0] ?? "");
@@ -406,7 +428,7 @@ export default function CompareModal({ pair, onClose }) {
 
     /* Names the request the current options call for. A result is only current when it carries this
        key, which is how loading is known without any state of its own. */
-    const requestKey = [tableA, tableB, kind, x, yColumn, kept?.join(",") ?? ""].join("|");
+    const requestKey = [tableA, tableB, kind, x, yColumn, kept?.join(",") ?? "", base ?? ""].join("|");
     const loading = Boolean(x) && result.key !== requestKey;
     const current = result.key === requestKey ? result : null;
     // While the next result loads, the last one of the same kind stays up, dimmed
@@ -436,7 +458,7 @@ export default function CompareModal({ pair, onClose }) {
         const timer = setTimeout(async () => {
             try {
                 const response = kind === "drift"
-                    ? await getDriftComparison({ a: tableA, b: tableB, x, keep: kept }, controller.signal)
+                    ? await getDriftComparison({ a: tableA, b: tableB, x, keep: kept, base }, controller.signal)
                     : await getNodeComparison(
                         { a: tableA, b: tableB, kind, x, y: yColumn },
                         controller.signal,
@@ -456,7 +478,7 @@ export default function CompareModal({ pair, onClose }) {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [requestKey, tableA, tableB, kind, x, yColumn, kept]);
+    }, [requestKey, tableA, tableB, kind, x, yColumn, kept, base]);
 
     useEffect(() => {
         dialogRef.current?.focus();
@@ -541,6 +563,18 @@ export default function CompareModal({ pair, onClose }) {
                                 </>
                             )}
                         </section>
+
+                        {kind === "drift" && (
+                            <section className="compare-section">
+                                <h3 className="compare-section-title">Measured against</h3>
+                                <Segmented
+                                    label="Measured against"
+                                    options={references}
+                                    value={base ? "ancestor" : "root"}
+                                    onChange={setReference}
+                                />
+                            </section>
+                        )}
 
                         {/* A kind with one view has nothing to choose - a drift column is always drawn the one way */}
                         {views.length > 1 && (

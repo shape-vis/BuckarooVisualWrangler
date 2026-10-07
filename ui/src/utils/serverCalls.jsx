@@ -370,10 +370,12 @@ export async function getDriftNull(node, columns = [], signal) {
  * What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
  * Sankey flows, the null test and an annotation. Takes an AbortSignal, as getNodeComparison does.
  */
-export async function getDriftDetail({ node, column, keep }, signal) {
+export async function getDriftDetail({ node, column, keep, base }, signal) {
     const params = new URLSearchParams({ node, column });
     // The categories to keep out of the Sankey's catch-all, when the modal has been told to keep any
     keep?.forEach((category) => params.append("keep", category));
+    // The ancestor to measure from instead of root, when the modal has been told to use one
+    if (base) params.append("base", base);
     const response = await fetch(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
     return await response.json();
 }
