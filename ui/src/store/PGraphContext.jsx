@@ -153,10 +153,13 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
     /* The server sends type "edgeType", which is not a registered edge type - React Flow silently
        falls back to its bezier default. Name that default outright so the curve is a choice rather
        than a fallback, and so it cannot change under us. */
-    const newEdges = edges.map((edge) => ({...edge, type: "default"}));
+    const newEdges = edges.map((edge) => ({...edge, type: "default", style: {...edge.style, strokeWidth: TREE_EDGE_WIDTH}}));
 
     return {nodes: newNodes, edges: newEdges};
 };
+
+// The wrangles joining graph nodes, drawn heavier than React Flow's 1px so the tree reads at a glance
+export const TREE_EDGE_WIDTH = 2.5;
 
 export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();

@@ -38,7 +38,7 @@ export function commonAncestor(nodesByTable, a, b) {
 }
 
 // The pair's colors, matching the graph's comparison rings (Nodes.css) in both its modes
-export const ROLE_COLORS = { a: "#1877F2", b: "#1a7f37" };
+export const ROLE_COLORS = { a: "#1877F2", b: "#701c1c" };
 export const ROLE_NAMES = { a: "Selection A", b: "Selection B" };
 
 // The server's name for the deleted rows' sink, and for the catch-all the long tail folds into

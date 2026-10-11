@@ -85,7 +85,7 @@
     color: #8a8d91;
 }
 
-/* The same pairing the graph draws: a dashed blue selection A and a solid green selection B */
+/* The same pairing the graph draws: a dashed blue selection A and a solid Persian plum selection B */
 .compare-node-chip {
     padding: 1px 8px;
     border-radius: 999px;
@@ -99,9 +99,9 @@
 }
 
 .compare-node-chip--b {
-    color: #1a7f37;
-    background: #e6f4ea;
-    border: 1px solid #1a7f37;
+    color: #701c1c;
+    background: #ecc9c9;
+    border: 1px solid #701c1c;
 }
 
 /* Save, pop out or dock, and close */
@@ -245,7 +245,7 @@
 }
 
 .compare-role--a { background: #1877F2; }
-.compare-role--b { background: #1a7f37; }
+.compare-role--b { background: #701c1c; }
 
 .compare-node-name {
     font-weight: 600;

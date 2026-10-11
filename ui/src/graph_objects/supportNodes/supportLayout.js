@@ -169,7 +169,15 @@ function placeSideNodes(records, branch) {
  * There is no link; a short stub on the sub-node itself points back at the label.
  */
 // Where an edge sub-node goes, in the graph's own coordinates, or null when its edge is not drawn
-function edgeBox(record, positions, drawnEdges, labelWidthOf, sides) {
+/* How far a host's group reaches above and below its card: a stack of side sub-nodes is centred on the card,
+   so a tall one stands out past both its edges */
+function verticalReach(hostId, stacks) {
+    const stack = stacks.get(hostId)?.height ?? 0;
+    const over = Math.max(0, stack / 2 - HOST_CARD.height / 2);
+    return {top: -over, bottom: HOST_CARD.height + over};
+}
+
+function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks) {
     const edge = incomingEdge(drawnEdges, record.hostId);
     const from = edge && positions.get(edge.source);
     const to = positions.get(record.hostId);
@@ -177,9 +185,12 @@ function edgeBox(record, positions, drawnEdges, labelWidthOf, sides) {
 
     const size = sizeOf(record);
     const side = sides.get(record.hostId) ?? "right";
+    /* Across, it sits by the drawn edge's middle. Down, it sits midway through the gap dagre left between the
+       two groups - from the bottom of everything around the parent to the top of everything around the host -
+       rather than between the bare cards, or a tall stack of side sub-nodes would reach up into it. */
     const middle = {
         x: (from.x + to.x) / 2 + HOST_CARD.width / 2,
-        y: (from.y + HOST_CARD.height + to.y) / 2,
+        y: (from.y + verticalReach(edge.source, stacks).bottom + to.y + verticalReach(record.hostId, stacks).top) / 2,
     };
     const clear = labelWidthOf(edge) / 2 + EDGE_GAP;
     return {
@@ -192,8 +203,9 @@ function edgeBox(record, positions, drawnEdges, labelWidthOf, sides) {
 }
 
 function placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides) {
+    const stacks = sideReserve(records, sides);
     return onEdge(records)
-        .map((record) => edgeBox(record, positions, drawnEdges, labelWidthOf, sides))
+        .map((record) => edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks))
         .filter(Boolean)
         .map(({record, side, to, x, y}) => ({
             id: record.id,

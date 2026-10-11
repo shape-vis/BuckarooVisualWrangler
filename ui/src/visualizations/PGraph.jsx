@@ -7,7 +7,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
-import {usePgraph} from "../store/PGraphContext.jsx";
+import {TREE_EDGE_WIDTH, usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
 import {useRepair} from "../store/RepairContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
@@ -361,7 +361,8 @@ const styledNodes = useMemo(() => {
 // The selected branch is lit up in the graph, so the trajectory in the panel is tied to a visible
 // path through the tree. Edges are untouched when no branch is selected.
 const styledEdges = useMemo(() => {
-    const selectedStyle = {stroke: "#1877F2", strokeWidth: 3};
+    // A step heavier than every other edge, so the picked branch still stands out from the tree
+    const selectedStyle = {stroke: "#1877F2", strokeWidth: TREE_EDGE_WIDTH + 1.5};
 
     /* Analysis mode draws each edge as a straight arrow from parent to child in the child's branch colour,
        without its label - the operation and its columns are still in the hover detail */
@@ -377,8 +378,9 @@ const styledEdges = useMemo(() => {
                 // A plot's lines are solid; the tree's moving dashes would read as uncertainty here
                 animated: false,
                 hidden: hidden.has(edge.source) || hidden.has(edge.target),
-                markerEnd: {type: MarkerType.ArrowClosed, color, width: 16, height: 16},
-                style: selected ? selectedStyle : {stroke: color, strokeWidth: 1.75, opacity: 0.85},
+                // Markers are sized in stroke widths, so this keeps the arrowhead as big as it was at 1.75
+                markerEnd: {type: MarkerType.ArrowClosed, color, width: 11, height: 11},
+                style: selected ? selectedStyle : {stroke: color, strokeWidth: TREE_EDGE_WIDTH, opacity: 0.85},
             };
         });
     }

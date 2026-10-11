@@ -14,12 +14,17 @@
 }
 
 /* The current node, and when a pair is set up, the two nodes being compared. Both get a ring so they read
-   as a pair against everything else in the graph, in the compare modal's colours: green for
-   the current node (selection B), blue for selection A. */
+   as a pair against everything else in the graph: blue for selection A, and for the current node
+   (selection B) plum's classic companion, gold. A solid gold fill is the strongest card in the graph - unlike
+   the deep plum of every node at rest, and well above the pale teal of supporting sub-nodes and their
+   groups - and it does not lean on colour alone: a heavier border in B's Persian plum, which ties it to
+   B's badge and plots, a gold halo and a slight lift. Deep plum titles keep it in the family. */
 .react-flow__node.pgraph-node--current {
-  background-color: #64ea96;
-  border: 2px solid #1a7f37;
-  box-shadow: 0 0 0 3px rgba(26, 127, 55, 0.25);
+  background-color: #efbf04;
+  border: 3px solid #701c1c;
+  color: #2c0e27;
+  font-weight: 600;
+  box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
 }
 
 .react-flow__node.pgraph-node--selection-a {
@@ -34,7 +39,6 @@
   color: inherit;
 }
 
-.react-flow__node.pgraph-node--current,
 .react-flow__node.pgraph-node--selection-a {
   color: #1c1e21;
 }
@@ -174,7 +178,7 @@
   pointer-events: none;
 }
 
-.node-comparison-badge--current     { background-color: #1a7f37; }
+.node-comparison-badge--current     { background-color: #701c1c; }
 .node-comparison-badge--selection-a { background-color: #1877F2; }
 .react-flow__node-input.selectable.selected,
     .react-flow__node-input.selectable:focus,
@@ -197,6 +201,14 @@
     .react-flow__node-group.selectable:focus-visible {
       box-shadow: 0 0 0 3px #20a449;
     }
+
+/* Clicking the current node also selects it in React Flow, whose ring above would replace the gold halo. As
+   specific as that ring and after it, so the current node keeps its own look selected or focused. */
+.react-flow__node.pgraph-node--current.selectable.selected,
+.react-flow__node.pgraph-node--current.selectable:focus,
+.react-flow__node.pgraph-node--current.selectable:focus-visible {
+  box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
+}
 
 /*.note-node-container{*/
 /*    display: flex;*/
@@ -475,8 +487,7 @@
   opacity: 0.5;
 }
 
-/* Accepting is the affirmative action, and green already means "the wrangled node" in this
-   graph - see pgraph-node--current */
+/* Accepting is the affirmative action, so it takes the app's green */
 .prospective-node-btn--accept {
   background: #64ea96;
   border-color: #1a7f37;
@@ -506,9 +517,9 @@
   border-color: #111827;
 }
 
-/* The comparison's colours, as on the cards: green for the current node (selection B), dashed blue for A */
+/* The comparison's colours, as on the cards: Persian plum for the current node (selection B), dashed blue for A */
 .analysis-dot--current {
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4.5px #1a7f37;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4.5px #701c1c;
 }
 
 .analysis-dot--selection-a {

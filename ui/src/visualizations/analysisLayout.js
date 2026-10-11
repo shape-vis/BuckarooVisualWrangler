@@ -79,7 +79,7 @@ const MARGIN = { simple: { x: DOT, y: DOT }, full: { x: CARD.width / 2 + 10, y: 
 const FALLBACK_CANVAS = { width: 900, height: 600 };
 
 /* One colour per top-level branch - the subtree under each of root's children - so the paths stay
-   distinguishable where they cross. Kept clear of the comparison roles' blue and green and of the error
+   distinguishable where they cross. Kept clear of the comparison roles' blue and Persian plum and of the error
    types' colours. */
 const BRANCH_COLORS = ["#8c6bb1", "#e08214", "#00838f", "#c2185b", "#8d6e63", "#5c6bc0", "#9e9d24"];
 export const ROOT_COLOR = "#4b5563";
