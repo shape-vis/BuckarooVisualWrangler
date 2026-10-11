@@ -1,0 +1,31 @@
+/* The chart a wrangle-diff sub-node draws - see visualizations/WrangleDiffChart.jsx. Small, so its axis text is
+   set down to the repair preview's size. */
+.wrangle-diff-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 2px;
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+.wrangle-diff-chart text {
+  font-size: 7px;
+}
+
+/* Full-height hover targets over each bin; invisible */
+.wrangle-diff-hit {
+  fill: transparent;
+}
+
+.wrangle-diff-message {
+  margin: auto;
+  padding: 8px 0;
+  font-size: 10px;
+  color: #65676b;
+  text-align: center;
+}
+
+.wrangle-diff-message--error {
+  color: #c1121f;
+}

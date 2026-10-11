@@ -1,99 +1,33 @@
-/* The compare modal, laid out as sketched: a narrow column of plot options on the left and the plot
-   filling the rest. It is portaled to <body> and centered with flexbox rather than a transform - a
-   transformed ancestor would become the containing block for the plot's own tooltip. */
+/* The compare panel, laid out as sketched: a narrow column of plot options on the left and the plot
+   filling the rest. It fills whatever holds it - the Plots view's Compare tab, or a popped-out window of
+   its own - and is never transformed, since a transformed ancestor would become the containing block for
+   the plot's own tooltip. */
 
-.compare-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.45);
-    animation: compare-fade-in 0.15s ease-out;
+.compare-host {
+    width: 100%;
+    height: 100%;
 }
 
-@keyframes compare-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+/* A popped-out panel's window is a blank page with only the panel in it */
+.compare-popup-body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+    background: #ffffff;
 }
 
-/* The default size; pulling an edge sets one inline, and the max keeps either inside the overlay when the
-   browser window shrinks */
-.compare-window {
+.compare-panel {
     position: relative;
     display: flex;
     flex-direction: column;
-    width: min(1320px, 100%);
-    height: min(860px, 100%);
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     background: #ffffff;
-    border: 1px solid #dddfe2;
-    border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
     color: #1c1e21;
     overflow: hidden;
-    outline: none;
-}
-
-/* ── Resizing ─────────────────────────────────────────────────────── */
-
-/* Thin strips along the window's edges and squares at its corners, over the content's own padding. Each
-   carries its cursor inline. */
-.compare-resize {
-    position: absolute;
-    z-index: 2;
-    touch-action: none;
-}
-
-.compare-resize--n,
-.compare-resize--s {
-    left: 12px;
-    right: 12px;
-    height: 6px;
-}
-
-.compare-resize--e,
-.compare-resize--w {
-    top: 12px;
-    bottom: 12px;
-    width: 6px;
-}
-
-.compare-resize--ne,
-.compare-resize--nw,
-.compare-resize--se,
-.compare-resize--sw {
-    width: 14px;
-    height: 14px;
-}
-
-.compare-resize--n, .compare-resize--ne, .compare-resize--nw { top: 0; }
-.compare-resize--s, .compare-resize--se, .compare-resize--sw { bottom: 0; }
-.compare-resize--e, .compare-resize--ne, .compare-resize--se { right: 0; }
-.compare-resize--w, .compare-resize--nw, .compare-resize--sw { left: 0; }
-
-/* The one visible grip, where a resizable window usually has it */
-.compare-resize--se::after {
-    content: "";
-    position: absolute;
-    right: 3px;
-    bottom: 3px;
-    width: 9px;
-    height: 9px;
-    background: linear-gradient(135deg,
-        transparent 0 40%, #bcc0c4 40% 50%, transparent 50% 65%, #bcc0c4 65% 75%, transparent 75%);
-}
-
-/* While an edge is pulled its cursor holds everywhere, and nothing underneath gets selected */
-.compare-overlay--resizing,
-.compare-overlay--resizing * {
-    cursor: var(--compare-resize-cursor) !important;
-    user-select: none;
+    /* Narrow layouts follow the panel's own width, which docked is much less than the window's */
+    container-type: inline-size;
 }
 
 /* ── Header ───────────────────────────────────────────────────────── */
@@ -168,6 +102,53 @@
     color: #1a7f37;
     background: #e6f4ea;
     border: 1px solid #1a7f37;
+}
+
+/* Save, pop out or dock, and close */
+.compare-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.compare-action {
+    padding: 6px 12px;
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
+    background: #ffffff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1c1e21;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.compare-action:hover:not(:disabled) {
+    background: #f0f2f5;
+    border-color: #bcc0c4;
+}
+
+.compare-action:disabled {
+    color: #8a8d91;
+    cursor: default;
+}
+
+/* Where a saved comparison is kept, in place of the Save button */
+.compare-saved {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a7f37;
+    white-space: nowrap;
+}
+
+.compare-action-error {
+    max-width: 220px;
+    font-size: 12px;
+    color: #c0392b;
 }
 
 .compare-close {
@@ -661,6 +642,13 @@
     padding: 6px 4px 0;
 }
 
+.compare-picker-group-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 10px;
+    font-weight: 400;
+}
+
 .compare-picker-action {
     padding: 0;
     border: none;
@@ -714,7 +702,12 @@
 }
 
 /* The catch-all's own heading, above the categories folded into it */
+/* The catch-all's heading, with its own select and deselect all at the right */
 .compare-picker-group {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
     margin: 8px 0 2px;
     padding: 0 4px;
     font-size: 11px;
@@ -1096,7 +1089,7 @@
     color: #8a8d91;
 }
 
-@media (max-width: 760px) {
+@container (max-width: 760px) {
     .compare-body {
         flex-direction: column;
     }

@@ -9,6 +9,7 @@ import {useMemo, useRef} from "react";
 import * as d3 from "d3";
 import {Brush} from "@visx/brush";
 import {ROLE_COLORS} from "../utils/comparison.js";
+import {useHostWindow} from "../store/HostWindowContext.jsx";
 
 // The pins above the curves and the tick labels below. The curves' own height comes from the plot, which
 // sizes root's row to match the ridgeline's; this is the height to use when it gives none.
@@ -59,6 +60,7 @@ function Grip({x, y, width, height, isBrushActive}) {
  */
 export default function RidgelineBrush({density, curves, spots, frame, rootColor, baseLabel = "root", curve = DEFAULT_CURVE, range, onRange}) {
     const brushRef = useRef(null);
+    const inThisWindow = useHostWindow() === window;
     const {grid, root} = density;
     const lo = grid[0];
     const hi = grid[grid.length - 1];
@@ -133,7 +135,11 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
                         </text>
                     ))}
                     <g transform={`translate(0, ${PIN})`}>
+                        {/* visx listens on this page's window for a drag that leaves the strip, which a
+                            popped-out panel never sends to - there the drag stays on the strip. The key
+                            remounts it, since visx only reads the choice when it mounts. */}
                         <Brush
+                            key={inThisWindow ? "opener" : "popup"}
                             xScale={x}
                             yScale={y}
                             width={frame.width}
@@ -144,7 +150,7 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
                             innerRef={brushRef}
                             handleSize={HANDLE}
                             onChange={changed}
-                            useWindowMoveEvents
+                            useWindowMoveEvents={inThisWindow}
                             selectedBoxStyle={{
                                 fill: BRUSH_COLOR, fillOpacity: 0.12,
                                 stroke: BRUSH_COLOR, strokeWidth: 1, strokeOpacity: 0.8,

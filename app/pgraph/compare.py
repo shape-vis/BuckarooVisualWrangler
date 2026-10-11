@@ -1,7 +1,7 @@
 """
 Comparing the data behind two pgraph nodes - September 13, 2026
 
-The compare modal plots two nodes' tables against each other. The ordinary plot endpoints cannot do
+The compare panel plots two nodes' tables against each other. The ordinary plot endpoints cannot do
 that: each one bins a table across its own min and max, so once a delete trims the outliers the two
 nodes' bins cover different ranges and bar n on one side is not bar n on the other. Everything here
 bins both states on one shared axis instead, which is what makes a bin-by-bin difference meaningful.

@@ -104,15 +104,13 @@ export default function Home( { onSuccess } ) {
 
               <div
                 className="dataset-button"
-                onClick={() =>
-                  loadDataset("Crimes_-_One_year_prior_to_present_20250421.csv")
-                }
+                onClick={() => loadDataset("games.csv")}
                 role="button"
                 tabIndex={0}
               >
-                Chicago
+                Video Game
                 <br />
-                Crime
+                Sales
               </div>
 
               <div

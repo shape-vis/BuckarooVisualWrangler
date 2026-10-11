@@ -85,7 +85,14 @@ const BRANCH_COLORS = ["#8c6bb1", "#e08214", "#00838f", "#c2185b", "#8d6e63", "#
 export const ROOT_COLOR = "#4b5563";
 
 // An AI suggestion has no table behind it, so no numbers to plot
-export const isPlotted = (node) => node.type !== "prospectiveNode";
+const isSuggestion = (node) => node.type === "prospectiveNode";
+
+/* A supporting sub-node describes its host rather than being a state of the table, so it has no point of its
+   own, and its position is relative to its host besides. Hidden on the plot for now. */
+// Its boundary goes with it
+export const isSupportNode = (node) => node.type === "supportNode" || node.type === "supportGroup";
+
+export const isPlotted = (node) => !isSuggestion(node) && !isSupportNode(node);
 
 // A folded run stands for its last node - the state it arrives at - and already carries that node's numbers
 const tableOf = (node) => (node.type === "collapsedNode" ? node.data?.tail : node.id);

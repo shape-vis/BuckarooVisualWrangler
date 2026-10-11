@@ -1,5 +1,5 @@
 // comparison.js
-// Shared by the compare modal and the plot it draws.
+// Shared by the compare panel and the plot it draws.
 
 import { ERROR_DIMENSIONS } from "../store/errorColors.js";
 import { truncateText } from "./textUtils.js";
@@ -52,9 +52,10 @@ export const FLOW_SIDES = [
     { id: "b", color: ROLE_COLORS.b },
 ];
 
-/* Each side's data: that node's breakdown against root */
+/* Each side's data: that node's breakdown against root. A single-node result carries its node as both sides,
+   and has only the one side to draw. */
 export function flowSides(data) {
-    return { a: data?.a, b: data?.b };
+    return { a: data?.single ? undefined : data?.a, b: data?.b };
 }
 
 /* The categories the Sankey lays out, in the server's order - the most common first. Both sides share one
@@ -111,4 +112,44 @@ export function measureOf(count, measure) {
     if (measure === "items") return count.items ?? 0;
     if (measure === "errors") return ERROR_DIMENSIONS.reduce((sum, type) => sum + (count[type] ?? 0), 0);
     return count[measure] ?? 0;
+}
+
+/* Each plot kind offers the views that make sense for it: a heatmap overlay would be two grids painted
+   over one another. Drift draws each node against root rather than against the other, and its views
+   depend on the column instead - see DRIFT_VIEWS. A single node has no other to overlay or subtract, so it
+   only ever draws side by side - one panel. */
+export const PLOT_KINDS = [
+    { id: "histogram", label: "Histogram", axes: 1, views: ["side", "overlay", "difference"] },
+    { id: "heatmap", label: "Heatmap", axes: 2, views: ["side", "difference"] },
+    { id: "drift", label: "Drift", axes: 1, views: null },
+];
+
+/* Drift's views: the shape a numeric column now has, and where a categorical one's rows went */
+export const DRIFT_VIEWS = { numeric: ["ridgeline"], categorical: ["flows"] };
+
+export const VIEW_LABELS = {
+    side: "Side by side", overlay: "Overlay", difference: "Difference",
+    ridgeline: "Ridgeline", flows: "Flows",
+};
+
+/**
+ * The views a kind offers, and the one actually drawn for a chosen view: a view this kind does not offer
+ * falls back to its first, so the choice is kept for when it applies again.
+ * @param columnKind drift's column kind, "numeric" or "categorical", as root decided it
+ */
+export function viewsFor({ kind, view, columnKind, single }) {
+    const views = kind === "drift"
+        ? DRIFT_VIEWS[columnKind] ?? DRIFT_VIEWS.numeric
+        : single ? ["side"] : PLOT_KINDS.find((plotKind) => plotKind.id === kind).views;
+    return { views, activeView: views.includes(view) ? view : views[0] };
+}
+
+/**
+ * What drift is measured from: the two nodes' common ancestor when asked for and it is not root, else root
+ * (null). Root is the node whose parent is the "root" sentinel.
+ */
+export function referenceBase({ kind, reference, a, b }, nodesByTable) {
+    if (kind !== "drift" || reference !== "ancestor" || a === b) return null;
+    const ancestor = commonAncestor(nodesByTable, a, b);
+    return !ancestor || nodesByTable?.[ancestor]?.data?.parent === "root" ? null : ancestor;
 }

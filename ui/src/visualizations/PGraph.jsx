@@ -9,12 +9,14 @@ import "@xyflow/react/dist/style.css";
 import "../styles/PGraph.css";
 import {usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
+import {useRepair} from "../store/RepairContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
 import {nodeName} from "../utils/comparison.js";
 import AnalysisAxes from "./AnalysisAxes.jsx";
 import AnalysisInset from "./AnalysisInset.jsx";
 import AnalysisEdge from "../graph_objects/AnalysisEdge.jsx";
+import SupportNodesModal from "../elements/SupportNodesModal.jsx";
 import {
     ANALYSIS_METRICS, DOT, METRIC_LABELS, ROOT_COLOR, plotFitPadding,
     analysisPositions, analysisScales, analysisTooltip, branchColors, driftOf, errorOf, isPlotted,
@@ -76,6 +78,30 @@ function between(from, to, t) {
 /* In analysis mode the plot fills the canvas, as a chart fills its frame: when the canvas changes size - the
    window resized, the dock opened beside it - the camera fits the plot to it again. Rendered inside React
    Flow, which is where the canvas's size and camera can be read. */
+/* Recentres the tree on whatever just arrived - the node a wrangle made, or a node's new prospective children -
+   as the provider names it (PGraphContext's focus). Each request is taken once, so a graph view that a wrangle
+   remounts still answers the request made while it was being replaced, and never answers one twice. React Flow
+   holds the fit until the new nodes have been measured. On the plot, where nodes sit at their numbers and
+   prospective ones are hidden, the request is taken and let go. */
+const FOCUS_PADDING = 0.3;
+// However few nodes are in focus, the view does not zoom in past their real size
+const FOCUS_MAX_ZOOM = 1;
+
+function FocusNewNodes({analysing}) {
+    const {focus, takeFocus} = usePgraph();
+    const {fitView} = useReactFlow();
+    useEffect(() => {
+        if (!focus.ids.length || !takeFocus(focus.key) || analysing) return;
+        fitView({
+            nodes: focus.ids.map((id) => ({id})),
+            padding: FOCUS_PADDING,
+            maxZoom: FOCUS_MAX_ZOOM,
+            duration: GLIDE_MS,
+        });
+    }, [focus, takeFocus, fitView, analysing]);
+    return null;
+}
+
 function FitPlotOnResize({x, y, width, height, axisLeft}) {
     const canvasWidth = useStore((state) => state.width);
     const canvasHeight = useStore((state) => state.height);
@@ -85,6 +111,23 @@ function FitPlotOnResize({x, y, width, height, axisLeft}) {
         fitBounds({x, y, width, height}, {padding: plotFitPadding(axisLeft), duration: 200});
     }, [canvasWidth, canvasHeight, x, y, width, height, axisLeft, fitBounds]);
     return null;
+}
+
+/* Shows or hides every supporting sub-node of one anchor at once. Pressed while they show, so the chip reads
+   as the state it is in; the eye says the same for anyone who does not read pressed buttons as on. */
+function SupportToggle({label, count, hidden, onToggle}) {
+    return (
+        <button
+            type="button"
+            className={`pgraph-support-toggle ${hidden ? "" : "pgraph-support-toggle--on"}`}
+            aria-pressed={!hidden}
+            title={`${hidden ? "Show" : "Hide"} all ${count} ${label.toLowerCase()}`}
+            onClick={onToggle}
+        >
+            <img src={hidden ? "/images/icons/eye-off.svg" : "/images/icons/eye.svg"} alt="" />
+            {label}
+        </button>
+    );
 }
 
 /* A segmented control: one choice of a few, each a button */
@@ -113,6 +156,8 @@ export default function PGraph() {
    repairing. Neither is a node, so both live in the same top-center panel the collapse error
    already uses. */
 const ai = useAISuggestions();
+// Repairs are previewed straight into the graph without opening the Repair panel, so a failure is told here
+const repair = useRepair();
 
 const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
         onEdgeClick, nodeTypes, comparisonPair, pareto, serverNodesById,
@@ -121,7 +166,9 @@ const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
         nodes, edges,
         collapsedRuns, collapseNodes, expandAllRuns,
         collapseError, setCollapseError,
-        graphMode, setGraphMode, analysisStyle, setAnalysisStyle, analysisMetric, setAnalysisMetric } = usePgraph();
+        graphMode, setGraphMode, analysisStyle, setAnalysisStyle, analysisMetric, setAnalysisMetric,
+        supportCountByAnchor, hideAllNodeSupports, setHideAllNodeSupports,
+        hideAllEdgeSupports, setHideAllEdgeSupports } = usePgraph();
 
 const analysing = graphMode === "analysis";
 
@@ -235,6 +282,9 @@ const styledNodes = useMemo(() => {
     // While the branch's end is being chosen, the nodes it may end on are marked as pickable
     const markEligible = selectionStage === "destination";
 
+    // Where each node is, for the group boundaries that follow their host without being its child
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+
     return nodes.map((node) => {
         const isCurrent = node.id === tableName;
         const isSelectionA = node.id === selectionAId;
@@ -244,6 +294,16 @@ const styledNodes = useMemo(() => {
 
         // Suggestions have no numbers, so the plot has nowhere to put them
         if (analysing && !isPlotted(node)) return {...node, hidden: true};
+
+        /* A group boundary sits beneath its host rather than being its child (see supportLayout's
+           groupBoundaries), so it is kept on the host here - where the host is dragged to, as well as where the
+           layout put it */
+        if (node.type === "supportGroup") {
+            const host = byId.get(node.data.hostId);
+            if (!host) return node;
+            const at = shown.get(host.id) ?? host.position;
+            return {...node, position: {x: at.x + node.data.offset.x, y: at.y + node.data.offset.y}};
+        }
 
         const role = isCurrent ? "current" : isSelectionA ? "selection-a" : null;
 
@@ -433,6 +493,30 @@ const onSelectionEnd = (event) => {
            is free to draw the box that magnifies; a shift-click on a node still picks selection A. */
         selectionKeyCode={analysing ? "Shift" : "c"}
       >
+        {/* Hiding every supporting sub-node at once, those beside nodes and those beside edges separately, for
+            when the tree gets crowded. Each toggle shows only once there is something for it to hide, and none
+            show on the plot, which hides sub-nodes anyway. */}
+        {!analysing && (supportCountByAnchor.side > 0 || supportCountByAnchor.edge > 0) && (
+          <Panel position="top-left" className="pgraph-support-toggles">
+            {supportCountByAnchor.side > 0 && (
+              <SupportToggle
+                label="Node supports"
+                count={supportCountByAnchor.side}
+                hidden={hideAllNodeSupports}
+                onToggle={() => setHideAllNodeSupports((hidden) => !hidden)}
+              />
+            )}
+            {supportCountByAnchor.edge > 0 && (
+              <SupportToggle
+                label="Edge supports"
+                count={supportCountByAnchor.edge}
+                hidden={hideAllEdgeSupports}
+                onToggle={() => setHideAllEdgeSupports((hidden) => !hidden)}
+              />
+            )}
+          </Panel>
+        )}
+
         {/* The graph's controls, and the way out of the selections made by clicking it */}
         <Panel position="top-right" className="pgraph-toolbar">
           <div className="pgraph-toolbar-row">
@@ -484,6 +568,14 @@ const onSelectionEnd = (event) => {
           )}
         </Panel>
 
+        {repair?.repairError && (
+          <Panel position="top-center">
+            <div className="pgraph-collapse-error" onClick={repair.dismissRepairError}>
+              {repair.repairError} <span className="pgraph-collapse-error-dismiss">dismiss</span>
+            </div>
+          </Panel>
+        )}
+
         {ai?.error && (
           <Panel position="top-center">
             <div className="pgraph-collapse-error" onClick={ai.dismissMessages}>
@@ -514,8 +606,9 @@ const onSelectionEnd = (event) => {
         {/* The plot's own gridlines replace the tree's background in analysis mode */}
         {analysing && layout.scales
           ? <AnalysisAxes scales={layout.scales} metric={analysisMetric} />
-          : <Background color="#ccc" variant={BackgroundVariant.Lines} />}
+          : <Background variant={BackgroundVariant.Dots} />}
         {analysing && layout.scales && <FitPlotOnResize {...layout.scales.bounds} axisLeft={layout.scales.axisLeft} />}
+        <FocusNewNodes analysing={analysing} />
         {/* Keyed on its region, so a new box opens a new inset, placed afresh */}
         {analysing && inset && layout.scales && (
           <AnalysisInset
@@ -537,6 +630,8 @@ const onSelectionEnd = (event) => {
         <Controls position={analysing ? "bottom-right" : "bottom-left"} />
         {/*<MiniMap nodeStrokeWidth={3} />*/}
       </ReactFlow>
+      {/* Opened from a node's support button; outside the canvas, which transforms whatever is inside it */}
+      <SupportNodesModal />
     </div>
   );
 }

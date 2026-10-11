@@ -1,0 +1,188 @@
+/* The modal that adds supporting sub-nodes: the kinds down the left, the chosen kind's settings on the right,
+   and the node's current sub-nodes beneath. Sits inside the shared .modal-content card. */
+.support-modal {
+  width: min(560px, 80vw);
+  text-align: left;
+  color: #1c1e21;
+}
+
+.support-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.support-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.support-modal-close {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  color: #65676b;
+}
+
+.support-modal-close:hover {
+  color: #1c1e21;
+}
+
+.support-modal-body {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+}
+
+.support-modal-kinds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.support-modal-kind {
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+  color: #1c1e21;
+}
+
+.support-modal-kind:hover {
+  background: #f0f2f5;
+}
+
+/* A kind that cannot be added to this node; still pickable, so its reason can be read */
+.support-modal-kind--unavailable {
+  color: #8c939d;
+}
+
+.support-modal-kind--active {
+  border-color: #1877F2;
+  background: #e7f0fd;
+  color: #1877F2;
+  font-weight: 600;
+}
+
+.support-modal-config {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.support-modal-description {
+  margin: 0;
+  font-size: 13px;
+  color: #65676b;
+}
+
+/* A kind's settings form lays its fields out with these, so every kind's form reads alike */
+.support-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.support-form-field input,
+.support-form-field select {
+  padding: 6px 8px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.support-modal-add {
+  cursor: pointer;
+  padding: 6px 14px;
+  border: 1px solid #1877F2;
+  border-radius: 6px;
+  background: #1877F2;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.support-modal-add:hover:not(:disabled) {
+  background: #166fe0;
+}
+
+.support-modal-add:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.support-modal-reason {
+  margin: 0;
+  font-size: 13px;
+  color: #c1121f;
+}
+
+.support-modal-attached {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.support-modal-attached h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.support-modal-attached ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.support-modal-attached-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.support-modal-attached-row button {
+  cursor: pointer;
+  padding: 2px 8px;
+  border: 1px solid #dddfe2;
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.support-modal-attached-row button:hover {
+  background: #f0f2f5;
+}
+
+.support-modal-side,
+.support-modal-empty {
+  color: #65676b;
+}
+
+.support-modal-empty {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* What a kind's settings still need before Add will take them */
+.support-modal-incomplete {
+  margin: 0;
+  font-size: 12px;
+  color: #65676b;
+}

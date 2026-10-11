@@ -4,7 +4,8 @@ import { Handle, Position} from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
-import {ERROR_TYPES, ERROR_DIMENSIONS} from "../store/errorColors.js";
+import {NodeMetrics} from "./NodeMetrics.jsx";
+import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
 import "../styles/Buttons.css"
 
 
@@ -23,50 +24,55 @@ function ComparisonBadge( { role } ){
 }
 
 /**
- * The node's quality metrics, revealed by the magnifier.
+ * A folded run's quality metrics, revealed by its magnifier. A real node shows its own as a supporting
+ * sub-node instead - see supportNodes/QualityMetricsSupport.jsx.
  *
  * Floats below the node rather than growing it: dagre lays the graph out from fixed node sizes, so a
  * node that actually grew would overlap the rank beneath it. This hangs in the gap RANK_SEPARATION
  * already leaves there.
  */
 function NodeMetricsExpansion( { metrics } ){
-    if (!metrics) {
-        return (
-            <div className="node-metrics">
-                <div className="node-metrics-empty">No metrics</div>
-            </div>
-        );
-    }
-
     return (
         <div className="node-metrics">
-            <div className="node-metrics-rows">
-                {ERROR_DIMENSIONS.map((dimension) => (
-                    <div key={dimension} className="node-metrics-row" title={ERROR_TYPES[dimension]}>
-                        <span className="node-metrics-swatch" data-error-type={dimension} />
-                        <span className="node-metrics-value">
-                            {((metrics.totals?.[dimension] ?? 0) * 100).toFixed(2)}%
-                        </span>
-                    </div>
-                ))}
-            </div>
-            <div className="node-metrics-footer">
-                {metrics.row_count} rows · {metrics.column_count} cols
-            </div>
+            <NodeMetrics metrics={metrics} />
         </div>
     );
 }
 
 /**
- * The buttons every node carries, and the metrics the magnifier reveals.
+ * One of a node's icon buttons, named in the shared tooltip on hover: what it is, then what it does now -
+ * or, while it is disabled, why.
+ *
+ * The tooltip hangs off a wrapper rather than the button, because a disabled button fires no mouse events,
+ * and the AI button spends most of its life disabled with a reason worth reading. Pressing hides the tooltip,
+ * since the button may open something over it or change what it would say.
+ */
+function NodeButton( { label, detail, children, ...button } ){
+    return (
+        <span
+            className="node-button-tip"
+            onMouseEnter={(event) => showTooltip(`<strong>${label}</strong><br/>${detail}`, event)}
+            onMouseMove={moveTooltip}
+            onMouseLeave={hideTooltip}
+            onMouseDown={hideTooltip}
+        >
+            <IconButton {...button} ariaLabel={label}>{children}</IconButton>
+        </span>
+    );
+}
+
+/**
+ * The buttons every node carries. Its quality metrics are a supporting sub-node now, added from the
+ * support button, rather than a readout of their own.
  *
  * Takes the node's id rather than reading data.label, because the layout truncates a long label
  * down to the three-character node id - so the label is not a table name you can send anywhere.
  */
-function NodeTools( { nodeId, data } ){
-    const { startBranchSelection, hasProspectiveNodes, graphMode } = usePgraph();
+function NodeTools( { nodeId } ){
+    const { startBranchSelection, hasProspectiveNodes, graphMode, openSupportModal,
+            supportCountByHost, hiddenSupportHosts, toggleSupportHidden, hideAllNodeSupports,
+            hideAllEdgeSupports } = usePgraph();
     const ai = useAISuggestions();
-    const [expanded, setExpanded] = useState(false);
 
     const openQuality = useCallback(() => startBranchSelection(), [startBranchSelection]);
 
@@ -83,36 +89,46 @@ function NodeTools( { nodeId, data } ){
         : analysing
             ? "Switch to wrangling mode for suggestions"
             : hasProspectiveNodes
-                ? "Accept or decline the current suggestions first"
+                ? "Accept or decline the candidate nodes already on the graph first"
                 : ai?.busy ? "Working…" : "Suggest repairs for this node";
+
+    // Off in analysis mode: sub-nodes are hidden on the plot, so adding one there would show nothing
+    const openSupport = useCallback(() => openSupportModal(nodeId), [openSupportModal, nodeId]);
+
+    /* Hiding and showing this node's sub-nodes - beside it and beside its incoming edge - offered once it has
+       some. What the graph's own toggles already hide is not this button's to show, so it counts only the rest,
+       and goes inert when there is none. */
+    const counts = supportCountByHost.get(nodeId) ?? {side: 0, edge: 0};
+    const hasSupport = counts.side + counts.edge > 0;
+    const supportCount = (hideAllNodeSupports ? 0 : counts.side) + (hideAllEdgeSupports ? 0 : counts.edge);
+    const supportHidden = hiddenSupportHosts.has(nodeId);
+    const toggleSupport = useCallback(() => toggleSupportHidden(nodeId), [toggleSupportHidden, nodeId]);
+    const supportNoun = supportCount === 1 ? "supporting node" : `${supportCount} supporting nodes`;
+
+    // The row shows on hover, but stays up while one of its buttons is switched on, so that is never hidden
+    const pinned = ai?.pendingNode === nodeId;
 
     return (
         <>
             {/* stopPropagation on click does not stop dblclick, and React Flow navigates the app
                 on a node double-click - so a quick double-tap on any of these would move the
                 current table out from under the user */}
-            <div className={"note-node-icon-container"} onDoubleClick={(e) => e.stopPropagation()}>
-                <IconButton
+            <div
+                className={`note-node-icon-container ${pinned ? "note-node-icon-container--pinned" : ""}`}
+                onDoubleClick={(e) => e.stopPropagation()}
+            >
+                <NodeButton
                     className="node-sub-button-chart"
-                    title="Measure quality along a branch"
+                    label="Branch quality"
+                    detail="Measure quality along a branch"
                     onClick={openQuality}
                 >
                     <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
-                </IconButton>
-                <IconButton
-                    className="node-sub-button-inspect"
-                    title={expanded ? "Hide this node's quality metrics" : "Show this node's quality metrics"}
-                    onClick={() => setExpanded((open) => !open)}
-                >
-                    <img
-                        src="/images/icons/inspect.svg"
-                        alt=""
-                        className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
-                    />
-                </IconButton>
-                <IconButton
+                </NodeButton>
+                <NodeButton
                     className="node-sub-button-ai"
-                    title={aiTitle}
+                    label="AI repairs"
+                    detail={aiTitle}
                     onClick={askAI}
                     disabled={aiBlocked}
                 >
@@ -121,10 +137,71 @@ function NodeTools( { nodeId, data } ){
                         alt=""
                         className={`nodeButtonSvgIcon ${ai?.pendingNode === nodeId ? "nodeButtonSvgIcon--active" : ""}`}
                     />
-                </IconButton>
+                </NodeButton>
+                <NodeButton
+                    className="node-sub-button-support"
+                    label="Supporting nodes"
+                    detail={analysing ? "Switch to wrangling mode to add supporting nodes" : "Add supporting nodes beside this node"}
+                    onClick={openSupport}
+                    disabled={analysing}
+                >
+                    <img src="/images/icons/support.svg" alt="" className="nodeButtonSvgIcon" />
+                </NodeButton>
+                {hasSupport && (
+                    <NodeButton
+                        className="node-sub-button-support-visibility"
+                        label={supportHidden ? "Show supporting nodes" : "Hide supporting nodes"}
+                        detail={analysing
+                            ? "Supporting nodes are hidden on the plot - switch to wrangling mode"
+                            : supportCount === 0
+                                ? "This node's supporting nodes are hidden graph-wide - turn them back on at the graph's top left"
+                                : `${supportHidden ? "Show" : "Hide"} this node's ${supportNoun}`}
+                        onClick={toggleSupport}
+                        disabled={analysing || supportCount === 0}
+                    >
+                        <img
+                            src={supportHidden ? "/images/icons/eye-off.svg" : "/images/icons/eye.svg"}
+                            alt=""
+                            className="nodeButtonSvgIcon"
+                        />
+                    </NodeButton>
+                )}
             </div>
 
-            {expanded && <NodeMetricsExpansion metrics={data.metrics} />}
+            {/* While they are hidden, a pill on the card's corner keeps them from being forgotten. It floats,
+                like the comparison badge, so it costs the layout nothing; clicking it shows them again. */}
+            {supportHidden && supportCount > 0 && !analysing && (
+                <button
+                    type="button"
+                    className="node-support-hidden-pill"
+                    onClick={(event) => { event.stopPropagation(); toggleSupport(); }}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onMouseEnter={(event) => showTooltip(`<strong>${supportCount} hidden</strong><br/>Click to show this node's ${supportNoun}`, event)}
+                    onMouseMove={moveTooltip}
+                    onMouseLeave={hideTooltip}
+                    aria-label={`Show this node's ${supportNoun}`}
+                >
+                    +{supportCount}
+                </button>
+            )}
+        </>
+    );
+}
+
+/**
+ * Where the links out to a node's supporting sub-nodes leave it: its left and right sides, since below it
+ * is where its wrangles branch. Hidden; the link itself is the mark.
+ *
+ * Rendered after the node's bottom handle. An edge that names no handle - every edge of the tree - leaves
+ * from a node's first source handle, so these must never come first.
+ */
+function SupportHandles(){
+    return (
+        <>
+            <Handle type="source" id="support-left" position={Position.Left}
+                    isConnectable={false} className="support-handle" />
+            <Handle type="source" id="support-right" position={Position.Right}
+                    isConnectable={false} className="support-handle" />
         </>
     );
 }
@@ -153,17 +230,19 @@ return (
                 <div className={"collapsed-node-range"}>
                     {String(data.head).split("_")[0]} … {String(data.tail).split("_")[0]}
                 </div>
-                <div className={"note-node-icon-container"}>
-                    <IconButton
+                <div className={`note-node-icon-container ${expanded ? "note-node-icon-container--pinned" : ""}`}>
+                    <NodeButton
                         className="node-sub-button-chart"
-                        title={`Plot quality across these ${data.run?.length} nodes`}
+                        label="Run quality"
+                        detail={`Plot quality across these ${data.run?.length} nodes`}
                         onClick={openQuality}
                     >
                         <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
-                    </IconButton>
-                    <IconButton
+                    </NodeButton>
+                    <NodeButton
                         className="node-sub-button-inspect"
-                        title={expanded ? "Hide quality metrics" : "Show the run's resulting quality metrics"}
+                        label="Quality metrics"
+                        detail={expanded ? "Hide quality metrics" : "Show the run's resulting quality metrics"}
                         onClick={() => setExpanded((open) => !open)}
                     >
                         <img
@@ -171,12 +250,13 @@ return (
                             alt=""
                             className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
                         />
-                    </IconButton>
-                    <IconButton
+                    </NodeButton>
+                    <NodeButton
                         className="node-sub-button-expand"
-                        title={`Expand these ${data.run?.length} nodes`}
+                        label="Expand run"
+                        detail={`Expand these ${data.run?.length} nodes`}
                         onClick={() => expandRun(id)}
-                    >+</IconButton>
+                    >+</NodeButton>
                 </div>
             </div>
         </div>
@@ -195,10 +275,11 @@ return (
         <div>
             <div className={"node-node-label"}>
                 <h3>{data.label}</h3>
-                <NodeTools nodeId={id} data={data} />
+                <NodeTools nodeId={id} />
             </div>
         </div>
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
+        <SupportHandles />
     </>
 )
 }
@@ -233,10 +314,11 @@ return (
         <div>
             <div className={"node-node-label"}>
                 <h3>{data.label}</h3>
-                <NodeTools nodeId={id} data={data} />
+                <NodeTools nodeId={id} />
             </div>
         </div>
         <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
+        <SupportHandles />
     </>
 )
 }

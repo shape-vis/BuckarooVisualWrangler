@@ -200,7 +200,8 @@
    above it on its own background - the main area's grey, so the two views still read as one surface - and a
    click on a node near its left edge reaches the node. */
 .svg-and-toolbox > .pgraph-container {
-  flex: 1 1 0;
+  /* Its share of the width it splits with the Plots view, as the divider between them sets it */
+  flex: var(--graph-grow, 1) 1 0;
   min-width: 0;
   position: relative;
   z-index: 1;
@@ -338,4 +339,50 @@
 
 .analysis-inset-node--dominated text {
   text-decoration: line-through;
+}
+
+/* ── Supporting sub-node toggles ─────────────────────────────────────────────
+   Top left: one chip each for the sub-nodes beside nodes and those beside edges. Turquoise while they show,
+   the sub-nodes' own colour; plain while they are hidden. */
+.pgraph-support-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pgraph-support-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #65676b;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 9px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.pgraph-support-toggle img {
+  width: 13px;
+  height: 13px;
+  opacity: 0.6;
+}
+
+.pgraph-support-toggle:hover {
+  background: #f5f7fa;
+}
+
+.pgraph-support-toggle--on,
+.pgraph-support-toggle--on:hover {
+  border-color: var(--support-accent);
+  background: var(--support-tint);
+  color: var(--support-ink);
+  font-weight: 600;
+}
+
+.pgraph-support-toggle--on img {
+  opacity: 0.85;
 }

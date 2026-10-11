@@ -7,6 +7,7 @@ from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
 from app.pgraph.compare import PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap
 from app.pgraph.distortion import distortion_trajectory, drift_detail
+from app.pgraph.comparison import Comparison, ComparisonError
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
 
 
@@ -161,11 +162,11 @@ def _requested_node(pgraph):
 @app.get("/api/pgraph/drift_detail")
 def drift_detail_view():
     """
-    What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
+    What the compare panel's Drift views draw for one node and one column: the ridgeline curves or the
     Sankey flows, and a plain-language annotation.
 
     Query: ?node=<node>&column=<column>[&keep=<category>&keep=<category>...][&base=<node>]
-    base measures from one of the node's ancestors instead of root - the modal sends the two selections'
+    base measures from one of the node's ancestors instead of root - the panel sends the two selections'
     common ancestor. Read-only: the node does not become the session's current table.
     """
     try:
@@ -189,8 +190,77 @@ def drift_detail_view():
             if pgraph.path_between(base, node) is None:
                 return {"success": False, "error": f"{base} is not an ancestor of {node}"}, 400
 
-        # The categories the modal wants kept out of the catch-all, when the reader has chosen any
+        # The categories the panel wants kept out of the catch-all, when the reader has chosen any
         keep = request.args.getlist("keep") or None
         return {"success": True, **drift_detail(pgraph, node, column, keep, base)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400
+
+
+# ── Saved comparisons ────────────────────────────────────────────────────────
+# The compare panel's settings, kept on the session's graph when the user saves them - see
+# app/pgraph/comparison.py. Settings only: opening one asks /api/pgraph/compare and drift_detail again.
+
+def _session_graph():
+    """:return: (graph, None), or (None, an error response) when there is no graph to keep comparisons on"""
+    pgraph = app_package.pgraph_for_session
+    if pgraph is None:
+        return None, ({"success": False, "error": "no graph in this session"}, 400)
+    return pgraph, None
+
+
+@app.post("/api/pgraph/comparisons")
+def save_comparison():
+    """
+    Keep a comparison on the graph.
+
+    Body: a comparison record, as ui/src/utils/comparisonSpec.js builds it. Returns it with its new id.
+    """
+    try:
+        pgraph, error = _session_graph()
+        if error:
+            return error
+        comparison = pgraph.add_comparison(Comparison.from_json(request.get_json(force=True), pgraph))
+        return {"success": True, "comparison": comparison.__json__()}
+    except (ComparisonError, ValueError) as e:
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.get("/api/pgraph/comparisons")
+def list_comparisons():
+    """
+    The saved comparisons, oldest first.
+
+    Query: [?anchor=<node>] to list only those pinned to one node.
+    """
+    pgraph, error = _session_graph()
+    if error:
+        return error
+    anchor = request.args.get("anchor") or None
+    return {"success": True, "comparisons": [c.__json__() for c in pgraph.comparisons_for(anchor)]}
+
+
+@app.put("/api/pgraph/comparisons/<comparison_id>")
+def update_comparison(comparison_id):
+    """Replace a saved comparison's settings. Body: the whole record, as for saving one."""
+    try:
+        pgraph, error = _session_graph()
+        if error:
+            return error
+        comparison = pgraph.update_comparison(
+            comparison_id, Comparison.from_json(request.get_json(force=True), pgraph))
+        if comparison is None:
+            return {"success": False, "error": f"no comparison {comparison_id}"}, 404
+        return {"success": True, "comparison": comparison.__json__()}
+    except (ComparisonError, ValueError) as e:
+        return {"success": False, "error": str(e)}, 400
+
+
+@app.delete("/api/pgraph/comparisons/<comparison_id>")
+def delete_comparison(comparison_id):
+    pgraph, error = _session_graph()
+    if error:
+        return error
+    if pgraph.remove_comparison(comparison_id) is None:
+        return {"success": False, "error": f"no comparison {comparison_id}"}, 404
+    return {"success": True}

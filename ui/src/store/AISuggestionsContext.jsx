@@ -72,7 +72,8 @@ export function AISuggestionsProvider({ onWrangleExecuted, children }) {
             }
 
             setProspectiveNodes((result.suggestions || []).map((s, index) => ({
-                id: prospectiveId(nodeTable, index),
+                id: prospectiveId(nodeTable, index, "ai"),
+                source: "ai",
                 parent: nodeTable,
                 op: s.op.startsWith("delete") ? "delete" : "impute",
                 label: s.label,

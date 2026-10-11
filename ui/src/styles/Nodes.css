@@ -1,9 +1,11 @@
-/* Nodes are white at rest. Which node is current and which is the comparison's selection A are states, so
-   they are modifier classes set from the node data rather than inline styles written by an effect. */
+/* Nodes are deep plum at rest, titled in white. Which node is current and which is the comparison's selection A
+   are states, so they are modifier classes set from the node data rather than inline styles written by an
+   effect - and they keep their own light fills, so they take dark titles back. */
 .react-flow__node-noteNode,
 .react-flow__node-rootNoteNode {
-  background-color: #ffffff;
-  border: 1px solid #1a192b;
+  background-color: #4a1942;
+  border: 1px solid #2c0e27;
+  color: #ffffff;
   border-radius: 3px;
   padding: 5px;
   font-size: 12px;
@@ -24,6 +26,17 @@
   background-color: #e7f0fd;
   border: 2px dashed #1877F2;
   box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
+}
+
+/* The title takes the card's text colour - the app's h3 rule would otherwise make it dark on the plum */
+.react-flow__node-noteNode h3,
+.react-flow__node-rootNoteNode h3 {
+  color: inherit;
+}
+
+.react-flow__node.pgraph-node--current,
+.react-flow__node.pgraph-node--selection-a {
+  color: #1c1e21;
 }
 
 /* A folded run. Dashed and tinted so it reads as several nodes standing in for themselves rather than
@@ -196,15 +209,158 @@
     display: flex;
     justify-content: center;
     border-radius: 4px;
+    /* Hidden until the node is hovered. Faded rather than removed, so the card keeps its height - dagre
+       laid the graph out from a fixed footprint, and the edges leaving its bottom would jump otherwise. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+/* Shown on hover, while one of its buttons has keyboard focus, and while a button in it is switched on */
+.react-flow__node:hover .note-node-icon-container,
+.note-node-icon-container:focus-within,
+.note-node-icon-container--pinned{
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* A node whose supporting sub-nodes are hidden: a count on its top-right corner, opposite the comparison
+   badge, that shows them again. Floats, so it adds nothing to the dagre layout. */
+.node-support-hidden-pill {
+  position: absolute;
+  top: -15px;
+  right: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--support-accent);
+  border-radius: 8px;
+  background: var(--support-tint);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--support-ink);
+  cursor: pointer;
+}
+
+.node-support-hidden-pill:hover {
+  background: var(--support-tint-strong);
+}
+
+/* Wraps each node button so its tooltip still works while the button is disabled; lays out as the button */
+.node-button-tip {
+    display: inline-flex;
+}
+
+/* Supporting sub-nodes' colour: turquoise, clear of the comparison's green and blue, the suggestions' violet
+   and the error types' colours. The cards, their links (supportLayout.js) and the hidden-count pill all
+   read these. */
+:root {
+  --support-accent: #14b8a6;
+  --support-tint: #e0f7f4;
+  --support-tint-strong: #c3efe9;
+  --support-ink: #0f5f58;
+}
+
+/* ── Supporting sub-nodes ────────────────────────────────────────────────────
+   Hung beside a node, to its left or right. This is the frame every kind shares; what a kind draws inside
+   is its own. Each kind's size is set in supportNodes/registry.js, which the layout stacks them by. */
+/* Sized by the kind's registry size; the frame fills it, and an edge sub-node's stub hangs off its left */
+.support-node-shell {
+  position: relative;
+}
+
+.support-node-stub {
+  position: absolute;
+  top: 50%;
+  border-top: 1.5px dashed var(--support-accent);
+  pointer-events: none;
+}
+
+.support-node {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 3px 6px;
+  background: var(--support-tint);
+  border: 1.5px solid var(--support-accent);
+  border-radius: 6px;
+  font-size: 10px;
+  text-align: left;
+  cursor: default;
+  overflow: hidden;
+}
+
+.support-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.support-node-title {
+  font-weight: 700;
+  color: var(--support-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-node-remove {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1;
+  color: #65676b;
+}
+
+.support-node-remove:hover {
+  color: #1c1e21;
+}
+
+/* The wrangle-diff kind: the wrangle named, then its chart filling what is left of the frame */
+.wrangle-diff {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.wrangle-diff-title {
+  color: #4b5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The quality-metrics kind: the magnifier's rows and footer, under the sub-node's title */
+.support-node-metrics {
+  margin-top: 3px;
+}
+
+.support-node-note {
+  color: #4b5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The link to a sub-node is the mark; its ends need no dots */
+.react-flow__handle.support-handle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .node-node-label{
     padding-bottom: 2px;
 }
 /* ── Prospective nodes ───────────────────────────────────────────────────────
-   A wrangle the AI is proposing, drawn where the resulting node would sit. Dashed and violet, so
-   it cannot be mistaken for a real node: the selection A marker is dashed blue and a folded run is
-   dashed grey, and both of those stand for something that exists. This one does not - yet. */
+   A wrangle that has not happened yet - one the AI is proposing, or a repair of the selected rows -
+   drawn where the resulting node would sit. Dashed and violet, so it cannot be mistaken for a real
+   node: the selection A marker is dashed blue and a folded run is dashed grey, and both of those
+   stand for something that exists. This one does not - yet. A small tag says which source it came from. */
 .react-flow__node-prospectiveNode {
   background-color: #faf5ff;
   border: 2px dashed #7c3aed;
@@ -225,6 +381,28 @@
   gap: 5px;
   font-weight: 600;
   color: #4c1d95;
+}
+
+/* Where the candidate came from. Both stay inside the prospective violet family, so the tag tells the
+   sources apart without making either read as a real node. */
+.prospective-node-source {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+.prospective-node-source--ai {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.prospective-node-source--repair {
+  background: #4c1d95;
+  color: #ffffff;
 }
 
 /* Same swatch treatment the metrics expansion uses, so an error type reads the same colour
@@ -254,6 +432,19 @@
   line-height: 1.3;
   margin: 4px 0 6px;
   text-align: left;
+}
+
+/* A repair candidate's preview chart: the Repair panel's card, untitled - the node's own title names it */
+.prospective-node-chart {
+  margin-bottom: 6px;
+}
+
+.prospective-node-chart .preview-card {
+  padding: 4px;
+}
+
+.prospective-node-chart .preview-card-label:empty {
+  display: none;
 }
 
 .prospective-node-buttons {
@@ -353,4 +544,40 @@
 .react-flow__handle.analysis-handle {
   opacity: 0;
   pointer-events: none;
+}
+
+/* A resizable sub-node's grips, shown only while the pointer is over it so a graph of them stays quiet */
+.support-node-shell .support-resize-handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid var(--support-accent);
+  background: #ffffff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.support-node-shell .support-resize-line {
+  border-color: var(--support-accent);
+  opacity: 0;
+}
+
+.support-node-shell:hover .support-resize-handle,
+.support-node-shell:hover .support-resize-line {
+  opacity: 1;
+}
+
+/* ── A node's group boundary ─────────────────────────────────────────────────
+   Around a node and its supporting sub-nodes, in the sub-nodes' turquoise, lightly shaded so the group reads as
+   one patch of the graph. It sits beneath the cards and edges, and takes no pointer events: React Flow sets
+   those inline on every node while the graph has click handlers, so this has to outrank them. */
+.react-flow__node-supportGroup {
+  pointer-events: none !important;
+}
+
+.support-group {
+  box-sizing: border-box;
+  border: 1.5px dashed var(--support-accent);
+  border-radius: 12px;
+  background: rgba(20, 184, 166, 0.08);
 }

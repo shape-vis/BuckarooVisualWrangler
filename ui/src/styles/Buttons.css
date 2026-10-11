@@ -184,7 +184,9 @@
 
 .iconButton-node-sub-button-chart,
 .iconButton-node-sub-button-inspect,
-.iconButton-node-sub-button-ai{
+.iconButton-node-sub-button-ai,
+.iconButton-node-sub-button-support,
+.iconButton-node-sub-button-support-visibility{
   cursor: pointer;
   /* Centers the SVG icon in the button box */
   display: inline-flex;
@@ -204,7 +206,9 @@
 
 .iconButton-node-sub-button-chart:hover:not(:disabled),
 .iconButton-node-sub-button-inspect:hover:not(:disabled),
-.iconButton-node-sub-button-ai:hover:not(:disabled){
+.iconButton-node-sub-button-ai:hover:not(:disabled),
+.iconButton-node-sub-button-support:hover:not(:disabled),
+.iconButton-node-sub-button-support-visibility:hover:not(:disabled){
   background-color: #e0e0e0;
   border-color: #a8b4c8;
 }
@@ -214,7 +218,9 @@
    carries real weight. */
 .iconButton-node-sub-button-chart:disabled,
 .iconButton-node-sub-button-inspect:disabled,
-.iconButton-node-sub-button-ai:disabled{
+.iconButton-node-sub-button-ai:disabled,
+.iconButton-node-sub-button-support:disabled,
+.iconButton-node-sub-button-support-visibility:disabled{
   cursor: default;
   opacity: 0.35;
 }

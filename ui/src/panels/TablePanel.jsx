@@ -125,7 +125,7 @@ export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
 
 
   return (
-    <CollapsiblePanel collapsed={`Top ${maxRows} Rows with Most Errors`} direction="down" defaultOpen={true} className="panel--table">
+    <CollapsiblePanel collapsed={`Top ${maxRows} Rows with Most Errors`} direction="down" defaultOpen={false} className="panel--table">
       <div id="table-div">
         <div className="table-title">
           Top {maxRows} Rows with Most Errors

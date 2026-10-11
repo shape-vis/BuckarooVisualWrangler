@@ -1,5 +1,5 @@
 // ComparisonPlot.jsx
-// Draws two nodes' data against each other for the compare modal. The data arrives from
+// Draws two nodes' data against each other for the compare panel. The data arrives from
 // /api/pgraph/compare already binned on axes both states share - see app/pgraph/compare.py - so every
 // view here can put the two on the same scales.
 
@@ -15,6 +15,8 @@ import {
     flowCategories, flowSides, measureOf, nodeName,
 } from "../utils/comparison.js";
 import {formatDrift} from "../utils/drift.js";
+import {driftZoomKey} from "../utils/comparisonSpec.js";
+import {useHostWindow} from "../store/HostWindowContext.jsx";
 
 /* A difference is colored by what it means. Rows gained or lost are neither good nor bad, so they get
    a neutral pair; errors going down is an improvement, and gets the attribute panel's green. */
@@ -63,7 +65,7 @@ function divergingColor(measure, extent) {
 
 // ── Tooltip ──────────────────────────────────────────────────────────────────
 
-/* The modal sits above the app's shared #tooltip, so the plot keeps its own. It is placed within the
+/* The panel can be in a window of its own, out of reach of the app's shared #tooltip, so the plot keeps its own. It is placed within the
    canvas, and flips away from whichever edge it would run off. */
 function makeTooltip(element, container) {
     const place = (event) => {
@@ -107,17 +109,22 @@ function makeTooltip(element, container) {
 
 const swatch = (color) => `<span class="compare-tooltip-swatch" style="background:${color}"></span>`;
 
+/* What a side is called: its selection and its node, or just the node when it is the only one drawn */
+function roleName(role, ctx, separator = " · ") {
+    return ctx.roles.length > 1 ? `${ROLE_NAMES[role]}${separator}${ctx.labels[role]}` : ctx.labels[role];
+}
+
 function countLine(role, ctx, count) {
     const flags = ERROR_DIMENSIONS
         .filter((type) => count?.[type])
         .map((type) => `${formatCount(count[type])} ${MEASURES[type].noun}`);
-    return `${swatch(ROLE_COLORS[role])}${ROLE_NAMES[role]} ${escapeHtml(ctx.labels[role])}: `
+    return `${swatch(ROLE_COLORS[role])}${escapeHtml(roleName(role, ctx, " "))}: `
         + `<strong>${formatCount(count?.items ?? 0)}</strong> rows${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
 
 function countsTooltip(title, datum, ctx) {
     return `<strong>${escapeHtml(title)}</strong><br>`
-        + `${countLine("a", ctx, datum.a)}<br>${countLine("b", ctx, datum.b)}`;
+        + ctx.roles.map((role) => countLine(role, ctx, datum[role])).join("<br>");
 }
 
 function differenceTooltip(title, datum, ctx) {
@@ -190,7 +197,7 @@ function titleChip(title, x, role, text) {
 
 function panelTitle(g, role, ctx) {
     const title = g.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -14)");
-    titleChip(title, 0, role, `${ROLE_NAMES[role]} · ${ctx.labels[role]}`);
+    titleChip(title, 0, role, roleName(role, ctx));
 }
 
 function pairTitle(g, ctx) {
@@ -245,10 +252,10 @@ function stackSegments(count) {
 
 function drawHistogramSide(svg, data, ctx) {
     // One y domain for both panels, or bars of equal height would not be equal counts
-    const peak = d3.max(data.bins, (bin) => Math.max(bin.a.items, bin.b.items)) || 1;
+    const peak = d3.max(data.bins, (bin) => Math.max(...ctx.roles.map((role) => bin[role].items))) || 1;
 
-    layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "a" : "b";
+    layoutPanels(svg, ctx.width, ctx.height, ctx.roles.length).forEach(({g, w, h}, i) => {
+        const role = ctx.roles[i];
         const xScale = binScale(data.scaleX, w, "horizontal");
         const y = d3.scaleLinear().domain([0, peak]).nice().range([h, 0]);
 
@@ -349,11 +356,11 @@ function drawTiles(g, data, xScale, yScale, tiles) {
 function drawHeatmapSide(svg, data, ctx) {
     // One color scale for both panels, so equal shades are equal counts
     const peak = d3.max(data.tiles, (tile) => Math.max(
-        measureOf(tile.a, ctx.measure), measureOf(tile.b, ctx.measure))) || 1;
+        ...ctx.roles.map((role) => measureOf(tile[role], ctx.measure)))) || 1;
     const fill = sequentialColor(ctx.measure, peak);
 
-    layoutPanels(svg, ctx.width, ctx.height, 2).forEach(({g, w, h}, i) => {
-        const role = i === 0 ? "a" : "b";
+    layoutPanels(svg, ctx.width, ctx.height, ctx.roles.length).forEach(({g, w, h}, i) => {
+        const role = ctx.roles[i];
         const xScale = binScale(data.scaleX, w, "horizontal");
         const yScale = binScale(data.scaleY, h, "vertical");
 
@@ -388,7 +395,7 @@ function drawHeatmapDifference(svg, data, ctx) {
 // ── Drift ────────────────────────────────────────────────────────────────────
 // Each node against root, from /api/pgraph/drift_detail - see app/pgraph/distortion.py. Drift is a cost,
 // not an error, so none of these views colors it good or bad.
-// The modal can measure from the two selections' common ancestor instead, so the reference is named by
+// The panel can measure from the two selections' common ancestor instead, so the reference is named by
 // ctx.labels.base wherever the reader sees it; "root" in the code below means whichever state that is.
 
 const ROOT_COLOR = "#8c939d";
@@ -398,7 +405,7 @@ const DRIFT_GUTTER = 72;
 const RIDGE_PADDING = 0.12;
 // The gap between the canvas and the strip under it, as .compare-plot-body sets it
 const BODY_GAP = 8;
-// Root's row never shrinks below this, however small the modal
+// Root's row never shrinks below this, however small the panel
 const MIN_STRIP_CURVE = 40;
 /* Where a curve is under this share of root's peak, it is too thin to divide by: out in the empty tails every
    curve is near zero, and a ratio of two near-zeros is noise */
@@ -506,16 +513,10 @@ function drawRidgeline(svg, data, ctx) {
     const density = data.a.density ?? data.b.density;
     if (!density) return drawEmpty(svg, ctx, "This column has too few distinct values to draw its shape");
 
-    const rows = [
-        {
-            key: "a", label: ctx.labels.a, curve: data.a.density?.node, color: ROLE_COLORS.a,
-            drift: data.a.distortion?.value
-        },
-        {
-            key: "b", label: ctx.labels.b, curve: data.b.density?.node, color: ROLE_COLORS.b,
-            drift: data.b.distortion?.value
-        },
-    ];
+    const rows = ctx.roles.map((role) => ({
+        key: role, label: ctx.labels[role], curve: data[role].density?.node, color: ROLE_COLORS[role],
+        drift: data[role].distortion?.value,
+    }));
 
     const [{g, w, h}] = layoutPanels(svg, ctx.width - DRIFT_GUTTER, ctx.height, 1);
     const grid = density.grid;
@@ -653,8 +654,8 @@ function drawRidgeCrosshair(g, hover, {rows, density, x, band, rise, w, h, lo, h
 
             ctx.tooltip.show(event, ridgeShares({
                 i, rootPeak, root: density.root,
-                curveA: rows.find((row) => row.key === "a").curve,
-                curveB: rows.find((row) => row.key === "b").curve,
+                curveA: rows.find((row) => row.key === "a")?.curve ?? null,
+                curveB: rows.find((row) => row.key === "b")?.curve ?? null,
                 labels: ctx.labels,
             }));
         })
@@ -703,7 +704,8 @@ function ridgelineCurve(bodyHeight) {
 function ridgelineOverview(data) {
     const density = data?.kind === "drift" ? (data.a.density ?? data.b.density) : null;
     if (!density) return null;
-    const curves = {a: data.a.density?.node ?? null, b: data.b.density?.node ?? null};
+    // A single node's result carries it as both sides; only one of them is drawn
+    const curves = {a: data.single ? null : data.a.density?.node ?? null, b: data.b.density?.node ?? null};
     const spots = {
         a: curves.a && mostChanged(density.root, curves.a),
         b: curves.b && mostChanged(density.root, curves.b),
@@ -758,7 +760,7 @@ function drawRibbons(g, side, {x0, x1, where, clip}, ctx) {
 }
 
 /* A category's bar or box is what the reader clicks to pick it out, in any of the three columns, and Delete
-   then hides it - the modal owns both, so the click only reports which category it was */
+   then hides it - the panel owns both, so the click only reports which category it was */
 function pickable(rect, label, title, ctx) {
     rect.classed("compare-flow-node", true)
         .classed("compare-flow-node--selected", ctx.selected === label)
@@ -879,7 +881,7 @@ function flowAnchor(side, {x0, x1}, where, h) {
 function flowSideTitle(g, side, detail, {align}, w, ctx, compact) {
     const header = g.append("g");
     const title = header.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)");
-    const name = compact ? ctx.labels[side.id] : `${ROLE_NAMES[side.id]} · ${ctx.labels[side.id]}`;
+    const name = compact ? ctx.labels[side.id] : roleName(side.id, ctx);
     titleChip(title, 0, side.id, name);
     header.append("text").attr("class", "compare-panel-subtitle").attr("y", -10)
         .text(`${compact ? "" : `vs ${ctx.labels.base} · `}drift ${formatDrift(detail?.distortion?.value)}`);
@@ -910,7 +912,9 @@ function drawFlows(svg, data, ctx) {
     // Never under enough for the removed sink's name, which a narrow canvas stacks over its count
     const room = Math.max(64, Math.min(COUNT_ROOM, w * 0.14));
     const rootWidth = Math.min(ROOT_BOX, w * 0.22);
-    const rootLeft = (w - rootWidth) / 2;
+    const sides = FLOW_SIDES.filter((side) => ctx.roles.includes(side.id));
+    // A single node's flows run out to the right only, so root moves left to give them the room
+    const rootLeft = sides.length > 1 ? (w - rootWidth) / 2 : Math.min(w * 0.25, room + FLOW_NODE);
     const rootRight = rootLeft + rootWidth;
     // Each side runs from root's edge (x0) out to its own column (x1), and its bubble keeps to its own half
     const frames = {
@@ -927,25 +931,28 @@ function drawFlows(svg, data, ctx) {
     const clip = `url(#${ctx.clipId})`;
 
     const rootHeader = g.append("g");
+    const rootMiddle = rootLeft + rootWidth / 2;
     rootHeader.append("g").attr("class", "compare-panel-title").attr("transform", "translate(0, -26)")
-        .append("text").attr("x", w / 2).attr("text-anchor", "middle").text(ctx.labels.base);
+        .append("text").attr("x", rootMiddle).attr("text-anchor", "middle").text(ctx.labels.base);
     const rootSubtitle = rootHeader.append("text").attr("class", "compare-panel-subtitle")
-        .attr("x", w / 2).attr("y", -10).attr("text-anchor", "middle")
+        .attr("x", rootMiddle).attr("y", -10).attr("text-anchor", "middle")
         .text(data.base ? "common ancestor" : "original upload");
 
     /* Three titles share the line over the plot. Where the canvas is too narrow for them, each side drops to its
        node's name and root to its own, rather than running into one another. */
-    const titles = (compact) => FLOW_SIDES.map((side) => flowSideTitle(g, side, detail[side.id], frames[side.id], w, ctx, compact));
+    const titles = (compact) => sides.map((side) => flowSideTitle(g, side, detail[side.id], frames[side.id], w, ctx, compact));
     const headers = titles(false);
-    const [boxA, boxRoot, boxB] = [headers[0], rootHeader, headers[1]].map((one) => one.node().getBoundingClientRect());
-    if (boxA.right + 8 > boxRoot.left || boxRoot.right + 8 > boxB.left) {
+    // Left to right as they sit: selection A's title if there is one, root's, then selection B's
+    const boxes = (sides.length > 1 ? [headers[0], rootHeader, headers[1]] : [rootHeader, headers[0]])
+        .map((one) => one.node().getBoundingClientRect());
+    if (boxes.some((box, i) => i > 0 && boxes[i - 1].right + 8 > box.left)) {
         headers.forEach((one) => one.remove());
         rootSubtitle.remove();
         titles(true);
     }
 
     // Back to front: ribbons, then the columns over their ends, then the bubbles over everything
-    FLOW_SIDES.forEach((side) => {
+    sides.forEach((side) => {
         const frame = frames[side.id];
         const drawn = layout.sides.find((one) => one.id === side.id);
         const middle = (frame.x0 + frame.x1) / 2;
@@ -1005,8 +1012,8 @@ function drawEmpty(svg, {width, height}, message = "Neither node has rows to plo
 
 // ── Legend ───────────────────────────────────────────────────────────────────
 
-function legendItems(kind, view, measure, labels) {
-    const roleLabel = (role) => `${ROLE_NAMES[role]} · ${labels[role]}`;
+function legendItems(kind, view, measure, labels, roles) {
+    const roleLabel = (role) => (roles.length > 1 ? `${ROLE_NAMES[role]} · ${labels[role]}` : labels[role]);
 
     if (kind === "drift") {
         if (view === "flows") {
@@ -1020,7 +1027,7 @@ function legendItems(kind, view, measure, labels) {
         const base = labels.base === "root" ? "Root" : labels.base;
         return [
             {label: base, style: {background: ROOT_COLOR}},
-            ...["a", "b"].map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}})),
+            ...roles.map((role) => ({label: roleLabel(role), style: {background: ROLE_COLORS[role]}})),
             {
                 label: `${base}'s shape, dashed on every row`, shape: "line",
                 style: {background: "repeating-linear-gradient(to right, #1c1e21 0 4px, transparent 4px 7px)"}
@@ -1060,20 +1067,32 @@ function legendItems(kind, view, measure, labels) {
     return errorItems;
 }
 
+// The sides a result draws: both selections, or just the one node a single-node result is about
+const BOTH_ROLES = ["a", "b"];
+const SINGLE_ROLES = ["b"];
+
 /**
- * The compare modal's plot.
+ * The compare panel's plot.
  *
  * Props:
  *  - data: a /api/pgraph/compare response, or null while there is none to show. A drift result carries base,
  *    the common ancestor its views are measured from, or null for root
  *  - view: "side" | "overlay" | "difference", or for drift "ridgeline" | "flows" -
- *    which the kind supports is the modal's call
+ *    which the kind supports is the panel's call
  *  - measure: a MEASURES key, read by difference views and heatmaps
  *  - labelA, labelB: short names for selection A and selection B
  *  - hidden: the Sankey's categories the reader has taken out of the view, by name
  *  - onHide: called with a category when its bar is selected and Delete pressed
+ *  - zoom: {key, range} - how far a drift plot is zoomed, and the driftZoomKey it was zoomed for
+ *  - onZoom: called with the next {key, range}, or with an updater taking the last
+ *  - compact: just the plot, without the zoom strip, the note or the legend - for a preview too small for them
+ *
+ * A result with single set is about one node, carried as both sides; only selection B's side is drawn.
  */
-export default function ComparisonPlot({data, view, measure, labelA, labelB, hidden = [], onHide}) {
+export default function ComparisonPlot({data, view, measure, labelA, labelB, hidden = [], onHide, zoom, onZoom,
+                                           compact = false}) {
+    const roles = data?.single ? SINGLE_ROLES : BOTH_ROLES;
+    const hostWindow = useHostWindow();
     const canvasRef = useRef(null);
     const svgRef = useRef(null);
     const tooltipRef = useRef(null);
@@ -1084,13 +1103,14 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
     /* The part of the column a zoomed ridgeline or Sankey shows, stamped with the column, nodes and reference it
        was chosen for. Another column, node pair or reference reads it as unzoomed, so a stale zoom lapses without an
        effect to reset it - a new reference refits the ridgeline's grid, so its old window means nothing. */
-    const zoomKey = data?.kind === "drift" ? `${data.x}|${data.a.node}|${data.b.node}|${data.base ?? ""}` : null;
-    const [zoom, setZoom] = useState({key: null, range: null});
-    const range = zoom.key === zoomKey ? zoom.range : null;
+    const zoomKey = data?.kind === "drift"
+        ? driftZoomKey({x: data.x, a: data.a.node, b: data.b.node, base: data.base})
+        : null;
+    const range = zoom?.key === zoomKey ? zoom.range : null;
     // The brush and the minimap report on every move, often the same range; only a new one is worth a redraw
-    const zoomTo = useCallback((next) => setZoom((previous) => (
+    const zoomTo = useCallback((next) => onZoom?.((previous) => (
         previous.key === zoomKey && String(previous.range) === String(next) ? previous : {key: zoomKey, range: next}
-    )), [zoomKey]);
+    )), [zoomKey, onZoom]);
 
     // Ids are unique per page, and useId's own characters are not all safe in a url(#...) reference
     const clipId = `compare-ridge-clip${useId().replace(/[^\w-]/g, "")}`;
@@ -1120,30 +1140,32 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             onHide?.(selected);
             setSelected(null);
         };
-        document.addEventListener("keydown", onKeyDown);
-        return () => document.removeEventListener("keydown", onKeyDown);
-    }, [selected, onHide, setSelected]);
+        hostWindow.document.addEventListener("keydown", onKeyDown);
+        return () => hostWindow.document.removeEventListener("keydown", onKeyDown);
+    }, [selected, onHide, setSelected, hostWindow]);
     // While the next column loads, the last one's drift result stays up - but only under a view for its kind
     const stale = data?.kind === "drift" && (data.a.kind ?? data.b.kind) !== DRIFT_VIEW_KINDS[view];
 
-    // The canvas takes whatever room the modal gives it, and the plot is laid out from that
+    /* The canvas takes whatever room the panel gives it, and the plot is laid out from that. The observers are
+       the host window's: one from this page is only checked as this page renders, which a popped-out panel's
+       window does not wait on. */
     useEffect(() => {
-        const observer = new ResizeObserver(([entry]) => {
+        const observer = new hostWindow.ResizeObserver(([entry]) => {
             setSize({width: entry.contentRect.width, height: entry.contentRect.height});
         });
         observer.observe(canvasRef.current);
         return () => observer.disconnect();
-    }, []);
+    }, [hostWindow]);
 
     /* The height the canvas and the ridgeline's strip share. It does not change as they split it, so the strip
        can be sized from it without the canvas's answer feeding back into the strip's - see ridgelineCurve. */
     const bodyRef = useRef(null);
     const [bodyHeight, setBodyHeight] = useState(0);
     useEffect(() => {
-        const observer = new ResizeObserver(([entry]) => setBodyHeight(entry.contentRect.height));
+        const observer = new hostWindow.ResizeObserver(([entry]) => setBodyHeight(entry.contentRect.height));
         observer.observe(bodyRef.current);
         return () => observer.disconnect();
-    }, []);
+    }, [hostWindow]);
 
     useEffect(() => {
         const svg = d3.select(svgRef.current);
@@ -1157,7 +1179,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             draw(svg, data, {
                 ...size, measure, tooltip, range, clipId, showNote: setNote, world: flowsWorld,
                 hidden, selected, onSelect: setSelected,
-                labels: {a: labelA, b: labelB, base: labelBase},
+                labels: {a: labelA, b: labelB, base: labelBase}, roles,
             });
         }
 
@@ -1166,7 +1188,8 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
             setNote(null);
             svg.selectAll("*").remove();
         };
-    }, [data, view, measure, labelA, labelB, labelBase, size, stale, range, clipId, hidden, selected, setSelected, flowsWorld]);
+    }, [data, view, measure, labelA, labelB, labelBase, size, stale, range, clipId, hidden, selected, setSelected, flowsWorld,
+        roles]);
 
     /* Over a zoomed Sankey the wheel scrolls it, as it would a long page. Attached by hand, since React's own wheel
        handler is passive and could not keep the page from scrolling too. */
@@ -1194,7 +1217,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         <svg ref={svgRef} width={size.width} height={size.height}/>
                         <div ref={tooltipRef} className="compare-tooltip"/>
                     </div>
-                    {view === "flows" && flowsWorld && !stale && size.height >= MIN_CANVAS && (
+                    {!compact && view === "flows" && flowsWorld && !stale && size.height >= MIN_CANVAS && (
                         // Keyed like the ridgeline's strip, so a new pair starts unzoomed rather than where the last was
                         <SankeyMinimap
                             key={zoomKey}
@@ -1205,7 +1228,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         />
                     )}
                 </div>
-                {view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && (
+                {!compact && view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && (
                     // Keyed on the column and nodes, so a new pair starts with a fresh brush rather than the last box
                     <RidgelineBrush
                         key={zoomKey}
@@ -1219,7 +1242,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                     />
                 )}
             </div>
-            {data?.kind === "drift" && (
+            {!compact && data?.kind === "drift" && (
                 <div className="compare-note" aria-live="polite">
                     {selected ? (
                         <>
@@ -1242,9 +1265,9 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                     )}
                 </div>
             )}
-            {data && (
+            {!compact && data && (
                 <div className="compare-legend">
-                    {legendItems(data.kind, view, measure, {a: labelA, b: labelB, base: labelBase}).map((item) => (
+                    {legendItems(data.kind, view, measure, {a: labelA, b: labelB, base: labelBase}, roles).map((item) => (
                         <span key={item.label} className="compare-legend-item">
                             <span
                                 className={`compare-legend-mark compare-legend-mark--${item.shape ?? "box"}`}

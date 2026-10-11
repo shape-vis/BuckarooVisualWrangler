@@ -6,6 +6,7 @@
 
 import {useEffect, useRef, useState} from "react";
 import {REMOVED_LABEL} from "../utils/comparison.js";
+import {useHostWindow} from "../store/HostWindowContext.jsx";
 import {FLOW_COLORS, flowKind, isStub, markedFlow, panRange, ribbonPath, ribbonPoint} from "./flowLayout.js";
 
 const WIDTH = 132;
@@ -49,6 +50,8 @@ function Grip({y}) {
  *  - onRange: called with the new range, or null
  */
 export default function SankeyMinimap({world, frame, range, onRange}) {
+    // Frames are the host window's, which keeps drawing while this page may be minimised behind a popped-out panel
+    const hostWindow = useHostWindow();
     const svgRef = useRef(null);
     const [f0, f1] = range ?? [0, 1];
     const H = frame.height;
@@ -66,13 +69,13 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
     const send = (next) => {
         pending.current = next;
         if (request.current) return;
-        request.current = requestAnimationFrame(() => {
+        request.current = hostWindow.requestAnimationFrame(() => {
             request.current = 0;
             const [start, end] = pending.current;
             onRange(start <= 1e-4 && end >= 1 - 1e-4 ? null : [start, end]);
         });
     };
-    useEffect(() => () => cancelAnimationFrame(request.current), []);
+    useEffect(() => () => hostWindow.cancelAnimationFrame(request.current), [hostWindow]);
 
     // The pointer's height on the minimap, as a share of the Sankey's
     const fractionAt = (event) => (event.clientY - svgRef.current.getBoundingClientRect().top - frame.top) / H;

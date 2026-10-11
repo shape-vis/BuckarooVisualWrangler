@@ -52,16 +52,16 @@ TOP_CHANGES = 8
 
 REMOVED_LABEL = "(removed)"
 
-# How many of the categories folded into the catch-all are named back, for the modal to list and offer
+# How many of the categories folded into the catch-all are named back, for the panel to list and offer
 OTHER_LISTED = 200
-# The most bands a Sankey will draw when the modal names the categories itself
+# The most bands a Sankey will draw when the panel names the categories itself
 MAX_KEPT = 100
 
 # Both Pareto axes are rounded to this many places, so float noise cannot make equal nodes dominate
 PARETO_PRECISION = 6
 
 # The ridgeline's smoothing, as gaussian_kde's factor on root, and how many points each curve has. The
-# points are dense because the compare modal zooms into a slice of the grid in the browser, and a zoomed
+# points are dense because the compare panel zooms into a slice of the grid in the browser, and a zoomed
 # window still needs enough of them to draw a smooth curve.
 KDE_FACTOR = 0.30
 KDE_POINTS = 1000
@@ -379,7 +379,7 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
                   most common in before_frame, and null whenever it occurs, as those axes do, and folds the
                   rest into OTHER_LABEL.
     :param keep: the categories to keep as themselves, naming them outright instead of by the limit - the
-                 modal sends this when the reader pulls one back out of the catch-all
+                 panel sends this when the reader pulls one back out of the catch-all
     :return: {"flows": [{"source", "target", "rows"}], "sources", "targets", "churn", "removal_rates",
               "categories", "other"}. Sources and targets run from the most common category down, so a plot
               can open on the top few. "other" names what the catch-all holds, so the reader can look inside
@@ -392,7 +392,7 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
 
     counts = source.value_counts()
     if keep is not None:
-        # The modal named them, so size does not come into it - only the order, which stays by count
+        # The panel named them, so size does not come into it - only the order, which stays by count
         kept = [label for label in counts.index if label in set(keep)][:MAX_KEPT]
     else:
         kept = list(counts.index)
@@ -402,7 +402,7 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
             if NULL_LABEL in counts.index and NULL_LABEL not in kept:
                 kept[-1] = NULL_LABEL
 
-    # What the catch-all holds, biggest first: the modal lists these and offers them back
+    # What the catch-all holds, biggest first: the panel lists these and offers them back
     tail = [label for label in counts.index if label not in set(kept)]
     other = None if not tail else {
         "categories": [{"category": str(label), "rows": int(counts[label])} for label in tail[:OTHER_LISTED]],
@@ -648,11 +648,11 @@ def _node_distortion_of(pgraph, node_table):
 
 def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     """
-    Everything the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
+    Everything the compare panel's Drift views draw for one node and one column: the ridgeline curves or the
     Sankey flows, and the annotation. Read-only.
 
     The reference is root unless a base is named. A base is one of the node's ancestors - the two selections'
-    common ancestor, when the modal is asked to leave out the history they share - and every number here is
+    common ancestor, when the panel is asked to leave out the history they share - and every number here is
     then measured from it exactly as it would be from root: the node's rows are a subset of any ancestor's,
     for the same reason they are of root's. The payload's "root" keys (rows_root, density.root) name that
     reference state, whichever it is.

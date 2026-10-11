@@ -1,0 +1,64 @@
+/* The Plots view, sharing the width with whichever other view is open beside it in the proportion the divider
+   between them sets - see SplitDivider */
+.plots-pane {
+    flex: var(--plots-grow, 1) 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.plots-pane-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+/* .plots-pane-body sets a display, so the hidden attribute needs to win explicitly */
+.plots-pane-body[hidden] {
+    display: none;
+}
+
+/* The plot matrix's svg is 100% wide, which as a flex item would claim the whole row */
+.plots-pane-body > #main-svg {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Tab strip, in the manner of editor file tabs - the right dock's, so the two read as one family */
+.plots-pane-tabstrip {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    background: #f0f2f5;
+    border-bottom: 1px solid #dddfe2;
+    padding-left: 6px;
+}
+
+.plots-pane-tab {
+    border: none;
+    border-right: 1px solid #dddfe2;
+    border-top: 2px solid transparent;
+    background: transparent;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #65676b;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.plots-pane-tab:hover {
+    background: #e7eaee;
+    color: #1c1e21;
+}
+
+/* The active tab reads as the sheet in front: white ground, accent edge, no bottom rule */
+.plots-pane-tab--active {
+    background: #ffffff;
+    color: #1c1e21;
+    font-weight: 600;
+    border-top: 2px solid #1877F2;
+    margin-bottom: -1px;
+    padding-bottom: 7px;
+}

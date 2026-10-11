@@ -1,13 +1,13 @@
 import {NavButton, IconButton} from "./Buttons.jsx";
-import {useCallback, useContext, useState} from "react";
+import {useContext, useState} from "react";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 import SettingsModal from "./SettingsModal.jsx";
-import CompareModal from "./CompareModal.jsx";
 import { resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
 import { usePgraph } from "../store/PGraphContext.jsx";
+import { useCompare } from "../store/CompareContext.jsx";
 import "../styles/Header.css"
 
 function TableStatus() {
@@ -48,11 +48,10 @@ export function BuckarooHeader( { onReset} ) {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection } = useRepair();
 
-    /* The two nodes paired in the graph, if any. The pair is copied when the modal opens, so the modal
-       keeps comparing what was clicked even if the graph's selection moves on underneath it. */
+    /* The two nodes paired in the graph, if any. The pair is copied when the comparison opens, so it keeps
+       comparing what was clicked even if the graph's selection moves on underneath it. */
     const { comparisonPair } = usePgraph();
-    const [openPair, setOpenPair] = useState(null);
-    const closeCompare = useCallback(() => setOpenPair(null), []);
+    const { openCompare } = useCompare();
 
     const handleBack = async () => {
         await resetApp();
@@ -74,7 +73,7 @@ export function BuckarooHeader( { onReset} ) {
             {comparisonPair && (
                 <button
                     className="header-action-btn header-compare-btn"
-                    onClick={() => setOpenPair(comparisonPair)}
+                    onClick={() => openCompare(comparisonPair)}
                     title={`Compare ${comparisonPair.a} (selection A) with ${comparisonPair.b} (selection B)`}
                 >
                     <img src="/images/icons/compare.svg" alt="" className="btn-svg-icon" />
@@ -118,7 +117,6 @@ export function BuckarooHeader( { onReset} ) {
                 <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
             </div>
             <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
-            {openPair && <CompareModal pair={openPair} onClose={closeCompare} />}
         </div>
     );
 }

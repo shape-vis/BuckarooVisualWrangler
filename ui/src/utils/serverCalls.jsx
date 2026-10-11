@@ -354,17 +354,52 @@ export async function getNodeComparison({ a, b, kind, x, y }, signal) {
 
 /**
  * GET /api/pgraph/drift_detail
- * What the compare modal's Drift views draw for one node and one column: the ridgeline curves or the
+ * What the compare panel's Drift views draw for one node and one column: the ridgeline curves or the
  * Sankey flows, and an annotation. Takes an AbortSignal, as getNodeComparison does.
  */
 export async function getDriftDetail({ node, column, keep, base }, signal) {
     const params = new URLSearchParams({ node, column });
-    // The categories to keep out of the Sankey's catch-all, when the modal has been told to keep any
+    // The categories to keep out of the Sankey's catch-all, when the panel has been told to keep any
     keep?.forEach((category) => params.append("keep", category));
-    // The ancestor to measure from instead of root, when the modal has been told to use one
+    // The ancestor to measure from instead of root, when the panel has been told to use one
     if (base) params.append("base", base);
     const response = await fetch(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
     return await response.json();
+}
+
+/**
+ * The saved comparisons kept on the graph - see app/pgraph/comparison.py. Each takes or returns a comparison
+ * object as ui/src/utils/comparisonSpec.js shapes it; saving or updating returns { success, comparison }.
+ */
+async function sendComparison(url, method, spec) {
+    const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: spec ? JSON.stringify(spec) : undefined,
+    });
+    return await response.json();
+}
+
+/** POST /api/pgraph/comparisons - keeps a new comparison on the graph and returns it with its id. */
+export function saveComparison(spec) {
+    return sendComparison("/api/pgraph/comparisons", "POST", spec);
+}
+
+/** PUT /api/pgraph/comparisons/<id> - replaces a saved comparison's settings. */
+export function updateComparison(id, spec) {
+    return sendComparison(`/api/pgraph/comparisons/${encodeURIComponent(id)}`, "PUT", spec);
+}
+
+/** GET /api/pgraph/comparisons - every saved comparison, or only those pinned to anchor when given one. */
+export async function listComparisons(anchor) {
+    const params = anchor ? `?${new URLSearchParams({ anchor })}` : "";
+    const response = await fetch(`/api/pgraph/comparisons${params}`, { method: "GET" });
+    return await response.json();
+}
+
+/** DELETE /api/pgraph/comparisons/<id> */
+export function deleteComparison(id) {
+    return sendComparison(`/api/pgraph/comparisons/${encodeURIComponent(id)}`, "DELETE");
 }
 
 export async function resetApp() {
