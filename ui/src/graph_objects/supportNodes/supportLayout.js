@@ -379,3 +379,34 @@ const SUPPORT_GROUP_PREFIX = "support:group:";
 
 // The edges the tree is made of: everything but the links out to sub-nodes
 export const treeEdgesOf = (edges) => edges.filter((edge) => !isSupportId(edge.target));
+
+// The boundary node drawn around a host's sub-nodes, by the host's id
+export const supportGroupId = (hostId) => `${SUPPORT_GROUP_PREFIX}${hostId}`;
+
+/**
+ * Where a sub-node dragged in from outside the graph can be dropped on a host: over the host's group when it has
+ * one, else over a group of the default size it will have once the sub-node is placed - the card, and the new
+ * sub-node beside it on the right, where a host's first side sub-node goes. In the graph's own coordinates.
+ *
+ * @param hostId  the node it may be dropped on
+ * @param nodes   the graph's nodes as drawn, groups placed on their hosts
+ * @param newSize the dropped kind's size
+ * @returns {{position, width, height}} or null when the host is not drawn
+ */
+export function dropZoneBox(hostId, nodes, newSize) {
+    const group = nodes.find((node) => node.id === supportGroupId(hostId));
+    if (group && !group.hidden) return {position: group.position, width: group.data.width, height: group.data.height};
+
+    const host = nodes.find((node) => node.id === hostId);
+    if (!host || host.hidden) return null;
+    const middle = host.position.y + HOST_CARD.height / 2;
+    const x0 = host.position.x;
+    const x1 = host.position.x + HOST_CARD.width + SIDE_GAP + newSize.width;
+    const y0 = Math.min(host.position.y, middle - newSize.height / 2);
+    const y1 = Math.max(host.position.y + HOST_CARD.height, middle + newSize.height / 2);
+    return {
+        position: {x: x0 - GROUP_PADDING, y: y0 - GROUP_PADDING},
+        width: x1 - x0 + 2 * GROUP_PADDING,
+        height: y1 - y0 + 2 * GROUP_PADDING,
+    };
+}

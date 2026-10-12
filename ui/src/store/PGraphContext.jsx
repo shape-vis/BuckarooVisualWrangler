@@ -18,6 +18,7 @@ import {descendantsOf, orderCollapsibleRun, collapsedRunId, applyCollapse,
         isProspectiveId, isSupportId} from "../utils/graphTopology.js";
 import {SupportNode} from "../graph_objects/supportNodes/SupportNode.jsx";
 import {SupportGroup} from "../graph_objects/supportNodes/SupportGroup.jsx";
+import {SupportDropZone} from "../graph_objects/supportNodes/SupportDropZone.jsx";
 import {EDGE_GAP, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf} from "../graph_objects/supportNodes/supportLayout.js";
 import {useSupportNodes} from "./supportNodes.js";
 import "../styles/Nodes.css"
@@ -70,6 +71,8 @@ const nodeTypes = {
     supportNode: SupportNode,
     // The boundary around a node and its sub-nodes
     supportGroup: SupportGroup,
+    // Where a sub-node dragged in from the Quality panel is dropped, only while one is being dragged
+    supportDropZone: SupportDropZone,
 };
 
 /* `reserve` is the room, by node id, that a node's supporting sub-nodes need on its left and right (see
@@ -542,16 +545,13 @@ export function PGraphProvider({children}) {
     );
 
     /* https://reactflow.dev/api-reference/types/node-mouse-handler - this is how you know the params */
-    const onNodeDoubleClick = useCallback(
-        async (event, node) => {
-            // A suggestion has no table behind it, and this sets the app's current table from the
-            // node id without asking - navigating to one would point every panel at nothing
-            if (isProspectiveId(node.id)) return;
-            // Nor does a supporting sub-node, which only ever describes its host
-            if (isSupportId(node.id)) return;
+    /* Makes a node the current one: the server's session moves to its table and every view is pulled again.
+       Double-clicking a node does this, and so does a sub-node's "Open in Plot Wrangler". */
+    const navigateToNode = useCallback(
+        async (nodeId) => {
             //setTableName is a dependency you have to list for this to work
-            await setGraphToClickedNode(node.id);
-            setTableName(node.id);
+            await setGraphToClickedNode(nodeId);
+            setTableName(nodeId);
             /* Navigating picks a new current node, so the comparison falls back to that node's own
                parent rather than keeping a selection A chosen for somewhere else in the graph. The
                branch goes with it: React Flow fires onNodeClick on the first click of a double
@@ -563,8 +563,18 @@ export function PGraphProvider({children}) {
             clearHistogramCache();
             clearHeatMapCache();
             viewContext.setRefreshKey(k => k + 1);
-            node.style
         }, [setTableName, viewContext, clearAllSelections]
+    )
+
+    const onNodeDoubleClick = useCallback(
+        async (event, node) => {
+            // A suggestion has no table behind it, and this sets the app's current table from the
+            // node id without asking - navigating to one would point every panel at nothing
+            if (isProspectiveId(node.id)) return;
+            // Nor does a supporting sub-node, which only ever describes its host
+            if (isSupportId(node.id)) return;
+            await navigateToNode(node.id);
+        }, [navigateToNode]
     )
 
     /* Shift-click re-targets selection A. A plain click ends a branch that is mid-selection,
@@ -605,7 +615,7 @@ export function PGraphProvider({children}) {
             nodes, setNodes,
             edges, setEdges,
             nodeTypes,
-            onNodesChange, onEdgesChange, onConnect, onLayout,
+            onNodesChange, onEdgesChange, onConnect, onLayout, navigateToNode,
             getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
             selectionAId, setSelectionAId, comparisonPair, serverNodesById,
             pareto: serverGraph.pareto,

@@ -1,0 +1,24 @@
+/* A Quality panel sparkline kept beside a node: the card's header, and its sparkline filling what is left */
+.sparkline-support {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 3px 4px;
+  background: #ffffff;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+/* The sparkline keeps its shape and scales into the room a resize gives it */
+.sparkline-support-chart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sparkline-support-chart .sparkline {
+  width: 100%;
+  height: 100% !important;
+}

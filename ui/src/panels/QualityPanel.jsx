@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 
 import { NavButton, StandardButton } from "../elements/Buttons.jsx";
-import Sparkline from "../visualizations/Sparkline.jsx";
-import { ERROR_TYPES, ERROR_DIMENSIONS, errorColors, DRIFT_COLOR } from "../store/errorColors.js";
+import { QualitySparklineChart, QualitySparklineHeader } from "../visualizations/QualitySparkline.jsx";
+import { ERROR_TYPES, ERROR_DIMENSIONS } from "../store/errorColors.js";
+import { SUPPORT_DRAG_TYPE } from "../store/supportNodes.js";
+import { ViewContext } from "../pages/Buckaroo.jsx";
 import { formatDrift } from "../utils/drift.js";
 import { describeWrangle, nodeName } from "../utils/comparison.js";
 import { truncateText } from "../utils/textUtils.js";
@@ -130,6 +132,49 @@ function ContributionList({ rows }) {
   );
 }
 
+/**
+ * A dimension's card, which can be dragged into the graph and dropped on the node the branch ends on - see
+ * SupportDropZone - where it is kept as a quality-sparkline sub-node. What it carries is a snapshot of the
+ * series: a node's numbers never change once it exists. Dragging opens the graph view if it is closed, so
+ * there is somewhere to drop it.
+ */
+function DraggableCard({ trajectory, dimension, series, className = "", children }) {
+  const { startSupportDrag, endSupportDrag } = usePgraph();
+  const { openView } = useContext(ViewContext) ?? {};
+  const { nodes } = trajectory;
+  const hostId = nodes[nodes.length - 1];
+
+  const onDragStart = (event) => {
+    const payload = {
+      hostId,
+      kind: "qualitySparkline",
+      config: {
+        dimension,
+        branch: { source: nodes[0], target: nodes[1] ?? null, destination: hostId },
+        nodes,
+        values: series.values,
+        deltas: series.deltas,
+      },
+    };
+    event.dataTransfer.setData(SUPPORT_DRAG_TYPE, JSON.stringify(payload));
+    event.dataTransfer.effectAllowed = "copy";
+    startSupportDrag(payload);
+    openView?.("graph");
+  };
+
+  return (
+    <div
+      className={`quality-dimension quality-dimension--draggable ${className}`}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={endSupportDrag}
+      title={`Drag onto ${nodeName(hostId)} in the graph to keep it there`}
+    >
+      {children}
+    </div>
+  );
+}
+
 function TrajectoryView({ trajectory, stage, loading, foldedNodeIds }) {
   if (loading) return <div className="quality-empty">Loading…</div>;
 
@@ -152,30 +197,23 @@ function TrajectoryView({ trajectory, stage, loading, foldedNodeIds }) {
         const series = trajectory.dimensions[dimension];
 
         return (
-          <div key={dimension} className="quality-dimension">
-            <div className="quality-dimension-header">
-              <span className="quality-swatch" data-error-type={dimension} />
-              <span className="quality-dimension-name">{ERROR_TYPES[dimension]}</span>
-              <span className="quality-dimension-value">
-                {asPercent(series.values[0])} → {asPercent(series.values[series.values.length - 1])}
-              </span>
-            </div>
-
-            <Sparkline
+          <DraggableCard key={dimension} trajectory={trajectory} dimension={dimension} series={series}>
+            <QualitySparklineHeader dimension={dimension} values={series.values} grip />
+            <QualitySparklineChart
+              dimension={dimension}
               values={series.values}
               deltas={series.deltas}
               nodeIds={trajectory.nodes}
-              color={errorColors(dimension)}
               collapsedNodeIds={foldedNodeIds}
             />
 
             <ContributionList rows={contributionRows(trajectory, dimension)} />
-          </div>
+          </DraggableCard>
         );
       })}
 
       {trajectory.distortion && (
-        <DriftCard series={trajectory.distortion} nodeIds={trajectory.nodes} foldedNodeIds={foldedNodeIds} />
+        <DriftCard series={trajectory.distortion} trajectory={trajectory} foldedNodeIds={foldedNodeIds} />
       )}
     </div>
   );
@@ -187,29 +225,19 @@ function TrajectoryView({ trajectory, stage, loading, foldedNodeIds }) {
  * spent knowingly: zero means nothing was done, not that the data is clean, so it is never colored as
  * better or worse - see app/pgraph/distortion.py.
  */
-function DriftCard({ series, nodeIds, foldedNodeIds }) {
+function DriftCard({ series, trajectory, foldedNodeIds }) {
   const measured = series.values.every((value) => value != null);
 
-  return (
-    <div className="quality-dimension quality-drift">
-      <div className="quality-dimension-header">
-        <span className="quality-swatch quality-swatch--drift" />
-        <span className="quality-dimension-name">Drift from root</span>
-        {measured && (
-          <span className="quality-dimension-value">
-            {formatDrift(series.values[0])} → {formatDrift(series.values[series.values.length - 1])}
-          </span>
-        )}
-      </div>
+  const body = (
+    <>
+      <QualitySparklineHeader dimension="drift" values={series.values} grip={measured} />
 
       {measured ? (
-        <Sparkline
+        <QualitySparklineChart
+          dimension="drift"
           values={series.values}
           deltas={series.deltas}
-          nodeIds={nodeIds}
-          color={DRIFT_COLOR}
-          polarity="neutral"
-          format="drift"
+          nodeIds={trajectory.nodes}
           collapsedNodeIds={foldedNodeIds}
         />
       ) : (
@@ -217,7 +245,16 @@ function DriftCard({ series, nodeIds, foldedNodeIds }) {
       )}
 
       <div className="quality-drift-note">A cost, not an error: how far the data has moved from the upload.</div>
-    </div>
+    </>
+  );
+
+  // Only a measured series has a sparkline to take into the graph
+  return measured ? (
+    <DraggableCard trajectory={trajectory} dimension="drift" series={series} className="quality-drift">
+      {body}
+    </DraggableCard>
+  ) : (
+    <div className="quality-dimension quality-drift">{body}</div>
   );
 }
 

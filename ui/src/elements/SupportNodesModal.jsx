@@ -34,18 +34,21 @@ export default function SupportNodesModal() {
     );
 }
 
+// The kinds the modal offers. Some are only ever made elsewhere - Save in the compare window makes Compare ones
+const ADDABLE_KINDS = SUPPORT_NODE_TYPE_LIST.filter((option) => option.addable !== false);
+
 function SupportNodesForm({hostId, onClose}) {
     const {supportNodes, addSupportNode, removeSupportNode, serverNodesById, comparisonPair} = usePgraph();
     const host = serverNodesById[hostId];
     const attached = supportNodes.filter((record) => record.hostId === hostId);
 
     // Why each kind cannot be added here, if it cannot - the root has no incoming edge, for one
-    const reasons = Object.fromEntries(SUPPORT_NODE_TYPE_LIST.map((option) => (
+    const reasons = Object.fromEntries(ADDABLE_KINDS.map((option) => (
         [option.id, option.unavailable?.({host, records: attached}) ?? null])));
 
     // Opens on the first kind that can be added, so the form is not greeted by a refusal
     const [kind, setKind] = useState(
-        () => (SUPPORT_NODE_TYPE_LIST.find((option) => !reasons[option.id]) ?? SUPPORT_NODE_TYPE_LIST[0])?.id ?? null);
+        () => (ADDABLE_KINDS.find((option) => !reasons[option.id]) ?? ADDABLE_KINDS[0])?.id ?? null);
     // A kind's starting settings, which can depend on the host and on what is selected in the graph
     const configFor = (next) => {
         const defaults = getSupportType(next)?.defaultConfig;
@@ -55,6 +58,8 @@ function SupportNodesForm({hostId, onClose}) {
 
     const type = getSupportType(kind);
     const ConfigForm = type?.ConfigForm;
+    // A kind picked from a gallery adds straight from its cards, in place of the settings form and Add
+    const Gallery = type?.Gallery;
     const reason = reasons[kind];
     // What the settings still need before one can be added, if anything
     const incomplete = reason ? null : type?.incomplete?.(config) ?? null;
@@ -71,7 +76,7 @@ function SupportNodesForm({hostId, onClose}) {
     };
 
     return (
-        <div className="support-modal">
+        <div className={`support-modal ${Gallery ? "support-modal--wide" : ""}`}>
             <div className="support-modal-header">
                 <h2>Supporting nodes · {nodeName(hostId)}</h2>
                 <button type="button" className="support-modal-close" onClick={onClose} title="Close">×</button>
@@ -79,7 +84,7 @@ function SupportNodesForm({hostId, onClose}) {
 
             <div className="support-modal-body">
                 <ul className="support-modal-kinds" role="listbox" aria-label="Kind of sub-node">
-                    {SUPPORT_NODE_TYPE_LIST.map((option) => (
+                    {ADDABLE_KINDS.map((option) => (
                         <li key={option.id}>
                             <button
                                 type="button"
@@ -103,16 +108,22 @@ function SupportNodesForm({hostId, onClose}) {
                         <>
                             <p className="support-modal-description">{type.description}</p>
                             {reason && <p className="support-modal-reason">{reason}</p>}
-                            {ConfigForm && !reason && <ConfigForm value={config} onChange={setConfig} hostId={hostId} />}
-                            {incomplete && <p className="support-modal-incomplete">{incomplete}</p>}
-                            <button
-                                type="button"
-                                className="support-modal-add"
-                                onClick={add}
-                                disabled={Boolean(reason || incomplete)}
-                            >
-                                Add {type.label.toLowerCase()}
-                            </button>
+                            {Gallery ? (
+                                !reason && <Gallery hostId={hostId} onAdd={(chosen) => addSupportNode(hostId, type.id, chosen)} />
+                            ) : (
+                                <>
+                                    {ConfigForm && !reason && <ConfigForm value={config} onChange={setConfig} hostId={hostId} />}
+                                    {incomplete && <p className="support-modal-incomplete">{incomplete}</p>}
+                                    <button
+                                        type="button"
+                                        className="support-modal-add"
+                                        onClick={add}
+                                        disabled={Boolean(reason || incomplete)}
+                                    >
+                                        Add {type.label.toLowerCase()}
+                                    </button>
+                                </>
+                            )}
                         </>
                     ) : (
                         <p className="support-modal-description">No kinds of sub-node are registered.</p>

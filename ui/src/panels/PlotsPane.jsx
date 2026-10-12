@@ -18,7 +18,7 @@ const TABS = [
     { id: "compare", label: "Compare" },
 ];
 
-export default function PlotsPane({ selectedAttributes }) {
+export default function PlotsPane({ selectedAttributes, plotFocus, onPlotFocused }) {
     const { spec, placement, plotsTab, setPlotsTab, dockSlot } = useCompare();
     const docked = Boolean(spec) && placement === "docked";
     const tab = docked ? plotsTab : "attributes";
@@ -42,7 +42,7 @@ export default function PlotsPane({ selectedAttributes }) {
                 </div>
             )}
             <div className="plots-pane-body" hidden={tab !== "attributes"}>
-                <MatrixView selectedAttributes={selectedAttributes} />
+                <MatrixView selectedAttributes={selectedAttributes} plotFocus={plotFocus} onPlotFocused={onPlotFocused} />
             </div>
             <div className="plots-pane-body" ref={dockSlot} hidden={tab !== "compare"} />
         </div>

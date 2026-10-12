@@ -501,6 +501,20 @@
     overflow: visible;
 }
 
+/* Said in a canvas too small to draw in, rather than leaving it blank */
+.compare-plot-small {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-style: italic;
+    color: #8a8d91;
+    text-align: center;
+    pointer-events: none;
+}
+
 .compare-plot-status {
     position: absolute;
     inset: 0;

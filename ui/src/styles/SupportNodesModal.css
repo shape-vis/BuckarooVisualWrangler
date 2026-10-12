@@ -6,6 +6,16 @@
   color: #1c1e21;
 }
 
+/* Wide enough for a kind picked from a gallery of plot cards */
+.support-modal--wide {
+  width: min(1100px, 88vw);
+}
+
+.support-modal--wide .support-modal-config {
+  align-items: stretch;
+  min-width: 0;
+}
+
 .support-modal-header {
   display: flex;
   align-items: center;

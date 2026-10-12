@@ -56,7 +56,7 @@ function MinimizeIcon({ x, y, onClick }) {
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
+function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, plotFocus, onPlotFocused }) {
     const { tableName: table_name } = useTableName();
     const matrixPlotAreaRef = useRef(null);
     const [plotSize, setPlotSize] = useState(180);
@@ -152,6 +152,26 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
     useEffect(() => {
         setFocusedCell(null);
     }, [table_name, selectedAttributes]);
+
+    /* Zoom to a plot asked for from elsewhere - a sub-node's "Open in Plot Wrangler" - once its columns are in
+       the matrix. After the reset above, so a request that arrives with new columns is not cleared by them.
+       Applying it hands it back (onPlotFocused) so it is gone rather than remembered as done: applying it twice
+       is harmless, which matters because StrictMode runs a new matrix's effects twice - reset, zoom, reset,
+       zoom - and a request skipped the second time would be left reset. A heatmap sits below the diagonal,
+       with x as its column; if the two are selected the other way round, it is the same pair drawn transposed. */
+    useEffect(() => {
+        if (!plotFocus) return;
+        const [x, y] = plotFocus.columns;
+        const xIndex = columns.indexOf(x);
+        const yIndex = y === undefined ? xIndex : columns.indexOf(y);
+        if (xIndex < 0 || yIndex < 0) return;
+        setFocusedCell(y === undefined
+            ? { i: xIndex, j: xIndex }
+            : { i: Math.max(xIndex, yIndex), j: Math.min(xIndex, yIndex) });
+        onPlotFocused?.(plotFocus.key);
+        // columns is selectedAttributes, under the name the rest of the panel uses
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [plotFocus, table_name, selectedAttributes]);
 
     useEffect(() => {
         const n = columns.length;
@@ -368,7 +388,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
  * - visualizations: mapping (e.g. window.visualizations) with modules that expose .module.draw(svgModel, view, canvas, ...args)
  * - width, height (optional) - if not provided component will size SVG to parent bounding box
  */
-export default function MatrixView({ selectedAttributes }) {
+export default function MatrixView({ selectedAttributes, plotFocus, onPlotFocused }) {
     const svgRef = useRef(null);
     const { tableName: table_name } = useTableName();
 
@@ -395,7 +415,7 @@ export default function MatrixView({ selectedAttributes }) {
 
     return (
         <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
-            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
+            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} plotFocus={plotFocus} onPlotFocused={onPlotFocused} />
         </svg>
     );
 }

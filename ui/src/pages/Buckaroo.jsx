@@ -22,6 +22,20 @@ import SplitDivider, {DEFAULT_SPLIT} from "../elements/SplitDivider.jsx";
 export const ViewContext = createContext();
 
 const MAX_OPEN_VIEWS = 2;
+// The attribute panel keeps at most this many attributes selected, dropping the oldest past it
+const MAX_SELECTED_ATTRIBUTES = 3;
+
+/* The selected attributes with columns added, oldest dropped past the cap - though never one of the columns
+   being added, which are the point. */
+function withAttributes(selected, columns) {
+    const next = [...selected, ...columns.filter((column) => !selected.includes(column))];
+    while (next.length > MAX_SELECTED_ATTRIBUTES) {
+        const drop = next.findIndex((column) => !columns.includes(column));
+        if (drop < 0) break;
+        next.splice(drop, 1);
+    }
+    return next;
+}
 
 
 
@@ -53,6 +67,22 @@ export default function Buckaroo({ onReset }) {
     }, []);
     const revealPlots = useCallback(() => openView("plots"), [openView]);
 
+    /* A plot the Plots view is asked to zoom to: its columns, x then y, stamped so asking for the same one twice
+       still counts. The matrix applies it once its columns are among the selected attributes, then hands it back
+       here to be dropped - only that request, should a newer one have arrived meanwhile. */
+    const [plotFocus, setPlotFocus] = useState(null);
+    const dropPlotFocus = useCallback((key) => {
+        setPlotFocus((current) => (current?.key === key ? null : current));
+    }, []);
+
+    /** Shows one plot in the Plots view - where brushing and wrangling happen - selecting its columns if they
+        are not already, and zoomed to it as its magnifier would. */
+    const focusPlot = useCallback((columns) => {
+        setSelectedAttributes((selected) => withAttributes(selected, columns));
+        setPlotFocus({columns, key: Date.now()});
+        openView("plots");
+    }, [openView]);
+
     const handleWrangleExecuted = useCallback(() => {
         clearScatterPlotCache();
         clearHeatMapCache();
@@ -62,7 +92,8 @@ export default function Buckaroo({ onReset }) {
 
     return (
         <>
-            <ViewContext.Provider value={{ openViews, toggleView, openView, refreshKey, setRefreshKey}}>
+            {/* selectedAttributes too: the error-plot sub-node's gallery offers the same columns the Plots view shows */}
+            <ViewContext.Provider value={{ openViews, toggleView, openView, refreshKey, setRefreshKey, selectedAttributes, focusPlot}}>
                 <SettingsProvider>
                 {/* Above PGraph and Repair: both ask the dock to show their tab */}
                 <DockProvider>
@@ -96,6 +127,8 @@ export default function Buckaroo({ onReset }) {
                                 {openViews.includes("plots") && (
                                     <PlotsPane
                                         selectedAttributes={selectedAttributes}
+                                        plotFocus={plotFocus}
+                                        onPlotFocused={dropPlotFocus}
                                     />
                                 )}
 

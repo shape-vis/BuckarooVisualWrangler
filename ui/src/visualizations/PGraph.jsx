@@ -17,6 +17,8 @@ import AnalysisAxes from "./AnalysisAxes.jsx";
 import AnalysisInset from "./AnalysisInset.jsx";
 import AnalysisEdge from "../graph_objects/AnalysisEdge.jsx";
 import SupportNodesModal from "../elements/SupportNodesModal.jsx";
+import {dropZoneBox} from "../graph_objects/supportNodes/supportLayout.js";
+import {recordSizeOf} from "../graph_objects/supportNodes/registry.js";
 import {
     ANALYSIS_METRICS, DOT, METRIC_LABELS, ROOT_COLOR, plotFitPadding,
     analysisPositions, analysisScales, analysisTooltip, branchColors, driftOf, errorOf, isPlotted,
@@ -168,7 +170,7 @@ const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
         collapseError, setCollapseError,
         graphMode, setGraphMode, analysisStyle, setAnalysisStyle, analysisMetric, setAnalysisMetric,
         supportCountByAnchor, hideAllNodeSupports, setHideAllNodeSupports,
-        hideAllEdgeSupports, setHideAllEdgeSupports } = usePgraph();
+        hideAllEdgeSupports, setHideAllEdgeSupports, supportDrag } = usePgraph();
 
 const analysing = graphMode === "analysis";
 
@@ -285,7 +287,7 @@ const styledNodes = useMemo(() => {
     // Where each node is, for the group boundaries that follow their host without being its child
     const byId = new Map(nodes.map((node) => [node.id, node]));
 
-    return nodes.map((node) => {
+    const drawn = nodes.map((node) => {
         const isCurrent = node.id === tableName;
         const isSelectionA = node.id === selectionAId;
         const isEligible = markEligible && eligibleDestinations.has(node.id);
@@ -354,8 +356,30 @@ const styledNodes = useMemo(() => {
             data: (role && selectionAId) ? {...node.data, comparisonRole: role} : node.data,
         };
     });
+
+    /* While a sub-node is dragged in from the Quality panel, the one place it can land: over its host's group, or
+       a group of the default size when the host has none yet. Above the cards, so the drop reaches it. The plot
+       hides sub-nodes, so it offers nowhere to drop one. */
+    const zone = supportDrag && !analysing
+        ? dropZoneBox(supportDrag.hostId, drawn, recordSizeOf({kind: supportDrag.kind, config: supportDrag.config}))
+        : null;
+    if (!zone) return drawn;
+    return [...drawn, {
+        id: "support:dropzone",
+        type: "supportDropZone",
+        position: zone.position,
+        /* Sized outright: it is not in the graph's node state, so React Flow's measurement of it goes nowhere,
+           and an unmeasured node without a size is never shown */
+        width: zone.width,
+        height: zone.height,
+        zIndex: 10,
+        draggable: false,
+        selectable: false,
+        focusable: false,
+        data: {width: zone.width, height: zone.height, hostId: supportDrag.hostId},
+    }];
 }, [nodes, tableName, comparisonPair, selectionStage, eligibleDestinations, dominatorOf, shown, analysing,
-    analysisStyle, colors]);
+    analysisStyle, colors, supportDrag]);
 
 
 // The selected branch is lit up in the graph, so the trajectory in the panel is tied to a visible

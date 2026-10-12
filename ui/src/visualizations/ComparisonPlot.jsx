@@ -69,12 +69,16 @@ function divergingColor(measure, extent) {
    canvas, and flips away from whichever edge it would run off. */
 function makeTooltip(element, container) {
     const place = (event) => {
+        /* In the canvas's own pixels. A plot drawn in a graph sub-node sits under the graph's zoom, a CSS scale,
+           so the pointer's screen offset is scaled back first - in the compare window the scale is 1. */
         const bounds = container.getBoundingClientRect();
-        const x = event.clientX - bounds.left;
-        const y = event.clientY - bounds.top;
+        const scale = bounds.width / (container.offsetWidth || bounds.width) || 1;
+        const x = (event.clientX - bounds.left) / scale;
+        const y = (event.clientY - bounds.top) / scale;
         const {offsetWidth: width, offsetHeight: height} = element;
-        const left = x + TOOLTIP_GAP + width > bounds.width ? x - TOOLTIP_GAP - width : x + TOOLTIP_GAP;
-        const top = y + TOOLTIP_GAP + height > bounds.height ? y - TOOLTIP_GAP - height : y + TOOLTIP_GAP;
+        const room = {width: container.offsetWidth, height: container.offsetHeight};
+        const left = x + TOOLTIP_GAP + width > room.width ? x - TOOLTIP_GAP - width : x + TOOLTIP_GAP;
+        const top = y + TOOLTIP_GAP + height > room.height ? y - TOOLTIP_GAP - height : y + TOOLTIP_GAP;
         element.style.left = `${Math.max(0, left)}px`;
         element.style.top = `${Math.max(0, top)}px`;
     };
@@ -1208,6 +1212,14 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
         return () => canvas.removeEventListener("wheel", onWheel);
     }, [view, range, flowsHeight, zoomTo]);
 
+    /* The zoom strip shares the body's height with the canvas and gives way to it: in a small box - a sub-node -
+       it shows only while the canvas keeps the room it needs to draw, so the plot itself never goes missing. The
+       body's height does not change as the two split it, so this cannot feed back into itself. */
+    const stripCurve = ridgelineCurve(bodyHeight);
+    const stripFits = bodyHeight - BODY_GAP - STRIP_CHROME - stripCurve >= MIN_CANVAS;
+    // A canvas too small for even the plot says so, rather than staying blank
+    const tooSmall = Boolean(data) && size.width > 0 && (size.width < MIN_CANVAS || size.height < MIN_CANVAS);
+
     return (
         <div className="compare-plot-frame">
             <div ref={bodyRef} className="compare-plot-body">
@@ -1216,6 +1228,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                     <div ref={canvasRef} className="compare-plot-canvas" onClick={() => setSelected(null)}>
                         <svg ref={svgRef} width={size.width} height={size.height}/>
                         <div ref={tooltipRef} className="compare-tooltip"/>
+                        {tooSmall && <div className="compare-plot-small">Make this larger to see the plot</div>}
                     </div>
                     {!compact && view === "flows" && flowsWorld && !stale && size.height >= MIN_CANVAS && (
                         // Keyed like the ridgeline's strip, so a new pair starts unzoomed rather than where the last was
@@ -1228,7 +1241,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         />
                     )}
                 </div>
-                {!compact && view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && (
+                {!compact && view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && stripFits && (
                     // Keyed on the column and nodes, so a new pair starts with a fresh brush rather than the last box
                     <RidgelineBrush
                         key={zoomKey}
@@ -1236,7 +1249,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         frame={ridgelineFrame(size.width)}
                         rootColor={ROOT_COLOR}
                         baseLabel={labelBase}
-                        curve={ridgelineCurve(bodyHeight)}
+                        curve={stripCurve}
                         range={range}
                         onRange={zoomTo}
                     />
@@ -1252,7 +1265,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                     ) : note ? (
                         <>
                             <span className="compare-note-role" style={{color: ROLE_COLORS[note.role]}}>
-                                {ROLE_NAMES[note.role]} · {note.label}
+                                {roles.length > 1 ? `${ROLE_NAMES[note.role]} · ${note.label}` : note.label}
                             </span>
                             {note.text}
                         </>

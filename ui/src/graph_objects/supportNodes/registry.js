@@ -23,15 +23,26 @@
  *   resizable     - optional (record) => whether the user can drag its size. A resized record keeps its size
  *                   on the record (`size`), which the layout reads in place of the kind's
  *   ConfigForm    - optional ({value, onChange, hostId}) settings form the modal shows before adding one
+ *   Gallery       - optional ({hostId, onAdd}) picker the modal shows in place of ConfigForm and Add, for a
+ *                   kind chosen from ready-made options; onAdd(config) adds one straight away
+ *   addable       - false for a kind made only elsewhere, which the modal does not offer
+ *   open          - optional (record, context) => opens its plot in the Plots view, from the Open in its header;
+ *                   see supportOpen.js. Error plots go to the standard plot view, every other plot to the
+ *                   plot analysis view (the compare window)
+ *   openTitle     - what that Open says it does
+ *   canOpen       - optional ({record, host}) => whether there is anything to open for this one
  *   Body          - ({record, host}) what the sub-node draws; host is the real node it belongs to, as the
  *                   server sent it, so a kind can show anything the node carries
  */
-import {PlaceholderConfigForm, PlaceholderBody} from "./PlaceholderSupport.jsx";
 import {QualityMetricsBody} from "./QualityMetricsSupport.jsx";
 import {WrangleDiffBody} from "./WrangleDiffSupport.jsx";
 import {wrangleDiffUnavailable} from "./wrangleDiffRules.js";
-import {PlotViewBody, PlotViewConfigForm} from "./PlotViewSupport.jsx";
-import {PREVIEW_SIZE, SINGLE_PLOT_SIZE, isSinglePlot, plotViewDefaults, plotViewIncomplete} from "./plotView.js";
+import {ErrorPlotBody, ErrorPlotGallery} from "./ErrorPlotSupport.jsx";
+import {CompareBody} from "./CompareSupport.jsx";
+import {COMPARE_DEFAULTS, COMPARE_SIZE} from "./compareView.js";
+import {SparklineBody} from "./SparklineSupport.jsx";
+import {DriftBody, DriftGallery} from "./DriftSupport.jsx";
+import {openCompare, openDrift, openErrorPlot} from "./supportOpen.js";
 
 export const DEFAULT_SUPPORT_SIZE = {width: 120, height: 44};
 
@@ -58,29 +69,64 @@ export const SUPPORT_NODE_TYPES = {
         ConfigForm: null,
         Body: WrangleDiffBody,
     },
-    plotView: {
-        id: "plotView",
-        label: "Plot view",
-        description: "A comparison plot kept beside the node: against another node or on its own, in full or narrowed to what you choose.",
+    errorPlot: {
+        id: "errorPlot",
+        label: "Error plot",
+        description: "One of this node's error plots - a histogram or a heatmap of the selected attributes - kept beside it.",
         anchor: "side",
         side: "auto",
-        // A single plot is drawn in full and starts larger; anything else is a preview that opens in the compare window
-        size: (config) => (isSinglePlot(config) ? SINGLE_PLOT_SIZE : PREVIEW_SIZE),
+        size: {width: 230, height: 250},
         resizable: () => true,
-        defaultConfig: plotViewDefaults,
-        incomplete: plotViewIncomplete,
-        ConfigForm: PlotViewConfigForm,
-        Body: PlotViewBody,
+        defaultConfig: {plot: "histogram", columns: []},
+        Gallery: ErrorPlotGallery,
+        Body: ErrorPlotBody,
+        open: openErrorPlot,
+        openTitle: "Open in the standard plot view to brush and wrangle it - this node becomes the current one",
     },
-    placeholder: {
-        id: "placeholder",
-        label: "Placeholder",
-        description: "A stand-in sub-node with a short note, until the real kinds are defined.",
+    drift: {
+        id: "drift",
+        label: "Drift plot",
+        description: "This node's drift from root for one column: a ridgeline for a numeric column, a Sankey for a categorical one.",
         anchor: "side",
         side: "auto",
-        defaultConfig: {note: ""},
-        ConfigForm: PlaceholderConfigForm,
-        Body: PlaceholderBody,
+        // Room for the compare window's whole drift plot - the plot, its zoom strip, the hover note and the legend
+        size: {width: 440, height: 500},
+        resizable: () => true,
+        defaultConfig: {column: ""},
+        Gallery: DriftGallery,
+        Body: DriftBody,
+        open: openDrift,
+        openTitle: "Open in the plot analysis view: this node against root, with the compare window's options",
+    },
+    qualitySparkline: {
+        id: "qualitySparkline",
+        label: "Quality sparkline",
+        description: "One quality dimension along a branch, dragged here from the Quality panel.",
+        anchor: "side",
+        side: "auto",
+        size: {width: 240, height: 120},
+        resizable: () => true,
+        // Only dragging a Quality panel card onto the node makes these
+        addable: false,
+        defaultConfig: {},
+        ConfigForm: null,
+        Body: SparklineBody,
+    },
+    compare: {
+        id: "compare",
+        label: "Compare",
+        description: "A comparison of two nodes, kept beside each by Save in the compare window.",
+        anchor: "side",
+        side: "auto",
+        size: COMPARE_SIZE,
+        resizable: () => true,
+        // Only Save in the compare window makes these
+        addable: false,
+        defaultConfig: COMPARE_DEFAULTS,
+        ConfigForm: null,
+        Body: CompareBody,
+        open: openCompare,
+        openTitle: "Open in the plot analysis view",
     },
 };
 

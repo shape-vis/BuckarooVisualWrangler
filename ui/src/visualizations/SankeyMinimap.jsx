@@ -77,8 +77,13 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
     };
     useEffect(() => () => hostWindow.cancelAnimationFrame(request.current), [hostWindow]);
 
-    // The pointer's height on the minimap, as a share of the Sankey's
-    const fractionAt = (event) => (event.clientY - svgRef.current.getBoundingClientRect().top - frame.top) / H;
+    /* The pointer's height on the minimap, as a share of the Sankey's - in the svg's own pixels, so it holds
+       under the graph's zoom when the plot is in a sub-node */
+    const fractionAt = (event) => {
+        const rect = svgRef.current.getBoundingClientRect();
+        const scale = rect.height / (svgRef.current.clientHeight || rect.height) || 1;
+        return ((event.clientY - rect.top) / scale - frame.top) / H;
+    };
     const modeAt = (at) => {
         const edge = EDGE / H;
         // A box short enough for both edges to be in reach gives each the half nearer it

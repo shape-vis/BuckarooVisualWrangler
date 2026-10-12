@@ -1,13 +1,16 @@
+import {useState} from "react";
 import {Handle, NodeResizer, Position} from "@xyflow/react";
 import {usePgraph} from "../../store/PGraphContext.jsx";
 import {anchorOf, getSupportType, recordSizeOf} from "./registry.js";
+import {useSupportOpenContext} from "./supportOpen.js";
 import {EDGE_GAP} from "./supportLayout.js";
 import "../../styles/Nodes.css";
 
 /**
  * The one React Flow node type behind every supporting sub-node. The frame - its name, the way to remove
  * it, the link to its host - is the same for all of them; what it draws inside is its kind's Body, handed
- * the host node so it can show anything about it.
+ * the host node so it can show anything about it. A kind that holds a plot also gets an Open in the header,
+ * which takes it to the Plots view - see supportOpen.js.
  *
  * A side sub-node faces its host: one on the left links in on its right side, and the reverse. An edge
  * sub-node has no link to draw - React Flow cannot join a node to an edge - so it carries a short stub of
@@ -30,6 +33,21 @@ export function SupportNode({data, width, height}) {
     const size = {width: width || recorded.width, height: height || recorded.height};
     const resizable = type?.resizable?.(record) ?? false;
     const onEdge = anchorOf(record) === "edge";
+    const host = serverNodesById[record.hostId];
+
+    // Open, for a kind that holds a plot - async, since an error plot may first make its node the current one
+    const openContext = useSupportOpenContext();
+    const canOpen = Boolean(type?.open) && (type.canOpen?.({record, host}) ?? true);
+    const [opening, setOpening] = useState(false);
+    const open = async (event) => {
+        event.stopPropagation();
+        setOpening(true);
+        try {
+            await type.open(record, openContext);
+        } finally {
+            setOpening(false);
+        }
+    };
 
     // Clicks inside a sub-node are its own; they must not select, navigate or end a branch behind it
     const stop = (event) => event.stopPropagation();
@@ -70,6 +88,17 @@ export function SupportNode({data, width, height}) {
                 )}
                 <div className="support-node-header">
                     <span className="support-node-title">{type?.label ?? record.kind}</span>
+                    {canOpen && (
+                        <button
+                            type="button"
+                            className="support-node-open"
+                            title={type.openTitle ?? "Open in the Plots view"}
+                            onClick={open}
+                            disabled={opening}
+                        >
+                            {opening ? "Opening…" : "Open ↗"}
+                        </button>
+                    )}
                     <button
                         type="button"
                         className="support-node-remove"
@@ -77,7 +106,7 @@ export function SupportNode({data, width, height}) {
                         onClick={(event) => { stop(event); removeSupportNode(record.id); }}
                     >×</button>
                 </div>
-                {Body && <Body record={record} host={serverNodesById[record.hostId]} />}
+                {Body && <Body record={record} host={host} />}
             </div>
         </div>
     );

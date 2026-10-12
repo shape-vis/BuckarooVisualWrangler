@@ -318,6 +318,30 @@
   white-space: nowrap;
 }
 
+/* Open, beside the remove button: takes a sub-node's plot to the Plots view */
+.support-node-open {
+  margin-left: auto;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 1px 6px;
+  border: 1px solid var(--support-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--support-ink);
+}
+
+.support-node-open:hover:not(:disabled) {
+  background: var(--support-tint-strong);
+}
+
+.support-node-open:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .support-node-remove {
   cursor: pointer;
   border: none;
@@ -350,13 +374,6 @@
 /* The quality-metrics kind: the magnifier's rows and footer, under the sub-node's title */
 .support-node-metrics {
   margin-top: 3px;
-}
-
-.support-node-note {
-  color: #4b5563;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The link to a sub-node is the mark; its ends need no dots */
@@ -591,4 +608,32 @@
   border: 1.5px dashed var(--support-accent);
   border-radius: 12px;
   background: rgba(20, 184, 166, 0.08);
+}
+
+/* Where a sub-node dragged in from the Quality panel can be dropped - over its host's group, only while dragging */
+.support-drop-zone {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 6px;
+  border: 2px dashed var(--support-accent);
+  border-radius: 12px;
+  background: rgba(20, 184, 166, 0.12);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.support-drop-zone--over {
+  border-style: solid;
+  background: rgba(20, 184, 166, 0.28);
+}
+
+.support-drop-zone-label {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--support-ink);
+  pointer-events: none;
 }

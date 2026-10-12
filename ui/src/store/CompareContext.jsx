@@ -7,9 +7,7 @@ import ComparePanel from "../elements/ComparePanel.jsx";
 import { usePgraph } from "./PGraphContext.jsx";
 import { HostWindowContext } from "./HostWindowContext.jsx";
 import { normalizeSpec, specFromPair } from "../utils/comparisonSpec.js";
-import {
-    restrictionsOf, savedPlotViewConfig, specOfPlotView,
-} from "../graph_objects/supportNodes/plotView.js";
+import { savedCompareConfig, specOfCompare } from "../graph_objects/supportNodes/compareView.js";
 
 /**
  * The open comparison, and where it is shown: docked as a tab in the Plots view, or popped out into a
@@ -82,8 +80,8 @@ function mirrorStyles(popup) {
 export function CompareProvider({ revealPlots, children }) {
     const { nodes, serverNodesById, supportNodes, addSupportNode, updateSupportNode } = usePgraph();
 
-    /* The open comparison and a serial for it, which keys the panel so each new one starts fresh. restrict is
-       what a plot-view sub-node fixed, and links are the sub-nodes it is kept on - see openPlotView and save. */
+    /* The open comparison and a serial for it, which keys the panel so each new one starts fresh. links are the
+       compare sub-nodes it is kept on - see openCompareNode and saveToNodes. */
     const [open, setOpen] = useState(null);
     const [placement, setPlacement] = useState("docked");
     const [popup, setPopup] = useState(null);
@@ -100,9 +98,11 @@ export function CompareProvider({ revealPlots, children }) {
        this is how that pagehide is told apart from the user closing the window. */
     const closedByApp = useRef(null);
 
-    const show = useCallback((spec, { restrict = null, links = null } = {}) => {
+    /* follow says what the linked sub-nodes keep of the comparison as it changes: the whole of it (a compare
+       sub-node), or only its column while it is on drift (a drift-plot sub-node, whose settings are its column). */
+    const show = useCallback((spec, { links = null, follow = "spec" } = {}) => {
         serial.current += 1;
-        setOpen({ spec, key: serial.current, restrict, links });
+        setOpen({ spec, key: serial.current, links, follow });
         if (popup && !popup.closed) {
             popup.focus();
         } else {
@@ -126,9 +126,9 @@ export function CompareProvider({ revealPlots, children }) {
     /** Opens a comparison saved on the graph, as the server returned it. */
     const openSaved = useCallback((spec) => show(normalizeSpec(spec)), [show]);
 
-    /** Opens a plot-view sub-node in the panel, offering only the options it leaves open. Every sub-node one
-        Save added changes along with it. The one already open is just brought forward. */
-    const openPlotView = useCallback((record) => {
+    /** Opens a compare sub-node in the panel. Every sub-node one Save added changes along with it. The one
+        already open is just brought forward. */
+    const openCompareNode = useCallback((record) => {
         const links = record.config?.group
             ? supportNodes.filter((one) => one.kind === record.kind && one.config?.group === record.config.group)
                 .map((one) => one.id)
@@ -139,22 +139,47 @@ export function CompareProvider({ revealPlots, children }) {
             return;
         }
         const columns = Object.keys(serverNodesById?.[record.hostId]?.data?.metrics?.columns ?? {});
-        show(specOfPlotView(record, columns), { restrict: restrictionsOf(record.config), links });
+        show(specOfCompare(record, columns), { links });
     }, [supportNodes, serverNodesById, open, popup, show, revealPlots]);
 
-    // While a comparison is kept on sub-nodes, they follow its settings
-    const links = open?.links;
-    const followSpec = useCallback((spec) => {
-        links?.forEach((id) => updateSupportNode(id, (record) => ({ config: { ...record.config, spec } })));
-    }, [links, updateSupportNode]);
+    /** Opens a drift-plot sub-node in the panel: its node against root - a single-node comparison - on drift, on
+        its column. Picking another column there while on drift carries back to the sub-node. The one already open
+        is just brought forward. */
+    const openDriftNode = useCallback((record) => {
+        if (open?.links?.includes(record.id)) {
+            if (popup && !popup.closed) popup.focus();
+            else { setPlotsTab("compare"); revealPlots?.(); }
+            return;
+        }
+        const spec = normalizeSpec({
+            a: record.hostId,
+            b: record.hostId,
+            anchor: record.hostId,
+            kind: "drift",
+            x: record.config?.column ?? "",
+            // One node has no other to measure against, only how far it has come from the upload
+            errorDelta: "rootB",
+        });
+        show(spec, { links: [record.id], follow: "driftColumn" });
+    }, [open, popup, show, revealPlots]);
 
-    /* Keeps the open comparison beside both its nodes, as a full comparison on each, and from then on they
+    // While a comparison is kept on sub-nodes, they follow its settings - all of them, or just what they keep
+    const links = open?.links;
+    const follow = open?.follow;
+    const followSpec = useCallback((spec) => {
+        links?.forEach((id) => updateSupportNode(id, (record) => {
+            if (follow !== "driftColumn") return { config: { ...record.config, spec } };
+            return spec.kind === "drift" && spec.x ? { config: { ...record.config, column: spec.x } } : {};
+        }));
+    }, [links, follow, updateSupportNode]);
+
+    /* Keeps the open comparison beside both its nodes, as a compare sub-node on each, and from then on they
        follow it. Grouped, so opening either later changes both. */
     const saveToNodes = useCallback((spec) => {
         const group = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         const ids = [...new Set([spec.a, spec.b])]
-            .map((host) => addSupportNode(host, "plotView", savedPlotViewConfig(spec, host, group)));
-        setOpen((was) => (was ? { ...was, links: ids } : was));
+            .map((host) => addSupportNode(host, "compare", savedCompareConfig(spec, host, group)));
+        setOpen((was) => (was ? { ...was, links: ids, follow: "spec" } : was));
     }, [addSupportNode]);
 
     // The nodes the open comparison is kept on, while any of its sub-nodes is still there
@@ -270,8 +295,9 @@ export function CompareProvider({ revealPlots, children }) {
     const value = useMemo(() => ({
         spec: open?.spec ?? null,
         placement, plotsTab, setPlotsTab,
-        openCompare, openSaved, openPlotView, closeCompare, popOut, dockIn, dockSlot,
-    }), [open, placement, plotsTab, openCompare, openSaved, openPlotView, closeCompare, popOut, dockIn, dockSlot]);
+        openCompare, openSaved, openCompareNode, openDriftNode, closeCompare, popOut, dockIn, dockSlot,
+    }), [open, placement, plotsTab, openCompare, openSaved, openCompareNode, openDriftNode, closeCompare, popOut, dockIn,
+        dockSlot]);
 
     return (
         <CompareContext.Provider value={value}>
@@ -281,7 +307,6 @@ export function CompareProvider({ revealPlots, children }) {
                     <ComparePanel
                         key={open.key}
                         initialSpec={open.spec}
-                        restrict={open.restrict}
                         placement={placement}
                         savedTo={savedTo}
                         onSpecChange={savedTo ? followSpec : undefined}

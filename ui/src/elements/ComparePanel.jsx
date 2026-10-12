@@ -272,16 +272,14 @@ function DriftSummary({ tableA, tableB, driftA, driftB, single }) {
  *  - initialSpec: the comparison object to open on - see ui/src/utils/comparisonSpec.js. Its a and b are
  *    node tables, a folded run already resolved to its tail. Read once: the panel owns its settings after.
  *    The same table as both a and b is a single-node comparison: one node's plots, measured against root.
- *  - restrict: what a plot-view sub-node fixed, or null for every option - {kinds: plot kind ids offered, or
- *    null for all; columns: {[kind]: {x, y}} for each kind whose columns are fixed}. See PlotViewSupport.jsx
  *  - placement: "docked" or "window", which decides whether it offers to pop out or to dock
- *  - savedTo: the graph nodes this comparison is kept on as plot-view sub-nodes, or null when it is not
+ *  - savedTo: the graph nodes this comparison is kept on as compare sub-nodes, or null when it is not
  *  - onSpecChange: called with the comparison object once its settings settle, while it is kept on any
  *  - onSave: called with the comparison object to keep it on its nodes; offered while savedTo is null
  *  - onPopOut, onDock, onClose: CompareContext's own, called straight from their buttons' clicks
  */
 export default function ComparePanel({
-    initialSpec, restrict = null, placement, savedTo = null, onSpecChange, onSave, onPopOut, onDock, onClose,
+    initialSpec, placement, savedTo = null, onSpecChange, onSave, onPopOut, onDock, onClose,
 }) {
     const { nodes, serverNodesById } = usePgraph();
     const hostWindow = useHostWindow();
@@ -341,10 +339,7 @@ export default function ComparePanel({
             : Math.abs(b.delta) - Math.abs(a.delta))),
     [attributes, metricsRoot, metricsA, metricsB, distortionA, distortionB, rankBy, errorDeltaId, single]);
 
-    // The plot kinds on offer - every one, unless a sub-node chose which - and the one drawn among them
-    const kinds = PLOT_KINDS.filter((option) => !restrict?.kinds || restrict.kinds.includes(option.id));
-    const [kindChoice, setKind] = useState(initialSpec.kind);
-    const kind = kinds.some((option) => option.id === kindChoice) ? kindChoice : kinds[0].id;
+    const [kind, setKind] = useState(initialSpec.kind);
     /* What the Drift views measure from: root, or the two selections' common ancestor - which leaves out the
        history they share, so only what happened after their branches parted is drawn. When they only meet at
        root the two are the same, and the choice is kept for a pair where they are not. */
@@ -365,13 +360,9 @@ export default function ComparePanel({
     ];
     /* A new comparison opens on what moved most. When nothing moved the ranking is empty, so it falls back to
        the attributes themselves rather than leaving the panel with nothing to plot. */
-    const [xChoice, setX] = useState(() => initialSpec.x || (ranked[0]?.name ?? attributes[0] ?? ""));
-    const [yChoice, setY] = useState(() => initialSpec.y
+    const [x, setX] = useState(() => initialSpec.x || (ranked[0]?.name ?? attributes[0] ?? ""));
+    const [y, setY] = useState(() => initialSpec.y
         || (ranked[1]?.name ?? ranked[0]?.name ?? attributes[1] ?? attributes[0] ?? ""));
-    // A sub-node can fix the column - or a heatmap's two - for each kind it offers
-    const locked = restrict?.columns?.[kind] ?? null;
-    const x = locked?.x || xChoice;
-    const y = locked?.y || yChoice;
     const [view, setView] = useState(initialSpec.view);
     const [measure, setMeasure] = useState(initialSpec.measure);
 
@@ -500,7 +491,7 @@ export default function ComparePanel({
                 <div className="compare-actions">
                     {/* Once kept on its nodes it follows along by itself, so there is nothing more to save */}
                     {savedTo ? (
-                        <span className="compare-saved" title="Changes here carry over to the plot-view sub-nodes it is kept on">
+                        <span className="compare-saved" title="Changes here carry over to the compare sub-nodes it is kept on">
                             Kept on {savedTo.map(nodeName).join(", ")}
                         </span>
                     ) : onSave && (
@@ -509,7 +500,7 @@ export default function ComparePanel({
                             className="compare-action"
                             onClick={() => onSave(currentSpec)}
                             disabled={!x}
-                            title="Keep this comparison beside both nodes in the graph, as plot-view sub-nodes"
+                            title="Keep this comparison beside both nodes in the graph, as compare sub-nodes"
                         >
                             Save
                         </button>
@@ -535,16 +526,12 @@ export default function ComparePanel({
                         <NodeRow role="b" table={tableB} rows={rowsB} label={single ? "This node" : undefined} />
                     </section>
 
-                    {/* A sub-node that settled on one kind has no other to switch to */}
-                    {kinds.length > 1 && (
-                        <section className="compare-section">
-                            <h3 className="compare-section-title">Plot</h3>
-                            <Segmented label="Plot type" options={kinds} value={kind} onChange={setKind} />
-                        </section>
-                    )}
+                    <section className="compare-section">
+                        <h3 className="compare-section-title">Plot</h3>
+                        <Segmented label="Plot type" options={PLOT_KINDS} value={kind} onChange={setKind} />
+                    </section>
 
-                    {/* Hidden once a sub-node fixed the column, as the most-changed list below is */}
-                    {!locked && <section className="compare-section">
+                    <section className="compare-section">
                         <h3 className="compare-section-title">{spec.axes === 1 ? "Attribute" : "Attributes"}</h3>
                         {attributes.length === 0 ? (
                             <div className="compare-muted">These nodes carry no attribute metrics.</div>
@@ -561,7 +548,7 @@ export default function ComparePanel({
                                 )}
                             </>
                         )}
-                    </section>}
+                    </section>
 
                     {/* One node is only ever measured from root */}
                     {kind === "drift" && !single && (
@@ -634,8 +621,7 @@ export default function ComparePanel({
                         />
                     </section>
 
-                    {/* For picking a column, so it goes once a sub-node has fixed it */}
-                    {ranked.length > 0 && !locked && (
+                    {ranked.length > 0 && (
                         <section className="compare-section">
                             <h3 className="compare-section-title">Most changed attributes</h3>
                             <Segmented label="Rank attributes by" options={RANKINGS} value={rankBy} onChange={setRankBy} />

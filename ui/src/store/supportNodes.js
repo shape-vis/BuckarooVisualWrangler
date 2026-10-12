@@ -20,6 +20,9 @@ import {anchorOf, getSupportType} from "../graph_objects/supportNodes/registry.j
  * so hiding never touches what would be saved. A host's own eye hides all of its sub-nodes - beside it and
  * beside its incoming edge; the graph's two toggles hide every side sub-node, or every edge sub-node, at once.
  */
+// The drag data type a sub-node dragged in from outside the graph carries - a Quality panel card sets it
+export const SUPPORT_DRAG_TYPE = "application/x-buckaroo-support";
+
 export function useSupportNodes() {
     const [supportNodes, setSupportNodes] = useState([]);
     const [supportModalHost, setSupportModalHost] = useState(null);
@@ -109,11 +112,19 @@ export function useSupportNodes() {
     const openSupportModal = useCallback((hostId) => setSupportModalHost(hostId), []);
     const closeSupportModal = useCallback(() => setSupportModalHost(null), []);
 
+    /* A sub-node being dragged in from outside the graph - a Quality panel sparkline - or null. While it is set
+       the graph draws a drop zone over its host's group (see SupportDropZone), and dropping there adds it:
+       {hostId, kind, config}. */
+    const [supportDrag, setSupportDrag] = useState(null);
+    const startSupportDrag = useCallback((payload) => setSupportDrag(payload), []);
+    const endSupportDrag = useCallback(() => setSupportDrag(null), []);
+
     return {
         supportNodes, addSupportNode, updateSupportNode, removeSupportNode,
         supportModalHost, openSupportModal, closeSupportModal,
         supportCountByHost, hiddenSupportHosts, setSupportHidden, toggleSupportHidden,
         supportCountByAnchor, isSupportShown,
         hideAllNodeSupports, setHideAllNodeSupports, hideAllEdgeSupports, setHideAllEdgeSupports,
+        supportDrag, startSupportDrag, endSupportDrag,
     };
 }

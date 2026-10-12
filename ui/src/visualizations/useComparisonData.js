@@ -1,5 +1,5 @@
 // useComparisonData.js
-// Fetches what a comparison plots, for the compare panel and the plot-view sub-node alike, so the two draw
+// Fetches what a comparison plots, for the compare panel and the compare sub-node alike, so the two draw
 // the same data the same way.
 
 import { useEffect, useState } from "react";
