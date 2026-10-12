@@ -163,21 +163,6 @@ export function collapsedNodeIds(collapsedRuns) {
     return ids;
 }
 
-/* Prospective nodes - wrangles that have not happened yet, drawn in the graph but not part of it. Each
-   comes from a source: "ai" for the AI's suggestions, "repair" for the previews of repairing a selection.
-
-   They carry an id that cannot collide with a table name: real node tables are named
-   "n{digit}{letter}_{base}", and a colon is not a legal character in one. Collapsed placeholders
-   already use the same trick with "collapsed:". */
-export const PROSPECTIVE_PREFIX = "prospect:";
-
-export const prospectiveId = (parentId, index, source) => `${PROSPECTIVE_PREFIX}${source}:${parentId}:${index}`;
-
-/* Several handlers take a node id and hand it to the server as a table name - navigating to a
-   node, resolving a branch, folding a run. A prospective node has no table behind it, so every
-   one of those has to be able to recognise and skip it. */
-export const isProspectiveId = (id) => String(id ?? "").startsWith(PROSPECTIVE_PREFIX);
-
 /* Supporting sub-nodes - nodes a user hangs beside a real node to support reading it. They are their
    own kind, not suggestions, so they have their own prefix and their own check: whatever suggestions
    become, sub-nodes are never a table and never part of the tree.

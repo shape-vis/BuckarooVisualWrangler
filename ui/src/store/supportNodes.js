@@ -109,6 +109,12 @@ export function useSupportNodes() {
         setSupportNodes((current) => current.filter((record) => record.id !== id));
     }, []);
 
+    // Every sub-node of these hosts - for a candidate that is declined, whose node is gone with it
+    const removeSupportNodesOf = useCallback((hostIds) => {
+        const gone = new Set(hostIds);
+        setSupportNodes((current) => current.filter((record) => !gone.has(record.hostId)));
+    }, []);
+
     const openSupportModal = useCallback((hostId) => setSupportModalHost(hostId), []);
     const closeSupportModal = useCallback(() => setSupportModalHost(null), []);
 
@@ -120,7 +126,7 @@ export function useSupportNodes() {
     const endSupportDrag = useCallback(() => setSupportDrag(null), []);
 
     return {
-        supportNodes, addSupportNode, updateSupportNode, removeSupportNode,
+        supportNodes, addSupportNode, updateSupportNode, removeSupportNode, removeSupportNodesOf,
         supportModalHost, openSupportModal, closeSupportModal,
         supportCountByHost, hiddenSupportHosts, setSupportHidden, toggleSupportHidden,
         supportCountByAnchor, isSupportShown,

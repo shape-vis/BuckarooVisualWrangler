@@ -2,33 +2,39 @@ import { useContext } from "react";
 import { SelectionContext } from "../store/SelectionContext.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useRepair } from "../store/RepairContext.jsx";
+import { useCandidates } from "../store/CandidatesContext.jsx";
 import PreviewCard from "./PreviewCard.jsx";
 import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
-import {usePgraph} from "../store/PGraphContext.jsx";
+import { usePgraph } from "../store/PGraphContext.jsx";
+import { nodeName } from "../utils/comparison.js";
 
-/* A candidate's card title: a lone impute is just "Impute", while a two-column selection's imputes name
-   the column each fills */
-function cardLabel(entry) {
-  if (entry.op === "delete") return "Delete Preview";
-  return entry.cols?.length > 1 ? `Impute "${entry.column}" Preview` : "Impute Preview";
-}
+// What each source calls its candidates
+const SOURCE_TAGS = { repair: "Repair", ai: "AI" };
 
 /**
- * The repair candidates for the current selection, as preview charts. The same candidates hang off the
- * current node in the graph - see RepairContext - so executing one here, or accepting or declining one there,
- * is reflected in both. Asking for repairs no longer opens this panel; it is here for a closer look.
+ * Every candidate staged on the graph - repairs of a selection and the AI's suggestions alike - as preview
+ * charts, grouped by the node each hangs off. The same candidates are drawn in the graph, where they can also be
+ * navigated to, compared and given supporting sub-nodes; accepting or declining one here or there is the same.
  */
 export default function RepairPanel() {
-  // global contexts for this component
   const { tableName } = useTableName();
   const { highlightedRowIds, highlightedCols } = useContext(SelectionContext);
-  const { busy, repairEntries, acceptRepair, repairError } = useRepair();
-  const {serverNodesById} = usePgraph();
+  const { busy, repairError, repairLocked } = useRepair();
+  const { candidates, acceptCandidate, declineCandidate, declineAll, busy: deciding, busyId } = useCandidates();
+  const { serverNodesById } = usePgraph();
   // The current table's size, from the metrics its graph node already carries
   const totalRows = serverNodesById?.[tableName]?.data?.metrics?.row_count;
 
   const hasSelection = highlightedRowIds && highlightedRowIds.length > 0;
+
+  // Candidates by the node they hang off, in the order they were staged
+  const groups = new Map();
+  candidates.forEach((node) => {
+    const parent = node.data?.parent;
+    if (!groups.has(parent)) groups.set(parent, []);
+    groups.get(parent).push(node);
+  });
 
   // The dock owns the panel chrome - tab strip, collapsing and resizing - so this renders bare content
   return (
@@ -44,6 +50,13 @@ export default function RepairPanel() {
             : "No selection — click a point, bin, or bar in the plots."}
         </div>
 
+        {/* Nothing is repaired from a candidate until it is accepted */}
+        {repairLocked && (
+          <div className="repair-locked">
+            {nodeName(tableName)} is a candidate. Accept it before repairing from it.
+          </div>
+        )}
+
         {/* ── Feedback ─────────────────────────────────────────────────── */}
         {busy && (
           <div className="repair-feedback-centered">
@@ -53,29 +66,66 @@ export default function RepairPanel() {
             </div>
           </div>
         )}
-        {!busy && repairEntries.length > 0 && !repairError && (
-          <div className="repair-feedback-centered repair-success">
-            Previews generated - also shown as candidate nodes in the graph
-          </div>
-        )}
         {repairError && (
           <div className="repair-error">
             Error: {repairError}
           </div>
         )}
 
-        {/* ── Preview area ──────────────────────────────────────────────── */}
+        {/* ── Candidates, by the node they hang off ─────────────────────── */}
         <div id="preview-area" className="toolbox-preview-area">
-          {repairEntries.map((entry) => (
-            <PreviewCard
-              key={entry.id}
-              label={cardLabel(entry)}
-              tableName={entry.previewTable}
-              cols={entry.cols}
-              errorColors={ERROR_COLORS}
-              chartType={entry.chartType}
-              onExecuteWrangle={() => acceptRepair(entry.id)}
-            />
+          {candidates.length === 0 && !busy && (
+            <div className="repair-feedback-centered">No candidates staged. Select rows and press Repair.</div>
+          )}
+          {[...groups].map(([parent, nodes]) => (
+            <div key={parent} className="repair-candidate-group">
+              <div className="repair-candidate-group-head">
+                <span>From {nodeName(parent)}</span>
+                <button
+                  type="button"
+                  className="repair-candidate-btn"
+                  onClick={() => declineAll(parent)}
+                  disabled={deciding}
+                  title={`Decline every candidate under ${nodeName(parent)}`}
+                >
+                  Decline all
+                </button>
+              </div>
+              {nodes.map((node) => {
+                const candidate = node.data.candidate ?? {};
+                return (
+                  <div key={node.id} className="repair-candidate">
+                    <PreviewCard
+                      label={`${SOURCE_TAGS[candidate.source] ?? "Candidate"} · ${nodeName(node.id)} · ${candidate.label ?? ""}`}
+                      tableName={node.id}
+                      cols={candidate.cols ?? []}
+                      errorColors={ERROR_COLORS}
+                      chartType={candidate.chart_type}
+                    />
+                    <div className="repair-candidate-actions">
+                      <button
+                        type="button"
+                        className="repair-candidate-btn repair-candidate-btn--accept"
+                        onClick={() => acceptCandidate(node.id)}
+                        disabled={deciding}
+                        title="Accept this wrangle and cement it into the graph"
+                      >
+                        {busyId === node.id ? "Working…" : "Accept"}
+                      </button>
+                      <button
+                        type="button"
+                        className="repair-candidate-btn"
+                        onClick={() => declineCandidate(node.id)}
+                        disabled={deciding}
+                        title="Decline this candidate"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ))}
         </div>
       </div>

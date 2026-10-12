@@ -1,0 +1,269 @@
+"""
+Candidates: wrangles staged as provisional pgraph nodes before they are accepted - see
+app/server_utils/candidates.py.
+
+A candidate is a full node of the graph - a child of its parent, with its edge, scored for the Pareto front,
+reachable by undo and redo, navigable - with its own table, errors, profile, rankings, metrics and drift. The
+one thing it cannot be is wrangled from. Accepting it renames nothing: it keeps its table and only gets its
+label. These run against a real graph, through the same routes the app calls.
+
+Replaces the old preview tests: the rows a repair removes or fills are checked here, on the candidates that
+now hold them.
+"""
+import pytest
+import pandas as pd
+from sqlalchemy import text as sa_text
+
+import app
+from app import engine, db_operations
+from app import app as flask_app
+from app.routes.wrangler_routes_sql import update_errors_table
+from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
+
+ROOT = "n0a_cands"
+
+
+def _drop_all(*tables):
+    with engine.begin() as conn:
+        for t in tables:
+            for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
+                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
+
+
+def _table_exists(name):
+    with engine.connect() as conn:
+        return conn.execute(sa_text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :n)"
+        ), {"n": name}).scalar()
+
+
+def _read(table):
+    return pd.read_sql_query(f'SELECT * FROM "{table}" ORDER BY "ID"', engine)
+
+
+def _make_root(data):
+    pd.DataFrame(data).to_sql(ROOT, engine, if_exists="replace", index=False)
+    update_errors_table(ROOT)
+    build_data_profile_table(ROOT)
+    init_pgraph_for_session(ROOT)
+    db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
+
+
+NUMERIC = {"ID": list(range(1, 11)),
+           "x": [10.0, None, 30.0, 40.0, None, 60.0, 70.0, 80.0, 90.0, 100.0],
+           "y": [1.0, 2.0, None, 4.0, 5.0, 6.0, None, 8.0, 9.0, 10.0]}
+
+
+@pytest.fixture
+def graph():
+    yield
+    tables = list(getattr(app, "pgraph_for_session", None).node_map.keys()) \
+        if getattr(app, "pgraph_for_session", None) is not None else []
+    app.pgraph_for_session = None
+    _drop_all(ROOT, *tables)
+
+
+@pytest.fixture
+def client():
+    return flask_app.test_client()
+
+
+def _stage(client, row_ids, cols, source=None):
+    body = {"row_ids": row_ids, "cols": cols}
+    if source:
+        body["source"] = source
+    resp = client.post("/api/wrangle/create-previews", json=body)
+    assert resp.status_code == 200, resp.get_json()
+    return {c["op"]: c for c in resp.get_json()["candidates"]}
+
+
+def _graph():
+    return app.pgraph_for_session
+
+
+# ─── Staging ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.sql
+def test_a_1d_selection_stages_a_delete_and_an_impute(graph, client):
+    _make_root(NUMERIC)
+    staged = _stage(client, [2, 5], ["x"])
+
+    assert set(staged) == {"delete", "impute"}
+    for candidate in staged.values():
+        table = candidate["table"]
+        assert table.startswith("c") and table.endswith("_cands")
+        assert candidate["source"] == "repair" and candidate["chart_type"] == "histogram"
+        assert candidate["row_count"] == 2
+
+        node = _graph().node_map[table]
+        assert node.provisional and node.parent_table == ROOT
+        assert table in _graph().node_map[ROOT].children
+        assert node.metrics is not None and node.distortion is not None
+        # Everything an accepted node has, so it can be navigated to
+        for companion in (table, f"errors_{table}", f"dp_{table}", f"rankings_{table}"):
+            assert _table_exists(companion), companion
+
+    # Staging takes no label and does not move the session
+    assert _graph().node_count == 1
+    assert _graph().current_node_table_name == ROOT
+    assert db_operations.main_table_name == ROOT
+
+    deleted = _read(staged["delete"]["table"])
+    assert len(deleted) == 8 and not {2, 5} & set(deleted["ID"])
+    imputed = _read(staged["impute"]["table"])
+    assert imputed["x"].notna().all()
+    # The parent is never touched
+    assert _read(ROOT)["x"].isna().sum() == 2
+
+
+@pytest.mark.sql
+def test_a_2d_impute_fills_only_its_own_column(graph, client):
+    _make_root(NUMERIC)
+    staged = _stage(client, [2, 3, 5, 7], ["x", "y"], source="scatterplot")
+
+    assert set(staged) == {"delete", "impute_x", "impute_y"}
+    assert staged["impute_x"]["chart_type"] == "scatterplot"
+    x_filled = _read(staged["impute_x"]["table"])
+    assert x_filled["x"].notna().all() and x_filled["y"].isna().sum() == 2
+    y_filled = _read(staged["impute_y"]["table"])
+    assert y_filled["y"].notna().all() and y_filled["x"].isna().sum() == 2
+
+
+@pytest.mark.sql
+def test_a_categorical_impute_fills_with_the_most_common_value(graph, client):
+    _make_root({"ID": [1, 2, 3, 4, 5], "c": ["a", "a", None, "b", None]})
+    imputed = _read(_stage(client, [3, 5], ["c"])["impute"]["table"])
+    assert list(imputed["c"]) == ["a", "a", "a", "b", "a"]
+
+
+@pytest.mark.sql
+def test_its_edge_is_marked_provisional(graph, client):
+    _make_root(NUMERIC)
+    table = _stage(client, [2], ["x"])["delete"]["table"]
+
+    edge = next(e for e in _graph().serialize_edges() if e["target"] == table)
+    assert edge["data"]["provisional"] is True
+    node = next(n for n in _graph().serialize_nodes() if n["id"] == table)
+    assert node["data"]["provisional"] is True
+    assert node["data"]["label"] == table.split("_")[0]
+
+
+@pytest.mark.sql
+def test_the_compare_endpoints_take_a_candidate(graph, client):
+    _make_root(NUMERIC)
+    table = _stage(client, [2, 5], ["x"])["impute"]["table"]
+
+    compare = client.get("/api/pgraph/compare", query_string={"a": ROOT, "b": table, "kind": "histogram", "x": "x"})
+    assert compare.status_code == 200, compare.get_json()
+    drift = client.get("/api/pgraph/drift_detail", query_string={"node": table, "column": "x"})
+    assert drift.status_code == 200, drift.get_json()
+
+
+# ─── Accepting and declining ─────────────────────────────────────────────────
+
+@pytest.mark.sql
+def test_accepting_publishes_it_and_leaves_its_siblings(graph, client):
+    _make_root(NUMERIC)
+    staged = _stage(client, [2, 5], ["x"])
+    table = staged["impute"]["table"]
+
+    body = client.post("/api/candidates/accept", json={"table": table}).get_json()
+
+    assert body == {"success": True, "table": table, "label": "n0b", "parent": ROOT}
+    node = _graph().node_map[table]
+    assert not node.provisional and node.label == "n0b"
+    assert _graph().node_count == 2
+    assert _graph().current_node_table_name == table
+    assert db_operations.main_table_name == table
+    # The sibling is still staged under the same parent
+    assert _graph().node_map[staged["delete"]["table"]].provisional
+
+
+@pytest.mark.sql
+def test_declining_drops_it_and_its_name_is_never_reused(graph, client):
+    _make_root(NUMERIC)
+    first = _stage(client, [2], ["x"])
+    table = first["delete"]["table"]
+
+    body = client.post("/api/candidates/discard", json={"tables": [table]}).get_json()
+
+    assert body["success"] is True
+    assert table not in _graph().node_map
+    assert table not in _graph().node_map[ROOT].children
+    assert not _table_exists(table) and not _table_exists(f"errors_{table}")
+
+    later = _stage(client, [2], ["x"])
+    assert table not in {c["table"] for c in later.values()}
+
+
+@pytest.mark.sql
+def test_declining_the_current_node_moves_the_session_to_its_parent(graph, client):
+    _make_root(NUMERIC)
+    table = _stage(client, [2], ["x"])["delete"]["table"]
+    client.post("/api/setGraphToClickedNode", json={"nodeId": table})
+    assert db_operations.main_table_name == table
+
+    body = client.post("/api/candidates/discard", json={"tables": [table]}).get_json()
+
+    assert body["current"] == ROOT
+    assert _graph().current_node_table_name == ROOT
+    assert db_operations.main_table_name == ROOT
+
+
+@pytest.mark.sql
+def test_reset_drops_every_candidate(graph, client):
+    _make_root(NUMERIC)
+    tables = [c["table"] for c in _stage(client, [2], ["x"]).values()]
+
+    client.post("/api/reset")
+
+    for table in tables:
+        assert not _table_exists(table)
+
+
+# ─── A node like any other ───────────────────────────────────────────────────
+
+@pytest.mark.sql
+def test_pareto_scores_it_as_a_leaf_and_its_parent_stops_being_one(graph, client):
+    _make_root(NUMERIC)
+    tables = {c["table"] for c in _stage(client, [2], ["x"]).values()}
+
+    scored = set(_graph().pareto()["scored"])
+    assert tables <= scored
+    assert ROOT not in scored
+
+
+@pytest.mark.sql
+def test_navigating_to_it_and_back(graph, client):
+    _make_root(NUMERIC)
+    table = _stage(client, [2], ["x"])["impute"]["table"]
+
+    resp = client.post("/api/setGraphToClickedNode", json={"nodeId": table})
+    assert resp.status_code == 200, resp.get_json()
+    assert _graph().current_node_table_name == table
+    assert _graph().prev_node_table_name == ROOT
+    assert _graph().next_node_table_name is None
+    assert db_operations.main_table_name == table
+
+    undo = client.post("/api/undo").get_json()
+    assert undo["success"] is True and db_operations.main_table_name == ROOT
+
+    # Redo from the parent steps into its last child, candidate or not
+    redo = client.post("/api/redo").get_json()
+    assert redo["success"] is True and db_operations.main_table_name == table
+
+
+@pytest.mark.sql
+def test_nothing_is_wrangled_from_a_candidate_until_it_is_accepted(graph, client):
+    _make_root(NUMERIC)
+    table = _stage(client, [2, 5], ["x"])["impute"]["table"]
+    client.post("/api/setGraphToClickedNode", json={"nodeId": table})
+
+    refused = client.post("/api/wrangle/create-previews", json={"row_ids": [1], "cols": ["x"]})
+    assert refused.status_code == 409
+    assert "Accept this candidate" in refused.get_json()["error"]
+    assert client.post("/api/wrangle/delete-column", json={"column": "y"}).status_code == 409
+    assert client.post("/api/ai/suggest", json={"node_table": table}).status_code == 409
+
+    client.post("/api/candidates/accept", json={"table": table})
+    assert client.post("/api/wrangle/create-previews", json={"row_ids": [1], "cols": ["x"]}).status_code == 200

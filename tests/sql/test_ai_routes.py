@@ -1,5 +1,6 @@
 """
-The two endpoints, with the model stubbed out.
+The AI endpoints, with the model stubbed out. A suggestion is staged as a candidate - a provisional node - and
+accepted through /api/candidates/accept, as a repair of the user's selection is.
 
 The network call is the only part of the workflow that cannot be tested offline, so it is the
 only part replaced here: everything downstream of "the model said to call these tools" is real -
@@ -50,6 +51,9 @@ def _make_root(flags):
 def graph():
     created = [ROOT]
     yield created
+    # Candidates and the nodes they became have tables of their own
+    if getattr(app, "pgraph_for_session", None) is not None:
+        created.extend(app.pgraph_for_session.node_map.keys())
     app.pgraph_for_session = None
     _drop_all(*created)
 
@@ -81,13 +85,18 @@ def test_suggest_returns_validated_suggestions(graph, stub_model):
     body = resp.get_json()
 
     assert body["success"] is True
-    assert len(body["suggestions"]) == 2
-    first = body["suggestions"][0]
-    assert first["op"] == "impute_rows"
-    assert first["columns"] == ["a"]
+    assert len(body["candidates"]) == 2
+    first = body["candidates"][0]
+    assert first["source"] == "ai"
+    assert first["suggestion"]["op"] == "impute_rows"
+    assert first["cols"] == ["a"]
     assert first["row_count"] == 1, "the count is resolved server-side, not taken from the model"
     assert first["label"] == "impute · a"
     assert first["reason"] == "One blank age."
+    assert first["chart_type"] == "histogram"
+    # Staged as a provisional node under the root, its wrangle already run on its own table
+    node = app.pgraph_for_session.node_map[first["table"]]
+    assert node.provisional and node.parent_table == ROOT
 
 
 @pytest.mark.sql
@@ -107,8 +116,8 @@ def test_suggest_drops_what_it_cannot_run(graph, stub_model):
         "/api/ai/suggest", json={"node_table": ROOT}
     ).get_json()
 
-    assert [s["op"] for s in body["suggestions"]] == ["impute_rows"]
-    assert body["suggestions"][0]["columns"] == ["b"]
+    assert [c["suggestion"]["op"] for c in body["candidates"]] == ["impute_rows"]
+    assert body["candidates"][0]["cols"] == ["b"]
 
 
 @pytest.mark.sql
@@ -121,7 +130,7 @@ def test_suggest_honours_no_suggestions(graph, stub_model):
     ).get_json()
 
     assert body["no_suggestions"] == "Everything looks clean."
-    assert "suggestions" not in body
+    assert "candidates" not in body
 
 
 @pytest.mark.sql
@@ -137,41 +146,31 @@ def test_suggest_does_not_move_the_session(graph, stub_model):
 
 
 @pytest.mark.sql
-def test_accept_runs_the_wrangle(graph, stub_model):
+def test_accepting_a_suggestion_runs_the_wrangle(graph, stub_model):
     _make_root([(3, "a", "missing")])
+    stub_model([{"name": "impute_rows",
+                 "args": {"column": "a", "error_type": "missing", "reason": "x"}}])
+    client = flask_app.test_client()
 
-    body = flask_app.test_client().post("/api/ai/accept", json={
-        "node_table": ROOT,
-        "suggestion": {"op": "impute_rows", "column": "a", "error_type": "missing"},
-    }).get_json()
-    graph.append(body["table"])
+    staged = client.post("/api/ai/suggest", json={"node_table": ROOT}).get_json()["candidates"][0]
+    body = client.post("/api/candidates/accept", json={"table": staged["table"]}).get_json()
 
     assert body["success"] is True
-    assert app.pgraph_for_session.node_map[body["table"]].parent_table == ROOT
+    assert body["table"] == staged["table"], "accepting renames nothing"
+    assert body["label"] == "n0b"
+    assert not app.pgraph_for_session.node_map[body["table"]].provisional
     after = pd.read_sql_query(f'SELECT * FROM "{body["table"]}" ORDER BY "ID"', engine)
     assert after.loc[after["ID"] == 3, "a"].iloc[0] == pytest.approx(50.0)
 
 
 @pytest.mark.sql
-def test_accept_revalidates_instead_of_trusting_the_client(graph):
-    """A payload the model could never have produced is refused, not run."""
+def test_accept_only_takes_a_candidate(graph):
+    """Nothing but a staged candidate can be accepted - not a node that already is one, not a stranger."""
     _make_root([(3, "a", "missing")])
     client = flask_app.test_client()
 
-    forged = client.post("/api/ai/accept", json={
-        "node_table": ROOT,
-        "suggestion": {"op": "impute_rows", "column": "a; DROP TABLE students",
-                       "error_type": "missing"},
-    })
-    assert forged.status_code == 422
-    assert "no such column" in forged.get_json()["error"]
-
-    bad_op = client.post("/api/ai/accept", json={
-        "node_table": ROOT,
-        "suggestion": {"op": "truncate_everything", "column": "a", "error_type": "missing"},
-    })
-    assert bad_op.status_code == 422
-
+    assert client.post("/api/candidates/accept", json={"table": ROOT}).status_code == 409
+    assert client.post("/api/candidates/accept", json={"table": "c99_nothing"}).status_code == 409
     # The table is untouched by either attempt
     assert len(pd.read_sql_query(f'SELECT * FROM "{ROOT}"', engine)) == 10
 
@@ -222,12 +221,10 @@ def test_endpoints_survive_a_session_with_no_graph_yet(monkeypatch):
     assert ai_wrangle.known_node("anything") is False
 
     client = flask_app.test_client()
-    for route, payload in (
-        ("/api/ai/suggest", {"node_table": "anything"}),
-        ("/api/ai/accept", {"node_table": "anything",
-                            "suggestion": {"op": "impute_rows", "column": "a",
-                                           "error_type": "missing"}}),
-    ):
-        resp = client.post(route, json=payload)
-        assert resp.status_code == 400, f"{route} returned {resp.status_code}"
-        assert "not a node" in resp.get_json()["error"]
+    resp = client.post("/api/ai/suggest", json={"node_table": "anything"})
+    assert resp.status_code == 400
+    assert "not a node" in resp.get_json()["error"]
+
+    resp = client.post("/api/candidates/accept", json={"table": "anything"})
+    assert resp.status_code == 409
+    assert "no graph" in resp.get_json()["error"]

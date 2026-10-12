@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { createTooltip } from "../utils/visCommon.jsx";
 import { formatDrift, formatDriftDelta } from "../utils/drift.js";
+import { nodeName } from "../utils/comparison.js";
 import "../styles/Sparkline.css";
 
 /**
@@ -54,9 +55,8 @@ const FORMATS = {
   },
 };
 
-// Axis labels have to fit in a few pixels, and a table name is mostly a prefix shared with every
-// other node - the leading "n0a" is the part that identifies it
-const shortNodeId = (nodeId) => String(nodeId ?? "").split("_")[0];
+// Axis labels have to fit in a few pixels, so each node goes by its label - "n0a", or a candidate's "c7"
+const shortNodeId = (nodeId) => nodeName(String(nodeId ?? ""));
 
 export default function Sparkline({
   values = [], deltas = [], nodeIds = [], color = "steelblue", collapsedNodeIds,

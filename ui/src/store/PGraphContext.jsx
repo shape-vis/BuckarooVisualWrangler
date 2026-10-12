@@ -15,12 +15,13 @@ import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/serverCalls.jsx";
 import {useDock} from "./DockContext.jsx";
 import {descendantsOf, orderCollapsibleRun, collapsedRunId, applyCollapse,
-        isProspectiveId, isSupportId} from "../utils/graphTopology.js";
+        isSupportId} from "../utils/graphTopology.js";
 import {SupportNode} from "../graph_objects/supportNodes/SupportNode.jsx";
 import {SupportGroup} from "../graph_objects/supportNodes/SupportGroup.jsx";
 import {SupportDropZone} from "../graph_objects/supportNodes/SupportDropZone.jsx";
 import {EDGE_GAP, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf} from "../graph_objects/supportNodes/supportLayout.js";
 import {useSupportNodes} from "./supportNodes.js";
+import {setNodeLabels} from "../utils/comparison.js";
 import "../styles/Nodes.css"
 
 
@@ -35,10 +36,12 @@ const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 200;
 const nodeHeight = 100;
 
-/* A prospective node that draws its preview chart - a repair candidate - is about three cards tall: its
-   title, rows and reason, the chart, and its buttons. Dagre reserves that, so the chart does not run into
-   the rank below. */
-const PREVIEW_FOOTPRINT = {height: 310};
+/* A candidate draws its preview chart, so it is about three cards tall: its title, rows and reason, the chart,
+   its buttons and the node tools. Dagre reserves that, so the chart does not run into the rank below. */
+const PREVIEW_FOOTPRINT = {height: 340};
+
+// The edge into a candidate: dashed, since its wrangle has not been accepted
+const PROVISIONAL_EDGE_STYLE = {stroke: "#7c3aed", strokeDasharray: "6 4"};
 
 // Gaps between siblings, between ranks, and between edges sharing a rank. Ranks get the most room:
 // that is where the edge labels sit, and where the magnifier's readout hangs.
@@ -95,20 +98,17 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
         edgesep: EDGE_SEPARATION,
     });
 
-    /* Nodes we build ourselves keep the type and label they were built with. Everything else is
-       a node the server sent, which is retyped and re-labelled below. A collapsed placeholder
-       stands in for a run; a prospective node stands in for a wrangle that has not happened. */
+    /* Nodes we build ourselves keep the type they were built with. Everything else is a node the server
+       sent, which is typed below. A collapsed placeholder stands in for a run; a candidate is drawn as a
+       prospective node - a staged wrangle, with its preview and its Accept and Decline. Labels are the server's
+       own short ones - n0b, c7 - so they need no shortening. */
     const PRESERVED_TYPES = new Set(["collapsedNode", "prospectiveNode"]);
     const isPreserved = (node) => PRESERVED_TYPES.has(node.type);
 
     nodes.forEach((node) => {
         if (!isPreserved(node)) {
-            // A table name too long to fit collapses to just its node id, which is 3 characters under
-            // the n{digit}{letter} scheme - n0a, n1b, ... - not the 2 the old n{count} scheme needed
-            if (node.data.label.length > 20) {
-                node.data.label = node.data.label.slice(0, 3)
-            }
-            node.type = "noteNode"
+            node.type = node.data?.provisional ? "prospectiveNode" : "noteNode";
+            if (node.data?.provisional) node.data.footprint = PREVIEW_FOOTPRINT;
         }
         // A node that draws taller than a card - a repair candidate with its preview chart - says so
         const height = node.data?.footprint?.height ?? nodeHeight;
@@ -156,7 +156,13 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
     /* The server sends type "edgeType", which is not a registered edge type - React Flow silently
        falls back to its bezier default. Name that default outright so the curve is a choice rather
        than a fallback, and so it cannot change under us. */
-    const newEdges = edges.map((edge) => ({...edge, type: "default", style: {...edge.style, strokeWidth: TREE_EDGE_WIDTH}}));
+    const newEdges = edges.map((edge) => ({
+        ...edge,
+        type: "default",
+        // An edge into a candidate is dashed and does not animate: its wrangle has not been accepted yet
+        ...(edge.data?.provisional ? {animated: false} : {}),
+        style: {...edge.style, ...(edge.data?.provisional ? PROVISIONAL_EDGE_STYLE : {}), strokeWidth: TREE_EDGE_WIDTH},
+    }));
 
     return {nodes: newNodes, edges: newEdges};
 };
@@ -254,11 +260,11 @@ export function PGraphProvider({children}) {
     /* Where the branch is allowed to end: the chosen edge's target and everything below it. Computed
        here from the edges the UI already holds, so the graph can show which nodes are pickable
        without a round trip. The server validates the choice independently. */
-    /* descendantsOf now walks the suggestion edges too, so filter them back out - a suggestion
-       is not somewhere a branch can end. Links out to supporting sub-nodes are not walked at all. */
+    /* Anywhere below the start edge, a candidate included - it is a node of the graph like any other. Links
+       out to supporting sub-nodes are not walked at all. */
     const eligibleDestinations = useMemo(
         () => (branchSelection.target
-            ? new Set([...descendantsOf(treeEdgesOf(edges), branchSelection.target)].filter((id) => !isProspectiveId(id)))
+            ? new Set(descendantsOf(treeEdgesOf(edges), branchSelection.target))
             : new Set()),
         [edges, branchSelection.target]
     );
@@ -302,19 +308,6 @@ export function PGraphProvider({children}) {
     const [analysisStyle, setAnalysisStyle] = useState("full");
     const [analysisMetric, setAnalysisMetric] = useState("total");
 
-    /* Prospective wrangles, drawn as nodes hanging off the node they were asked for: the AI's
-       suggestions (source "ai") or the previews of repairing a selection (source "repair"). One set
-       at a time - asking either source replaces whatever is there. Like collapsing, this is a way of
-       looking at the graph rather than part of it: none is a node of the graph until it is accepted.
-
-       It lives here, rather than in the context that fetches it, because the effect below is the
-       only writer of what React Flow draws. Anything injected through setNodes from outside would
-       be erased the next time the server graph or a collapsed run changed. Entries are
-       {id, source, parent, op, label, reason, rowCount, ...}, plus what their source needs to accept
-       them: an AI suggestion's `suggestion`, a repair's `previewTable` and `cols`. */
-    const [prospectiveNodes, setProspectiveNodes] = useState([]);
-    const clearProspectiveNodes = useCallback(() => setProspectiveNodes([]), []);
-
     /* The supporting sub-nodes hung beside nodes, and the modal that adds them. Their records live here
        for the same reason: the effect below draws them. */
     const support = useSupportNodes();
@@ -334,18 +327,18 @@ export function PGraphProvider({children}) {
     }, []);
     // Every real node drawn so far, so a folded run expanding again is not mistaken for new nodes
     const seenNodeIds = useRef(new Set());
-    // The prospective nodes drawn last time, so a fresh set counts as new even when it reuses the ids
-    const drawnProspectiveIds = useRef(new Set());
+    // The candidates drawn last time, so new ones can be told from those already on the graph
+    const drawnCandidateIds = useRef(new Set());
 
     /* Fold the nodes the user lassoed. Rejects anything that is not one unbroken run on a single
        branch, because collapsing through a fork would orphan the sibling subtree. */
     const collapseNodes = useCallback((selectedIds) => {
-        // A lasso catches whatever is under it, suggestions included; they are not part of the
-        // run being folded, so drop them before the run is validated. A host's links out to its
-        // sub-nodes would read as a fork, so the run is judged on the tree's own edges.
+        // A lasso catches whatever is under it, sub-nodes included; they are not part of the run being
+        // folded, so drop them before the run is validated. A host's links out to its sub-nodes would read
+        // as a fork, so the run is judged on the tree's own edges. A candidate is a node like any other.
         const run = orderCollapsibleRun(
             treeEdgesOf(edges),
-            selectedIds.filter((id) => !isProspectiveId(id) && !isSupportId(id)),
+            selectedIds.filter((id) => !isSupportId(id)),
         );
         if (run.error) {
             setCollapseError(run.error);
@@ -379,6 +372,25 @@ export function PGraphProvider({children}) {
         [serverGraph]
     );
 
+    /* Candidates: wrangles staged as provisional nodes - a repair of the user's selection, or one the AI
+       suggested - see app/server_utils/candidates.py. Each is a node of the graph like any other, sent with
+       the rest; the one thing not allowed is wrangling from it, until it is accepted. */
+    const candidates = useMemo(() => serverGraph.nodes.filter((node) => node.data?.provisional), [serverGraph]);
+    const candidateIds = useMemo(() => new Set(candidates.map((node) => node.id)), [candidates]);
+    const isCandidate = useCallback((id) => candidateIds.has(id), [candidateIds]);
+    // Whether the session is on a candidate, which nothing may be wrangled from
+    const currentIsCandidate = candidateIds.has(tableName);
+
+    /* A run the user folded keeps the ids it was made from. A candidate in one may since have been declined -
+       always as the run's last node, since nothing hangs off a candidate - so a run is read without ids the
+       graph no longer has, and one left too short to fold is let go. */
+    const liveRuns = useMemo(() => {
+        const present = new Set(serverGraph.nodes.map((node) => node.id));
+        return collapsedRuns
+            .map((run) => ({...run, nodes: run.nodes.filter((id) => present.has(id))}))
+            .filter((run) => run.nodes.length >= 2);
+    }, [collapsedRuns, serverGraph]);
+
     /* Fold the server's graph into what React Flow should draw, and write it into React Flow's own
        state rather than deriving it alongside.
 
@@ -389,45 +401,8 @@ export function PGraphProvider({children}) {
         if (serverGraph.nodes.length === 0) return;
 
         function drawGraph() {
-            const folded = applyCollapse(serverGraph.nodes, serverGraph.edges, collapsedRuns);
-
-            /* A suggestion whose parent has been folded into a run has nothing to hang off.
-               dagre.setEdge invents a node for an endpoint it does not know, and that invented
-               node has no dimensions - which turns every position in the graph into NaN. */
+            const folded = applyCollapse(serverGraph.nodes, serverGraph.edges, liveRuns);
             const visible = new Set(folded.nodes.map((node) => node.id));
-            const live = prospectiveNodes.filter((s) => visible.has(s.parent));
-
-            const suggested = live.map((s) => ({
-                id: s.id,
-                type: "prospectiveNode",
-                position: {x: 0, y: 0},
-                data: {
-                    // Which source it came from, so the node can hand accept and decline back to that source
-                    source: s.source,
-                    label: s.label,
-                    parent: s.parent,
-                    reason: s.reason,
-                    rowCount: s.rowCount,
-                    errorType: s.errorType,
-                    suggestion: s.suggestion,
-                    // A repair candidate has a preview table, which it draws as the Repair panel does
-                    previewTable: s.previewTable,
-                    cols: s.cols,
-                    chartType: s.chartType,
-                    footprint: s.previewTable ? PREVIEW_FOOTPRINT : undefined,
-                    metrics: null,
-                },
-            }));
-
-            const suggestedEdges = live.map((s) => ({
-                id: `e${s.id}`,
-                source: s.parent,
-                target: s.id,
-                label: s.op,
-                animated: false,
-                style: {stroke: "#7c3aed", strokeDasharray: "6 4"},
-            }));
-
             /* applyCollapse hands back the server's own node objects by reference when nothing is
                folded, and laying out writes type and label onto whatever it is given - so build a
                new array rather than pushing onto that one. */
@@ -437,8 +412,8 @@ export function PGraphProvider({children}) {
                hiding them lets the tree close up. */
             const supported = supportNodes.filter((record) => visible.has(record.hostId) && isSupportShown(record));
             const lay = (reserve, edgeRoom) => getLayoutedElements(
-                [...folded.nodes, ...suggested],
-                [...folded.edges, ...suggestedEdges],
+                folded.nodes.map((node) => ({...node, data: {...node.data}})),
+                [...folded.edges],
                 'TB',
                 {reserve, edgeRoom},
             );
@@ -458,27 +433,29 @@ export function PGraphProvider({children}) {
             setNodes([...treeNodes, ...beside.nodes]);
             setEdges([...layout.edges, ...beside.edges]);
 
-            /* What arrived with this draw. Real nodes are new once ever; prospective ones whenever they were
-               not drawn just before. A folded run's placeholder is a way of looking at nodes already seen. The
-               graph's first draw is the whole graph, which the view fits anyway, so it only records. */
-            const real = treeNodes.filter((node) => !isProspectiveId(node.id) && node.type !== "collapsedNode");
-            const prospective = treeNodes.filter((node) => isProspectiveId(node.id));
+            /* What arrived with this draw. An accepted node is new once ever - including a candidate the moment
+               it is accepted; a candidate whenever it was not drawn just before. A folded run's placeholder is a
+               way of looking at nodes already seen. The graph's first draw is the whole graph, which the view
+               fits anyway, so it only records. */
+            const isStaged = (node) => node.type === "prospectiveNode";
+            const real = treeNodes.filter((node) => !isStaged(node) && node.type !== "collapsedNode");
+            const staged = treeNodes.filter(isStaged);
             const firstDraw = seenNodeIds.current.size === 0;
             const newReal = real.filter((node) => !seenNodeIds.current.has(node.id)).map((node) => node.id);
-            const newProspective = prospective.filter((node) => !drawnProspectiveIds.current.has(node.id));
+            const newStaged = staged.filter((node) => !drawnCandidateIds.current.has(node.id));
             real.forEach((node) => seenNodeIds.current.add(node.id));
-            drawnProspectiveIds.current = new Set(prospective.map((node) => node.id));
+            drawnCandidateIds.current = new Set(staged.map((node) => node.id));
 
-            // The node in focus: a new node, or the one new prospective nodes hang from - with its prospective children
-            const anchors = new Set([...newReal, ...newProspective.map((node) => node.data.parent)]);
+            // The node in focus: a new node, or the one new candidates hang from - with its candidates
+            const anchors = new Set([...newReal, ...newStaged.map((node) => node.data.parent)]);
             if (!firstDraw && anchors.size > 0) {
-                const children = prospective.filter((node) => anchors.has(node.data.parent)).map((node) => node.id);
+                const children = staged.filter((node) => anchors.has(node.data.parent)).map((node) => node.id);
                 setFocus((current) => ({ids: [...anchors, ...children], key: current.key + 1}));
             }
         }
 
         drawGraph();
-    }, [serverGraph, collapsedRuns, prospectiveNodes, supportNodes, isSupportShown, setNodes, setEdges]);
+    }, [serverGraph, liveRuns, supportNodes, isSupportShown, setNodes, setEdges]);
 
     // The edges making up the selected branch, keyed "source->target", for highlighting in the graph
     const selectedBranchEdges = useMemo(() => {
@@ -490,6 +467,14 @@ export function PGraphProvider({children}) {
         return keys;
     }, [branchTrajectory]);
 
+    /* Take a graph the server sent. Every node's label - n2b, or a candidate's c7 - is registered before the
+       graph is, so anything that names a node by nodeName reads the new labels on the render that follows. */
+    const receiveGraph = useCallback((result) => {
+        setNodeLabels(new Map(result.nodes.map((node) => [node.id, node.data?.label ?? node.id])));
+        setServerGraph({nodes: result.nodes, edges: result.edges, pareto: result.pareto,
+            comparisons: result.comparisons ?? []});
+    }, []);
+
     // Pull the graph from the server and re-layout it. Every path that mutates the graph - executing a
     // wrangle, undo, redo - has to call this, or the rendered graph drifts from the real one.
     const refreshGraph = useCallback(async () => {
@@ -497,9 +482,8 @@ export function PGraphProvider({children}) {
         if (!pGraphResult?.nodes) return;
 
         // Folding and layout happen in the effect above, so both paths into the graph agree
-        setServerGraph({nodes: pGraphResult.nodes, edges: pGraphResult.edges, pareto: pGraphResult.pareto,
-            comparisons: pGraphResult.comparisons ?? []});
-    }, []);
+        receiveGraph(pGraphResult);
+    }, [receiveGraph]);
 
     /* Pull the graph as soon as there is a table to pull it for.
 
@@ -517,12 +501,11 @@ export function PGraphProvider({children}) {
         (async () => {
             const result = await getPGraph();
             if (stale || !result?.nodes) return;
-            setServerGraph({nodes: result.nodes, edges: result.edges, pareto: result.pareto,
-                comparisons: result.comparisons ?? []});
+            receiveGraph(result);
         })();
 
         return () => { stale = true; };
-    }, [tableName]);
+    }, [tableName, receiveGraph]);
 
     const onConnect = useCallback(
         (params) =>
@@ -568,10 +551,8 @@ export function PGraphProvider({children}) {
 
     const onNodeDoubleClick = useCallback(
         async (event, node) => {
-            // A suggestion has no table behind it, and this sets the app's current table from the
-            // node id without asking - navigating to one would point every panel at nothing
-            if (isProspectiveId(node.id)) return;
-            // Nor does a supporting sub-node, which only ever describes its host
+            // A supporting sub-node only ever describes its host, and has no table to navigate to. A candidate
+            // does: it can be made current and explored, though nothing can be wrangled from it until accepted
             if (isSupportId(node.id)) return;
             await navigateToNode(node.id);
         }, [navigateToNode]
@@ -590,9 +571,7 @@ export function PGraphProvider({children}) {
                 return;
             }
             event.stopPropagation();
-            // Same reason: a suggestion cannot be selection A
-            if (isProspectiveId(node.id)) return;
-            // Nor can a supporting sub-node
+            // A supporting sub-node cannot be selection A; a candidate can, to compare it before accepting it
             if (isSupportId(node.id)) return;
             setSelectionAId(current => (current === node.id ? null : node.id));
         }, [selectionStage, eligibleDestinations, pickBranchDestination]
@@ -622,8 +601,9 @@ export function PGraphProvider({children}) {
             // The comparisons saved on the graph, each a comparison object - see utils/comparisonSpec.js
             comparisons: serverGraph.comparisons,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
-            prospectiveNodes, setProspectiveNodes, clearProspectiveNodes,
-            hasProspectiveNodes: prospectiveNodes.length > 0,
+            // Staged wrangles, as nodes of the graph - see CandidatesContext for accepting and declining them
+            candidates, isCandidate, currentIsCandidate,
+            hasCandidates: candidates.length > 0,
             // supportNodes, add/update/removeSupportNode, supportModalHost, open/closeSupportModal
             ...support,
             startBranchSelection, resetBranchSelection,

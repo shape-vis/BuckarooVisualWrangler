@@ -90,6 +90,19 @@ class GraphNode:
         # never folded into the error totals - see app/pgraph/distortion.py
         self.distortion = None
 
+        """ staging - see app/server_utils/candidates.py """
+        # A candidate wrangle - a repair of a selection, or an AI suggestion - staged as a node so it can be
+        # analysed before it is accepted. It is a full node of the graph in every way but one: nothing may be
+        # wrangled from it until it is accepted. Accepting only clears this.
+        self.provisional = False
+        # What the user sees the node called - "n0a", "n2c" - assigned when it joins the graph for good. The
+        # table name is the node's identity and never changes, so this is kept apart from it; a candidate
+        # shows its own table's prefix ("c7") until it is accepted.
+        self.label = None
+        # Where a candidate came from and how to present it: {source: "repair" | "ai", label, reason,
+        # row_count, error_type, cols, chart_type}. None for a node that was never a candidate.
+        self.candidate = None
+
     def __json__(self):
         return {
             "parent_table": self.parent_table,
@@ -99,7 +112,10 @@ class GraphNode:
             "error_table_name": self.error_table_name,
             "children": self.children,
             "metrics": self.metrics.__json__() if self.metrics is not None else None,
-            "distortion": self.distortion
+            "distortion": self.distortion,
+            "provisional": self.provisional,
+            "label": self.label,
+            "candidate": self.candidate,
         }
 
     def set_metrics(self, metrics):
@@ -144,6 +160,10 @@ class GraphNode:
 
     def add_child(self, child_node: str):
         self.children.append(child_node)
+
+    def remove_child(self, child_node: str):
+        if child_node in self.children:
+            self.children.remove(child_node)
 
 
 

@@ -135,3 +135,71 @@
   color: red;
   margin: 8px 12px;
 }
+
+/* Repairing is off while the current node is a staged candidate */
+.repair-locked {
+    margin: 4px 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #f5efff;
+    color: #5b21b6;
+    font-size: 12px;
+}
+
+/* The candidates staged under one node */
+.repair-candidate-group {
+    width: 100%;
+    padding: 4px 6px 8px;
+    box-sizing: border-box;
+    border-bottom: 1px solid #e4e6eb;
+}
+
+.repair-candidate-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 2px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #3c4043;
+}
+
+.repair-candidate {
+    margin: 6px 0;
+    border: 1px solid #dddfe2;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.repair-candidate-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 8px 8px;
+}
+
+.repair-candidate-btn {
+    padding: 4px 12px;
+    border: 1px solid #dddfe2;
+    border-radius: 6px;
+    background: #ffffff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.repair-candidate-btn:hover:not(:disabled) {
+    background: #f0f2f5;
+}
+
+.repair-candidate-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.repair-candidate-btn--accept {
+    border-color: #1a7f37;
+    background: #64ea96;
+    color: #06301a;
+}

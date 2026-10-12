@@ -169,6 +169,12 @@ def reset_app():
     """
     Resets the server-side DBOperations state when the user navigates back to the home page.
     """
+    # Candidates are only ever staged; leaving the session drops them rather than their tables lingering
+    from app.server_utils import candidates
+    try:
+        candidates.discard_all()
+    except Exception as exc:  # never let cleanup stand in the way of leaving
+        print(f"[reset] could not drop staged candidates: {exc}")
     db_operations.reset()
     return {"success": True}
 

@@ -3,12 +3,13 @@ The AI suggestion endpoints.
 
 Registered automatically by the pkgutil sweep in app/__init__.py.
 
-Two routes do the work. /suggest is read-only: it builds a node's profile, asks the model which
-repairs it would make, and returns the ones that survive validation. /accept runs one for real.
-Declining is purely a front-end concern and has no endpoint.
+/suggest builds a node's profile, asks the model which repairs it would make, and stages each one that
+survives validation as a candidate: a provisional node under that node, its wrangle run on a copy of the
+table, exactly as a repair of the user's selection is staged. Accepting and declining a candidate is the
+same for both, and lives in candidate_routes.py.
 
-/accept re-derives the suggestion from scratch rather than trusting the payload it is given, so
-a tampered request can do nothing the model could not have asked for in the first place.
+The model only ever picks an operation and a column from a closed set; the rows a wrangle touches are
+resolved by the server from the flags (see ai_wrangle), so nothing the model says reaches a table directly.
 """
 import traceback
 
@@ -19,7 +20,7 @@ from app import app as flask_app
 from app.llm import gemini_client, tools
 from app.llm.profile import build_profile_block
 from app.llm.prompts import SYSTEM_PROMPT, build_user_prompt
-from app.server_utils import ai_wrangle
+from app.server_utils import ai_wrangle, candidates
 from app.server_utils.ai_wrangle import SuggestionError
 
 
@@ -54,16 +55,22 @@ def ai_suggest():
 
     Body: {"node_table": "n0a_adult_x7f2q"}
 
-    Returns {"success": true, "suggestions": [...]} - each entry carries the op, the columns, the
-    flag, a server-computed row_count and the model's reason - or {"no_suggestions": "<why>"}
-    when the model judged the table clean.
+    Returns {"success": true, "candidates": [...]} - each a staged candidate (see
+    candidates.candidate_json) carrying its op, columns, flag, a server-computed row_count and the
+    model's reason - or {"no_suggestions": "<why>"} when the model judged the table clean.
 
-    Read-only: it never changes which table the session is on.
+    It never changes which table the session is on: the candidates are staged under node_table, and
+    the user accepts or declines them through candidate_routes.py.
     """
     try:
         node_table = _node_table_from_request(request.get_json(force=True, silent=True))
     except SuggestionError as exc:
         return {"success": False, "error": str(exc)}, 400
+    try:
+        # A candidate must be accepted before anything is wrangled from it - suggestions included
+        candidates.require_accepted(node_table)
+    except candidates.CandidateError as exc:
+        return {"success": False, "error": str(exc)}, 409
 
     try:
         profile_block, columns = build_profile_block(node_table)
@@ -115,9 +122,11 @@ def ai_suggest():
             continue
         seen.add(key)
 
-        payload = suggestion.to_json()
-        payload["id"] = f"{node_table}:{len(suggestions)}"
-        suggestions.append(payload)
+        try:
+            suggestions.append(ai_wrangle.stage_suggestion(node_table, suggestion))
+        except Exception as exc:
+            # One that cannot be staged is dropped like one that cannot be run
+            rejected.append(f"{call['name']}: {exc}")
 
     if rejected:
         print(f"[ai] dropped {len(rejected)} unusable suggestion(s): {'; '.join(rejected)}")
@@ -126,36 +135,4 @@ def ai_suggest():
         return {"success": True, "node_table": node_table,
                 "no_suggestions": "Nothing the model proposed could be applied to this table."}
 
-    return {"success": True, "node_table": node_table, "suggestions": suggestions}
-
-
-@flask_app.post("/api/ai/accept")
-def ai_accept():
-    """
-    Run one suggestion for real, cementing a new node onto the graph.
-
-    Body: {"node_table": "n0a_...", "suggestion": {op, columns/column, target?, error_type}}
-
-    Branches from node_table whatever the current node is, so the remaining suggestions stay
-    valid and can be accepted or declined afterwards in any order.
-    """
-    body = request.get_json(force=True, silent=True) or {}
-    try:
-        node_table = _node_table_from_request(body)
-    except SuggestionError as exc:
-        return {"success": False, "error": str(exc)}, 400
-
-    raw = body.get("suggestion")
-    if not isinstance(raw, dict):
-        return {"success": False, "error": "suggestion is required"}, 400
-
-    try:
-        _, columns = build_profile_block(node_table)
-        return ai_wrangle.apply_suggestion(node_table, raw, columns)
-    except SuggestionError as exc:
-        # Everything the guards refuse lands here, with a message meant for the user
-        return {"success": False, "error": str(exc)}, 422
-    except Exception as exc:
-        print("ERROR in ai_accept")
-        print(traceback.format_exc())
-        return {"success": False, "error": str(exc)}, 500
+    return {"success": True, "node_table": node_table, "candidates": suggestions}

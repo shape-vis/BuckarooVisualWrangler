@@ -449,6 +449,19 @@
   white-space: nowrap;
 }
 
+/* The candidate's own id - c7 - which it goes by until it is accepted and gets its n… label */
+.prospective-node-id {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 500;
+  color: #7c3aed;
+}
+
+/* The tools every node carries, under its buttons */
+.prospective-node-tools {
+  margin-top: 4px;
+}
+
 .prospective-node-rows {
   color: #6b21a8;
   font-size: 10px;
@@ -535,6 +548,20 @@
 }
 
 /* The comparison's colours, as on the cards: Persian plum for the current node (selection B), dashed blue for A */
+/* A staged candidate: hollow, in its branch's colour */
+.analysis-dot--provisional {
+  background: #ffffff;
+  border: 2px dashed var(--analysis-dot-color);
+  box-sizing: border-box;
+}
+
+/* A staged candidate on the plot's full view: a card like the rest, dashed violet like its tree card */
+.react-flow__node.pgraph-node--provisional:not(.pgraph-node--current) {
+  border: 2px dashed #7c3aed;
+  background-color: #faf5ff;
+  color: #4c1d95;
+}
+
 .analysis-dot--current {
   box-shadow: 0 0 0 2px #ffffff, 0 0 0 4.5px #701c1c;
 }

@@ -10,6 +10,7 @@ import "../styles/PGraph.css";
 import {TREE_EDGE_WIDTH, usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
 import {useRepair} from "../store/RepairContext.jsx";
+import {useCandidates} from "../store/CandidatesContext.jsx";
 import {useTableName} from "../store/TableNameContext.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
 import {nodeName} from "../utils/comparison.js";
@@ -160,6 +161,7 @@ export default function PGraph() {
 const ai = useAISuggestions();
 // Repairs are previewed straight into the graph without opening the Repair panel, so a failure is told here
 const repair = useRepair();
+const candidateActions = useCandidates();
 
 const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
         onEdgeClick, nodeTypes, comparisonPair, pareto, serverNodesById,
@@ -311,6 +313,9 @@ const styledNodes = useMemo(() => {
 
         /* The simple view's dot. Its role travels in data rather than as a class: the role classes style a
            card. Root, the pair and anything chosen are named outright; the rest on hover. */
+        // A staged candidate is plotted like any node, marked as provisional rather than drawn as its full card
+        const provisional = Boolean(node.data?.provisional);
+
         if (analysing && analysisStyle === "simple") {
             const isRun = node.type === "collapsedNode";
             return {
@@ -330,6 +335,7 @@ const styledNodes = useMemo(() => {
                         role,
                         label: isRun ? `${nodeName(node.data.head)}…${nodeName(node.data.tail)}` : nodeName(node.id),
                         showLabel: node.data?.parent === "root" || Boolean(role) || isEligible,
+                        provisional,
                     },
                 },
             };
@@ -340,6 +346,7 @@ const styledNodes = useMemo(() => {
 
         const classes = [
             analysing ? PLOTTED_NODE_CLASS : "",
+            analysing && provisional ? "pgraph-node--provisional" : "",
             role ? `pgraph-node--${role}` : "",
             isEligible ? "pgraph-node--eligible" : "",
             // Alongside the other marks rather than instead of them - a dominated node can still be current
@@ -348,6 +355,8 @@ const styledNodes = useMemo(() => {
 
         return {
             ...node,
+            // On the plot a candidate is a card like the rest - its preview and buttons belong to the tree
+            ...(analysing && provisional ? {type: "noteNode"} : {}),
             position,
             className: classes,
             // A card's place on the plot is its data, so it cannot be dragged off it
@@ -404,7 +413,11 @@ const styledEdges = useMemo(() => {
                 hidden: hidden.has(edge.source) || hidden.has(edge.target),
                 // Markers are sized in stroke widths, so this keeps the arrowhead as big as it was at 1.75
                 markerEnd: {type: MarkerType.ArrowClosed, color, width: 11, height: 11},
-                style: selected ? selectedStyle : {stroke: color, strokeWidth: TREE_EDGE_WIDTH, opacity: 0.85},
+                style: {
+                    ...(selected ? selectedStyle : {stroke: color, strokeWidth: TREE_EDGE_WIDTH, opacity: 0.85}),
+                    // The edge into a candidate stays dashed on the plot too
+                    ...(edge.data?.provisional ? {strokeDasharray: "6 4"} : {}),
+                },
             };
         });
     }
@@ -602,6 +615,13 @@ const onSelectionEnd = (event) => {
           </Panel>
         )}
 
+        {candidateActions?.error && (
+          <Panel position="top-center">
+            <div className="pgraph-collapse-error" onClick={candidateActions.dismissError}>
+              {candidateActions.error} <span className="pgraph-collapse-error-dismiss">dismiss</span>
+            </div>
+          </Panel>
+        )}
         {ai?.error && (
           <Panel position="top-center">
             <div className="pgraph-collapse-error" onClick={ai.dismissMessages}>

@@ -22,13 +22,8 @@ import app
 from app import engine
 from app.db_utils import query
 from app.db_utils.execute_sql import fetch_sql
-from app.server_utils.service_helpers import (
-    WRANGLE_LOCK,
-    _clone_table_pair,
-    _safe_pg_name,
-    clicked_node_access_helper,
-    execute_wrangle_preview,
-)
+from app.server_utils import candidates
+from app.server_utils.service_helpers import WRANGLE_LOCK
 
 # The four flags the detectors produce. Matches DIMENSIONS in app/pgraph/metrics.py and
 # ERROR_DIMENSIONS in ui/src/store/errorColors.js.
@@ -48,9 +43,8 @@ class Op:
     """
     One wrangle operation, as both the model and the pipeline see it.
 
-    preview_suffix is the contract with execute_wrangle_preview: that function reads the
-    operation back off the preview table's *name* via extract_preview_action, so naming the
-    preview correctly is the only thing needed to make the promote path behave.
+    preview_suffix names which wrangle this is - which column of a pair an impute fills - and
+    Suggestion.wrangle_op turns it into the op the staged node records.
     """
     kind: str               # "impute" or "delete"
     dims: int               # 1 or 2 columns
@@ -95,16 +89,20 @@ class Suggestion:
             return self.columns[0] if self.target == "x" else self.columns[1]
         return self.columns[0]
 
-    def label(self) -> str:
-        """Matches format_wrangle_label, so a prospective node reads like the node it becomes."""
-        from app.pgraph.node import format_wrangle_label
-        wrangle_op = {
+    @property
+    def wrangle_op(self) -> str:
+        """The wrangle as a node records it: delete, impute, or impute_x / impute_y for one column of a pair."""
+        return {
             "_preview_delete": "delete",
             "_preview_impute": "impute",
             "_preview_impute_x": "impute_x",
             "_preview_impute_y": "impute_y",
         }[self.preview_suffix]
-        return format_wrangle_label(wrangle_op, self.columns)
+
+    def label(self) -> str:
+        """Matches format_wrangle_label, so a candidate reads like the node it becomes."""
+        from app.pgraph.node import format_wrangle_label
+        return format_wrangle_label(self.wrangle_op, self.columns)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -277,94 +275,59 @@ def prepare(node_table: str, raw: dict[str, Any], columns: list[str]) -> Suggest
     return suggestion
 
 
-def create_preview_for_op(node_table: str, suggestion: Suggestion) -> str:
+def stage_suggestion(node_table: str, suggestion: Suggestion) -> dict[str, Any]:
     """
-    Build the single preview table this suggestion needs, and return its name.
+    Stage a prepared suggestion as a candidate - a provisional node under node_table, built the same way a
+    repair of a selection is (app/server_utils/candidates.py). Only where it came from differs: the model's
+    reason and the flag it targets ride along, and the row count is the server's, never the model's claim.
 
-    create_previews_1d/2d build every preview a user *might* pick - two tables for 1D, three for
-    2D - and re-run detection over each. An accept has already picked one, so the rest is waste:
-    detection walks the whole table per preview. This builds just the one.
-
-    The name is the contract. execute_wrangle_preview reads the operation back off the preview's
-    name, so as long as it is <parent><suffix> the promote path is unchanged.
+    :return: the candidate, as candidates.candidate_json gives it
     """
-    preview = _safe_pg_name(node_table, suggestion.preview_suffix)
-    errors_src = query._get_errors_table(node_table)
-
-    with engine.begin() as conn:
-        _clone_table_pair(conn, node_table, preview, errors_src)
-
-    if suggestion.spec.kind == "delete":
-        query.remove_rows_by_ids(table=preview, ids=suggestion.row_ids)
-    else:
-        query.impute_by_ids(
-            table=preview, col=suggestion.imputed_column, ids=suggestion.row_ids
-        )
-
-    # Imported here rather than at module scope: routes are auto-imported alphabetically, so
-    # ai_routes loads before wrangler_routes_sql.
-    from app.routes.wrangler_routes_sql import update_errors_table
-    update_errors_table(preview)
-
-    return preview
+    return candidates.materialize(
+        node_table,
+        suggestion.wrangle_op,
+        suggestion.columns,
+        suggestion.row_ids,
+        imputed_column=suggestion.imputed_column,
+        source="ai",
+        meta={
+            "label": suggestion.label(),
+            "reason": suggestion.reason,
+            "row_count": len(suggestion.row_ids),
+            "error_type": suggestion.error_type,
+            "chart_type": "histogram" if len(suggestion.columns) == 1 else "heatmap",
+            # Kept so the suggestion can be told apart from its siblings, and re-checked if ever needed
+            "suggestion": {"op": suggestion.op, "columns": suggestion.columns, "target": suggestion.target,
+                           "error_type": suggestion.error_type},
+        },
+    )
 
 
 def apply_suggestion(node_table: str, raw: dict[str, Any], columns: list[str]) -> dict[str, Any]:
     """
-    Run a suggestion for real: build its preview, promote it, and leave the session pointing at
-    the node that results.
+    Run a suggestion for real in one step: stage it as a candidate, then accept it, leaving the session on the
+    node that results. The UI stages and accepts separately; this is the two together.
 
-    Branches from node_table whatever the current node happens to be, so accepting one suggestion
-    does not invalidate the others - the parent table is never modified.
+    Branches from node_table whatever the current node happens to be, so accepting one suggestion does not
+    invalidate the others - the parent table is never modified.
 
     :return: {"table": <new node table name>, "row_count": <rows the wrangle touched>, ...}
     """
     if not known_node(node_table):
         raise SuggestionError(f"{node_table} is not a node in this session's graph")
 
-    # Everything from here to the promote has to be serialized: preview names are derived from
-    # the parent and node ids are handed out by reading a counter. See WRANGLE_LOCK.
     with WRANGLE_LOCK:
         suggestion = prepare(node_table, raw, columns)
-
         try:
-            preview = create_preview_for_op(node_table, suggestion)
-            result = execute_wrangle_preview(
-                node_table, preview, _safe_pg_name, app.db_operations, suggestion.columns
-            )
-        except Exception:
-            # A throw between add_node and the rename leaves a node for a table that does not
-            # exist. Put the session back on the parent so the graph and the DB agree again.
-            _restore_to(node_table)
-            raise
-
-        new_table = result.get("table")
-
-        # add_node sets prev to whatever was current, which only means "parent" when the wrangle
-        # branched off the current node. This one branches off an arbitrary node, so the undo
-        # cursor has to be set from the tree instead.
-        clicked_node_access_helper(new_table)
-        app.db_operations.load_table(
-            new_table, f"errors_{new_table}", f"dp_{new_table}"
-        )
+            staged = stage_suggestion(node_table, suggestion)
+        except candidates.CandidateError as exc:
+            raise SuggestionError(str(exc)) from exc
+        result = candidates.accept(staged["table"])
 
     return {
         "success": True,
-        "table": new_table,
+        "table": result["table"],
         "parent": node_table,
         "row_count": len(suggestion.row_ids),
         "label": suggestion.label(),
     }
-
-
-def _restore_to(node_table: str) -> None:
-    """Best-effort: leave the session consistent on `node_table` after a failed accept."""
-    try:
-        graph = session_graph()
-        if graph is not None and node_table in graph.node_map:
-            clicked_node_access_helper(node_table)
-        app.db_operations.load_table(
-            node_table, f"errors_{node_table}", f"dp_{node_table}"
-        )
-    except Exception as exc:  # never mask the original failure
-        print(f"[ai] could not restore session to {node_table}: {exc}")

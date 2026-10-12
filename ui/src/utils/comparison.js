@@ -4,11 +4,27 @@
 import { ERROR_DIMENSIONS } from "../store/errorColors.js";
 import { truncateText } from "./textUtils.js";
 
-/* Node tables are named "<node id>_<base name>", so the id - n0a, n2b - names a node compactly. The
-   full table name stays available in a title attribute. */
+/* What each node is called, by its table - "n2b" - as the graph's payload labels it. A node's table name is
+   its identity and never changes; its label is assigned when it joins the graph for good, and a staged
+   candidate shows its own "c7" until then. PGraphContext refills this whenever the graph loads. */
+let nodeLabels = new Map();
+
+export function setNodeLabels(labels) {
+    nodeLabels = labels;
+}
+
+/* A node's short name: its label, or for a table the graph has not labelled, the prefix its name starts with
+   - n0a, c7. The full table name stays available in a title attribute. */
 export function nodeName(id) {
-    const match = id?.match(/^(n\d[a-z])_/);
+    if (nodeLabels.has(id)) return nodeLabels.get(id);
+    const match = id?.match(/^(n\d[a-z]|c\d+)_/);
     return match ? match[1] : truncateText(id, 16);
+}
+
+/* The base a node table's name carries after its prefix - the uploaded file's cleaned name */
+export function baseName(id) {
+    const match = id?.match(/^(?:n\d[a-z]|c\d+)_(.+)$/);
+    return match ? match[1] : null;
 }
 
 /* A sentence for the wrangle that produced a node: "Imputed age", "Deleted rows selected on age ×

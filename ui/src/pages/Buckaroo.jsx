@@ -15,6 +15,7 @@ import { BuckarooHeader } from "../elements/Header.jsx";
 import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
 import {AISuggestionsProvider} from "../store/AISuggestionsContext.jsx";
+import {CandidatesProvider} from "../store/CandidatesContext.jsx";
 import {DockProvider} from "../store/DockContext.jsx";
 import {CompareProvider} from "../store/CompareContext.jsx";
 import SplitDivider, {DEFAULT_SPLIT} from "../elements/SplitDivider.jsx";
@@ -98,11 +99,13 @@ export default function Buckaroo({ onReset }) {
                 {/* Above PGraph and Repair: both ask the dock to show their tab */}
                 <DockProvider>
                 <PGraphProvider>
-                {/* Inside PGraphProvider: the graph owns the suggestion nodes, this owns asking
-                    for them. Accepting one runs the same post-wrangle sequence RepairContext does. */}
-                <AISuggestionsProvider onWrangleExecuted={handleWrangleExecuted}>
+                {/* Inside PGraphProvider: the server stages the AI's suggestions as candidates, which arrive with
+                    the graph; this owns asking for them. Accepting is CandidatesProvider's, below. */}
+                <AISuggestionsProvider>
                 <RowRangeProvider>
                 <SelectionProvider>
+                {/* Accepting or declining a candidate - a repair or an AI suggestion - lands like a wrangle */}
+                <CandidatesProvider onWrangleExecuted={handleWrangleExecuted}>
                 <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
                 {/* Outside the keyed container below, so an open comparison survives a wrangle. It docks
                     into the Plots view, and opens that view to do so. */}
@@ -150,6 +153,7 @@ export default function Buckaroo({ onReset }) {
                     </div>
                 </CompareProvider>
                 </RepairProvider>
+                </CandidatesProvider>
                 </SelectionProvider>
                 </RowRangeProvider>
                 </AISuggestionsProvider>

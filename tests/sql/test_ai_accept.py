@@ -63,6 +63,9 @@ def clean_graph():
     """Every test here mutates the process-wide session graph, so reset it around each one."""
     created = [ROOT]
     yield created
+    # Candidates and the nodes they became have tables of their own
+    if getattr(app, "pgraph_for_session", None) is not None:
+        created.extend(app.pgraph_for_session.node_map.keys())
     app.pgraph_for_session = None
     _drop_all(*created)
 

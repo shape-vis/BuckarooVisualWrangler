@@ -4,6 +4,7 @@ import { Handle, Position} from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
+import {CANDIDATE_LOCKED} from "../store/RepairContext.jsx";
 import {NodeMetrics} from "./NodeMetrics.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
 import "../styles/Buttons.css"
@@ -13,7 +14,7 @@ import "../styles/Buttons.css"
  * Names a node's role in the current comparison. Floats above the node so it cannot be confused with
  * the node's own label, and so it costs the node no height in the dagre layout.
  */
-function ComparisonBadge( { role } ){
+export function ComparisonBadge( { role } ){
     if (!role) return null;
 
     return (
@@ -68,8 +69,8 @@ function NodeButton( { label, detail, children, ...button } ){
  * Takes the node's id rather than reading data.label, because the layout truncates a long label
  * down to the three-character node id - so the label is not a table name you can send anywhere.
  */
-function NodeTools( { nodeId } ){
-    const { startBranchSelection, hasProspectiveNodes, graphMode, openSupportModal,
+export function NodeTools( { nodeId } ){
+    const { startBranchSelection, isCandidate, graphMode, openSupportModal,
             supportCountByHost, hiddenSupportHosts, toggleSupportHidden, hideAllNodeSupports,
             hideAllEdgeSupports } = usePgraph();
     const ai = useAISuggestions();
@@ -78,18 +79,18 @@ function NodeTools( { nodeId } ){
 
     const askAI = useCallback(() => ai?.requestSuggestions(nodeId), [ai, nodeId]);
 
-    /* One set of suggestions at a time. Rather than silently replacing the last node's, every AI
-       button goes inert until the outstanding ones have been accepted or declined - so there is
-       never a second dashed forest, and never a question of which is stale. Suggestions have no
-       numbers to plot, so analysis mode hides them, and asking for one there would show nothing. */
+    /* Suggestions are staged as candidates under this node, alongside any already there. Nothing can be
+       wrangled from a candidate until it is accepted, so a candidate's own AI button is off; and in analysis
+       mode the new candidates would land somewhere the tree is not drawn. */
     const analysing = graphMode === "analysis";
-    const aiBlocked = !ai?.configured || ai?.busy || hasProspectiveNodes || analysing;
+    const locked = isCandidate(nodeId);
+    const aiBlocked = !ai?.configured || ai?.busy || analysing || locked;
     const aiTitle = !ai?.configured
         ? "AI suggestions are not configured - add GEMINI_API_KEY to .env"
-        : analysing
-            ? "Switch to wrangling mode for suggestions"
-            : hasProspectiveNodes
-                ? "Accept or decline the candidate nodes already on the graph first"
+        : locked
+            ? `${CANDIDATE_LOCKED}.`
+            : analysing
+                ? "Switch to wrangling mode for suggestions"
                 : ai?.busy ? "Working…" : "Suggest repairs for this node";
 
     // Off in analysis mode: sub-nodes are hidden on the plot, so adding one there would show nothing
@@ -195,7 +196,7 @@ function NodeTools( { nodeId } ){
  * Rendered after the node's bottom handle. An edge that names no handle - every edge of the tree - leaves
  * from a node's first source handle, so these must never come first.
  */
-function SupportHandles(){
+export function SupportHandles(){
     return (
         <>
             <Handle type="source" id="support-left" position={Position.Left}
@@ -293,10 +294,16 @@ return (
  * box around the dot. The handles are invisible; analysis edges run centre to centre and do not use them.
  */
 export function AnalysisDotNode( { data } ){
-    const { color, role, label, showLabel } = data.analysis;
+    const { color, role, label, showLabel, provisional } = data.analysis;
     return (
         <div
-            className={`analysis-dot ${role ? `analysis-dot--${role}` : ""} ${showLabel ? "analysis-dot--labelled" : ""}`}
+            className={[
+                "analysis-dot",
+                role ? `analysis-dot--${role}` : "",
+                showLabel ? "analysis-dot--labelled" : "",
+                // A staged candidate is hollow: it is on the plot, but not yet part of the graph
+                provisional ? "analysis-dot--provisional" : "",
+            ].filter(Boolean).join(" ")}
             style={{"--analysis-dot-color": color}}
         >
             <Handle type="target" position={Position.Top} className="analysis-handle" isConnectable={false}/>

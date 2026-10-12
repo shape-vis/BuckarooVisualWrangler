@@ -213,23 +213,23 @@ export async function queryBinsForRows(params) {
 
 /**
  * POST /api/wrangle/create-previews
- * Create preview_delete and preview_impute copies of the table,
- * apply wrangling to each, re-run error detection, and return the
- * two preview table names.
+ * Stage every way of repairing the current node's selected rows as a candidate - a provisional node under the
+ * current node, its wrangle already run on a copy of its table. See app/server_utils/candidates.py.
  *
- * Backend uses db_operations.main_table_name as the source of truth.
- * { row_ids, cols }
+ * source is the plot a two-column selection was made on, which its candidates' preview charts draw as.
+ * Returns { success, candidates: [{table, parent, op, source, label, reason, row_count, cols, chart_type}] }.
  */
-export async function createPreviews(rowIds, cols) {
+export async function createPreviews(rowIds, cols, source = null) {
     try {
         const response = await fetch("/api/wrangle/create-previews", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ row_ids: rowIds, cols }),
+            body: JSON.stringify({ row_ids: rowIds, cols, source }),
         });
         return await response.json();
     } catch (error) {
         console.error("[createPreviews]", error.message);
+        return { success: false, error: error.message };
     }
 }
 
@@ -248,24 +248,6 @@ export async function queryPreviewHistogram(params) {
         return await response.json();
     } catch (error) {
         console.error("[queryPreviewHistogram]", error.message);
-    }
-}
-
-/**
- * POST /api/wrangle/execute
- * Promote a preview table to be the main table, deleting all other previews.
- * Backend uses db_operations.main_table_name as the source of truth.
- */
-export async function executeWrangle(previewTable, cols = []) {
-    try {
-        const response = await fetch("/api/wrangle/execute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ preview_table: previewTable, cols }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[executeWrangle]", error.message);
     }
 }
 
@@ -434,11 +416,12 @@ export async function aiStatus() {
 
 /**
  * POST /api/ai/suggest
- * Ask the model what it would repair on one node. Read-only: it does not move the session off
- * whatever table is current.
+ * Ask the model what it would repair on one node, and stage each repair it suggests as a candidate under
+ * that node - the same as a repair of a selection is. It does not move the session off whatever table is
+ * current.
  *
- * Returns { success, suggestions: [{id, op, columns, target, error_type, row_count, reason,
- * label}] } or { success, no_suggestions: "<why>" }.
+ * Returns { success, candidates: [{table, parent, op, source, label, reason, row_count, error_type, cols,
+ * chart_type}] } or { success, no_suggestions: "<why>" }.
  *
  * Takes an AbortSignal so a superseded request can be dropped rather than raced.
  */
@@ -453,22 +436,41 @@ export async function requestAiSuggestions(nodeTable, signal) {
 }
 
 /**
- * POST /api/ai/accept
- * Run one suggestion, cementing a new node onto the graph. The server re-validates the
- * suggestion from scratch, so this is not a trusted payload.
+ * POST /api/candidates/accept
+ * Accept a staged candidate - a repair or an AI suggestion - into the graph for good, moving the session onto
+ * it. Nothing is renamed: it keeps its table and gets its label.
  *
- * Returns { success, table } - the new node's table name - or { success: false, error }.
+ * Returns { success, table, label, parent } or { success: false, error }.
  */
-export async function acceptAiSuggestion(nodeTable, suggestion) {
+export async function acceptCandidate(table) {
     try {
-        const response = await fetch("/api/ai/accept", {
+        const response = await fetch("/api/candidates/accept", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ node_table: nodeTable, suggestion }),
+            body: JSON.stringify({ table }),
         });
         return await response.json();
     } catch (error) {
-        console.error("[acceptAiSuggestion]", error.message);
+        console.error("[acceptCandidate]", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * POST /api/candidates/discard
+ * Decline candidates: drop their nodes and tables. Returns { success, current } - current is the table the
+ * session moved to when it was on one of them, else null.
+ */
+export async function discardCandidates(tables) {
+    try {
+        const response = await fetch("/api/candidates/discard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tables }),
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("[discardCandidates]", error.message);
         return { success: false, error: error.message };
     }
 }
@@ -489,10 +491,10 @@ const serverCalls = {
     createPreviews,
     queryPreviewHistogram,
     queryPreviewScatterplot,
-    executeWrangle,
     aiStatus,
     requestAiSuggestions,
-    acceptAiSuggestion,
+    acceptCandidate,
+    discardCandidates,
 };
 
 export default serverCalls;

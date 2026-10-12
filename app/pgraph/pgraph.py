@@ -52,6 +52,11 @@ class PGraph:
         self.comparisons = {}
         self.comparison_count = 0
 
+        # How many candidates have ever been staged. Their tables are named c{count}_<base> from it, and it only
+        # counts up, so a name is never reused - not even a discarded candidate's. Candidates do not count in
+        # node_count, which hands out the labels of nodes that joined the graph for good.
+        self.candidate_count = 0
+
     def serialize_node_map(self):
         ser_map = {}
         for key in self.node_map.keys():
@@ -97,7 +102,12 @@ class PGraph:
                 {
                     "id": key,
                     "data": {
-                        "label": key,
+                        # Its name as the user knows it - "n2c" - or a candidate's own "c7" until it is accepted
+                        "label": node.label or key.split("_")[0],
+                        # A staged candidate: a node like any other, which nothing may be wrangled from until it
+                        # is accepted, and what it came from - see app/server_utils/candidates.py
+                        "provisional": node.provisional,
+                        "candidate": node.candidate,
                         # The front end derives collapse validation, the analysis plot's links and
                         # node highlighting from this, so none of them need a round trip
                         "parent": node.parent_table,
@@ -156,13 +166,15 @@ class PGraph:
                         "animated": "true",
                         # The edge shows the bare operation and keeps the columns for its hover detail
                         "label": child_node_obj.wrangle_name(),
-                        "data": {"detail": child_node_obj.wrangle_label()}
+                        # An edge into a candidate is drawn dashed: the wrangle has not been accepted yet
+                        "data": {"detail": child_node_obj.wrangle_label(), "provisional": child_node_obj.provisional}
                     }
                 )
         return list_of_edges
 
     def add_node(self, node: GraphNode):
         new_node_table_name = node.table_name
+        node.label = node_id_for_count(self.node_count)
         self.node_map[new_node_table_name] = node
         self.node_count += 1
         self.wrangle_map[self.node_count] = node.wrangle_op
@@ -176,6 +188,7 @@ class PGraph:
 
     def add_root_node(self, node: GraphNode):
         root_node_table_name = node.table_name
+        node.label = node_id_for_count(self.node_count)
         self.node_map[root_node_table_name] = node
         self.node_count += 1
 
@@ -186,6 +199,70 @@ class PGraph:
 
     def get_new_node_id(self):
         return node_id_for_count(self.node_count)
+
+    # ── Candidates ───────────────────────────────────────────────────────────
+    # A candidate wrangle is staged as a provisional node: a full node of the graph - a child of its parent,
+    # with its edge, in the Pareto scoring, reachable by undo and redo - that nothing may be wrangled from until
+    # it is accepted. Its table name is its identity and never changes; accepting it only clears the flag and
+    # gives it a label. See app/server_utils/candidates.py.
+
+    def take_candidate_prefix(self):
+        """:return: the next candidate's table prefix - "c0", "c1", ... - never handed out twice"""
+        prefix = f"c{self.candidate_count}"
+        self.candidate_count += 1
+        return prefix
+
+    def add_candidate(self, node: GraphNode):
+        """
+        Stage a candidate under its parent. Unlike add_node it takes no label and no place in node_count, and
+        leaves the current node where it is: asking for candidates does not move anyone.
+        """
+        node.provisional = True
+        self.node_map[node.table_name] = node
+        if node.parent_table in self.node_map:
+            self.node_map[node.parent_table].add_child(node.table_name)
+
+    def is_provisional(self, table_name):
+        node = self.node_map.get(table_name)
+        return bool(node and node.provisional)
+
+    def publish(self, table_name):
+        """
+        Accept a candidate into the graph for good: it is already a child of its parent, so all that changes is
+        that it stops being provisional and gets the next label.
+        :return: the node
+        """
+        node = self.node_map[table_name]
+        if not node.provisional:
+            raise ValueError(f"{table_name} is not a candidate")
+        node.provisional = False
+        node.label = node_id_for_count(self.node_count)
+        self.node_count += 1
+        self.wrangle_map[self.node_count] = node.wrangle_op
+        return node
+
+    def remove_candidate(self, table_name):
+        """
+        Take a candidate out of the graph. A candidate never has children - nothing may be wrangled from it -
+        so nothing is orphaned. A pointer left on it is moved: off the current node to its parent, and the
+        parent's next to its last remaining child.
+        :return: the table the session should be on afterwards, when it had to move, else None
+        """
+        node = self.node_map.get(table_name)
+        if node is None or not node.provisional:
+            raise ValueError(f"{table_name} is not a candidate")
+        parent = self.node_map.get(node.parent_table)
+        if parent is not None:
+            parent.remove_child(table_name)
+        del self.node_map[table_name]
+
+        if self.current_node_table_name == table_name and parent is not None:
+            self.set_clicked_node_as_current(parent.table_name)
+            return parent.table_name
+        if self.next_node_table_name == table_name:
+            current = self.node_map.get(self.current_node_table_name)
+            self.next_node_table_name = current.children[-1] if current and current.children else None
+        return None
 
     def undo_pgraph(self):
         if self.prev_node_table_name == "root":

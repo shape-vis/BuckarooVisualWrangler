@@ -7,11 +7,12 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import create_error_df, create_previews_1d, create_previews_2d, \
-    execute_wrangle_preview, _safe_pg_name, create_data_profile_df, get_sqlalchemy_dtype_map
+from app.server_utils.service_helpers import create_error_df, _safe_pg_name, create_data_profile_df, \
+    get_sqlalchemy_dtype_map
 from sqlalchemy import inspect, text
 
 from app.db_utils.data_profile import DataProfile
+from app.server_utils import candidates
 
 """
 Wrangling Endpoints - In-place modification of tables
@@ -157,31 +158,47 @@ def update_preview_error_table(table_name: str, err_table_name: str) -> None:
         raise
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Wrangling Endpoints (Supports both bin-based and ID-based selections)
-# the way it works is, create-previews does all wrangles (delete, impute x/y), 
-# puts the wrangled tables into the DB, then execute promotes the desired wrangle
-# and deletes the previews
+# Wrangling Endpoints
+# create-previews works out every way of repairing the rows the user selected and stages each as a candidate:
+# a provisional node of the graph, with its own table, that the user can analyse before accepting one. See
+# app/server_utils/candidates.py, which stages the AI's suggestions the same way and accepts both.
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _repair_options(cols, row_count):
+    """
+    The ways a selection can be repaired. Deleting removes the selected rows; imputing fills a column in them
+    with its mean, or its most common value if it is categorical. A two-column selection can be imputed on
+    either column.
+    :return: [(op, imputed column, label, reason)]
+    """
+    rows = "the selected row" if row_count == 1 else f"the {row_count:,} selected rows"
+    fill = lambda column: f"Fill {column} in {rows} with its mean, or its most common value if it is categorical"
+    if len(cols) == 1:
+        return [
+            ("delete", None, "Delete rows", f"Remove {rows}"),
+            ("impute", cols[0], f"Impute {cols[0]}", fill(cols[0])),
+        ]
+    return [
+        ("delete", None, "Delete rows", f"Remove {rows}"),
+        ("impute_x", cols[0], f"Impute {cols[0]}", fill(cols[0])),
+        ("impute_y", cols[1], f"Impute {cols[1]}", fill(cols[1])),
+    ]
 
 
 @app.post("/api/wrangle/create-previews")
 def create_previews():
     """
-    Create preview copies of the main table for the current row selection.
-
-    For 1D (len(cols)==1):
-      - <table>_preview_delete  : selected rows removed
-      - <table>_preview_impute  : selected column imputed for those rows
-
-    For 2D (len(cols)==2):
-      - <table>_preview_delete    : selected rows removed
-      - <table>_preview_impute_x  : cols[0] imputed for those rows
-      - <table>_preview_impute_y  : cols[1] imputed for those rows
+    Stage every way of repairing the current node's selected rows as a candidate: a provisional node under the
+    current node, its wrangle already run on a copy of its table. Delete and impute for a one-column selection;
+    delete, impute x and impute y for two.
 
     Body JSON:
-      table    – main table name
       row_ids  – list of integer row IDs to operate on
       cols     – list of column names involved in the selection (for imputation)
+      source   – the plot the selection was made on, "heatmap" or "scatterplot", which a two-column candidate's
+                 preview chart draws as
+    :return: {"success", "candidates": [...]} - see candidates.candidate_json
     """
     try:
         body = request.get_json(force=True)
@@ -189,43 +206,26 @@ def create_previews():
         row_ids = body.get("row_ids", [])
         cols    = body.get("cols", [])
 
-        # extra case protection.
-        #cols    = [f'{col}' for col in cols]
-
         if not row_ids:
             return {"success": False, "error": "No rows selected"}, 400
+        if len(cols) not in (1, 2):
+            return {"success": False, "error": "A selection is on one column or two"}, 400
 
-        if len(cols) == 1:
-            return create_previews_1d(table, row_ids, cols, _safe_pg_name, update_errors_table)
-        else:
-            return create_previews_2d(table, row_ids, cols, _safe_pg_name, update_errors_table)
+        chart_type = "histogram" if len(cols) == 1 else (body.get("source") or "heatmap")
+        staged = [
+            candidates.materialize(
+                table, op, cols, row_ids, imputed_column=imputed, source="repair",
+                meta={"label": label, "reason": reason, "row_count": len(row_ids), "error_type": None,
+                      "chart_type": chart_type},
+            )
+            for op, imputed, label, reason in _repair_options(cols, len(row_ids))
+        ]
+        return {"success": True, "candidates": staged}
 
+    except candidates.CandidateError as e:
+        return {"success": False, "error": str(e)}, 409
     except Exception as e:
         print("ERROR in create_previews")
-        print(traceback.format_exc())
-        return {"success": False, "error": str(e)}, 400
-
-
-@app.post("/api/wrangle/execute")
-def execute_wrangle():
-    """
-    Promote a preview table to become the main table:
-    1. Delete all other preview tables (and their errors_ siblings) for this base table
-    2. Rename the main table to <table>_old
-    3. Rename the selected preview table to <table>
-    4. Delete <table>_old
-    """
-    try:
-        body = request.get_json(force=True)
-        table         = db_operations.main_table_name
-        preview_table = body["preview_table"]  # the preview to promote
-        # The columns the selection was made on. The preview table name records the operation but not
-        # what it acted on, so the client passes them back through to label the new node's edge.
-        cols          = body.get("cols", [])
-
-        return execute_wrangle_preview(table, preview_table, _safe_pg_name, db_operations, cols)
-    except Exception as e:
-        print("ERROR in execute_wrangle")
         print(traceback.format_exc())
         return {"success": False, "error": str(e)}, 400
 
@@ -241,6 +241,8 @@ def wrangle_delete_column():
         body = request.get_json(force=True)
         table_name = db_operations.main_table_name
         column = body["column"]
+        # Deleting a column changes the table in place - a candidate must be accepted before it is wrangled
+        candidates.require_accepted(table_name)
 
         print(f"Deleting column '{column}' from table '{table_name}'")
 
@@ -256,6 +258,8 @@ def wrangle_delete_column():
             "remaining_columns": remaining_columns,
             "deleted_column": column
         }
+    except candidates.CandidateError as e:
+        return {"success": False, "error": str(e)}, 409
     except Exception as e:
         print("ERROR OCCURRED")
         print(traceback.format_exc())

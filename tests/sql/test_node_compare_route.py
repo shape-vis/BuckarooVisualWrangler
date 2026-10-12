@@ -48,8 +48,9 @@ def graph():
 
     yield ROOT, child
 
+    tables = list(app.pgraph_for_session.node_map.keys())
     app.pgraph_for_session = None
-    _drop_all(ROOT, child)
+    _drop_all(ROOT, child, *tables)
 
 
 @pytest.fixture

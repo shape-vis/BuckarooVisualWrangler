@@ -5,18 +5,19 @@ import SettingsModal from "./SettingsModal.jsx";
 import { resetApp } from "../utils/serverCalls.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
-import { useRepair } from "../store/RepairContext.jsx";
+import { CANDIDATE_LOCKED, useRepair } from "../store/RepairContext.jsx";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { useCompare } from "../store/CompareContext.jsx";
+import { baseName, nodeName } from "../utils/comparison.js";
 import "../styles/Header.css"
 
 function TableStatus() {
     const { tableName } = useTableName();
     const { isLoading } = useLoading();
 
-    // Node tables are named "<node id>_<base name>", where the node id is n{digit}{letter}
-    const match = tableName?.match(/^n(\d[a-z])_(.+)$/);
-    const label = match ? `n${match[1]} - ${match[2]}` : tableName || "No table";
+    // The node's label - n2b, or a staged candidate's c7 - then the uploaded file's name
+    const base = baseName(tableName);
+    const label = base ? `${nodeName(tableName)} - ${base}` : tableName || "No table";
 
     return (
         <div className="table-status">
@@ -46,7 +47,7 @@ export function BuckarooHeader( { onReset} ) {
     onReset = onReset || (() => {});
     const { openViews, toggleView } = useContext(ViewContext);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection } = useRepair();
+    const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection, repairLocked } = useRepair();
 
     /* The two nodes paired in the graph, if any. The pair is copied when the comparison opens, so it keeps
        comparing what was clicked even if the graph's selection moves on underneath it. */
@@ -89,8 +90,9 @@ export function BuckarooHeader( { onReset} ) {
                 <button
                     className="header-action-btn"
                     onClick={triggerRepairSelection}
-                    disabled={busy || !hasSelection}
-                    title="Repair Selection"
+                    disabled={busy || !hasSelection || repairLocked}
+                    // Nothing is wrangled from a staged candidate until it is accepted
+                    title={repairLocked ? `${CANDIDATE_LOCKED}.` : "Repair Selection"}
                 >
                     <img src="/images/icons/repair.svg" alt="" className="btn-svg-icon" />
                     Repair

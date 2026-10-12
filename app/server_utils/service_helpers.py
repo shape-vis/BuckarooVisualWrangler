@@ -23,21 +23,17 @@ from detectors.missing_value import missing_value
 from app.db_utils.data_profile import DataProfile
 from app.pgraph.metrics import refresh_node_metrics
 
-# Node tables are named "<node id>_<base name>", where the node id is n{digit}{letter} - see
-# node_id_for_count in app/pgraph/pgraph.py
+# Node tables are named "<prefix>_<base name>". The root's prefix is its node id, n{digit}{letter} - see
+# node_id_for_count in app/pgraph/pgraph.py. Every node since is staged as a candidate first and keeps the
+# candidate's prefix, c{n}, for good: a table name never changes, and the node's id is its label instead.
 NODE_PREFIX_PATTERN = re.compile(r'^n(\d[a-z])_(.+)$')
+CANDIDATE_PREFIX_PATTERN = re.compile(r'^(c\d+)_(.+)$')
 
 """
-Serializes preview-and-promote, which is not safe to run concurrently:
-
-  - get_new_node_id() only reads node_count, so two wrangles in flight both claim the same id
-  - _safe_pg_name(table, "_preview_delete") is deterministic, so two wrangles off the same
-    parent build previews under the same names and clobber each other mid-flight
-  - execute_wrangle_preview drops every preview name derived from its table, including ones
-    another request is still using
-
-Flask's dev server is threaded, so this is reachable simply by clicking twice. Held across
-create_previews_* -> execute_wrangle_preview. The manual path does not take it yet.
+Serializes staging and accepting candidates (app/server_utils/candidates.py), which is not safe to run
+concurrently: a candidate's table name and an accepted node's label are both handed out by reading a counter,
+so two requests in flight would claim the same one. Flask's dev server is threaded, so this is reachable
+simply by clicking twice. Re-entrant, since accepting an AI suggestion in one step stages it then accepts it.
 """
 WRANGLE_LOCK = threading.RLock()
 
@@ -431,46 +427,6 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
 
-def execute_wrangle_preview(table, preview_table, safe_pg_name_fn, db_operations, wrangle_cols=None):
-    """
-    Promote a preview table to the new current table and make it as a new node in the pgraph
-    1. Drop all other preview tables (and their errors_ siblings)
-    2. Rename preview to the new node table
-    3. Reload db_operations with the new node
-    Returns a dict with success and table name.
-    """
-    # from app import engine, db_operations
-
-    all_possible_previews = [
-        safe_pg_name_fn(table, "_preview_delete"),
-        safe_pg_name_fn(table, "_preview_impute"),
-        safe_pg_name_fn(table, "_preview_impute_x"),
-        safe_pg_name_fn(table, "_preview_impute_y"),
-    ]
-
-    app.db_operations.drop_preview_tables(all_possible_previews, preview_table)
-
-    wrangle_executed = extract_preview_action(preview_table)
-    preview_table_trimmed = trim_preview_suffix(preview_table)
-
-    #enter into pgraph before current or new tables are modified, return the new tables name with nodeID added
-    # new_table_name = pgraph_entry_point(table, preview_table_trimmed, wrangle_executed)
-    new_table_name = n_wrangle(table, preview_table_trimmed, wrangle_executed, wrangle_cols)
-    app.db_operations.rename_preview_to_new(preview_table, new_table_name)
-
-    # Preview tables have no profile, so the promoted node gets one built here
-    build_data_profile_table(new_table_name)
-
-    db_operations.load_table(new_table_name, f"errors_{new_table_name}", f"dp_{new_table_name}")
-
-    app.db_operations.update_rankings(new_table_name)
-
-    # Compute the node's quality metrics once, here. Everything downstream - the attribute summary
-    # deltas, the node detail panel, the sparklines - reads this cached object rather than recomputing
-    refresh_node_metrics(new_table_name)
-
-    return {"success": True, "table": new_table_name}
-
 def _clone_table_pair(conn, source_table, dest_table, errors_source):
     """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dest_table}"'))
@@ -478,13 +434,6 @@ def _clone_table_pair(conn, source_table, dest_table, errors_source):
     errors_dest = f"errors_{dest_table}"
     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
     conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
-
-def trim_preview_suffix(name: str) -> str:
-    """Remove the '_preview...' tail from a table name, if present."""
-    idx = name.find("_preview")
-    if idx != -1:
-        return name[:idx]
-    return name
 
 def init_pgraph_for_session(root_table):
     app.pgraph_for_session = PGraph()
@@ -495,132 +444,12 @@ def init_pgraph_for_session(root_table):
 
     refresh_node_metrics(root_table)
 
-def n_wrangle(parent_table, child_table, wrangle_executed, wrangle_cols=None):
-    new_table_name = make_new_table_name(child_table)
-    current_node = GraphNode(parent_table, wrangle_executed, new_table_name,
-                             f"errors_{new_table_name}", wrangle_cols)
-    app.pgraph_for_session.add_node(current_node)
-    return new_table_name
-
-def make_new_table_name(child_table):
-    """
-    Re-prefix a parent's table name with the next node id. The old prefix is stripped by pattern
-    rather than by slicing a fixed number of characters, so this stays correct however the node id
-    scheme changes.
-    :param child_table: the parent node's table name, e.g. "n0a_adult_x7f2q"
-    :return: the same base name under the next node id, e.g. "n1b_adult_x7f2q"
-    """
-    node_id = app.pgraph_for_session.get_new_node_id()
-    parsed = _parse_node_id(child_table)
-    base_name = parsed[1] if parsed else child_table
-    return f"{node_id}_{base_name}"
-
-def create_minimal_preview_table(conn, source_table, preview_table_name, errors_source, cols):
-    """
-    Drop and recreate a minimal dest table and empty error table to populate only with regard to the cols.
-    This is because we don't know which wrangle the user will select, so only generate enough information
-    to populate the preview.
-
-    :arg: conn               - connection to the Postgres database.
-    :arg: source_table       - name of the current main table.
-    :arg: preview_table_name - temporary preview table to create.
-    :arg: errors_source      - the current main table error table.
-    :arg: cols               - the column(s) of interest for the preview.
-    """
-
-    col_sel_query = ", ".join(cols)
-
-    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{preview_table_name}"'))
-    conn.execute(sa_text(f'CREATE TABLE "{preview_table_name}" AS SELECT {col_sel_query} FROM "{source_table}"'))
-    errors_dest = f"errors_{preview_table_name}"
-    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
-
-    # Copy schema but leave empty.
-    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" (LIKE "{errors_source}" INCLUDING ALL)"'))
-
-def create_previews_1d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
-    """
-    Create delete and impute preview tables for a 1D (single-column) selection.
-    Returns a dict with preview table names and dims=1.
-    """
-    from app import engine
-
-    errors_src = f"errors_{table}"
-    # Creates name for the preview tables
-    preview_delete_table_name = safe_pg_name_fn(table, "_preview_delete")
-    preview_impute_table_name = safe_pg_name_fn(table, "_preview_impute")
-
-    # Preview tables are created (error_..._preview)
-    with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete_table_name, errors_src)
-        _clone_table_pair(conn, table, preview_impute_table_name, errors_src)
-
-        #create_minimal_preview_table(conn, table, preview_delete, errors_src, cols)
-        #create_minimal_preview_table(conn, table, preview_impute, errors_src, cols)
-
-
-    # Modify the preview table based on the preview type
-    query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
-    query.impute_by_ids(table=preview_impute_table_name, col=cols[0], ids=row_ids)
-
-    # The preview histograms read errors_, but nothing reads a preview's data profile, so it isn't
-    # built until the preview is promoted in execute_wrangle_preview
-    update_errors_fn(preview_delete_table_name)
-    update_errors_fn(preview_impute_table_name)
-
-    return {
-        "success": True,
-        "preview_delete": preview_delete_table_name,
-        "preview_impute": preview_impute_table_name,
-        "dims": 1,
-    }
-
-def extract_preview_action(name: str) -> str:
-    """Extract the action after '_preview_' (e.g. 'impute_y'), or '' if not found."""
-    marker = "_preview_"
-    idx = name.find(marker)
-    if idx != -1:
-        return name[idx + len(marker):]
-    return ""
-
-def create_previews_2d(table, row_ids, cols, safe_pg_name_fn, update_errors_fn):
-    """
-    Create delete, impute_x, and impute_y preview tables for a 2D (two-column) selection.
-    Returns a dict with preview table names and dims=2.
-    """
-    from app import engine
-
-    errors_src  = f"errors_{table}"
-    preview_delete_table_name   = safe_pg_name_fn(table, "_preview_delete")
-    preview_impute_x_table_name = safe_pg_name_fn(table, "_preview_impute_x")
-    preview_impute_y_table_name = safe_pg_name_fn(table, "_preview_impute_y")
-
-    with engine.begin() as conn:
-        _clone_table_pair(conn, table, preview_delete_table_name, errors_src)
-        _clone_table_pair(conn, table, preview_impute_x_table_name, errors_src)
-        _clone_table_pair(conn, table, preview_impute_y_table_name, errors_src)
-
-    query.remove_rows_by_ids(table=preview_delete_table_name, ids=row_ids)
-    query.impute_by_ids(table=preview_impute_x_table_name, col=cols[0], ids=row_ids)
-    query.impute_by_ids(table=preview_impute_y_table_name, col=cols[1], ids=row_ids)
-
-    # As in the 1D case, the profile is left until the preview is promoted
-    update_errors_fn(preview_delete_table_name)
-    update_errors_fn(preview_impute_x_table_name)
-    update_errors_fn(preview_impute_y_table_name)
-
-
-    return {
-        "success": True,
-        "preview_delete": preview_delete_table_name,
-        "preview_impute_x": preview_impute_x_table_name,
-        "preview_impute_y": preview_impute_y_table_name,
-        "dims": 2,
-    }
-
 def _parse_node_id(table_name):
-    """Parse 'n0c_rest_of_name' into ('0c', 'rest_of_name'). Returns None on failure."""
-    m = NODE_PREFIX_PATTERN.match(table_name)
+    """
+    Parse a node table's name into its prefix and base: 'n0c_rest_of_name' into ('0c', 'rest_of_name'), and a
+    candidate's 'c7_rest_of_name' into ('c7', 'rest_of_name'). Returns None for anything else.
+    """
+    m = NODE_PREFIX_PATTERN.match(table_name) or CANDIDATE_PREFIX_PATTERN.match(table_name)
     if not m:
         return None
     return m.group(1), m.group(2)

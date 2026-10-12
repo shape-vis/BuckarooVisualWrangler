@@ -5,7 +5,7 @@ import app
 from app.pgraph.metrics import NodeMetrics, quality_trajectory
 from app.pgraph.node import GraphNode, format_wrangle_label
 from app.pgraph.pgraph import PGraph, node_id_for_count
-from app.server_utils.service_helpers import make_new_table_name, _parse_node_id
+from app.server_utils.service_helpers import _parse_node_id
 
 
 class StubDataProfile:
@@ -205,22 +205,21 @@ class TableNamingTests(unittest.TestCase):
 
     def test_parse_node_id(self):
         self.assertEqual(_parse_node_id("n0c_adult_x7f2q"), ("0c", "adult_x7f2q"))
+        # A node staged as a candidate keeps its c{n} prefix for good
+        self.assertEqual(_parse_node_id("c7_adult_x7f2q"), ("c7", "adult_x7f2q"))
         self.assertIsNone(_parse_node_id("adult_x7f2q"))
 
-    def test_base_name_survives_past_the_tenth_node(self):
-        """The old positional slice assumed a two-character prefix and corrupted names from n10 on."""
-        table_name = "n0a_adult_x7f2q"
-
-        for _ in range(15):
-            table_name = make_new_table_name(table_name)
+    def test_labels_run_past_the_tenth_node(self):
+        """A node's label is handed out from node_count, and runs n0a, n0b ... n0z, n1a without a hitch."""
+        for index in range(15):
             app.pgraph_for_session.add_node(
-                GraphNode("parent", "delete", table_name, f"errors_{table_name}")
+                GraphNode("n0a_adult_x7f2q", "delete", f"c{index}_adult_x7f2q", f"errors_c{index}_adult_x7f2q")
             )
 
-            self.assertTrue(table_name.endswith("_adult_x7f2q"), table_name)
-
-        # 1 root + 15 children, so the last id minted is the sixteenth
-        self.assertEqual(table_name, "n0p_adult_x7f2q")
+        labels = [node.label for node in app.pgraph_for_session.node_map.values()]
+        # 1 root + 15 children, so the last label handed out is the sixteenth
+        self.assertEqual(labels[0], "n0a")
+        self.assertEqual(labels[-1], "n0p")
 
 
 if __name__ == '__main__':
