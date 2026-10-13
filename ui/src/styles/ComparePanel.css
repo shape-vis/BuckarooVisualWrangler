@@ -24,7 +24,7 @@
     height: 100%;
     background: #ffffff;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    color: #1c1e21;
+    color: var(--ink);
     overflow: hidden;
     /* Narrow layouts follow the panel's own width, which docked is much less than the window's */
     container-type: inline-size;
@@ -60,7 +60,7 @@
     gap: 6px 12px;
     margin-top: 6px;
     font-size: 12px;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .compare-node-summary {
@@ -73,7 +73,7 @@
 
 .compare-wrangle {
     font-weight: 600;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 .compare-wrangle-meta::before {
@@ -93,15 +93,15 @@
 }
 
 .compare-node-chip--a {
-    color: #1877F2;
-    background: #e7f0fd;
-    border: 1px dashed #1877F2;
+    color: var(--accent);
+    background: var(--accent-tint);
+    border: 1px dashed var(--accent);
 }
 
 .compare-node-chip--b {
-    color: #701c1c;
+    color: var(--selection-b);
     background: #ecc9c9;
-    border: 1px solid #701c1c;
+    border: 1px solid var(--selection-b);
 }
 
 /* Save, pop out or dock, and close */
@@ -115,20 +115,20 @@
 
 .compare-action {
     padding: 6px 12px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     background: #ffffff;
     font-family: inherit;
     font-size: 13px;
     font-weight: 600;
-    color: #1c1e21;
+    color: var(--ink);
     white-space: nowrap;
     cursor: pointer;
     transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .compare-action:hover:not(:disabled) {
-    background: #f0f2f5;
+    background: var(--surface-muted);
     border-color: #bcc0c4;
 }
 
@@ -141,7 +141,7 @@
 .compare-saved {
     font-size: 12px;
     font-weight: 600;
-    color: #1a7f37;
+    color: var(--fewer);
     white-space: nowrap;
 }
 
@@ -159,14 +159,14 @@
     background: transparent;
     font-size: 24px;
     line-height: 1;
-    color: #65676b;
+    color: var(--ink-muted);
     cursor: pointer;
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .compare-close:hover {
     background: #e4e6eb;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 /* ── Body ─────────────────────────────────────────────────────────── */
@@ -177,7 +177,7 @@
     display: flex;
     gap: 16px;
     padding: 16px;
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .compare-options {
@@ -190,7 +190,7 @@
     padding: 14px;
     box-sizing: border-box;
     background: #ffffff;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 10px;
 }
 
@@ -213,13 +213,13 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .compare-muted {
     font-size: 12px;
     font-style: italic;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 /* ── Nodes ────────────────────────────────────────────────────────── */
@@ -244,8 +244,8 @@
     color: #ffffff;
 }
 
-.compare-role--a { background: #1877F2; }
-.compare-role--b { background: #701c1c; }
+.compare-role--a { background: var(--accent); }
+.compare-role--b { background: var(--selection-b); }
 
 .compare-node-name {
     font-weight: 600;
@@ -257,7 +257,7 @@
 .compare-node-rows {
     margin-left: auto;
     font-size: 12px;
-    color: #65676b;
+    color: var(--ink-muted);
     white-space: nowrap;
 }
 
@@ -265,7 +265,7 @@
 
 .compare-segmented {
     display: flex;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
 }
@@ -284,7 +284,7 @@
 }
 
 .compare-segment + .compare-segment {
-    border-left: 1px solid #dddfe2;
+    border-left: 1px solid var(--border);
 }
 
 .compare-segment:hover {
@@ -300,8 +300,8 @@
 
 .compare-segment--active,
 .compare-segment--active:hover {
-    background: #e7f0fd;
-    color: #1877F2;
+    background: var(--accent-tint);
+    color: var(--accent);
     font-weight: 600;
 }
 
@@ -313,18 +313,18 @@
 
 .compare-field-label {
     font-size: 12px;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .compare-select {
     width: 100%;
     padding: 6px 8px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: #ffffff;
     font: inherit;
     font-size: 13px;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 .compare-segment:focus-visible,
@@ -332,7 +332,7 @@
 .compare-brush-reset:focus-visible,
 .compare-close:focus-visible,
 .compare-ranked-item:focus-visible {
-    outline: 2px solid #1877F2;
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
 
@@ -353,7 +353,7 @@
 }
 
 .compare-changes dt {
-    color: #65676b;
+    color: var(--ink-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -401,7 +401,7 @@
     font-variant-numeric: tabular-nums;
     text-align: right;
     white-space: nowrap;
-    color: #0f766e;
+    color: var(--drift);
 }
 
 .compare-ranked-item {
@@ -413,18 +413,18 @@
     font: inherit;
     font-size: 12px;
     text-align: left;
-    color: #1c1e21;
+    color: var(--ink);
     cursor: pointer;
 }
 
 .compare-ranked-item:hover {
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .compare-ranked-item--active,
 .compare-ranked-item--active:hover {
-    background: #e7f0fd;
-    border-color: #1877F2;
+    background: var(--accent-tint);
+    border-color: var(--accent);
 }
 
 .compare-ranked-name {
@@ -440,9 +440,9 @@
     white-space: nowrap;
 }
 
-.compare-delta--improved { color: #1a7f37; }
-.compare-delta--worsened { color: #c1121f; }
-.compare-delta--flat     { color: #65676b; }
+.compare-delta--improved { color: var(--fewer); }
+.compare-delta--worsened { color: var(--more); }
+.compare-delta--flat     { color: var(--ink-muted); }
 
 /* ── Plot ─────────────────────────────────────────────────────────── */
 
@@ -453,7 +453,7 @@
     display: flex;
     padding: 12px 14px;
     background: #ffffff;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 10px;
 }
 
@@ -527,13 +527,13 @@
 .compare-plot-pill {
     max-width: 70%;
     padding: 6px 14px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 999px;
     background: #ffffff;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     font-size: 13px;
     text-align: center;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .compare-plot-pill--error {
@@ -546,7 +546,7 @@
 /* The app's axis text size applies here too, but never below what reads at this scale */
 .compare-plot-canvas .bottom-axis-text,
 .compare-plot-canvas .left-axis-text {
-    font-size: max(10px, var(--axis-text-size, 8px));
+    font-size: max(10px, var(--axis-text-size));
 }
 
 .compare-axis .domain,
@@ -557,13 +557,13 @@
 .compare-panel-title text {
     font-size: 12px;
     font-weight: 600;
-    fill: #1c1e21;
+    fill: var(--ink);
 }
 
 /* What a Sankey's panel is drawn against, under its title */
 .compare-panel-subtitle {
     font-size: 11px;
-    fill: #65676b;
+    fill: var(--ink-muted);
 }
 
 /* Root's box for a category, in the middle of the Sankey. Light, so the name written in it reads. Set before
@@ -586,12 +586,12 @@
 }
 
 .compare-flow-node:hover {
-    stroke: #0f766e;
+    stroke: var(--drift);
     stroke-width: 2;
 }
 
 .compare-flow-node--selected {
-    stroke: #0f766e;
+    stroke: var(--drift);
     stroke-width: 2.5;
 }
 
@@ -612,17 +612,17 @@
     justify-content: space-between;
     width: 100%;
     padding: 6px 8px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: #ffffff;
     font: inherit;
     font-size: 13px;
-    color: #1c1e21;
+    color: var(--ink);
     cursor: pointer;
 }
 
 .compare-picker-summary:hover {
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 /* Over the options beneath rather than pushing them down, as a select's list would be */
@@ -634,7 +634,7 @@
     margin-top: 4px;
     padding: 6px;
     background: #ffffff;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
 }
@@ -643,7 +643,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 5px 8px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     font: inherit;
     font-size: 12px;
@@ -669,7 +669,7 @@
     background: none;
     font: inherit;
     font-size: 11px;
-    color: #0f766e;
+    color: var(--drift);
     cursor: pointer;
 }
 
@@ -699,7 +699,7 @@
 }
 
 .compare-picker-item:hover {
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .compare-picker-name {
@@ -711,7 +711,7 @@
 }
 
 .compare-picker-rows {
-    color: #65676b;
+    color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
 }
 
@@ -726,7 +726,7 @@
     padding: 0 4px;
     font-size: 11px;
     font-weight: 700;
-    color: #65676b;
+    color: var(--ink-muted);
     border-top: 1px solid #eef0f2;
     padding-top: 6px;
 }
@@ -738,7 +738,7 @@
 }
 
 .compare-zero {
-    stroke: #1c1e21;
+    stroke: var(--ink);
     stroke-width: 1;
 }
 
@@ -756,7 +756,7 @@
 
 .compare-empty {
     font-size: 13px;
-    fill: #65676b;
+    fill: var(--ink-muted);
 }
 
 .compare-tooltip {
@@ -765,13 +765,13 @@
     display: none;
     max-width: 300px;
     padding: 6px 10px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     background: #ffffff;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     font-size: 12px;
     line-height: 1.5;
-    color: #1c1e21;
+    color: var(--ink);
     pointer-events: none;
 }
 
@@ -826,16 +826,16 @@
 /* Each figure is a node against root rather than against the other node. Teal, like every other drift
    figure - never red. */
 .compare-section-title--drift {
-    color: #0f766e;
+    color: var(--drift);
 }
 
 .compare-ridge-floor {
-    stroke: #dddfe2;
+    stroke: var(--border);
 }
 
 .compare-ridge-root {
     fill: none;
-    stroke: #1c1e21;
+    stroke: var(--ink);
     stroke-width: 1;
     stroke-dasharray: 4 3;
 }
@@ -868,7 +868,7 @@
 }
 
 .compare-ridge-crosshair line {
-    stroke: #0f766e;
+    stroke: var(--drift);
     stroke-width: 2;
     stroke-dasharray: 5 2;
 }
@@ -885,13 +885,13 @@
 
 .compare-ridge-crosshair-root {
     fill: #ffffff;
-    stroke: #1c1e21;
+    stroke: var(--ink);
     stroke-width: 1.2;
 }
 
 .compare-ridge-crosshair-box {
     fill: #ffffff;
-    stroke: #0f766e;
+    stroke: var(--drift);
     stroke-width: 1;
 }
 
@@ -899,7 +899,7 @@
     font-size: 11px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    fill: #0f766e;
+    fill: var(--drift);
 }
 
 .compare-ridge-label,
@@ -915,12 +915,12 @@
 
 .compare-flow-count {
     font-size: 10px;
-    fill: #65676b;
+    fill: var(--ink-muted);
 }
 
 .compare-flow-label {
     font-size: 11px;
-    fill: #1c1e21;
+    fill: var(--ink);
 }
 
 .compare-flow-label--removed {
@@ -929,7 +929,7 @@
 
 /* A category root never held - a recode into a new value - named on its band without a box */
 .compare-flow-label--new {
-    fill: #65676b;
+    fill: var(--ink-muted);
     font-style: italic;
 }
 
@@ -953,12 +953,12 @@
 
 .compare-brush-tick {
     font-size: 10px;
-    fill: #65676b;
+    fill: var(--ink-muted);
     font-variant-numeric: tabular-nums;
 }
 
 .compare-brush-floor {
-    stroke: #dddfe2;
+    stroke: var(--border);
 }
 
 .compare-brush-grip {
@@ -971,11 +971,11 @@
 
 .compare-brush-grip rect:not(.compare-brush-grip-hit) {
     fill: #ffffff;
-    stroke: #0f766e;
+    stroke: var(--drift);
 }
 
 .compare-brush-grip path {
-    stroke: #0f766e;
+    stroke: var(--drift);
 }
 
 /* In the gutter right of the strip, where the ridgeline prints each row's drift */
@@ -989,17 +989,17 @@
 
 .compare-brush-reset {
     padding: 2px 8px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: #ffffff;
     font-family: inherit;
-    color: #0f766e;
+    color: var(--drift);
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
 .compare-brush-reset:hover {
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .compare-brush-hint {
@@ -1070,7 +1070,7 @@
 }
 
 .compare-bubble--hover circle {
-    fill: #f0f2f5;
+    fill: var(--surface-muted);
 }
 
 /* Fixed height, so the plot above does not jump as bubbles are hovered on and off */

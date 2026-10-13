@@ -21,7 +21,10 @@ import {SupportDropZone} from "../graph_objects/supportNodes/SupportDropZone.jsx
 import {EDGE_GAP, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf} from "../graph_objects/supportNodes/supportLayout.js";
 import {useSupportNodes} from "./supportNodes.js";
 import {setNodeLabels} from "../utils/comparison.js";
-import "../styles/Nodes.css"
+import "../styles/Nodes.css";
+import "../styles/SupportNode.css";
+import "../styles/ProspectiveNode.css";
+import "../styles/AnalysisDot.css";
 
 
 export const PGraphContext = createContext(null);

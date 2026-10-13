@@ -6,7 +6,7 @@
     z-index: 2;
     cursor: col-resize;
     touch-action: none;
-    background: #dddfe2;
+    background: var(--border);
     background-clip: content-box;
     padding: 0 2px;
     box-sizing: border-box;
@@ -16,7 +16,7 @@
 .split-divider:hover,
 .split-divider:active,
 .split-divider:focus-visible {
-    background-color: #1877F2;
+    background-color: var(--accent);
     padding: 0 1px;
     outline: none;
 }

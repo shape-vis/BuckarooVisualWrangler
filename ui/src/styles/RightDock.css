@@ -5,7 +5,7 @@
     height: 100%;
     flex-shrink: 0;
     background: #ffffff;
-    border-left: 1px solid #dddfe2;
+    border-left: 1px solid var(--border);
     box-sizing: border-box;
     overflow: hidden;
 }
@@ -26,7 +26,7 @@
 
 .right-dock-resize:hover,
 .right-dock-resize:active {
-    background: #1877F2;
+    background: var(--accent);
 }
 
 /* Tab strip, in the manner of editor file tabs */
@@ -34,19 +34,19 @@
     display: flex;
     align-items: stretch;
     flex-shrink: 0;
-    background: #f0f2f5;
-    border-bottom: 1px solid #dddfe2;
+    background: var(--surface-muted);
+    border-bottom: 1px solid var(--border);
     padding-left: 6px;
 }
 
 .right-dock-tab {
     border: none;
-    border-right: 1px solid #dddfe2;
+    border-right: 1px solid var(--border);
     background: transparent;
     padding: 0.5em 0.9em;
     font-size: 0.92em;
     font-family: inherit;
-    color: #65676b;
+    color: var(--ink-muted);
     cursor: pointer;
     white-space: nowrap;
     border-top: 2px solid transparent;
@@ -55,15 +55,15 @@
 
 .right-dock-tab:hover {
     background: #e7eaee;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 /* The active tab reads as the sheet in front: white ground, accent edge, no bottom rule */
 .right-dock-tab--active {
     background: #ffffff;
-    color: #1c1e21;
+    color: var(--ink);
     font-weight: 600;
-    border-top: 2px solid #1877F2;
+    border-top: 2px solid var(--accent);
     margin-bottom: -1px;
     padding-bottom: calc(0.5em + 1px);
 }
@@ -72,7 +72,7 @@
     margin-left: auto;
     border: none;
     background: transparent;
-    color: #65676b;
+    color: var(--ink-muted);
     font-size: 1.1em;
     line-height: 1;
     padding: 0 0.7em;
@@ -81,7 +81,7 @@
 
 .right-dock-hide:hover {
     background: #e7eaee;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 .right-dock-body {
@@ -105,7 +105,7 @@
     width: 34px;
     flex-direction: column;
     align-items: stretch;
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .right-dock-rail-tab {
@@ -114,9 +114,9 @@
     transform: rotate(180deg);
     flex: 1;
     border: none;
-    border-bottom: 1px solid #dddfe2;
+    border-bottom: 1px solid var(--border);
     background: transparent;
-    color: #65676b;
+    color: var(--ink-muted);
     font-family: inherit;
     font-size: 11px;
     font-weight: 600;
@@ -128,5 +128,5 @@
 
 .right-dock-rail-tab:hover {
     background: #e7eaee;
-    color: #1877F2;
+    color: var(--accent);
 }

@@ -1,11 +1,51 @@
+/* The app's colours, named once. Every stylesheet reads them from here - including the compare panel's popped-out
+   window, which is handed a copy of this page's stylesheets. */
 :root {
     --axis-text-size: 8px;
+
+    /* Text, borders and surfaces */
+    --ink: #1c1e21;
+    --ink-muted: #65676b;
+    --border: #dddfe2;
+    --surface-muted: #f0f2f5;
+    --surface-hover: #e4e6ea;
+
+    /* The app's blue - links, the selected tab, selection A - and its tint */
+    --accent: #1877f2;
+    --accent-tint: #e7f0fd;
+
+    /* Drift, as DRIFT_COLOR in ui/src/store/errorColors.js; and selection B, the current node */
+    --drift: #0f766e;
+    --selection-b: #701c1c;
+
+    /* Staged candidates: violet, dashed */
+    --candidate: #7c3aed;
+    --candidate-tint: #faf5ff;
+    --candidate-ink: #4c1d95;
+
+    /* A difference between two nodes: fewer rows, or more */
+    --fewer: #1a7f37;
+    --more: #c1121f;
+
+    /* The error types, as ERROR_TYPE_COLORS in ui/src/store/errorColors.js */
+    --error-missing: saddlebrown;
+    --error-mismatch: hotpink;
+    --error-anomaly: red;
+    --error-incomplete: gray;
+    --error-none: steelblue;
+
+    /* Supporting sub-nodes: turquoise, clear of the comparison's green and blue, the candidates' violet and the
+       error types' colours. The cards, their links (supportLayout.js) and the hidden-count pill all read these. */
+    --support-accent: #14b8a6;
+    --support-tint: #e0f7f4;
+    --support-tint-strong: #c3efe9;
+    --support-ink: #0f5f58;
 }
 
 body {
   min-width: 320px;
   min-height: 100vh;
-  background-color: #f0f2f5;
+  background-color: var(--surface-muted);
 }
 
 body, html, h1 {
@@ -15,7 +55,7 @@ body, html, h1 {
     height: 100%;
     overflow: auto;
     overflow-x: hidden;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 h3 {
@@ -24,14 +64,14 @@ h3 {
     margin-bottom: 8px;
     font-size: 15px;
     font-weight: 600;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 #table-div {
     padding: 4px;
     align-items: center;
     height: calc(30vh - 85px);
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     overflow-y: auto;
     overflow-x: scroll;
@@ -43,7 +83,7 @@ h3 {
 
 #table-container {
     font-size: 11px;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 .error-scent {
@@ -53,7 +93,7 @@ h3 {
     position: relative;
     font-size: 10px;
     font-weight: bold;
-    color: #1c1e21;
+    color: var(--ink);
     padding-top: 2px;
     padding-left: 4px;
     padding-right: 4px;
@@ -72,12 +112,12 @@ p {
 
 .bottom-axis-text {
     text-anchor: end;
-    font-size: var(--axis-text-size, 8px);
+    font-size: var(--axis-text-size);
     transform: rotate(-45deg);
 }
 
 .left-axis-text {
-    font-size: var(--axis-text-size, 8px);
+    font-size: var(--axis-text-size);
 }
 
 #main-svg {

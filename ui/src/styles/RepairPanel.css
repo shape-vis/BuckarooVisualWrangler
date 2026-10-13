@@ -5,7 +5,7 @@
     width: auto;
     height: auto;
     background-color: #ffffff;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     align-items: center;
     justify-content: center;
@@ -15,7 +15,7 @@
 }
 
 .repair-method:hover {
-    border-color: #1877F2;
+    border-color: var(--accent);
     box-shadow: 0 2px 6px rgba(24, 119, 242, 0.15);
 }
 
@@ -23,7 +23,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     background: #ffffff;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -126,7 +126,7 @@
 
 .repair-candidate {
     margin: 6px 0;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     background: #ffffff;
 }
@@ -140,7 +140,7 @@
 
 .repair-candidate-btn {
     padding: 4px 12px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: #ffffff;
     font-family: inherit;
@@ -150,7 +150,7 @@
 }
 
 .repair-candidate-btn:hover:not(:disabled) {
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .repair-candidate-btn:disabled {
@@ -159,7 +159,7 @@
 }
 
 .repair-candidate-btn--accept {
-    border-color: #1a7f37;
+    border-color: var(--fewer);
     background: #64ea96;
     color: #06301a;
 }

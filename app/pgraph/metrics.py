@@ -11,19 +11,16 @@ through DataProfile.calculate_column_attribute, which carries its own look-up-th
 """
 import json
 
+from app.db_utils.detector_sql import STRUCTURAL_COLUMNS
+
 # The four quality dimensions from the thesis proposal. These names match the error_type values the
 # detectors emit and ERROR_DIMENSIONS in ui/src/store/errorColors.js, so the front end can color them
 # without a translation table.
 DIMENSIONS = ("missing", "mismatch", "anomaly", "incomplete")
 
-# Row identifiers are not data attributes, so they are never counted as columns with quality. The
-# detectors never flag "ID" (see STRUCTURAL_COLUMNS in app/db_utils/detector_sql.py), so it could only ever
-# contribute zeroes and dilute the node-level totals.
-ID_COLUMNS = ("ID", "Original_ID")
-
-# Not data attributes: the row identifiers, and the index columns to_sql can leave behind, which
-# DataProfile.get_col_names also skips. Drift and the AI's profile cover the same columns the error metrics do.
-SKIPPED_COLUMNS = (*ID_COLUMNS, "index", "level_0")
+# Not data attributes, so never counted as columns with quality: exactly the columns the detectors never flag, which
+# could only contribute zeroes and dilute the node-level totals. Drift and the AI's profile skip the same columns.
+SKIPPED_COLUMNS = STRUCTURAL_COLUMNS
 
 
 def parse_json_counts(raw):
@@ -71,7 +68,7 @@ class NodeMetrics:
         :param row_count: the node table's row count, the one thing DataProfile does not provide
         :return: a NodeMetrics for that node
         """
-        col_names = [col for col in data_profile.get_col_names() if col not in ID_COLUMNS]
+        col_names = [col for col in data_profile.get_col_names() if col not in SKIPPED_COLUMNS]
 
         columns = {}
         summed_counts = {dimension: 0 for dimension in DIMENSIONS}

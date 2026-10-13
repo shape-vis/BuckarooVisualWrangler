@@ -29,20 +29,20 @@
     display: flex;
     align-items: stretch;
     flex-shrink: 0;
-    background: #f0f2f5;
-    border-bottom: 1px solid #dddfe2;
+    background: var(--surface-muted);
+    border-bottom: 1px solid var(--border);
     padding-left: 6px;
 }
 
 .plots-pane-tab {
     border: none;
-    border-right: 1px solid #dddfe2;
+    border-right: 1px solid var(--border);
     border-top: 2px solid transparent;
     background: transparent;
     padding: 6px 14px;
     font-size: 13px;
     font-family: inherit;
-    color: #65676b;
+    color: var(--ink-muted);
     cursor: pointer;
     white-space: nowrap;
     transition: background-color 0.15s ease, color 0.15s ease;
@@ -50,15 +50,15 @@
 
 .plots-pane-tab:hover {
     background: #e7eaee;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 /* The active tab reads as the sheet in front: white ground, accent edge, no bottom rule */
 .plots-pane-tab--active {
     background: #ffffff;
-    color: #1c1e21;
+    color: var(--ink);
     font-weight: 600;
-    border-top: 2px solid #1877F2;
+    border-top: 2px solid var(--accent);
     margin-bottom: -1px;
     padding-bottom: 7px;
 }

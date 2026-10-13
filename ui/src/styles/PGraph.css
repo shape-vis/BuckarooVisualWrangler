@@ -24,7 +24,7 @@
 
 .pgraph-segmented {
   display: inline-flex;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
   background: #ffffff;
@@ -33,7 +33,7 @@
 
 .pgraph-segment {
   border: none;
-  border-left: 1px solid #dddfe2;
+  border-left: 1px solid var(--border);
   background: transparent;
   color: #3c4043;
   font-family: inherit;
@@ -53,15 +53,15 @@
 
 .pgraph-segment--active,
 .pgraph-segment--active:hover {
-  background: #e7f0fd;
-  color: #1877F2;
+  background: var(--accent-tint);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .pgraph-hint {
   font-size: 11px;
   font-style: italic;
-  color: #65676b;
+  color: var(--ink-muted);
   background: rgba(240, 242, 245, 0.9);
   border-radius: 4px;
   padding: 2px 6px;
@@ -78,9 +78,9 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #65676b;
+  color: var(--ink-muted);
   background: #ffffff;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 2px 4px 2px 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -91,7 +91,7 @@
   background: transparent;
   font-family: inherit;
   font-size: 12px;
-  color: #1c1e21;
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -118,7 +118,7 @@
 }
 
 .analysis-axis-strip {
-  fill: #f0f2f5;
+  fill: var(--surface-muted);
   fill-opacity: 0.94;
 }
 
@@ -144,10 +144,10 @@
 
 /* Sits over the graph, appearing only while something is selected or collapsed */
 .pgraph-action-button {
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
-  color: #1c1e21;
+  color: var(--ink);
   font-family: inherit;
   font-size: 12px;
   padding: 5px 10px;
@@ -158,7 +158,7 @@
 
 .pgraph-action-button:hover {
   background: #edf3fe;
-  color: #1877F2;
+  color: var(--accent);
   box-shadow: 0 2px 6px rgba(24, 119, 242, 0.2);
 }
 
@@ -185,7 +185,7 @@
 /* The model reporting that it found nothing worth repairing. Not an error - it sits in the same
    top-center slot as the collapse error, but reads as information rather than as a failure. */
 .pgraph-ai-notice {
-  background: #faf5ff;
+  background: var(--candidate-tint);
   border: 1px solid #ddd6fe;
   color: #5b21b6;
   border-radius: 6px;
@@ -205,7 +205,7 @@
   min-width: 0;
   position: relative;
   z-index: 1;
-  background: #f0f2f5;
+  background: var(--surface-muted);
 }
 
 /* ── Analysis mode's detail inset ──────────────────────────────────────────
@@ -325,11 +325,11 @@
 }
 
 .analysis-inset-ring--current {
-  stroke: #701c1c;
+  stroke: var(--selection-b);
 }
 
 .analysis-inset-ring--selection-a {
-  stroke: #1877F2;
+  stroke: var(--accent);
   stroke-dasharray: 3 2;
 }
 
@@ -354,10 +354,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
-  color: #65676b;
+  color: var(--ink-muted);
   font-family: inherit;
   font-size: 12px;
   padding: 4px 9px;

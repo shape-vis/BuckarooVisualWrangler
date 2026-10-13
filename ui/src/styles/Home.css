@@ -1,6 +1,6 @@
 
 .dataset-button {
-    background-color: #1877F2;
+    background-color: var(--accent);
     color: white;
     font-size: 14px;
     font-weight: 600;

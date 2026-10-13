@@ -3,7 +3,7 @@
 .support-modal {
   width: min(560px, 80vw);
   text-align: left;
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 /* Wide enough for a kind picked from a gallery of plot cards */
@@ -34,11 +34,11 @@
   background: transparent;
   font-size: 20px;
   line-height: 1;
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 .support-modal-close:hover {
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 .support-modal-body {
@@ -61,15 +61,15 @@
   cursor: pointer;
   text-align: left;
   padding: 6px 10px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
   font-size: 13px;
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 .support-modal-kind:hover {
-  background: #f0f2f5;
+  background: var(--surface-muted);
 }
 
 /* A kind that cannot be added to this node; still pickable, so its reason can be read */
@@ -78,9 +78,9 @@
 }
 
 .support-modal-kind--active {
-  border-color: #1877F2;
-  background: #e7f0fd;
-  color: #1877F2;
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -94,15 +94,15 @@
 .support-modal-description {
   margin: 0;
   font-size: 13px;
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 .support-modal-add {
   cursor: pointer;
   padding: 6px 14px;
-  border: 1px solid #1877F2;
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #1877F2;
+  background: var(--accent);
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
@@ -120,13 +120,13 @@
 .support-modal-reason {
   margin: 0;
   font-size: 13px;
-  color: #c1121f;
+  color: var(--more);
 }
 
 .support-modal-attached {
   margin-top: 18px;
   padding-top: 12px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--surface-muted);
 }
 
 .support-modal-attached h3 {
@@ -151,19 +151,19 @@
 .support-modal-attached-row button {
   cursor: pointer;
   padding: 2px 8px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 4px;
   background: #ffffff;
   font-size: 12px;
 }
 
 .support-modal-attached-row button:hover {
-  background: #f0f2f5;
+  background: var(--surface-muted);
 }
 
 .support-modal-side,
 .support-modal-empty {
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 .support-modal-empty {
@@ -175,5 +175,5 @@
 .support-modal-incomplete {
   margin: 0;
   font-size: 12px;
-  color: #65676b;
+  color: var(--ink-muted);
 }

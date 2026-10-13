@@ -1,13 +1,12 @@
 // comparisonSpec.js
 // The comparison object: everything the compare panel shows, as one plain record of settings. The panel
-// opens from one and reports one, and a compare sub-node keeps one in its config. Its keys match
-// app/pgraph/comparison.py. Settings only: opening one fetches its plot again.
+// opens from one and reports one, and a compare sub-node keeps one in its config. Settings only: opening one
+// fetches its plot again.
 
 export const SPEC_VERSION = 1;
 
 const DEFAULTS = {
     version: SPEC_VERSION,
-    id: null,
     anchor: null,
     a: null,
     b: null,

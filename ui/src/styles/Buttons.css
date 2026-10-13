@@ -1,9 +1,9 @@
 
 .rotatedButton {
   padding: 5px;
-  color: #65676b;
-  background-color: #f0f2f5;
-  border: 1px solid #dddfe2;
+  color: var(--ink-muted);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -17,13 +17,13 @@
 }
 
 .rotatedButton:hover {
-  background-color: #e4e6ea;
+  background-color: var(--surface-hover);
 }
 
 .rotatedButton--selected {
-  background-color: #e7f0fd;
-  color: #1877F2;
-  border-color: #1877F2;
+  background-color: var(--accent-tint);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .rotatedButtonText {
@@ -36,9 +36,9 @@
 
 .standardButton {
   padding: 5px 10px;
-  color: #1c1e21;
-  background-color: #f0f2f5;
-  border: 1px solid #dddfe2;
+  color: var(--ink);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -50,13 +50,13 @@
 }
 
 .standardButton:hover {
-  background-color: #e4e6ea;
+  background-color: var(--surface-hover);
 }
 
 .standardButton--selected {
-  background-color: #e7f0fd;
-  color: #1877F2;
-  border-color: #1877F2;
+  background-color: var(--accent-tint);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .standardButtonText {
@@ -133,7 +133,7 @@
 .navButtonButtonText {
   font-size: 14px;
   font-weight: 600;
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 .navButtonContainer {

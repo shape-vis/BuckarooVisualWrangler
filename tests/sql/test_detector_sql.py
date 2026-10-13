@@ -168,6 +168,22 @@ def test_id_is_never_flagged(detect):
 
 
 @pytest.mark.sql
+def test_a_csv_index_column_is_never_flagged_but_an_original_id_is(detect):
+    """
+    As the pandas detectors had it: "Unnamed: 0" - a CSV's unnamed index column - is structural, while an upload's
+    own id column, renamed "Original_ID" when it can't serve as "ID", is data like any other.
+    """
+    flags = detect(pd.DataFrame({
+        "ID": [1, 2, 3],
+        "Unnamed: 0": [None, 1, 2],
+        "Original_ID": [None, "x7", "x9"],
+    }))
+
+    assert "Unnamed: 0" not in flags.get("missing", {})
+    assert flags["missing"]["Original_ID"] == {1}
+
+
+@pytest.mark.sql
 def test_the_errors_table_keeps_its_shape_and_is_indexed(detect):
     detect(pd.DataFrame({"ID": [1, 2], "value": [None, 1.0]}))
 

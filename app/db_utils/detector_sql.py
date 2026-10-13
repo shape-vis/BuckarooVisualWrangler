@@ -17,8 +17,11 @@ from app.db_utils.column_types import ColumnTypes, NUMERIC_TEXT_REGEX
 from app.db_utils.execute_sql import execute_sql, quote_identifier, quote_literal
 
 
-# Row identifiers, and the index columns pandas leaves behind: never data, so never flagged
-STRUCTURAL_COLUMNS = ("ID", "index", "level_0")
+# Columns that are never data, so never flagged: the row identifier "ID"; "Unnamed: 0", the column pandas names a
+# CSV's unnamed index column; and the index columns to_sql can leave behind. The pandas detectors skipped exactly "ID"
+# and "Unnamed: 0" - an upload's original id column, renamed "Original_ID" when it can't serve as "ID", is data like
+# any other. Metrics, drift and the AI's profile skip this same list (see app/pgraph/metrics.py).
+STRUCTURAL_COLUMNS = ("ID", "Unnamed: 0", "index", "level_0")
 
 # The text a cell can hold and still count as missing
 MISSING_TOKENS = ("null", "undefined")

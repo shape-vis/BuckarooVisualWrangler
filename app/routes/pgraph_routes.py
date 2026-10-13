@@ -5,7 +5,6 @@ from app import app, db_operations, engine
 from app.pgraph.metrics import quality_trajectory
 from app.db_utils.compare_sql import PLOT_KINDS, CompareSQL
 from app.pgraph.distortion import distortion_trajectory, drift_detail
-from app.pgraph.comparison import Comparison, ComparisonError
 from app.server_utils.service_helpers import (
     WRANGLE_LOCK,
     clicked_node_access_helper,
@@ -214,68 +213,3 @@ def drift_detail_view():
         return {"success": True, **drift_detail(pgraph, node, column, keep, base)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400
-
-
-# ── Saved comparisons ────────────────────────────────────────────────────────
-# The compare panel's settings, kept on the session's graph when the user saves them - see
-# app/pgraph/comparison.py. Settings only: opening one asks /api/pgraph/compare and drift_detail again.
-
-@app.post("/api/pgraph/comparisons")
-def save_comparison():
-    """
-    Keep a comparison on the graph.
-
-    Body: a comparison record, as ui/src/utils/comparisonSpec.js builds it. Returns it with its new id.
-    """
-    try:
-        pgraph, error = _graph_or_error()
-        if error:
-            return error
-        comparison = pgraph.add_comparison(Comparison.from_json(request.get_json(force=True), pgraph))
-        return {"success": True, "comparison": comparison.__json__()}
-    except (ComparisonError, ValueError) as e:
-        return {"success": False, "error": str(e)}, 400
-
-
-@app.get("/api/pgraph/comparisons")
-def list_comparisons():
-    """
-    The saved comparisons, oldest first.
-
-    Query: [?anchor=<node>] to list only those pinned to one node.
-    """
-    pgraph, error = _graph_or_error()
-    if error:
-        return error
-    anchor = request.args.get("anchor") or None
-
-    comparisons = []
-    for comparison in pgraph.comparisons_for(anchor):
-        comparisons.append(comparison.__json__())
-    return {"success": True, "comparisons": comparisons}
-
-
-@app.put("/api/pgraph/comparisons/<comparison_id>")
-def update_comparison(comparison_id):
-    """Replace a saved comparison's settings. Body: the whole record, as for saving one."""
-    try:
-        pgraph, error = _graph_or_error()
-        if error:
-            return error
-        comparison = pgraph.update_comparison(
-            comparison_id, Comparison.from_json(request.get_json(force=True), pgraph))
-        if comparison is None:
-            return {"success": False, "error": f"no comparison {comparison_id}"}, 404
-        return {"success": True, "comparison": comparison.__json__()}
-    except (ComparisonError, ValueError) as e:
-        return {"success": False, "error": str(e)}, 400
-
-
-@app.delete("/api/pgraph/comparisons/<comparison_id>")
-def delete_comparison(comparison_id):
-    pgraph, error = _graph_or_error()
-    if error:
-        return error
-    if pgraph.remove_comparison(comparison_id) is None:
-        return {"success": False, "error": f"no comparison {comparison_id}"}, 404
-    return {"success": True}

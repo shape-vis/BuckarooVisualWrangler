@@ -218,6 +218,6 @@ def test_endpoints_survive_a_session_with_no_graph_yet(monkeypatch):
     assert resp.status_code == 409
     assert "no graph" in resp.get_json()["error"]
 
-    resp = client.get("/api/pgraph/comparisons")
+    resp = client.get("/api/pgraph/drift_detail", query_string={"node": "anything", "column": "a"})
     assert resp.status_code == 400
     assert "no graph" in resp.get_json()["error"]

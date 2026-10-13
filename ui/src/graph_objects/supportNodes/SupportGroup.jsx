@@ -1,4 +1,4 @@
-import "../../styles/Nodes.css";
+import "../../styles/SupportNode.css";
 
 /**
  * The boundary drawn around a node and its supporting sub-nodes - see supportLayout's groupBoundaries. Sized

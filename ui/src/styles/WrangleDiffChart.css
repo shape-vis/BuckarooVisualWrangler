@@ -22,10 +22,10 @@
   margin: auto;
   padding: 8px 0;
   font-size: 10px;
-  color: #65676b;
+  color: var(--ink-muted);
   text-align: center;
 }
 
 .wrangle-diff-message--error {
-  color: #c1121f;
+  color: var(--more);
 }

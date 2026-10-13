@@ -4,6 +4,8 @@
 from typing import List, Tuple
 from sqlalchemy import text
 from app import engine
+from app.db_utils.detector_sql import missing_cell_predicate
+from app.db_utils.execute_sql import quote_identifier
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper Functions
@@ -53,11 +55,11 @@ def _get_row_count(conn, table: str) -> int:
 
 
 def _missing_pred(col: str) -> str:
-    """Boolean SQL expression that is TRUE when column is 'missing'."""
-    return (
-        f"(\"{col}\" IS NULL "
-        f"OR LOWER(\"{col}\"::text) IN ('', 'null', 'undefined', 'nan', 'none'))"
-    )
+    """
+    Boolean SQL expression that is TRUE when a cell of the column is missing - the detectors' rule, so an impute
+    never learns its fill value from a cell the Missing metric counts as missing.
+    """
+    return missing_cell_predicate(quote_identifier(col))
 
 
 def _compute_imputation_value(conn, table: str, col: str, is_numeric: bool):

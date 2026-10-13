@@ -1,0 +1,143 @@
+/* ── Prospective nodes ───────────────────────────────────────────────────────
+   A wrangle that has not happened yet - one the AI is proposing, or a repair of the selected rows -
+   drawn where the resulting node would sit. Dashed and violet, so it cannot be mistaken for a real
+   node: the selection A marker is dashed blue and a folded run is dashed grey, and both of those
+   stand for something that exists. This one does not - yet. A small tag says which source it came from. */
+.react-flow__node-prospectiveNode {
+  background-color: var(--candidate-tint);
+  border: 2px dashed var(--candidate);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: center;
+  /* Matches the other node types, so dagre's fixed 200x100 footprint still describes it */
+  min-width: 150px;
+  max-width: 190px;
+  cursor: default;
+}
+
+.prospective-node-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--candidate-ink);
+}
+
+/* Where the candidate came from. Both stay inside the prospective violet family, so the tag tells the
+   sources apart without making either read as a real node. */
+.prospective-node-source {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+.prospective-node-source--ai {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.prospective-node-source--repair {
+  background: var(--candidate-ink);
+  color: #ffffff;
+}
+
+/* Same swatch treatment the metrics expansion uses, so an error type reads the same colour
+   wherever it appears */
+.prospective-node-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.prospective-node-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The candidate's own id - c7 - which it goes by until it is accepted and gets its n… label */
+.prospective-node-id {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--candidate);
+}
+
+/* The tools every node carries, under its buttons */
+.prospective-node-tools {
+  margin-top: 4px;
+}
+
+.prospective-node-rows {
+  color: #6b21a8;
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.prospective-node-reason {
+  color: #4b5563;
+  font-size: 10px;
+  line-height: 1.3;
+  margin: 4px 0 6px;
+  text-align: left;
+}
+
+/* A repair candidate's preview chart: the Repair panel's card, untitled - the node's own title names it */
+.prospective-node-chart {
+  margin-bottom: 6px;
+}
+
+.prospective-node-chart .preview-card {
+  padding: 4px;
+}
+
+.prospective-node-chart .preview-card-label:empty {
+  display: none;
+}
+
+.prospective-node-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.prospective-node-btn {
+  cursor: pointer;
+  border: 1px solid #c4b5fd;
+  background: #ffffff;
+  color: var(--candidate-ink);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.prospective-node-btn:hover:not(:disabled) {
+  background: #ede9fe;
+  border-color: var(--candidate);
+}
+
+.prospective-node-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Accepting is the affirmative action, so it takes the app's green */
+.prospective-node-btn--accept {
+  background: #64ea96;
+  border-color: var(--fewer);
+  color: #06301a;
+  font-weight: 600;
+}
+
+.prospective-node-btn--accept:hover:not(:disabled) {
+  background: #46d97e;
+}

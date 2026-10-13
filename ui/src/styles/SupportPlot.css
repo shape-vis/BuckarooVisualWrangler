@@ -37,14 +37,14 @@
   gap: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 .support-plot-picker select {
   flex: 1;
   min-width: 0;
   padding: 2px 4px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 11px;
 }
@@ -69,7 +69,7 @@
 }
 
 .support-plot-status--error {
-  color: #c1121f;
+  color: var(--more);
 }
 
 .support-plot-actions {
@@ -81,23 +81,23 @@
 
 .support-plot-action {
   padding: 3px 10px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  color: #1c1e21;
+  color: var(--ink);
   cursor: pointer;
 }
 
 .support-plot-action:hover {
-  background: #f0f2f5;
+  background: var(--surface-muted);
 }
 
 .support-plot-action--primary {
-  border-color: #1877F2;
-  background: #1877F2;
+  border-color: var(--accent);
+  background: var(--accent);
   color: #ffffff;
 }
 
@@ -128,7 +128,7 @@
 .support-plot-gallery-item {
   height: 270px;
   padding: 8px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #ffffff;
   box-sizing: border-box;
@@ -147,7 +147,7 @@
 .support-plot-gallery-empty {
   margin: 0;
   font-size: 13px;
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 /* ── In the graph ───────────────────────────────────────────────────────── */

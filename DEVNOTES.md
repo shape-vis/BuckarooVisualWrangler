@@ -130,7 +130,6 @@ through `service_helpers.session_graph()`.
 - `node_count` - how many nodes joined for good; it hands out labels (`node_id_for_count`: n0a ... n0z, n1a ... n9z)
 - `candidate_count` - hands out candidate prefixes (`c0`, `c1`, ...), never reused
 - `current_node_table_name`, `prev_node_table_name`, `next_node_table_name` - the navigation pointers
-- `comparisons` - saved compare-panel settings (`app/pgraph/comparison.py`)
 
 Navigation: `undo_pgraph` steps up to the current node's parent (and refuses at the root), `redo_pgraph` steps down
 to the node undo left or the most recent child, and `set_clicked_node_as_current` jumps to a clicked node. The
@@ -142,7 +141,7 @@ deleted, so navigating between nodes is instant.
 `candidate` (where a candidate came from: repair or AI, its reason, row count, ...).
 
 The graph is sent to the client by `GET /api/routes/update_pgraph` as `{nodes, edges, current_table, prev_table,
-next_table, pareto, comparisons}`.
+next_table, pareto}`.
 
 ---
 
@@ -206,7 +205,7 @@ no import line.
 | `wrangler_routes_sql.py` | `POST /api/wrangle/create-previews` (stages repair candidates) |
 | `candidate_routes.py` | `POST /api/candidates/accept`, `POST /api/candidates/discard` |
 | `ai_routes.py` | `GET /api/ai/status`, `POST /api/ai/suggest` |
-| `pgraph_routes.py` | `GET /api/routes/update_pgraph`, `POST /api/setGraphToClickedNode`, `GET /api/pgraph/branch_trajectory`, `GET /api/pgraph/compare`, `GET /api/pgraph/drift_detail`, saved comparisons under `/api/pgraph/comparisons` |
+| `pgraph_routes.py` | `GET /api/routes/update_pgraph`, `POST /api/setGraphToClickedNode`, `GET /api/pgraph/branch_trajectory`, `GET /api/pgraph/compare`, `GET /api/pgraph/drift_detail` |
 
 Main-table endpoints read `db_operations.main_table_name` rather than taking a table from the client. Endpoints that
 take a table name only accept nodes of the session's graph.
@@ -252,8 +251,7 @@ app/
 │   ├── pgraph.py                # PGraph
 │   ├── node.py                  # GraphNode, wrangle labels
 │   ├── metrics.py               # NodeMetrics
-│   ├── distortion.py            # drift arithmetic, annotations, Pareto
-│   └── comparison.py            # saved comparison settings
+│   └── distortion.py            # drift arithmetic, annotations, Pareto
 ├── llm/                         # prompt, tool declarations, Gemini client - no SQL, no writes
 ├── routes/                      # one file per endpoint group, auto-imported
 └── server_utils/

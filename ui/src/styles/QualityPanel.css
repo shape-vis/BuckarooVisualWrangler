@@ -7,12 +7,12 @@
     gap: 0.7em;
     width: 100%;
     box-sizing: border-box;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 .quality-empty,
 .quality-nochange {
-    color: #65676b;
+    color: var(--ink-muted);
     font-style: italic;
     font-size: 0.92em;
 }
@@ -30,7 +30,7 @@
 
 /* One dimension's sparkline plus its per-step contributions */
 .quality-dimension {
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 0.65em;
     padding: 0.5em;
     background: #ffffff;
@@ -71,7 +71,7 @@
     margin-left: auto;
     font-size: 0.92em;
     font-weight: 700;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .quality-swatch {
@@ -82,10 +82,10 @@
     display: inline-block;
 }
 
-.quality-swatch[data-error-type="missing"]    { background-color: saddlebrown; }
-.quality-swatch[data-error-type="mismatch"]   { background-color: hotpink; }
-.quality-swatch[data-error-type="anomaly"]    { background-color: red; }
-.quality-swatch[data-error-type="incomplete"] { background-color: gray; }
+.quality-swatch[data-error-type="missing"]    { background-color: var(--error-missing); }
+.quality-swatch[data-error-type="mismatch"]   { background-color: var(--error-mismatch); }
+.quality-swatch[data-error-type="anomaly"]    { background-color: var(--error-anomaly); }
+.quality-swatch[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
 
 /* Per-step contributions: each step's share of the branch's total absolute change */
 .contribution-list {
@@ -101,7 +101,7 @@
     align-items: baseline;
     gap: 0.3em;
     font-size: 0.83em;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .contribution-step {
@@ -115,7 +115,7 @@
     font-weight: 700;
 }
 
-.contribution-share--improved { color: #1a7f37; }
+.contribution-share--improved { color: var(--fewer); }
 .contribution-share--worsened { color: #d1242f; }
 
 .contribution-delta {
@@ -133,7 +133,7 @@
 }
 
 .columns-sort-label {
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .columns-table {
@@ -145,9 +145,9 @@
 .columns-table th {
     text-align: right;
     font-weight: 600;
-    color: #65676b;
+    color: var(--ink-muted);
     padding: 0.25em 0.17em;
-    border-bottom: 1px solid #dddfe2;
+    border-bottom: 1px solid var(--border);
 }
 
 .columns-table th:first-child {
@@ -157,7 +157,7 @@
 .columns-table td {
     text-align: right;
     padding: 0.25em 0.17em;
-    border-bottom: 1px solid #f0f2f5;
+    border-bottom: 1px solid var(--surface-muted);
 }
 
 .columns-table-name {
@@ -179,7 +179,7 @@
     flex-direction: column;
     gap: 0.25em;
     padding: 0.5em;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 0.65em;
     background: #f7f8fa;
     font-size: 0.9em;
@@ -196,8 +196,8 @@
     width: 1.4em;
     height: 1.4em;
     border-radius: 50%;
-    background: #dddfe2;
-    color: #65676b;
+    background: var(--border);
+    color: var(--ink-muted);
     text-align: center;
     font-weight: 700;
     font-size: 0.85em;
@@ -205,12 +205,12 @@
 }
 
 .branch-picker-step--done .branch-picker-index {
-    background: #1877F2;
+    background: var(--accent);
     color: #ffffff;
 }
 
 .branch-picker-label {
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .branch-picker-value {
@@ -229,7 +229,7 @@
 
 .branch-summary {
     font-size: 0.83em;
-    color: #65676b;
+    color: var(--ink-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -240,21 +240,21 @@
    in errorColors.js. */
 .quality-drift {
     margin-top: 0.5em;
-    border-top: 3px solid #0f766e;
+    border-top: 3px solid var(--drift);
 }
 
 .quality-swatch--drift {
-    background-color: #0f766e;
+    background-color: var(--drift);
 }
 
 .quality-drift-note {
     margin-top: 0.2em;
     font-size: 0.8em;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .columns-table .columns-table-drift {
-    border-left: 2px solid #dddfe2;
+    border-left: 2px solid var(--border);
     padding-left: 0.4em;
     white-space: nowrap;
 }
@@ -267,7 +267,7 @@
 /* Trade-off view: the graph's leaves on error and drift together */
 .tradeoff-note {
     font-size: 0.83em;
-    color: #65676b;
+    color: var(--ink-muted);
 }
 
 .columns-table .tradeoff-wrangle {
@@ -296,12 +296,12 @@
 
 .tradeoff-use {
     padding: 0.15em 0.6em;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 0.4em;
     background: #ffffff;
     font: inherit;
     font-size: 0.9em;
-    color: #1877F2;
+    color: var(--accent);
     cursor: pointer;
 }
 

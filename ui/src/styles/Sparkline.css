@@ -11,7 +11,7 @@
    --axis-text-size, via .left-axis-text / .bottom-axis-text in main.css. */
 .sparkline-axis .domain,
 .sparkline-axis .tick line {
-    stroke: #dddfe2;
+    stroke: var(--border);
 }
 
 /* A ring behind a point whose node the graph currently has folded into a collapsed node. Its value

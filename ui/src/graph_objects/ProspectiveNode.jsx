@@ -7,7 +7,7 @@ import { showTooltip, moveTooltip, hideTooltip } from "../utils/visCommon.jsx";
 import { escapeHtml } from "../utils/html.js";
 import { CANDIDATE_SOURCES } from "../utils/candidates.js";
 import { ComparisonBadge, NodeTools, SupportHandles } from "./NodeTypes.jsx";
-import "../styles/Nodes.css";
+import "../styles/ProspectiveNode.css";
 
 /**
  * A candidate: a wrangle staged as a provisional node of the graph - a way of repairing the user's selection,
@@ -123,7 +123,7 @@ export function ProspectiveNode({ id, data, isConnectable }) {
                 </div>
 
                 {/* The tools every node carries: branch quality, supporting nodes - its AI button stays off */}
-                <div className="node-node-label prospective-node-tools">
+                <div className="node-tools prospective-node-tools">
                     <NodeTools nodeId={id} />
                 </div>
             </div>

@@ -21,15 +21,15 @@
    B's badge and plots, a gold halo and a slight lift. Deep plum titles keep it in the family. */
 .react-flow__node.pgraph-node--current {
   background-color: #efbf04;
-  border: 3px solid #701c1c;
+  border: 3px solid var(--selection-b);
   color: #2c0e27;
   font-weight: 600;
   box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
 }
 
 .react-flow__node.pgraph-node--selection-a {
-  background-color: #e7f0fd;
-  border: 2px dashed #1877F2;
+  background-color: var(--accent-tint);
+  border: 2px dashed var(--accent);
   box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
 }
 
@@ -40,13 +40,13 @@
 }
 
 .react-flow__node.pgraph-node--selection-a {
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 /* A folded run. Dashed and tinted so it reads as several nodes standing in for themselves rather than
    as a wrangling step of its own. */
 .react-flow__node-collapsedNode {
-  background-color: #f0f2f5;
+  background-color: var(--surface-muted);
   border: 2px dashed #8c939d;
   border-radius: 6px;
   padding: 5px;
@@ -57,7 +57,7 @@
 
 .collapsed-node-range {
   font-size: 10px;
-  color: #65676b;
+  color: var(--ink-muted);
   margin-bottom: 2px;
 }
 
@@ -73,7 +73,7 @@
   font-size: 15px;
   font-weight: 700;
   line-height: 1;
-  color: #1877F2;
+  color: var(--accent);
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
@@ -92,7 +92,7 @@
   margin-top: 4px;
   padding: 5px 6px;
   background: #ffffff;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   z-index: 20;
@@ -121,28 +121,28 @@
   flex-shrink: 0;
 }
 
-.node-metrics-swatch[data-error-type="missing"]    { background-color: saddlebrown; }
-.node-metrics-swatch[data-error-type="mismatch"]   { background-color: hotpink; }
-.node-metrics-swatch[data-error-type="anomaly"]    { background-color: red; }
-.node-metrics-swatch[data-error-type="incomplete"] { background-color: gray; }
+.node-metrics-swatch[data-error-type="missing"]    { background-color: var(--error-missing); }
+.node-metrics-swatch[data-error-type="mismatch"]   { background-color: var(--error-mismatch); }
+.node-metrics-swatch[data-error-type="anomaly"]    { background-color: var(--error-anomaly); }
+.node-metrics-swatch[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
 
 .node-metrics-value {
   font-weight: 600;
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 .node-metrics-footer {
   margin-top: 3px;
   padding-top: 3px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--surface-muted);
   font-size: 9px;
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 .node-metrics-empty {
   font-size: 10px;
   font-style: italic;
-  color: #65676b;
+  color: var(--ink-muted);
 }
 
 /* A leaf another leaf beats on both error and drift - never the right choice, whatever the analyst
@@ -158,9 +158,16 @@
 
 /* While the end of a branch is being chosen, the nodes it may end on invite the click */
 .react-flow__node.pgraph-node--eligible {
-  outline: 2px dashed #1877F2;
+  outline: 2px dashed var(--accent);
   outline-offset: 3px;
   cursor: pointer;
+}
+
+/* A staged candidate on the plot's full view: a card like the rest, dashed violet like its tree card */
+.react-flow__node.pgraph-node--provisional:not(.pgraph-node--current) {
+  border: 2px dashed var(--candidate);
+  background-color: var(--candidate-tint);
+  color: var(--candidate-ink);
 }
 
 /* Floats above the node, so it adds no height to the dagre layout */
@@ -178,29 +185,17 @@
   pointer-events: none;
 }
 
-.node-comparison-badge--current     { background-color: #701c1c; }
-.node-comparison-badge--selection-a { background-color: #1877F2; }
-.react-flow__node-input.selectable.selected,
-    .react-flow__node-input.selectable:focus,
-    .react-flow__node-input.selectable:focus-visible,
-    .react-flow__node-default.selectable.selected,
-    .react-flow__node-default.selectable:focus,
-    .react-flow__node-default.selectable:focus-visible,
-    .react-flow__node-output.selectable.selected,
-    .react-flow__node-output.selectable:focus,
-    .react-flow__node-output.selectable:focus-visible,
-    .react-flow__node-group.selectable.selected,
-    .react-flow__node-noteNode.selectable.selected,
-    .react-flow__node-noteNode.selectable:focus,
-    .react-flow__node-noteNode.selectable:focus-visible,
-    .react-flow__node-rootNoteNode.selectable.selected,
-    .react-flow__node-rootNoteNode.selectable:focus,
-    .react-flow__node-rootNoteNode.selectable:focus-visible,
-    .react-flow__node-group.selectable.selected,
-    .react-flow__node-group.selectable:focus,
-    .react-flow__node-group.selectable:focus-visible {
-      box-shadow: 0 0 0 3px #20a449;
-    }
+.node-comparison-badge--current     { background-color: var(--selection-b); }
+.node-comparison-badge--selection-a { background-color: var(--accent); }
+/* React Flow's own ring on a selected or focused card, in the app's green */
+.react-flow__node-noteNode.selectable.selected,
+.react-flow__node-noteNode.selectable:focus,
+.react-flow__node-noteNode.selectable:focus-visible,
+.react-flow__node-rootNoteNode.selectable.selected,
+.react-flow__node-rootNoteNode.selectable:focus,
+.react-flow__node-rootNoteNode.selectable:focus-visible {
+  box-shadow: 0 0 0 3px #20a449;
+}
 
 /* Clicking the current node also selects it in React Flow, whose ring above would replace the gold halo. As
    specific as that ring and after it, so the current node keeps its own look selected or focused. */
@@ -210,13 +205,7 @@
   box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
 }
 
-/*.note-node-container{*/
-/*    display: flex;*/
-/*    flex-direction: column;*/
-/*}*/
-
 .note-node-icon-container{
-    /*padding: 2px;*/
     background-color: rgb(255 255 255);
     display: flex;
     justify-content: center;
@@ -262,405 +251,6 @@
     display: inline-flex;
 }
 
-/* Supporting sub-nodes' colour: turquoise, clear of the comparison's green and blue, the suggestions' violet
-   and the error types' colours. The cards, their links (supportLayout.js) and the hidden-count pill all
-   read these. */
-:root {
-  --support-accent: #14b8a6;
-  --support-tint: #e0f7f4;
-  --support-tint-strong: #c3efe9;
-  --support-ink: #0f5f58;
-}
-
-/* ── Supporting sub-nodes ────────────────────────────────────────────────────
-   Hung beside a node, to its left or right. This is the frame every kind shares; what a kind draws inside
-   is its own. Each kind's size is set in supportNodes/registry.js, which the layout stacks them by. */
-/* Sized by the kind's registry size; the frame fills it, and an edge sub-node's stub hangs off its left */
-.support-node-shell {
-  position: relative;
-}
-
-.support-node-stub {
-  position: absolute;
-  top: 50%;
-  border-top: 1.5px dashed var(--support-accent);
-  pointer-events: none;
-}
-
-.support-node {
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  padding: 3px 6px;
-  background: var(--support-tint);
-  border: 1.5px solid var(--support-accent);
-  border-radius: 6px;
-  font-size: 10px;
-  text-align: left;
-  cursor: default;
-  overflow: hidden;
-}
-
-.support-node-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.support-node-title {
-  font-weight: 700;
-  color: var(--support-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Open, beside the remove button: takes a sub-node's plot to the Plots view */
-.support-node-open {
-  margin-left: auto;
-  flex-shrink: 0;
-  cursor: pointer;
-  padding: 1px 6px;
-  border: 1px solid var(--support-accent);
-  border-radius: 4px;
-  background: #ffffff;
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--support-ink);
-}
-
-.support-node-open:hover:not(:disabled) {
-  background: var(--support-tint-strong);
-}
-
-.support-node-open:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.support-node-remove {
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  padding: 0 2px;
-  font-size: 13px;
-  line-height: 1;
-  color: #65676b;
-}
-
-.support-node-remove:hover {
-  color: #1c1e21;
-}
-
-/* The wrangle-diff kind: the wrangle named, then its chart filling what is left of the frame */
-.wrangle-diff {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-
-.wrangle-diff-title {
-  color: #4b5563;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The quality-metrics kind: the magnifier's rows and footer, under the sub-node's title */
-.support-node-metrics {
-  margin-top: 3px;
-}
-
-/* The link to a sub-node is the mark; its ends need no dots */
-.react-flow__handle.support-handle {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.node-node-label{
+.node-tools{
     padding-bottom: 2px;
-}
-/* ── Prospective nodes ───────────────────────────────────────────────────────
-   A wrangle that has not happened yet - one the AI is proposing, or a repair of the selected rows -
-   drawn where the resulting node would sit. Dashed and violet, so it cannot be mistaken for a real
-   node: the selection A marker is dashed blue and a folded run is dashed grey, and both of those
-   stand for something that exists. This one does not - yet. A small tag says which source it came from. */
-.react-flow__node-prospectiveNode {
-  background-color: #faf5ff;
-  border: 2px dashed #7c3aed;
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 11px;
-  text-align: center;
-  /* Matches the other node types, so dagre's fixed 200x100 footprint still describes it */
-  min-width: 150px;
-  max-width: 190px;
-  cursor: default;
-}
-
-.prospective-node-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-weight: 600;
-  color: #4c1d95;
-}
-
-/* Where the candidate came from. Both stay inside the prospective violet family, so the tag tells the
-   sources apart without making either read as a real node. */
-.prospective-node-source {
-  flex: 0 0 auto;
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.5;
-}
-
-.prospective-node-source--ai {
-  background: #ede9fe;
-  color: #5b21b6;
-}
-
-.prospective-node-source--repair {
-  background: #4c1d95;
-  color: #ffffff;
-}
-
-/* Same swatch treatment the metrics expansion uses, so an error type reads the same colour
-   wherever it appears */
-.prospective-node-swatch {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  flex: 0 0 auto;
-}
-
-.prospective-node-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The candidate's own id - c7 - which it goes by until it is accepted and gets its n… label */
-.prospective-node-id {
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 500;
-  color: #7c3aed;
-}
-
-/* The tools every node carries, under its buttons */
-.prospective-node-tools {
-  margin-top: 4px;
-}
-
-.prospective-node-rows {
-  color: #6b21a8;
-  font-size: 10px;
-  margin-top: 1px;
-}
-
-.prospective-node-reason {
-  color: #4b5563;
-  font-size: 10px;
-  line-height: 1.3;
-  margin: 4px 0 6px;
-  text-align: left;
-}
-
-/* A repair candidate's preview chart: the Repair panel's card, untitled - the node's own title names it */
-.prospective-node-chart {
-  margin-bottom: 6px;
-}
-
-.prospective-node-chart .preview-card {
-  padding: 4px;
-}
-
-.prospective-node-chart .preview-card-label:empty {
-  display: none;
-}
-
-.prospective-node-buttons {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-}
-
-.prospective-node-btn {
-  cursor: pointer;
-  border: 1px solid #c4b5fd;
-  background: #ffffff;
-  color: #4c1d95;
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 10px;
-  line-height: 1.4;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.prospective-node-btn:hover:not(:disabled) {
-  background: #ede9fe;
-  border-color: #7c3aed;
-}
-
-.prospective-node-btn:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-/* Accepting is the affirmative action, so it takes the app's green */
-.prospective-node-btn--accept {
-  background: #64ea96;
-  border-color: #1a7f37;
-  color: #06301a;
-  font-weight: 600;
-}
-
-.prospective-node-btn--accept:hover:not(:disabled) {
-  background: #46d97e;
-}
-
-/* ── Analysis mode's dots ────────────────────────────────────────────────────
-   Each node plotted at its drift and error, in its branch's colour. The label hangs outside the dot, so
-   React Flow measures the dot alone and the dot is what sits on the node's point. */
-.analysis-dot {
-  position: relative;
-  width: 14px;
-  height: 14px;
-  box-sizing: border-box;
-  border-radius: 50%;
-  background: var(--analysis-dot-color);
-  border: 1.5px solid #ffffff;
-  cursor: pointer;
-}
-
-.react-flow__node-analysisNode:hover .analysis-dot {
-  border-color: #111827;
-}
-
-/* The comparison's colours, as on the cards: Persian plum for the current node (selection B), dashed blue for A */
-/* A staged candidate: hollow, in its branch's colour */
-.analysis-dot--provisional {
-  background: #ffffff;
-  border: 2px dashed var(--analysis-dot-color);
-  box-sizing: border-box;
-}
-
-/* A staged candidate on the plot's full view: a card like the rest, dashed violet like its tree card */
-.react-flow__node.pgraph-node--provisional:not(.pgraph-node--current) {
-  border: 2px dashed #7c3aed;
-  background-color: #faf5ff;
-  color: #4c1d95;
-}
-
-.analysis-dot--current {
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4.5px #701c1c;
-}
-
-.analysis-dot--selection-a {
-  outline: 2.5px dashed #1877F2;
-  outline-offset: 2px;
-}
-
-.analysis-dot-label {
-  position: absolute;
-  left: 18px;
-  bottom: 12px;
-  display: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: #111827;
-  white-space: nowrap;
-  pointer-events: none;
-  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff, 0 0 2px #ffffff;
-}
-
-.analysis-dot--labelled .analysis-dot-label,
-.react-flow__node-analysisNode:hover .analysis-dot-label {
-  display: block;
-}
-
-/* The same verdict the cards show by greying and striking through */
-.react-flow__node-analysisNode.pgraph-node--dominated .analysis-dot-label {
-  text-decoration: line-through;
-  color: #6b7280;
-}
-
-/* Analysis edges run centre to centre, so a dot's handles are only there for React Flow's bookkeeping */
-.react-flow__handle.analysis-handle {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* A resizable sub-node's grips, shown only while the pointer is over it so a graph of them stays quiet */
-.support-node-shell .support-resize-handle {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  border: 1px solid var(--support-accent);
-  background: #ffffff;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.support-node-shell .support-resize-line {
-  border-color: var(--support-accent);
-  opacity: 0;
-}
-
-.support-node-shell:hover .support-resize-handle,
-.support-node-shell:hover .support-resize-line {
-  opacity: 1;
-}
-
-/* ── A node's group boundary ─────────────────────────────────────────────────
-   Around a node and its supporting sub-nodes, in the sub-nodes' turquoise, lightly shaded so the group reads as
-   one patch of the graph. It sits beneath the cards and edges, and takes no pointer events: React Flow sets
-   those inline on every node while the graph has click handlers, so this has to outrank them. */
-.react-flow__node-supportGroup {
-  pointer-events: none !important;
-}
-
-.support-group {
-  box-sizing: border-box;
-  border: 1.5px dashed var(--support-accent);
-  border-radius: 12px;
-  background: rgba(20, 184, 166, 0.08);
-}
-
-/* Where a sub-node dragged in from the Quality panel can be dropped - over its host's group, only while dragging */
-.support-drop-zone {
-  box-sizing: border-box;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 6px;
-  border: 2px dashed var(--support-accent);
-  border-radius: 12px;
-  background: rgba(20, 184, 166, 0.12);
-  transition: background-color 0.12s ease, border-color 0.12s ease;
-}
-
-.support-drop-zone--over {
-  border-style: solid;
-  background: rgba(20, 184, 166, 0.28);
-}
-
-.support-drop-zone-label {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #ffffff;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--support-ink);
-  pointer-events: none;
 }

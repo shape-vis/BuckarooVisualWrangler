@@ -7,10 +7,6 @@ to traverse up and down, it access' the child's parent node
 from app.pgraph.node import GraphNode
 from app.pgraph.distortion import pareto_frontier
 
-# A graph keeps at most this many saved comparisons. Each is a few hundred bytes of settings, so the cap
-# is about refusing a runaway client rather than about memory.
-MAX_COMPARISONS = 500
-
 # Node ids are n{digit}{letter} - n0a, n0b ... n0z, n1a ... n9z. Always exactly three characters, so
 # the prefix on a table name has a fixed width and 260 nodes fit before ids run out.
 NODE_ID_CAPACITY = 260
@@ -51,10 +47,6 @@ class PGraph:
         self.next_node_table_name = None
         self.current_node_table_name = None
 
-        # Saved comparisons by id, each a Comparison of settings only - see app/pgraph/comparison.py.
-        # Ids count up and are never reused, so a stale id names nothing rather than someone else's record.
-        self.comparisons = {}
-        self.comparison_count = 0
 
         # How many candidates have ever been staged. Their tables are named c{count}_<base> from it, and it only
         # counts up, so a name is never reused - not even a discarded candidate's. Candidates do not count in
@@ -69,8 +61,6 @@ class PGraph:
             "prev_table": self.prev_node_table_name,
             "next_table": self.next_node_table_name,
             "pareto": self.pareto(),
-            # Small enough to ride along, so anything drawn from the graph can show what is pinned where
-            "comparisons": [comparison.__json__() for comparison in self.comparisons.values()]
         }
 
     def pareto(self):
@@ -305,41 +295,3 @@ class PGraph:
         self.prev_node_table_name = current_node.parent_table
         self.current_node_table_name = node_table_name
         return self.current_node_table_name
-
-    def add_comparison(self, comparison):
-        """
-        Keep a comparison on the graph under a new id.
-        :param comparison: a Comparison, as Comparison.from_json made it
-        :return: the comparison, now carrying its id
-        :raises ValueError: once the graph holds MAX_COMPARISONS
-        """
-        if len(self.comparisons) >= MAX_COMPARISONS:
-            raise ValueError(f"a graph keeps at most {MAX_COMPARISONS} comparisons")
-        comparison.stamp(f"c{self.comparison_count}")
-        self.comparison_count += 1
-        self.comparisons[comparison.id] = comparison
-        return comparison
-
-    def update_comparison(self, comparison_id, comparison):
-        """
-        Replace a saved comparison's settings, keeping its id and when it was first saved.
-        :return: the replacement, or None when no comparison has that id
-        """
-        existing = self.comparisons.get(comparison_id)
-        if existing is None:
-            return None
-        comparison.stamp(comparison_id, existing.created_at)
-        self.comparisons[comparison_id] = comparison
-        return comparison
-
-    def remove_comparison(self, comparison_id):
-        """:return: the removed comparison, or None when no comparison has that id"""
-        return self.comparisons.pop(comparison_id, None)
-
-    def comparisons_for(self, anchor=None):
-        """
-        The saved comparisons pinned to one node, oldest first, or every one when no node is named.
-        :param anchor: a node table name, or None
-        """
-        return [comparison for comparison in self.comparisons.values()
-                if anchor is None or comparison.anchor == anchor]

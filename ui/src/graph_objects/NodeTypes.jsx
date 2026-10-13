@@ -1,5 +1,6 @@
 import {useCallback, useState} from "react";
-import "../styles/Nodes.css"
+import "../styles/Nodes.css";
+import "../styles/AnalysisDot.css";
 import { Handle, Position} from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
@@ -245,7 +246,7 @@ export function CollapsedNode( { id, data, isConnectable } ){
         <>
             <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>
             <div>
-                <div className={"node-node-label"}>
+                <div className="node-tools">
                     <h3 title={data.run?.join(" → ")}>{data.label}</h3>
                     <div className={"collapsed-node-range"}>
                         {headId} … {tailId}
@@ -296,7 +297,7 @@ function NoteCard( { id, data, isConnectable, hasParent } ){
             {hasParent && <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>}
             <ComparisonBadge role={data.comparisonRole} />
             <div>
-                <div className={"node-node-label"}>
+                <div className="node-tools">
                     <h3>{data.label}</h3>
                     <NodeTools nodeId={id} />
                 </div>

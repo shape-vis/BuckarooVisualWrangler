@@ -2,7 +2,7 @@ import {useState} from "react";
 import {usePgraph} from "../../store/PGraphContext.jsx";
 import {SUPPORT_DRAG_TYPE} from "../../store/supportNodes.js";
 import {nodeName} from "../../utils/comparison.js";
-import "../../styles/Nodes.css";
+import "../../styles/SupportNode.css";
 
 /**
  * Where a sub-node dragged in from outside the graph can be dropped: drawn over its host's group, or over a

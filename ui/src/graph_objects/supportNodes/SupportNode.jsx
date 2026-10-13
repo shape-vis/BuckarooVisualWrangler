@@ -4,7 +4,7 @@ import {usePgraph} from "../../store/PGraphContext.jsx";
 import {anchorOf, getSupportType, recordSizeOf} from "./registry.js";
 import {useSupportOpenContext} from "./supportOpen.js";
 import {EDGE_GAP} from "./supportLayout.js";
-import "../../styles/Nodes.css";
+import "../../styles/SupportNode.css";
 
 // Smaller than this and nothing a resizable kind draws still reads
 const MIN_RESIZED = {width: 180, height: 120};
