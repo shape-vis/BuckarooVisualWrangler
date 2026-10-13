@@ -7,9 +7,9 @@ Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.
 """
 
 from app.db_utils.execute_sql import fetch_sql
-from app.server_utils.service_helpers import get_error_dist, is_categorical, _validate_identifier
+from app.server_utils.service_helpers import _validate_identifier
+from app.server_utils.workers import run_queries
 from app.db_utils.data_profile import DataProfile
-import pandas as pd
 
 def get_default_attributes_from_rankings(tablename, engine):
     """
@@ -44,25 +44,19 @@ def generate_complete_json(tablename):
     print(f"Generating JSON for table: {tablename}")
 
     data_profile = DataProfile(tablename, engine)
-
-    # TODO: get rid of these arguments from the get_error_dist
-    error_df = pd.read_sql_query(f'SELECT * FROM "{"errors_" + tablename}"', engine)
-    main_df = pd.read_sql_query(f'SELECT * FROM "{tablename}"', engine)
-
-    error_list = get_error_dist(error_df, main_df).to_dict('records')
-
-    default_attributes = get_default_attributes_from_rankings(tablename, engine)
+    attributes = list(data_profile.get_col_names())
 
     return {
-        "columnErrors": convert_error_list_to_dict(error_list),
-        "attributes": list(data_profile.get_col_names()),
-        "attributeDistributions": build_attribute_distributions(data_profile, main_df),
-        "defaultAttributes": default_attributes
+        # Each column's error rates, counted in the database rather than by reading the table out of it
+        "columnErrors": data_profile.calculate_error_distribution(),
+        "attributes": attributes,
+        "attributeDistributions": build_attribute_distributions(data_profile, attributes),
+        "defaultAttributes": get_default_attributes_from_rankings(tablename, engine)
     }
 
-def get_attribute_stats(data_profile, column, main_df):
+def get_attribute_stats(data_profile, column):
     """
-    Get statistics for a specific attribute in the DataFrame
+    Get statistics for a specific attribute in the table
     :param data_profile: Data profile class instance (used for calculating summary stats)
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the column
@@ -72,17 +66,22 @@ def get_attribute_stats(data_profile, column, main_df):
         return get_categorical_stats(data_profile, column)
     return get_numeric_stats(data_profile, column)
 
-def build_attribute_distributions(data_profile, main_df):
+def build_attribute_distributions(data_profile, columns):
     """
-    Build distributions for each attribute in the main DataFrame
+    Build distributions for each attribute in the table. Each column's stats are their own lookups in the data
+    profile, so the columns are read at the same time.
     :param data_profile: Data profile class instance (used for calculating summary stats)
-    :param main_df: The main DataFrame containing the data
+    :param columns: the table's column names
     :return: dictionary containing distributions for each attribute
     """
-    distributions = {}
+    def stats_of(column):
+        return get_attribute_stats(data_profile, column)
 
-    for col in data_profile.get_col_names():
-        distributions[col] = get_attribute_stats(data_profile, col, main_df)
+    column_stats = run_queries(stats_of, columns)
+
+    distributions = {}
+    for column, stats in zip(columns, column_stats):
+        distributions[column] = stats
     return distributions
 
 def get_categorical_stats(data_profile, column):
@@ -113,28 +112,3 @@ def get_numeric_stats(data_profile, column):
             "max": data_profile.calculate_column_attribute('max', column)
         }
     }
-
-def convert_error_list_to_dict(error_list):
-   """
-   Convert the error list to a dictionary format
-   :param error_list: list of error dictionaries
-   :return: dictionary with a format like this (an example):
-            "Age": {"incomplete": 0.75},
-            "Country": {"missing": 2.25},
-            "ConvertedSalary": {"incomplete": 2.5}
-   """
-   result = {}
-   for row in error_list:
-       if row != "error_type":
-           error_type = row["error_type"]
-           for col_key, percentage in row.items():
-               if col_key != "error_type" and float(percentage) > 0:
-                   col_name = col_key.strip()
-                   if col_name not in result:
-                       result[col_name] = {}
-                   result[col_name][error_type] = float(percentage)
-   return result
-
-
-
-

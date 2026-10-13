@@ -5,7 +5,7 @@ import app as app_package
 from app import app, db_operations, engine
 from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
-from app.pgraph.compare import PLOT_KINDS, load_node_state, compare_histogram, compare_heatmap
+from app.db_utils.compare_sql import PLOT_KINDS, CompareSQL
 from app.pgraph.distortion import distortion_trajectory, drift_detail
 from app.pgraph.comparison import Comparison, ComparisonError
 from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
@@ -95,8 +95,8 @@ def compare_nodes():
 
     Query: ?a=<node>&b=<node>&kind=histogram|heatmap&x=<column>[&y=<column>][&bins=10]
     a is selection A and b selection B; y is required for a heatmap. Returns the plot payload
-    for that kind plus each side's row count.
-    Read-only: neither node becomes the session's current table. See app/pgraph/compare.py.
+    for that kind plus each side's row count, both built in Postgres - see app/db_utils/compare_sql.py.
+    Read-only: neither node becomes the session's current table.
     """
     try:
         pgraph = app_package.pgraph_for_session
@@ -125,12 +125,11 @@ def compare_nodes():
 
         bin_count = _bounded_int("bins", 10, 1, 50)
 
-        columns = [x_column] if y_column is None else [x_column, y_column]
-        state_a = load_node_state(engine, table_a, columns)
-        state_b = load_node_state(engine, table_b, columns)
-
-        plot = (compare_histogram(state_a, state_b, x_column, bin_count) if kind == "histogram"
-                else compare_heatmap(state_a, state_b, x_column, y_column, bin_count))
+        compare = CompareSQL(engine, table_a, table_b)
+        if kind == "histogram":
+            plot = compare.generate_compare_histogram(x_column, bin_count)
+        else:
+            plot = compare.generate_compare_heatmap(x_column, y_column, bin_count)
 
         return {
             "success": True,
@@ -139,7 +138,6 @@ def compare_nodes():
             "b": table_b,
             "x": x_column,
             "y": y_column,
-            "rows": {"a": len(state_a.data), "b": len(state_b.data)},
             **plot,
         }
     except Exception as e:

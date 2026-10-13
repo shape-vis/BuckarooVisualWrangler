@@ -17,7 +17,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from app.pgraph.compare import PLOT_KINDS
+from app.db_utils.compare_sql import PLOT_KINDS
 
 COMPARISON_VERSION = 1
 

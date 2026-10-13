@@ -4,15 +4,14 @@
 
 import pandas as pd
 from flask import request, send_file
-import time
 from app import app
 from app import db_operations, engine
-from app.db_utils.data_profile import DataProfile 
+from app.db_utils.execute_sql import copy_insert
 from app.server_utils.service_helpers import (
+    build_node,
     generate_table_name,
-    create_error_df,
     get_sqlalchemy_dtype_map,
-    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
+    get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session,
 )
 from app.server_utils.set_id_column import set_id_column
 from app.pgraph.pgraph import node_id_for_count
@@ -23,7 +22,8 @@ def load_file(csv_file, filename):
     This loads the csv from the local path of the repo that the user clicked;
     set's IDs to each row,
     puts the whole csv into a Pandas Dataframe,
-    runs the python detectors the dataframe,
+    writes it to the database as the root table,
+    builds the root's errors, data profile, rankings, metrics and drift there - the same build every node gets -
     generates a unique name for the table,
     and returns a JSON object of all the info.
 
@@ -33,11 +33,7 @@ def load_file(csv_file, filename):
     """
     dataframe = pd.read_csv(csv_file)
 
-    # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
-    start_time = time.time()
-    detected_data = create_error_df(dataframe)
-    time_to_detect = time.time() - start_time
     app.original_table_name = filename
     table_name = generate_table_name(filename)
     table_name_with_node_id = f"{node_id_for_count(0)}_{table_name}"
@@ -54,17 +50,17 @@ def load_file(csv_file, filename):
 
         The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
         connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
+
+        The rows go in through COPY, one stream, rather than one INSERT per row.
         """
-        table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
-        # No index: these rows are keyed by column_id / column_name, so the pandas row counter is
-        # just noise that changes whenever a subset of rows is rebuilt
-        detected_data.to_sql(error_table_name, engine, if_exists='replace', index=False)
-        data_profile = DataProfile(table_name_with_node_id, engine)
+        table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map,
+                                   method=copy_insert)
 
-        data_profile_df = create_data_profile_df(data_profile)
-        dtype_map = data_profile.dtype_dict
+        # The root is detected, profiled, ranked and measured from the stored table, exactly as every node is
+        root_metrics, root_distortion = build_node(table_name_with_node_id, table_name_with_node_id)
 
-        data_profile_df.to_sql(dp_table_name, engine, if_exists='replace', dtype=dtype_map, index=False)
+        #init the pgraph
+        init_pgraph_for_session(table_name_with_node_id, root_metrics, root_distortion)
 
         """
         now we fully init the DBOperations object that was first initialized in init.py,
@@ -73,13 +69,6 @@ def load_file(csv_file, filename):
         db_operations.load_table(table_name_with_node_id, error_table_name, dp_table_name)
         rows_affected = db_operations.get_row_count(table_name_with_node_id)
         detected_rows_affected = db_operations.get_row_count(error_table_name)
-
-        #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
-        rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings_" + table_name_with_node_id, engine, if_exists='replace', index=False)
-
-        #init the pgraph
-        init_pgraph_for_session(table_name_with_node_id)
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name_with_node_id}

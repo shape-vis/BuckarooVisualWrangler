@@ -275,32 +275,62 @@ def prepare(node_table: str, raw: dict[str, Any], columns: list[str]) -> Suggest
     return suggestion
 
 
+def suggestion_spec(suggestion: Suggestion) -> candidates.CandidateSpec:
+    """
+    A prepared suggestion as a candidate to stage - built the same way a repair of a selection is
+    (app/server_utils/candidates.py). Only where it came from differs: the model's reason and the flag it targets
+    ride along, and the row count is the server's, never the model's claim.
+    """
+    meta = {
+        "label": suggestion.label(),
+        "reason": suggestion.reason,
+        "row_count": len(suggestion.row_ids),
+        "error_type": suggestion.error_type,
+        "chart_type": "histogram" if len(suggestion.columns) == 1 else "heatmap",
+        # Kept so the suggestion can be told apart from its siblings, and re-checked if ever needed
+        "suggestion": {"op": suggestion.op, "columns": suggestion.columns, "target": suggestion.target,
+                       "error_type": suggestion.error_type},
+    }
+    return candidates.CandidateSpec(
+        op=suggestion.wrangle_op,
+        cols=list(suggestion.columns),
+        row_ids=suggestion.row_ids,
+        imputed_column=suggestion.imputed_column,
+        source="ai",
+        meta=meta,
+    )
+
+
 def stage_suggestion(node_table: str, suggestion: Suggestion) -> dict[str, Any]:
     """
-    Stage a prepared suggestion as a candidate - a provisional node under node_table, built the same way a
-    repair of a selection is (app/server_utils/candidates.py). Only where it came from differs: the model's
-    reason and the flag it targets ride along, and the row count is the server's, never the model's claim.
+    Stage one prepared suggestion as a candidate - a provisional node under node_table.
 
     :return: the candidate, as candidates.candidate_json gives it
     """
-    return candidates.materialize(
-        node_table,
-        suggestion.wrangle_op,
-        suggestion.columns,
-        suggestion.row_ids,
-        imputed_column=suggestion.imputed_column,
-        source="ai",
-        meta={
-            "label": suggestion.label(),
-            "reason": suggestion.reason,
-            "row_count": len(suggestion.row_ids),
-            "error_type": suggestion.error_type,
-            "chart_type": "histogram" if len(suggestion.columns) == 1 else "heatmap",
-            # Kept so the suggestion can be told apart from its siblings, and re-checked if ever needed
-            "suggestion": {"op": suggestion.op, "columns": suggestion.columns, "target": suggestion.target,
-                           "error_type": suggestion.error_type},
-        },
-    )
+    return candidates.stage_all(node_table, [suggestion_spec(suggestion)])[0]
+
+
+def stage_suggestions(node_table: str, suggestions: list[Suggestion]):
+    """
+    Stage prepared suggestions as candidates, all built at once. Each is the model's own proposal, so each that
+    builds is staged whether or not the others do.
+
+    :return: (the staged candidates, in the suggestions' order, and [(suggestion, error)] for each that could not
+             be built)
+    """
+    specs = []
+    suggestion_of_spec = {}
+    for suggestion in suggestions:
+        spec = suggestion_spec(suggestion)
+        specs.append(spec)
+        suggestion_of_spec[id(spec)] = suggestion
+
+    staged, failed_specs = candidates.stage_each(node_table, specs)
+
+    failures = []
+    for spec, error in failed_specs:
+        failures.append((suggestion_of_spec[id(spec)], error))
+    return staged, failures
 
 
 def apply_suggestion(node_table: str, raw: dict[str, Any], columns: list[str]) -> dict[str, Any]:

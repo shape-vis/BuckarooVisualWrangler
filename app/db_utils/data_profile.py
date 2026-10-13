@@ -40,7 +40,7 @@ class DataProfile:
         self.table_name = table_name
         self.data_profile_table_name = "dp_" + table_name
         self.error_table_name = "errors_" + table_name
-        self.col_types = ColumnTypes(table_name, engine)
+        self.col_types = ColumnTypes.for_table(table_name, engine)
 
 
         self.engine = engine
@@ -326,6 +326,31 @@ class DataProfile:
 
 
         return error_counts
+
+    def calculate_error_distribution(self):
+        """
+        The share of the table's rows each column's error types flag, for the attribute summary panel's badges.
+        :return: {column_name: {error_type: fraction of rows}}, listing only error types that flag at least one row
+        """
+        query = f"""
+                SELECT
+                    e.column_id,
+                    e.error_type,
+                    COUNT(*)::float8 / NULLIF((SELECT COUNT(*) FROM "{self.table_name}"), 0) AS fraction
+                FROM "{self.error_table_name}" e
+                GROUP BY e.column_id, e.error_type
+                """
+        rows = fetch_sql(query, False, self.engine)
+
+        distribution = {}
+        for column_name, error_type, fraction in rows:
+            # An empty table has no rows to take a share of
+            if fraction is None:
+                continue
+            if column_name not in distribution:
+                distribution[column_name] = {}
+            distribution[column_name][error_type] = fraction
+        return distribution
 
     # TODO: implement this later
     # # Dict mapping from class to error types to error counts

@@ -92,7 +92,7 @@ def ai_suggest():
         print(traceback.format_exc())
         return {"success": False, "error": str(exc)}, 500
 
-    suggestions = []
+    prepared = []
     seen = set()
     rejected = []
 
@@ -121,12 +121,18 @@ def ai_suggest():
         if key in seen:
             continue
         seen.add(key)
+        prepared.append(suggestion)
 
+    # Every suggestion that survived is built at once. One that cannot be staged is dropped like one that
+    # cannot be run.
+    suggestions = []
+    if prepared:
         try:
-            suggestions.append(ai_wrangle.stage_suggestion(node_table, suggestion))
-        except Exception as exc:
-            # One that cannot be staged is dropped like one that cannot be run
-            rejected.append(f"{call['name']}: {exc}")
+            suggestions, failures = ai_wrangle.stage_suggestions(node_table, prepared)
+        except candidates.CandidateError as exc:
+            return {"success": False, "error": str(exc)}, 409
+        for suggestion, exc in failures:
+            rejected.append(f"{suggestion.op}: {exc}")
 
     if rejected:
         print(f"[ai] dropped {len(rejected)} unusable suggestion(s): {'; '.join(rejected)}")

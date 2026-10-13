@@ -267,3 +267,93 @@ def test_nothing_is_wrangled_from_a_candidate_until_it_is_accepted(graph, client
 
     client.post("/api/candidates/accept", json={"table": table})
     assert client.post("/api/wrangle/create-previews", json={"row_ids": [1], "cols": ["x"]}).status_code == 200
+
+
+# ─── Staging several at once ─────────────────────────────────────────────────
+# A request's candidates are built at the same time, each on its own node-build thread, and join the graph together.
+
+def _candidate_tables():
+    """Every candidate table in the database for this root, whether or not it made it into the graph."""
+    with engine.connect() as conn:
+        rows = conn.execute(sa_text(
+            "SELECT table_name FROM information_schema.tables WHERE table_name ~ '^c[0-9]+_cands$'"))
+        return {row[0] for row in rows}
+
+
+@pytest.mark.sql
+def test_a_2d_selection_stages_three_at_once_named_in_order(graph, client):
+    _make_root(NUMERIC)
+
+    resp = client.post("/api/wrangle/create-previews", json={"row_ids": [2, 3, 5], "cols": ["x", "y"]})
+    assert resp.status_code == 200, resp.get_json()
+    staged = resp.get_json()["candidates"]
+
+    # Named in the order the repairs were asked for, whichever finished building first
+    assert [candidate["op"] for candidate in staged] == ["delete", "impute_x", "impute_y"]
+    assert [candidate["table"] for candidate in staged] == ["c0_cands", "c1_cands", "c2_cands"]
+    for candidate in staged:
+        node = _graph().node_map[candidate["table"]]
+        assert node.provisional and node.metrics is not None and node.distortion is not None
+
+
+@pytest.mark.sql
+def test_if_one_build_fails_none_of_its_set_is_staged(graph):
+    from app.server_utils import candidates
+    _make_root(NUMERIC)
+    specs = [candidates.CandidateSpec(op="delete", cols=["x"], row_ids=[2]),
+             candidates.CandidateSpec(op="impute", cols=["x"], row_ids=[2], imputed_column="no_such_column")]
+
+    with pytest.raises(Exception):
+        candidates.stage_all(ROOT, specs)
+
+    assert not any(node.provisional for node in _graph().node_map.values())
+    assert _candidate_tables() == set()
+    # The names it claimed are spent all the same, so none is ever handed out twice
+    assert _graph().candidate_count == 2
+
+
+@pytest.mark.sql
+def test_a_reset_while_building_stages_nothing(graph, monkeypatch):
+    from app.pgraph.pgraph import PGraph
+    from app.server_utils import candidates
+    _make_root(NUMERIC)
+    session_graph = _graph()
+    build_node = candidates.build_node
+
+    def build_then_reset(table, root_table):
+        built = build_node(table, root_table)
+        # The user went Home and uploaded again while the candidate was being built
+        app.pgraph_for_session = PGraph()
+        return built
+
+    monkeypatch.setattr(candidates, "build_node", build_then_reset)
+
+    with pytest.raises(candidates.CandidateError, match="session changed"):
+        candidates.stage_all(ROOT, [candidates.CandidateSpec(op="delete", cols=["x"], row_ids=[2])])
+
+    assert _candidate_tables() == set()
+    assert app.pgraph_for_session.node_map == {}
+    app.pgraph_for_session = session_graph
+
+
+@pytest.mark.sql
+def test_builds_run_without_holding_the_graph_lock(graph, monkeypatch):
+    from app.server_utils import candidates
+    from app.server_utils.service_helpers import WRANGLE_LOCK
+    _make_root(NUMERIC)
+    build_node = candidates.build_node
+    lock_was_free = []
+
+    def build_and_check_the_lock(table, root_table):
+        # Another request - accepting or declining a candidate, say - must not have to wait for a build to finish
+        acquired = WRANGLE_LOCK.acquire(timeout=5)
+        lock_was_free.append(acquired)
+        if acquired:
+            WRANGLE_LOCK.release()
+        return build_node(table, root_table)
+
+    monkeypatch.setattr(candidates, "build_node", build_and_check_the_lock)
+
+    candidates.stage_all(ROOT, [candidates.CandidateSpec(op="delete", cols=["x"], row_ids=[2])])
+
+    assert lock_was_free == [True]

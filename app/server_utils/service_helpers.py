@@ -8,20 +8,17 @@ import string
 import re
 import threading
 from sqlalchemy import types as sql_types
-from sqlalchemy import text as sa_text
 import pandas as pd
 
 import app
 from app.db_utils import query
+from app.db_utils.detector_sql import DetectorSQL
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
 from app.server_utils.set_id_column import set_id_column
-from detectors.anomaly import anomaly
-from detectors.datatype_mismatch import datatype_mismatch
-from detectors.incomplete import incomplete
-from detectors.missing_value import missing_value
+from app.server_utils.workers import run_queries
 from app.db_utils.data_profile import DataProfile
-from app.pgraph.metrics import refresh_node_metrics
+from app.pgraph.metrics import compute_node_metrics
 
 # Node tables are named "<prefix>_<base name>". The root's prefix is its node id, n{digit}{letter} - see
 # node_id_for_count in app/pgraph/pgraph.py. Every node since is staged as a candidate first and keeps the
@@ -30,10 +27,12 @@ NODE_PREFIX_PATTERN = re.compile(r'^n(\d[a-z])_(.+)$')
 CANDIDATE_PREFIX_PATTERN = re.compile(r'^(c\d+)_(.+)$')
 
 """
-Serializes staging and accepting candidates (app/server_utils/candidates.py), which is not safe to run
-concurrently: a candidate's table name and an accepted node's label are both handed out by reading a counter,
-so two requests in flight would claim the same one. Flask's dev server is threaded, so this is reachable
-simply by clicking twice. Re-entrant, since accepting an AI suggestion in one step stages it then accepts it.
+Serializes the moments candidates (app/server_utils/candidates.py) touch the graph: claiming their table names,
+joining the graph, being accepted or declined. Those are not safe to run concurrently - a candidate's table name
+and an accepted node's label are both handed out by reading a counter, so two requests in flight would claim the
+same one. Flask's dev server is threaded, so this is reachable simply by clicking twice. It is held for moments
+only: the candidates' tables are built between those moments, without it. Re-entrant, since accepting an AI
+suggestion in one step stages it then accepts it.
 """
 WRANGLE_LOCK = threading.RLock()
 
@@ -144,60 +143,6 @@ def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
         return f'SELECT * FROM "errors_{table_name}" WHERE "ID" BETWEEN {min_id_int} AND {max_id_int}'
     return f'SELECT * FROM "{table_name}" WHERE "ID" BETWEEN {min_id_int} AND {max_id_int}'
 
-def get_values_for_df_melt(df):
-    """
-    Gets the column names of the columns which have errors in them, the excluded 
-    columns are the one's which make up the structure for the error dataframe, these should be
-    ignored
-    :param df: the dataframe to get the values from
-    :return: a list of column names to be used in the melt operation
-    """
-    values = []
-    columns = df.columns
-    for column in columns:
-        if column not in ('ID', "Unnamed: 0", "column_id","error_type","row_id"):
-            values.append(column)
-    return values
-
-def perform_melt(dfs):
-    """
-    Performs a melt operation, basically combines them, on the list of error detected dataframes provided, this is used to combine the
-    error dataframes from the detectors into a single dataframe for easier processing
-    :param dfs: a list of dataframes to be melted
-    :return: a single melted dataframe 
-    """
-    df_combined = pd.DataFrame()
-    for df in dfs:
-        melted_df = pd.melt(df, id_vars='ID', value_vars=get_values_for_df_melt(df))
-        melted_df.rename(columns={'ID': 'row_id','variable':'column_id','value':'error_type'}, inplace=True)
-        df_combined = pd.concat([df_combined,melted_df])
-    nan_mask = df_combined['error_type'].isna()
-    df_combined = df_combined[~nan_mask]
-    df_combined.reset_index(drop=True, inplace=True)
-
-    return df_combined
-
-# Previously called run_detectors
-def create_error_df(data_frame):
-    """
-    Runs all 4 detectors that are implemented
-    on the server, on the data, and returns a compiled dataframe of the complete errors
-    :param data_frame:the dataframe to run the detectors on
-    :return: a single compiled dataframe of all the errors detected
-    """
-    df_with_id = set_id_column(data_frame)
-
-    # TODO: optimize these functions
-    anomaly_df = pd.DataFrame(anomaly(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    incomplete_df = pd.DataFrame(incomplete(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    missing_value_df = pd.DataFrame(missing_value(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    datatype_mismatch_df = pd.DataFrame(datatype_mismatch(df_with_id.copy())).rename_axis("ID", axis="index").reset_index()
-    frames = [anomaly_df, incomplete_df, missing_value_df,datatype_mismatch_df]
-
-    df = perform_melt(frames)
-    print("CREATE ERROR TABLE TYPE MAP", df.dtypes)
-    return df
-
 def create_data_profile_df(data_profile, col_names=None):
     """
     :param data_profile: the data profile object
@@ -211,21 +156,22 @@ def create_data_profile_df(data_profile, col_names=None):
     default_attributes = list(data_profile.name_to_func)
 
 
-    col_list = []
-
     # If col_names is not provided (no specific columns to create a dp for), use all column names from the data profile
     if col_names is None:
         col_names = data_profile.get_col_names()
 
-    for col in col_names:
-
+    def profile_column(col):
         row_dict = {'column_name': col}
         for attribute in default_attributes:
 
             # Attributes that don't match the column type come back as None, so every column still
             # gets a value for every attribute in the data profile
             row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
-        col_list.append(row_dict)
+        return row_dict
+
+    # Each column's attributes are their own SQL queries, independent of every other column's, so the columns are
+    # profiled at the same time
+    col_list = run_queries(profile_column, col_names)
 
     df = pd.DataFrame(col_list)
 
@@ -244,37 +190,29 @@ def build_data_profile_table(table_name):
     create_data_profile_df(data_profile).to_sql(f"dp_{table_name}", engine, if_exists='replace', index=False)
 
 
-def calculate_attribute_rankings(error_df):
+def build_node(table_name, root_table):
     """
-    Calculate attribute rankings by total error count
-    :param error_df: Melted error DataFrame with columns {row_id, column_id, error_type}
-    :return: DataFrame with columns [attribute, total_errors, rank] sorted by total_errors descending
+    Build everything a node's table is read through, from the table itself: its errors, data profile and rankings
+    tables, and its quality metrics and drift from root. The root is built this way at upload, and so is every
+    candidate - so a node's measurements never depend on how it was made.
+
+    Each step is SQL, and the profile and the drift measure their columns at the same time on the query pool. The
+    metrics read the data profile, so they come after it.
+
+    :param table_name: the node's table, already holding its data
+    :param root_table: the session's root table - the table itself, for the root
+    :return: (metrics, distortion)
     """
-    if error_df.empty:
-        return pd.DataFrame(columns=['attribute', 'total_errors', 'rank'])
+    from app import engine
+    from app.pgraph.distortion import compute_node_distortion
 
-    ranking = error_df.groupby('column_id').size().reset_index(name='total_errors')
-    ranking = ranking.sort_values('total_errors', ascending=False)
-    ranking['rank'] = range(1, len(ranking) + 1)
-    ranking = ranking.rename(columns={'column_id': 'attribute'})
+    DetectorSQL(engine, table_name).generate_errors_table()
+    app.db_operations.update_rankings(table_name)
+    build_data_profile_table(table_name)
+    metrics = compute_node_metrics(table_name)
+    distortion = compute_node_distortion(table_name, root_table)
+    return metrics, distortion
 
-    return ranking[['attribute', 'total_errors', 'rank']]
-
-def get_error_dist(error_df,normal_df):
-    """
-    Gets the distribution of errors in the error dataframe, this is used to create a pivot table, and also in the attribute summaries
-    :param error_df: the error dataframe to get the distribution from
-    :param normal_df: the normal dataframe to get the total number of IDs from
-    :return: a pivot table of the error distribution
-    """
-    res = error_df.pivot_table("row_id", index="error_type", columns='column_id', aggfunc="count")
-    res_mask = res.fillna(0)
-    total_ids = normal_df['ID'].count()
-    res_mask = res_mask.div(total_ids)
-
-    # Flatten the multi-level columns
-    res_mask = res_mask.reset_index()
-    return res_mask
 
 def create_error_dict(df, error_size):
     """
@@ -427,22 +365,27 @@ def create_bins_for_a_numeric_column(column,bin_count):
     return pd.cut(column_numeric, bins=bin_count)
 
 
-def _clone_table_pair(conn, source_table, dest_table, errors_source):
-    """Drop-and-recreate dest_table and its errors_ sibling as copies of source tables."""
-    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{dest_table}"'))
-    conn.execute(sa_text(f'CREATE TABLE "{dest_table}" AS SELECT * FROM "{source_table}"'))
-    errors_dest = f"errors_{dest_table}"
-    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_dest}"'))
-    conn.execute(sa_text(f'CREATE TABLE "{errors_dest}" AS SELECT * FROM "{errors_source}"'))
+def init_pgraph_for_session(root_table, metrics=None, distortion=None):
+    """
+    Start the session's graph, with the root as its only node.
+    :param root_table: the uploaded table, with its errors and data profile tables already built
+    :param metrics: the root's metrics, when build_node has just measured them; measured here otherwise
+    :param distortion: the root's drift - zero throughout - likewise
+    """
+    from app.pgraph.distortion import compute_node_distortion
 
-def init_pgraph_for_session(root_table):
+    if metrics is None:
+        metrics = compute_node_metrics(root_table)
+    if distortion is None:
+        distortion = compute_node_distortion(root_table, root_table)
+
     app.pgraph_for_session = PGraph()
 
     # create the root node, add it to the pgraph as the root
     root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
+    root_node.set_metrics(metrics)
+    root_node.set_distortion(distortion)
     app.pgraph_for_session.add_root_node(root_node)
-
-    refresh_node_metrics(root_table)
 
 def _parse_node_id(table_name):
     """

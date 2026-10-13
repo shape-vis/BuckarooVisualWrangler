@@ -1,169 +1,40 @@
+"""
+The arithmetic of the drift metric (app/pgraph/distortion.py): everything it does with the numbers DriftSQL has
+already reduced the rows to, so none of it needs a database. The statistics measured from rows - W1/IQR, TVD, edit
+facts, quantiles, flows - are held to their cases in tests/sql/test_drift_sql.py.
+"""
 import unittest
-from unittest import mock
 
 import numpy as np
-import pandas as pd
 
-from app.pgraph import distortion
-from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, RowIdentityError,
-                                   annotation, category_flows, column_detail, column_distortion,
-                                   distortion_trajectory, drift_detail, edit_facts, node_density,
-                                   node_distortion, pareto_frontier, root_density_params, root_distortion,
-                                   summarize)
-from app.pgraph.node import GraphNode
-from app.pgraph.pgraph import PGraph
+from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, annotation, category_flows,
+                                   column_distortion, distortion_trajectory, node_density, pareto_frontier,
+                                   root_density_params, summarize)
 
 
-def numeric(values):
-    return pd.Series(values, dtype=object)
+def masses(values):
+    """Values as DriftSQL.generate_value_masses gives them: each distinct number once, with how often it occurs."""
+    numbers, occurrences = np.unique(np.asarray(values, dtype=float), return_counts=True)
+    return {"numbers": numbers.tolist(), "occurrences": occurrences.tolist()}
 
 
-def labels(values):
-    return pd.Series(values, dtype=object)
+def same_place(counts):
+    """Flows for a node identical to root: every row stays in its category."""
+    pairs = []
+    for label, rows in counts.items():
+        pairs.append({"source": label, "target": label, "rows": rows})
+    return pairs
 
 
-class NumericDistortionTests(unittest.TestCase):
-    def test_identical_column_scores_zero(self):
-        values = numeric([1.0, 2.0, 3.0, 4.0, 5.0])
-
-        self.assertEqual(column_distortion(values, values.copy(), NUMERIC)["value"], 0.0)
-
-    def test_shift_is_measured_in_root_iqrs(self):
-        # Root's IQR is 3 - 1 = 2, and every value moved up by 1
-        result = column_distortion(numeric([0, 1, 2, 3, 4]), numeric([1, 2, 3, 4, 5]), NUMERIC)
-
-        self.assertAlmostEqual(result["value"], 0.5)
-        self.assertEqual(result["stat"], "W1/IQR")
-
-    def test_unequal_sizes(self):
-        # Worked by hand over the two quantile functions, which step at fifths and at thirds: W1 = 1
-        result = column_distortion(numeric([0, 1, 2, 3, 4]), numeric([0, 1, 2]), NUMERIC)
-
-        self.assertAlmostEqual(result["value"], 0.5)
-
-    def test_nulls_are_left_out_and_imputation_registers(self):
-        root = numeric([1, 2, 3, 4, None])
-
-        self.assertEqual(column_distortion(root, root.copy(), NUMERIC)["value"], 0.0)
-        self.assertGreater(column_distortion(root, numeric([1, 2, 3, 4, 2.5]), NUMERIC)["value"], 0.0)
-
-    def test_text_in_a_numeric_column_is_ignored(self):
-        root = numeric([1, 2, 3, 4, "oops"])
-
-        self.assertEqual(column_distortion(root, root.copy(), NUMERIC)["value"], 0.0)
-
-    def test_no_iqr_falls_back_to_the_standard_deviation(self):
-        # The middle half is all 5s; the standard deviation is sqrt(12.5)
-        result = column_distortion(numeric([0, 5, 5, 5, 10]), numeric([1, 6, 6, 6, 11]), NUMERIC)
-
-        self.assertAlmostEqual(result["value"], 1 / np.sqrt(12.5))
-
-    def test_constant_column_has_no_value_rather_than_zero(self):
-        result = column_distortion(numeric([5, 5, 5]), numeric([5, 5]), NUMERIC)
-
-        self.assertTrue(result["degenerate"])
-        self.assertIsNone(result["value"])
-        self.assertEqual(result["reason"], "constant column")
-
-    def test_an_emptied_column_has_no_value_rather_than_zero(self):
-        result = column_distortion(numeric([1, 2, 3]), numeric([None, None]), NUMERIC)
-
-        self.assertIsNone(result["value"])
-        self.assertEqual(result["reason"], "no values")
-
-    def test_small_columns_are_low_confidence(self):
-        self.assertTrue(column_distortion(numeric([1, 2, 3]), numeric([1, 2]), NUMERIC)["low_confidence"])
-        big = numeric(list(range(40)))
-        self.assertFalse(column_distortion(big, big.copy(), NUMERIC)["low_confidence"])
+def tail_counts():
+    """c0 holds 7 rows, c1 6, ... c6 1."""
+    counts = {}
+    for i in range(7):
+        counts[f"c{i}"] = 7 - i
+    return counts
 
 
-class CategoricalDistortionTests(unittest.TestCase):
-    def test_identical_column_scores_zero(self):
-        values = labels(["a", "b", "b"])
-
-        self.assertEqual(column_distortion(values, values.copy(), CATEGORICAL)["value"], 0.0)
-
-    def test_disjoint_columns_score_one(self):
-        result = column_distortion(labels(["a", "a", "b"]), labels(["c", "d"]), CATEGORICAL)
-
-        self.assertAlmostEqual(result["value"], 1.0)
-        self.assertEqual(result["stat"], "TVD")
-
-    def test_moved_mass_is_counted_once(self):
-        # a goes from half to three quarters and b the other way: 0.25 of the mass moved, not 0.5
-        result = column_distortion(labels(["a", "a", "b", "b"]), labels(["a", "a", "a", "b"]), CATEGORICAL)
-
-        self.assertAlmostEqual(result["value"], 0.25)
-
-    def test_missing_cells_are_one_category(self):
-        # A node identical to root scores zero, and every spelling of missing is the same category
-        values = labels(["a", "b", None, "null", "undefined"])
-
-        self.assertEqual(column_distortion(values, values.copy(), CATEGORICAL)["value"], 0.0)
-        self.assertEqual(column_distortion(values, labels(["a", "b", None, None, None]), CATEGORICAL)["value"],
-                         0.0)
-
-    def test_imputation_registers_in_full(self):
-        # Root is a quarter a, a quarter b and half null; filling both gaps with a moves that half to a
-        result = column_distortion(labels(["a", "b", None, None]), labels(["a", "b", "a", "a"]), CATEGORICAL)
-
-        self.assertAlmostEqual(result["value"], 0.5)
-
-    def test_deleting_the_missing_rows_registers(self):
-        # Null's half of root is gone, and a and b take a half each instead of a quarter
-        result = column_distortion(labels(["a", "b", None, None]), labels(["a", "b"]), CATEGORICAL)
-
-        self.assertAlmostEqual(result["value"], 0.5)
-
-    def test_an_all_missing_column_still_has_a_value(self):
-        result = column_distortion(labels([None, None]), labels([None]), CATEGORICAL)
-
-        self.assertEqual(result["value"], 0.0)
-        self.assertFalse(result["degenerate"])
-
-
-def frame(rows):
-    return pd.DataFrame(rows)
-
-
-ROOT = frame({"ID": [1, 2, 3, 4, 5, 6], "num": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], "cat": list("aabbcc")})
-KINDS = {"num": NUMERIC, "cat": CATEGORICAL}
-
-
-class NodeDistortionTests(unittest.TestCase):
-    def test_node_identical_to_root_scores_zero_everywhere(self):
-        result = node_distortion(ROOT, ROOT.copy(), KINDS)
-
-        self.assertEqual(result["overall"], 0.0)
-        self.assertEqual({column: r["value"] for column, r in result["columns"].items()}, {"num": 0.0, "cat": 0.0})
-
-    def test_root_short_circuits_to_zero(self):
-        result = root_distortion(ROOT, KINDS)
-
-        self.assertEqual(result["overall"], 0.0)
-        self.assertFalse(any(r["degenerate"] for r in result["columns"].values()))
-
-    def test_a_row_root_does_not_have_raises(self):
-        grown = pd.concat([ROOT, frame({"ID": [7], "num": [7.0], "cat": ["c"]})])
-
-        with self.assertRaises(RowIdentityError):
-            node_distortion(ROOT, grown, KINDS)
-
-    def test_dropped_and_added_columns_are_structural_not_scored(self):
-        node = ROOT.drop(columns="cat").assign(extra=1)
-        result = node_distortion(ROOT, node, KINDS)
-
-        self.assertEqual(result["columns"]["cat"]["reason"], "column removed")
-        self.assertEqual(result["columns"]["extra"]["reason"], "column added")
-        self.assertEqual(result["structural"], {"removed": ["cat"], "added": ["extra"]})
-        self.assertEqual(result["overall"], result["columns"]["num"]["value"])
-
-    def test_row_identifiers_are_not_scored(self):
-        result = node_distortion(ROOT.assign(index=range(6)), ROOT.assign(index=range(6)), KINDS)
-
-        self.assertNotIn("index", result["columns"])
-        self.assertNotIn("ID", result["columns"])
-
+class SummaryTests(unittest.TestCase):
     def test_numeric_columns_are_not_capped(self):
         # A shift of ten IQRs has to read worse than a shift of one, so nothing is clipped
         one = {"num": {"value": 1.0, "kind": NUMERIC, "degenerate": False},
@@ -188,119 +59,77 @@ class NodeDistortionTests(unittest.TestCase):
     def test_nothing_scored_has_no_overall(self):
         self.assertIsNone(summarize({})["overall"])
 
-    def test_edit_facts_count_removed_rows_and_changed_cells(self):
-        node = ROOT[ROOT["ID"] != 6].copy()
-        node.loc[node["ID"] == 1, "cat"] = "b"
+    def test_a_column_is_scored_from_its_measurements(self):
+        measured = {"n_reference": 40, "n_node": 40, "wasserstein": 1.0, "q1": 1.0, "q3": 3.0, "std": 1.5}
 
-        facts = edit_facts(ROOT, node, KINDS)
+        result = column_distortion(measured, NUMERIC)
 
-        self.assertEqual(facts["rows_root"], 6)
-        self.assertEqual(facts["rows_removed"], 1)
-        self.assertEqual(facts["cells_changed"], {"num": 0, "cat": 1})
+        self.assertAlmostEqual(result["value"], 0.5)
+        self.assertFalse(result["low_confidence"])
 
 
-class DetailTests(unittest.TestCase):
-    def test_shift_is_read_on_the_grid_in_root_iqrs(self):
-        root = numeric(list(range(101)))
-        detail = column_detail(root, numeric([value + 10 for value in range(101)]), NUMERIC)
-
-        # Root's IQR is 50, and every quantile moved up by 10
-        np.testing.assert_allclose(detail["shift"], [0.2] * len(detail["grid"]))
-
-    def test_mean_shift_on_a_fine_grid_matches_the_number(self):
-        rng = np.random.default_rng(0)
-        root = pd.Series(rng.normal(0, 1, 2000))
-        node = root * 1.1 + 0.2
-        fine = tuple(np.linspace(0.001, 0.999, 999))
-
-        detail = column_detail(root, node, NUMERIC, grid=fine)
-        value = column_distortion(root, node, NUMERIC)["value"]
-
-        self.assertAlmostEqual(np.mean(np.abs(detail["shift"])), value, delta=0.1 * value)
-
-    def test_categories_that_moved_most_are_named_and_the_rest_summed(self):
-        root = labels([f"c{i}" for i in range(10) for _ in range(10)])
-        node = labels([f"c{i}" for i in range(10) for _ in range(10 + i)])
-
-        detail = column_detail(root, node, CATEGORICAL)
-        rows = detail["categories"]
-
-        self.assertEqual(len(rows), 9)
-        self.assertEqual(detail["truncated_n"], 2)
-        self.assertEqual(rows[-1]["category"], OTHER_LABEL)
-        self.assertEqual(rows[0]["category"], "c0")
-        # Shares always sum to 100, so the changes sum to zero across every row, the summed one included
-        self.assertAlmostEqual(sum(row["change_pct"] for row in rows), 0.0)
-
+class DensityTests(unittest.TestCase):
     def test_root_through_its_own_fit_lies_on_its_own_curve(self):
-        root = pd.Series(np.random.default_rng(1).normal(50, 10, 500))
+        root = masses(np.random.default_rng(1).normal(50, 10, 500))
         params = root_density_params(root)
 
         np.testing.assert_allclose(node_density(root, params), params["root_curve"])
 
     def test_a_node_that_lost_half_its_rows_keeps_half_the_area(self):
-        root = pd.Series(np.random.default_rng(2).normal(0, 1, 1000))
-        params = root_density_params(root)
+        values = np.random.default_rng(2).normal(0, 1, 1000)
+        params = root_density_params(masses(values))
 
-        curve = np.asarray(node_density(root.iloc[::2], params))
+        curve = np.asarray(node_density(masses(values[::2]), params))
 
         self.assertAlmostEqual(np.trapezoid(curve, params["grid"]), 0.5, delta=0.02)
 
     def test_a_node_of_one_repeated_value_still_draws(self):
-        params = root_density_params(pd.Series([1.0, 2.0, 3.0, 4.0]))
+        params = root_density_params(masses([1.0, 2.0, 3.0, 4.0]))
 
-        self.assertIsNotNone(node_density(pd.Series([2.0, 2.0, 2.0]), params))
+        self.assertIsNotNone(node_density(masses([2.0, 2.0, 2.0]), params))
+
+    def test_a_constant_root_cannot_be_smoothed(self):
+        self.assertIsNone(root_density_params(masses([5.0, 5.0, 5.0])))
+
+    def test_repeated_values_smooth_as_if_every_row_were_listed(self):
+        # The masses carry each value once with its count, which has to sum to the same curve as listing every row
+        rows = [1.0, 1.0, 1.0, 2.0, 5.0, 5.0]
+        params = root_density_params(masses(rows))
+        bandwidth = params["bandwidth"]
+
+        grid = np.asarray(params["grid"])
+        by_row = np.zeros(len(grid))
+        for value in rows:
+            by_row += np.exp(-0.5 * ((grid - value) / bandwidth) ** 2) / (bandwidth * np.sqrt(2 * np.pi))
+
+        np.testing.assert_allclose(params["root_curve"], by_row / len(rows))
+        self.assertAlmostEqual(bandwidth, 0.30 * np.std(rows, ddof=1))
 
 
-class FlowTests(unittest.TestCase):
-    def test_a_swap_leaves_tvd_at_zero_but_churn_counts_it(self):
-        root = frame({"ID": [1, 2, 3, 4], "g": ["a", "a", "b", "b"]})
-        node = frame({"ID": [1, 2, 3, 4], "g": ["b", "a", "a", "b"]})
-
-        self.assertEqual(column_distortion(root["g"], node["g"], CATEGORICAL)["value"], 0.0)
-        self.assertAlmostEqual(category_flows(root, node, "g")["churn"], 0.5)
-
-    def test_deleted_rows_go_to_the_removed_sink(self):
-        root = frame({"ID": [1, 2, 3], "g": ["a", "a", "b"]})
-        node = frame({"ID": [1, 2], "g": ["a", "a"]})
-
-        flows = category_flows(root, node, "g")
-
-        self.assertIn({"source": "b", "target": REMOVED_LABEL, "rows": 1}, flows["flows"])
-        self.assertEqual(flows["targets"][-1], REMOVED_LABEL)
-        self.assertEqual(flows["removal_rates"], {"a": 0.0, "b": 1.0})
-        self.assertAlmostEqual(flows["churn"], 1 / 3)
-
+class FlowFoldingTests(unittest.TestCase):
     def test_the_long_tail_folds_into_other(self):
-        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
-        root = frame({"ID": list(range(len(values))), "g": values})
-
-        flows = category_flows(root, root.copy(), "g", limit=6)
+        flows = category_flows(same_place(tail_counts()), limit=6)
 
         self.assertEqual(flows["sources"], ["c0", "c1", "c2", "c3", "c4", OTHER_LABEL])
         self.assertEqual(flows["categories"], 7)
 
     def test_a_column_within_the_limit_keeps_every_category(self):
-        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
-        root = frame({"ID": list(range(len(values))), "g": values})
-
-        flows = category_flows(root, root.copy(), "g", limit=7)
+        flows = category_flows(same_place(tail_counts()), limit=7)
 
         self.assertEqual(flows["sources"], [f"c{i}" for i in range(7)])
 
     def test_null_is_kept_when_the_tail_folds(self):
-        values = [f"c{i}" for i in range(7) for _ in range(8 - i)] + [None]
-        root = frame({"ID": list(range(len(values))), "g": values})
+        counts = {}
+        for i in range(7):
+            counts[f"c{i}"] = 8 - i
+        counts["null"] = 1
 
-        flows = category_flows(root, root.copy(), "g", limit=6)
+        flows = category_flows(same_place(counts), limit=6)
 
         self.assertEqual(flows["sources"], ["c0", "c1", "c2", "c3", "null", OTHER_LABEL])
 
     def test_the_catch_all_names_what_it_holds(self):
-        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
-        root = frame({"ID": list(range(len(values))), "g": values})
-
-        other = category_flows(root, root.copy(), "g", limit=4)["other"]
+        other = category_flows(same_place(tail_counts()), limit=4)["other"]
 
         # c3 down, biggest first, with the rows each one took into the catch-all
         self.assertEqual(other["categories"], [{"category": "c3", "rows": 4}, {"category": "c4", "rows": 3},
@@ -309,29 +138,22 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(other["more"], 0)
 
     def test_named_categories_are_kept_whatever_their_size(self):
-        values = [f"c{i}" for i in range(7) for _ in range(7 - i)]
-        root = frame({"ID": list(range(len(values))), "g": values})
-
-        flows = category_flows(root, root.copy(), "g", keep=["c0", "c6"])
+        flows = category_flows(same_place(tail_counts()), keep=["c0", "c6"])
 
         self.assertEqual(flows["sources"], ["c0", "c6", OTHER_LABEL])
         self.assertEqual([row["category"] for row in flows["other"]["categories"]], ["c1", "c2", "c3", "c4", "c5"])
 
     def test_nothing_folded_means_no_catch_all_to_look_into(self):
-        root = frame({"ID": [1, 2, 3], "g": ["a", "a", "b"]})
+        self.assertIsNone(category_flows(same_place({"a": 2, "b": 1}))["other"])
 
-        self.assertIsNone(category_flows(root, root.copy(), "g")["other"])
+    def test_removed_rows_set_each_categorys_removal_rate(self):
+        pairs = [{"source": "a", "target": "a", "rows": 2}, {"source": "b", "target": REMOVED_LABEL, "rows": 1}]
 
-    def test_flows_between_two_nodes_read_from_the_first(self):
-        """Flows between any two states: the first is the source side, and its deletes are the sink."""
-        frame_a = frame({"ID": [1, 2, 3, 4], "g": ["a", "a", "b", "b"]})
-        frame_b = frame({"ID": [1, 2, 3], "g": ["a", "b", "b"]})
+        flows = category_flows(pairs)
 
-        flows = category_flows(frame_a, frame_b, "g")
-
-        self.assertIn({"source": "a", "target": "b", "rows": 1}, flows["flows"])
-        self.assertIn({"source": "b", "target": REMOVED_LABEL, "rows": 1}, flows["flows"])
-        self.assertAlmostEqual(flows["churn"], 0.5)
+        self.assertEqual(flows["targets"][-1], REMOVED_LABEL)
+        self.assertEqual(flows["removal_rates"], {"a": 0.0, "b": 1.0})
+        self.assertAlmostEqual(flows["churn"], 1 / 3)
 
 
 class AcrossNodesTests(unittest.TestCase):
@@ -374,92 +196,6 @@ class AnnotationTests(unittest.TestCase):
         self.assertIn("No operation acted on Gender", text)
         self.assertIn("Female rows were removed at 13.3%, against 5.5% of Male.", sentences)
         self.assertNotIn("because", text)
-
-
-class DriftFromAnAncestorTests(unittest.TestCase):
-    """
-    drift_detail measured from a common ancestor rather than root, on a graph held in memory:
-
-        root ── mid (deletes 7, 8 on num) ─┬─ left  (deletes 1 on cat)
-                                           └─ right (deletes 3, 4 on cat)
-
-    The tables are read through load_node_data, which is pointed at frames here instead of the database.
-    """
-    KINDS = {"num": NUMERIC, "cat": CATEGORICAL}
-
-    def setUp(self):
-        root = frame({"ID": list(range(1, 9)), "num": [float(i) for i in range(1, 9)], "cat": list("aabbccdd")})
-        mid = root[root["ID"] <= 6].reset_index(drop=True)
-        self.frames = {
-            "root": root,
-            "mid": mid,
-            "left": mid[mid["ID"] != 1].reset_index(drop=True),
-            "right": mid[~mid["ID"].isin([3, 4])].reset_index(drop=True),
-        }
-
-        self.graph = PGraph()
-        self.graph.add_root_node(GraphNode("root", "root", "root", "errors_root"))
-        for table, parent, column in (("mid", "root", "num"), ("left", "mid", "cat"), ("right", "mid", "cat")):
-            self.graph.add_node(GraphNode(parent, "delete", table, f"errors_{table}", [column]))
-        for table, node in self.graph.node_map.items():
-            drift = (root_distortion(root, self.KINDS) if table == "root"
-                     else node_distortion(root, self.frames[table], self.KINDS))
-            node.set_distortion({**drift, "facts": edit_facts(root, self.frames[table], self.KINDS)})
-
-        # Root as the session would have cached it, and every other table read from the frames above
-        saved = dict(distortion._root_cache)
-        distortion._root_cache.update(table="root", frame=root, kinds=self.KINDS)
-        self.addCleanup(distortion._root_cache.update, saved)
-        distortion._density_cache.clear()
-        self.addCleanup(distortion._density_cache.clear)
-        loader = mock.patch.object(distortion, "load_node_data",
-                                   lambda _engine, table, columns: self.frames[table][["ID", *columns]])
-        loader.start()
-        self.addCleanup(loader.stop)
-
-    def test_without_a_base_it_is_measured_from_root(self):
-        detail = drift_detail(self.graph, "left", "cat")
-
-        self.assertEqual(detail["base"], "root")
-        self.assertEqual(detail["distortion"], self.graph.node_map["left"].distortion["columns"]["cat"])
-        self.assertEqual(detail["rows_root"], 8)
-        self.assertEqual(detail["rows_removed"], 3)
-
-    def test_from_an_ancestor_it_is_as_if_that_ancestor_were_root(self):
-        mid, left = self.frames["mid"], self.frames["left"]
-
-        detail = drift_detail(self.graph, "left", "cat", base_table="mid")
-
-        self.assertEqual(detail["base"], "mid")
-        self.assertEqual(detail["distortion"]["value"], column_distortion(mid["cat"], left["cat"], CATEGORICAL)["value"])
-        self.assertEqual(detail["flows"], category_flows(mid, left, "cat"))
-        # Only the row deleted below mid is counted, out of mid's rows
-        self.assertEqual(detail["rows_root"], 6)
-        self.assertEqual(detail["rows_removed"], 1)
-
-    def test_a_numeric_column_is_smoothed_on_the_ancestor(self):
-        detail = drift_detail(self.graph, "right", "num", base_table="mid")
-
-        params = root_density_params(self.frames["mid"]["num"])
-        self.assertEqual(detail["density"]["grid"], params["grid"])
-        self.assertEqual(detail["density"]["root"], params["root_curve"])
-        self.assertEqual(detail["density"]["node"], node_density(self.frames["right"]["num"], params))
-
-    def test_only_the_steps_below_the_ancestor_count_as_acting_on_a_column(self):
-        # mid's delete acted on num, but it is above the ancestor, so from there num only lost rows to cat's
-        from_root = drift_detail(self.graph, "left", "num")["annotation"]["record"]
-        from_mid = drift_detail(self.graph, "left", "num", base_table="mid")["annotation"]["record"]
-
-        self.assertTrue(from_root["acted_on"])
-        self.assertFalse(from_mid["acted_on"])
-
-    def test_the_ancestor_against_itself_has_not_drifted(self):
-        detail = drift_detail(self.graph, "mid", "num", base_table="mid")
-
-        self.assertEqual(detail["distortion"]["value"], 0.0)
-        self.assertEqual(detail["rows_removed"], 0)
-        # The same curve up to float noise: the node's fit lands on the ancestor's bandwidth by way of a factor
-        np.testing.assert_allclose(detail["density"]["node"], detail["density"]["root"])
 
 
 if __name__ == "__main__":

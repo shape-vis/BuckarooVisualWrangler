@@ -20,17 +20,19 @@ rows with missing cells and filling those cells both move rows out of that categ
 full, and a node identical to root still scores zero. A numeric column leaves its missing cells out, since a
 null has no place on the number line W1 is measured along.
 
-The spec is the fidelity proposal's docs 01-03. As in compare.py, the loaders touch the database and
-everything else is plain pandas over frames it is handed, so it is testable without one.
+The spec is the fidelity proposal's docs 01-03. The rows never leave the database: DriftSQL
+(app/db_utils/drift_sql.py) reduces both states to a handful of numbers per column, and everything here is plain
+arithmetic over those, so it is testable without one.
 """
-import numpy as np
-import pandas as pd
-from scipy.stats import gaussian_kde, wasserstein_distance
+import threading
+from functools import partial
 
-from detectors.missing_value import missing_mask
-from app.pgraph.compare import (MAX_CATEGORIES, NULL_LABEL, OTHER_LABEL, _differs, _labels, _matched, _numbers,
-                                load_node_data)
+import numpy as np
+
+from app.db_utils.compare_sql import MAX_LABELS, NULL_LABEL, OTHER_LABEL
+from app.db_utils.drift_sql import REMOVED_LABEL, DriftSQL
 from app.pgraph.metrics import ID_COLUMNS
+from app.server_utils.workers import run_all
 
 NUMERIC = "numeric"
 CATEGORICAL = "categorical"
@@ -50,8 +52,6 @@ LOW_CONFIDENCE_N = 30
 # A share-change table names this many categories and sums the rest into one row
 TOP_CHANGES = 8
 
-REMOVED_LABEL = "(removed)"
-
 # How many of the categories folded into the catch-all are named back, for the panel to list and offer
 OTHER_LISTED = 200
 # The most bands a Sankey will draw when the panel names the categories itself
@@ -65,6 +65,9 @@ PARETO_PRECISION = 6
 # window still needs enough of them to draw a smooth curve.
 KDE_FACTOR = 0.30
 KDE_POINTS = 1000
+
+# The ridgeline's curves are summed over this many distinct values at a time, which bounds the memory one sum takes
+DENSITY_CHUNK = 2000
 
 
 class RowIdentityError(ValueError):
@@ -96,39 +99,18 @@ def column_kinds(col_types, columns):
 
 # ── One column ───────────────────────────────────────────────────────────────
 
-def _numeric_values(values):
-    """The column's numbers. Nulls, and any text in a mostly-numeric column, fall away - as they do from
-    the attribute summary's mean and median."""
-    numbers = _numbers(values)
-    return numbers[numbers.notna()].to_numpy()
-
-
-def _category_values(values):
-    """The column's labels, every cell the Missing detector's rule calls missing labelled null."""
-    return values.astype(str).where(~missing_mask(values), NULL_LABEL)
-
-
-def _scale(root_numbers):
+def _scale(q1, q3, std):
     """
-    What a numeric drift is measured in: root's IQR. A column whose middle half is a single value has no
-    IQR, so its standard deviation stands in; a column that is one value throughout has neither.
+    What a numeric drift is measured in: root's IQR. A column whose middle half is a single value has no IQR, so its
+    standard deviation stands in; a column that is one value throughout has neither.
 
     :return: the scale, or None for a constant column
     """
-    q1, q3 = np.quantile(root_numbers, [0.25, 0.75])
     if q3 > q1:
         return float(q3 - q1)
-    std = float(np.std(root_numbers, ddof=1))
-    return std if std > 0 else None
-
-
-def _shares(root_labels, node_labels):
-    """Each category's share of root and of the node, aligned, with the node's change."""
-    shares = pd.DataFrame({"root": root_labels.value_counts(normalize=True),
-                           "node": node_labels.value_counts(normalize=True)}).fillna(0.0)
-    # assign rather than item assignment: pandas 2.2 raises a spurious chained-assignment warning for the
-    # latter under Python 3.14
-    return shares.assign(change=shares["node"] - shares["root"])
+    if std is not None and std > 0:
+        return float(std)
+    return None
 
 
 def _result(kind, value, n_root, n_node, reason=None):
@@ -136,8 +118,7 @@ def _result(kind, value, n_root, n_node, reason=None):
     One column's drift. A column with nothing honest to report carries a reason instead of a value - never
     a zero, which would read as "unchanged".
     """
-    # Counts arrive as numpy integers, which Flask cannot encode, and which would make the flag below a
-    # numpy bool
+    # Counts can arrive as numpy integers, which Flask cannot encode, and which would make the flag below a numpy bool
     n_root, n_node = int(n_root), int(n_node)
     return {
         "value": None if reason else float(value),
@@ -151,44 +132,113 @@ def _result(kind, value, n_root, n_node, reason=None):
     }
 
 
-def column_distortion(root, node, kind):
+def column_distortion(measured, kind):
     """
     How far one column has drifted from root.
 
-    :param root: root's values for the column
-    :param node: the node's values for it
+    :param measured: the column's drift inputs, as DriftSQL.generate_numeric_drift or generate_categorical_drift
+                     gives them
     :param kind: NUMERIC or CATEGORICAL, decided on root
     :return: {"value", "stat", "kind", "n_root", "n_node", "degenerate", "reason", "low_confidence"}
     """
-    if kind == NUMERIC:
-        r, n = _numeric_values(root), _numeric_values(node)
-        if len(n) == 0:
-            return _result(kind, None, len(r), 0, "no values")
-        if len(r) < 2 or len(n) < 2:
-            return _result(kind, None, len(r), len(n), "too few values")
-        scale = _scale(r)
-        if scale is None:
-            return _result(kind, None, len(r), len(n), "constant column")
-        return _result(kind, wasserstein_distance(r, n) / scale, len(r), len(n))
+    n_root = measured["n_reference"]
+    n_node = measured["n_node"]
 
-    r, n = _category_values(root), _category_values(node)
-    if len(r) == 0 or len(n) == 0:
-        return _result(kind, None, len(r), len(n), "no values")
-    # Halved because a row leaving one category arrives in another; unhalved, every move counts twice
-    return _result(kind, 0.5 * _shares(r, n)["change"].abs().sum(), len(r), len(n))
+    if kind == NUMERIC:
+        if n_node == 0:
+            return _result(kind, None, n_root, 0, "no values")
+        if n_root < 2 or n_node < 2:
+            return _result(kind, None, n_root, n_node, "too few values")
+        scale = _scale(measured["q1"], measured["q3"], measured["std"])
+        if scale is None:
+            return _result(kind, None, n_root, n_node, "constant column")
+        return _result(kind, measured["wasserstein"] / scale, n_root, n_node)
+
+    if n_root == 0 or n_node == 0:
+        return _result(kind, None, n_root, n_node, "no values")
+    return _result(kind, measured["tvd"], n_root, n_node)
+
+
+# ── Measuring, one column per query ──────────────────────────────────────────
+
+def measure_columns(drift):
+    """
+    Every column's drift inputs, in the shape node_distortion reads: root's data columns, then any column only the
+    node has. Each column the two states share is measured by its own query, and each table's present cells by one
+    more, all of them at once on the query pool - a query per column is what lets them run side by side.
+
+    :param drift: a DriftSQL between root and the node
+    :return: one object per column - its plan entry ({"column", "kind", "in_node"}), its present cells on either
+             side, and, for a shared column, its measurement
+    """
+    plan = drift.column_plan()
+
+    tasks = [partial(drift.generate_present_cells, "reference"), partial(drift.generate_present_cells, "node")]
+    for entry in plan:
+        if entry["kind"] is None or not entry["in_node"]:
+            continue
+        if entry["kind"] == NUMERIC:
+            tasks.append(partial(drift.generate_numeric_drift, entry["column"]))
+        else:
+            tasks.append(partial(drift.generate_categorical_drift, entry["column"]))
+
+    results = run_all(tasks)
+    present_reference = results[0]
+    present_node = results[1]
+
+    measurements = {}
+    for measured in results[2:]:
+        measurements[measured["column"]] = measured
+
+    column_drift = []
+    for entry in plan:
+        column = entry["column"]
+        measured = {**entry,
+                    "present_reference": present_reference.get(column, 0),
+                    "present_node": present_node.get(column, 0)}
+        measured.update(measurements.get(column, {}))
+        column_drift.append(measured)
+    return column_drift
+
+
+def measure_edit_facts(drift, columns):
+    """
+    The edit facts between two states: their rows matched by one query, and each shared column's changed cells
+    counted by a query of its own, all of them at once on the query pool.
+
+    :param drift: a DriftSQL between the two states
+    :param columns: the data columns to count changed cells in. Only those both states hold are counted.
+    :return: {"rows_reference", "rows_removed", "rows_unknown", "first_unknown_id", "cells_changed": {column: n}}
+    """
+    shared = []
+    for column in columns:
+        if drift.is_shared(column):
+            shared.append(column)
+
+    tasks = [drift.generate_row_counts]
+    for column in shared:
+        tasks.append(partial(drift.generate_changed_cells, column))
+
+    results = run_all(tasks)
+
+    facts = dict(results[0])
+    facts["cells_changed"] = dict(zip(shared, results[1:]))
+    return facts
 
 
 # ── One node ─────────────────────────────────────────────────────────────────
 
-def check_row_identity(root_frame, node_frame):
+def check_row_identity(facts):
     """
     Every wrangle edits cells or deletes rows, and none creates one - so a node's rows are always a subset
-    of root's, matched by "ID". The Sankey's removed sink and the removal rates both lean on that. A node that broke it would make every one of them wrong
-    without saying so, so this raises instead.
+    of root's, matched by "ID". The Sankey's removed sink and the removal rates both lean on that. A node that broke it
+    would make every one of them wrong without saying so, so this raises instead.
+
+    :param facts: the edit facts, as measure_edit_facts gives them
     """
-    extra = set(node_frame["ID"]) - set(root_frame["ID"])
-    if extra:
-        raise RowIdentityError(f"the node holds {len(extra)} row(s) that root does not, e.g. ID {min(extra)}")
+    unknown = facts["rows_unknown"]
+    if unknown:
+        raise RowIdentityError(f"the node holds {unknown} row(s) that root does not, e.g. ID {facts['first_unknown_id']}")
 
 
 def summarize(columns, weights=None):
@@ -216,153 +266,229 @@ def summarize(columns, weights=None):
     return {"overall": total / weight_sum if weight_sum else None}
 
 
-def node_distortion(root_frame, node_frame, kinds, weights=None):
+def node_distortion(column_drift, weights=None):
     """
     Every column's drift from root, and the node's single number.
 
-    :param root_frame: root's rows, "ID" plus its columns
-    :param node_frame: the node's rows
-    :param kinds: {column: kind} for root's data columns - see column_kinds
+    :param column_drift: every column's drift inputs, as measure_columns gives them - root's data columns, then any
+                         column only the node has
     :param weights: {column: weight}, or None for every column counting the same
     :return: {"overall", "columns", "structural"} - structural lists columns the node dropped or gained,
              which have no drift and are reported as changes to the table's shape instead
     """
-    check_row_identity(root_frame, node_frame)
-
     columns = {}
-    for column, kind in kinds.items():
-        if column in node_frame.columns:
-            columns[column] = column_distortion(root_frame[column], node_frame[column], kind)
+    removed = []
+    added = []
+
+    for measured in column_drift:
+        column = measured["column"]
+        kind = measured["kind"]
+        if column in SKIPPED_COLUMNS:
+            continue
+
+        if kind is None:
+            added.append(column)
+            columns[column] = _result(None, None, 0, measured["present_node"], "column added")
+        elif not measured["in_node"]:
+            removed.append(column)
+            columns[column] = _result(kind, None, measured["present_reference"], 0, "column removed")
         else:
-            columns[column] = _result(kind, None, root_frame[column].notna().sum(), 0, "column removed")
+            columns[column] = column_distortion(measured, kind)
 
-    added = [column for column in node_frame.columns
-             if column not in kinds and column not in SKIPPED_COLUMNS]
-    for column in added:
-        columns[column] = _result(None, None, 0, node_frame[column].notna().sum(), "column added")
-
-    removed = [column for column in kinds if column not in node_frame.columns]
     return {**summarize(columns, weights), "columns": columns,
             "structural": {"removed": removed, "added": added}}
 
 
-def root_distortion(root_frame, kinds):
-    """Root against itself: exactly zero on every column, without computing anything."""
+def root_distortion(kinds, present_cells, row_count):
+    """
+    Root against itself: exactly zero on every column, without measuring anything. A categorical column counts its
+    missing cells, as column_distortion does; a numeric column counts its present cells.
+
+    :param kinds: root's data columns' kinds
+    :param present_cells: root's non-null cells per column, as DriftSQL.generate_present_cells gives them
+    :param row_count: root's rows
+    """
     columns = {}
     for column, kind in kinds.items():
-        # A categorical column counts its missing cells, as column_distortion does
-        present = len(root_frame) if kind == CATEGORICAL else root_frame[column].notna().sum()
+        if kind == CATEGORICAL:
+            present = row_count
+        else:
+            present = present_cells.get(column, 0)
         columns[column] = _result(kind, 0.0, present, present)
     return {"overall": 0.0, "columns": columns, "structural": {"removed": [], "added": []}}
 
 
-def edit_facts(root_frame, node_frame, columns):
+def edit_facts(facts):
     """
     What the wrangles between root and this node did, read off the data: how many of root's rows are gone,
     and per column how many of the surviving cells now hold a different value. The detail views and the
     annotations are keyed on these rather than on operation names, so a new kind of repair needs no change
     in any of them.
 
-    :param columns: the data columns to count changed cells in
+    :param facts: the edit facts, as measure_edit_facts gives them
     :return: {"rows_root", "rows_removed", "cells_changed": {column: count}}
     """
-    shared = [column for column in columns if column in node_frame.columns]
-    matched = _matched(root_frame, node_frame, shared, "inner")
-    changed = {column: int(np.count_nonzero(_differs(matched[f"{column}_a"], matched[f"{column}_b"])))
-               for column in shared}
-    return {"rows_root": len(root_frame),
-            "rows_removed": len(set(root_frame["ID"]) - set(node_frame["ID"])),
-            "cells_changed": changed}
+    return {"rows_root": facts["rows_reference"],
+            "rows_removed": facts["rows_removed"],
+            "cells_changed": dict(facts["cells_changed"])}
 
 
 # ── Detail: what the drill-down views draw ───────────────────────────────────
 
-def _share_row(label, shares):
-    return {"category": str(label), "root_pct": float(shares["root"]), "node_pct": float(shares["node"]),
-            "change_pct": float(shares["change"])}
+def _share_row(label, root_pct, node_pct, change_pct):
+    return {"category": str(label), "root_pct": float(root_pct), "node_pct": float(node_pct),
+            "change_pct": float(change_pct)}
 
 
-def column_detail(root, node, kind, grid=TAIL_GRID):
+def numeric_column_detail(numeric_detail, grid=TAIL_GRID):
     """
-    The breakdown behind one column's number: where in the distribution its mass moved.
+    The breakdown behind a numeric column's number: the node's quantiles against root's on the grid, and the shift
+    between them in root IQRs. The shift at q is the integrand of W1 at q, so the shifts and the number measure the
+    same thing - but no finite grid averages back to the number, and nothing said from this may suggest one does.
 
-    Numeric: the node's quantiles against root's on the grid, and the shift between them in root IQRs. The
-    shift at q is the integrand of W1 at q, so the shifts and the number measure the same thing - but no
-    finite grid averages back to the number, and nothing said from this may suggest one does.
-    Categorical: each category's share of root and of the node in percent, the TOP_CHANGES categories that
-    moved most by name and the rest summed into one row.
-
-    :return: numeric {"kind", "grid", "root", "node", "shift"}; categorical {"kind", "categories",
-             "truncated_n"}, categories as {"category", "root_pct", "node_pct", "change_pct"}.
-             None when the column has nothing to break down.
+    :param numeric_detail: both states' measurements, as DriftSQL.generate_numeric_detail gives them for the grid
+    :return: {"kind", "grid", "root", "node", "shift"}, or None when the column has nothing to break down
     """
-    if kind == NUMERIC:
-        r, n = _numeric_values(root), _numeric_values(node)
-        scale = _scale(r) if len(r) >= 2 else None
-        if scale is None or len(n) < 2:
-            return None
-        root_q, node_q = np.quantile(r, grid), np.quantile(n, grid)
-        return {"kind": kind, "grid": list(grid), "root": root_q.tolist(), "node": node_q.tolist(),
-                "shift": ((node_q - root_q) / scale).tolist()}
-
-    r, n = _category_values(root), _category_values(node)
-    if len(r) == 0 or len(n) == 0:
+    reference = numeric_detail.get("reference")
+    node = numeric_detail.get("node")
+    if reference is None or node is None:
         return None
-    shares = _shares(r, n) * 100
+
+    scale = None
+    if reference["n"] >= 2:
+        scale = _scale(reference["q1"], reference["q3"], reference["std"])
+    if scale is None or node["n"] < 2:
+        return None
+
+    root_quantiles = np.asarray(reference["quantiles"], dtype=float)
+    node_quantiles = np.asarray(node["quantiles"], dtype=float)
+    shift = (node_quantiles - root_quantiles) / scale
+    return {"kind": NUMERIC, "grid": list(grid), "root": root_quantiles.tolist(), "node": node_quantiles.tolist(),
+            "shift": shift.tolist()}
+
+
+def categorical_column_detail(category_counts):
+    """
+    The breakdown behind a categorical column's number: each category's share of root and of the node in percent,
+    the TOP_CHANGES categories that moved most by name and the rest summed into one row.
+
+    :param category_counts: each category's count in both states, as DriftSQL.generate_category_shares gives them
+    :return: {"kind", "categories", "truncated_n"}, categories as {"category", "root_pct", "node_pct",
+             "change_pct"}; None when the column has nothing to break down
+    """
+    root_total = 0
+    node_total = 0
+    for counted in category_counts:
+        root_total += counted["reference_count"]
+        node_total += counted["node_count"]
+    if root_total == 0 or node_total == 0:
+        return None
+
+    # Each category's share of either state, and the node's change, in percent
+    shares = {}
+    for counted in category_counts:
+        root_share = counted["reference_count"] / root_total
+        node_share = counted["node_count"] / node_total
+        shares[counted["label"]] = (root_share * 100, node_share * 100, (node_share - root_share) * 100)
+
     # Largest movers first, ties broken by name so the table is the same on every render
-    order = sorted(shares.index, key=lambda label: (-abs(shares.at[label, "change"]), str(label)))
-    rows = [_share_row(label, shares.loc[label]) for label in order[:TOP_CHANGES]]
+    def largest_move_first(label):
+        change_pct = shares[label][2]
+        return -abs(change_pct), str(label)
+
+    order = sorted(shares, key=largest_move_first)
+
+    rows = []
+    for label in order[:TOP_CHANGES]:
+        root_pct, node_pct, change_pct = shares[label]
+        rows.append(_share_row(label, root_pct, node_pct, change_pct))
+
     rest = order[TOP_CHANGES:]
     if rest:
-        rows.append(_share_row(OTHER_LABEL, shares.loc[rest].sum()))
-    return {"kind": kind, "categories": rows, "truncated_n": len(rest)}
+        rest_root = rest_node = rest_change = 0.0
+        for label in rest:
+            root_pct, node_pct, change_pct = shares[label]
+            rest_root += root_pct
+            rest_node += node_pct
+            rest_change += change_pct
+        rows.append(_share_row(OTHER_LABEL, rest_root, rest_node, rest_change))
+
+    return {"kind": CATEGORICAL, "categories": rows, "truncated_n": len(rest)}
 
 
-def root_density_params(root_values, factor=KDE_FACTOR, points=KDE_POINTS):
+def _smoothed(value_masses, grid, bandwidth):
+    """
+    A sum of Gaussian kernels on the grid, one per value, each weighted by how many rows hold the value - exactly
+    what a Gaussian KDE of every row sums, without repeating a value once per row.
+
+    :param value_masses: {"numbers", "occurrences"}, as DriftSQL.generate_value_masses gives them
+    :param grid: where to evaluate the sum
+    :param bandwidth: the kernels' standard deviation
+    :return: the sum at each grid point - the KDE's density, times the number of rows
+    """
+    numbers = np.asarray(value_masses["numbers"], dtype=float)
+    occurrences = np.asarray(value_masses["occurrences"], dtype=float)
+    grid = np.asarray(grid, dtype=float)
+
+    curve = np.zeros(len(grid))
+    for start in range(0, len(numbers), DENSITY_CHUNK):
+        chunk_numbers = numbers[start:start + DENSITY_CHUNK]
+        chunk_occurrences = occurrences[start:start + DENSITY_CHUNK]
+        # One row per grid point, one column per value: how many bandwidths apart they are
+        distances = (grid[:, np.newaxis] - chunk_numbers[np.newaxis, :]) / bandwidth
+        kernels = np.exp(-0.5 * distances ** 2)
+        curve += kernels @ chunk_occurrences
+
+    return curve / (bandwidth * np.sqrt(2 * np.pi))
+
+
+def root_density_params(value_masses, factor=KDE_FACTOR, points=KDE_POINTS):
     """
     Fit the ridgeline's smoothing on root, once per column.
 
     Every row of a ridgeline has to be smoothed identically, or the differences between rows are partly the
     smoother's doing (doc 03 §3.6b). So the bandwidth is fitted here, on root, in the column's own units, and
-    node_density reuses it for every node.
+    node_density reuses it for every node. It is the factor times root's sample standard deviation - the bandwidth
+    gaussian_kde fits for a scalar factor.
 
+    :param value_masses: root's distinct numbers and their counts, as DriftSQL.generate_value_masses gives them
     :return: {"bandwidth", "grid", "root_curve", "n_root"}, or None when root cannot be smoothed
     """
-    r = _numeric_values(root_values)
-    if len(r) < 2 or np.std(r) == 0:
+    numbers = np.asarray(value_masses["numbers"], dtype=float)
+    occurrences = np.asarray(value_masses["occurrences"], dtype=float)
+    n_root = int(occurrences.sum())
+    # Fewer than two values, or one value throughout, has no spread to smooth with
+    if n_root < 2 or numbers.min() == numbers.max():
         return None
-    kde = gaussian_kde(r, bw_method=factor)
-    bandwidth = float(np.sqrt(kde.covariance[0, 0]))
-    grid = np.linspace(r.min() - 3 * bandwidth, r.max() + 3 * bandwidth, points)
-    return {"bandwidth": bandwidth, "grid": grid.tolist(), "root_curve": kde(grid).tolist(), "n_root": len(r)}
+
+    mean = (occurrences * numbers).sum() / n_root
+    variance = (occurrences * (numbers - mean) ** 2).sum() / (n_root - 1)
+    bandwidth = float(factor * np.sqrt(variance))
+
+    grid = np.linspace(numbers.min() - 3 * bandwidth, numbers.max() + 3 * bandwidth, points)
+    root_curve = _smoothed(value_masses, grid, bandwidth) / n_root
+    return {"bandwidth": bandwidth, "grid": grid.tolist(), "root_curve": root_curve.tolist(), "n_root": n_root}
 
 
-def node_density(node_values, params):
+def node_density(value_masses, params):
     """
     One node's curve on root's grid, smoothed with root's bandwidth.
 
-    gaussian_kde takes its bandwidth as a factor on the data's own spread, so the factor is set per node to
-    land on root's bandwidth exactly. The curve is scaled by the node's share of root's values rather than
-    normalised to an area of one: the rows share one vertical scale, and a curve normalised on its own would
-    make a node that lost half its rows look unchanged (§3.6b). Where nothing moved, it lies on root's.
+    The curve is scaled by the node's share of root's values rather than normalised to an area of one: the rows share
+    one vertical scale, and a curve normalised on its own would make a node that lost half its rows look unchanged
+    (§3.6b). Where nothing moved, it lies on root's.
 
+    :param value_masses: the node's distinct numbers and their counts
     :return: the curve, or None when the node has too few values to draw
     """
-    n = _numeric_values(node_values)
-    if params is None or len(n) < 2:
+    n_node = int(np.asarray(value_masses["occurrences"], dtype=float).sum())
+    if params is None or n_node < 2:
         return None
-    grid = np.asarray(params["grid"])
-    bandwidth = params["bandwidth"]
-    std = np.std(n, ddof=1)
-    if std > 0:
-        curve = gaussian_kde(n, bw_method=bandwidth / std)(grid)
-    else:
-        # Every value is the same, which gaussian_kde cannot fit - but the curve is just one kernel
-        curve = np.exp(-0.5 * ((grid - n[0]) / bandwidth) ** 2) / (bandwidth * np.sqrt(2 * np.pi))
-    return (curve * len(n) / params["n_root"]).tolist()
+    curve = _smoothed(value_masses, params["grid"], params["bandwidth"]) / params["n_root"]
+    return curve.tolist()
 
 
-def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep=None):
+def category_flows(pairs, limit=MAX_LABELS, keep=None):
     """
     Where each of the earlier state's rows sits in the later one, for one categorical column: in a category,
     or in the removed sink when the later state no longer has the row. Rows are matched by "ID", and given
@@ -372,11 +498,10 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
     five rows moving each way between two categories moves ten rows and leaves TVD at zero - the two answer
     different questions, and both are reported.
 
-    :param before_frame: the state the rows start in - root, for a node's Sankey - as a frame with "ID" and
-                         the column
-    :param after_frame: the state they end in
+    :param pairs: how many rows take each path, as DriftSQL.generate_category_flows gives them - root to the node,
+                  for a node's Sankey - every category listed as itself
     :param limit: the most categories kept, the compare axes' limit by default. A column with more keeps its
-                  most common in before_frame, and null whenever it occurs, as those axes do, and folds the
+                  most common in the earlier state, and null whenever it occurs, as those axes do, and folds the
                   rest into OTHER_LABEL.
     :param keep: the categories to keep as themselves, naming them outright instead of by the limit - the
                  panel sends this when the reader pulls one back out of the catch-all
@@ -385,51 +510,102 @@ def category_flows(before_frame, after_frame, column, limit=MAX_CATEGORIES, keep
               can open on the top few. "other" names what the catch-all holds, so the reader can look inside
               it and take a category back out. churn and the category count are over the unfolded labels.
     """
-    matched = _matched(before_frame, after_frame, [column], "left")
-    source = _labels(matched[f"{column}_a"])
-    target = _labels(matched[f"{column}_b"]).where(matched["ID"].isin(after_frame["ID"]), REMOVED_LABEL)
-    churn = float((source != target).mean()) if len(source) else 0.0
+    # How many rows start in each category, and how many end somewhere else
+    source_rows = {}
+    total_rows = 0
+    moved_rows = 0
+    for pair in pairs:
+        source_rows[pair["source"]] = source_rows.get(pair["source"], 0) + pair["rows"]
+        total_rows += pair["rows"]
+        if pair["source"] != pair["target"]:
+            moved_rows += pair["rows"]
+    churn = moved_rows / total_rows if total_rows else 0.0
 
-    counts = source.value_counts()
+    # The categories most common first, ties broken by name
+    def most_common_first(label):
+        return -source_rows[label], label
+
+    by_count = sorted(source_rows, key=most_common_first)
+
     if keep is not None:
         # The panel named them, so size does not come into it - only the order, which stays by count
-        kept = [label for label in counts.index if label in set(keep)][:MAX_KEPT]
+        named = set(keep)
+        kept = []
+        for label in by_count:
+            if label in named:
+                kept.append(label)
+        kept = kept[:MAX_KEPT]
     else:
-        kept = list(counts.index)
+        kept = list(by_count)
         if len(kept) > limit:
             kept = kept[:limit - 1]
             # Null is the rarest kept, so it takes the last place and the order still runs by count
-            if NULL_LABEL in counts.index and NULL_LABEL not in kept:
+            if NULL_LABEL in source_rows and NULL_LABEL not in kept:
                 kept[-1] = NULL_LABEL
 
     # What the catch-all holds, biggest first: the panel lists these and offers them back
-    tail = [label for label in counts.index if label not in set(kept)]
-    other = None if not tail else {
-        "categories": [{"category": str(label), "rows": int(counts[label])} for label in tail[:OTHER_LISTED]],
-        "more": max(0, len(tail) - OTHER_LISTED),
-        "rows": int(counts[tail].sum()),
-    }
+    kept_set = set(kept)
+    tail = []
+    for label in by_count:
+        if label not in kept_set:
+            tail.append(label)
 
-    def fold(labels):
-        return labels.where(labels.isin(kept) | (labels == REMOVED_LABEL), OTHER_LABEL)
+    other = None
+    if tail:
+        listed = []
+        tail_rows = 0
+        for label in tail:
+            tail_rows += source_rows[label]
+        for label in tail[:OTHER_LISTED]:
+            listed.append({"category": str(label), "rows": int(source_rows[label])})
+        other = {"categories": listed, "more": max(0, len(tail) - OTHER_LISTED), "rows": int(tail_rows)}
 
-    folded = pd.DataFrame({"source": fold(source), "target": fold(target)})
-    flows = [{"source": s, "target": t, "rows": int(rows)}
-             for (s, t), rows in folded.value_counts(sort=False).items()]
+    def fold(label):
+        if label in kept_set or label == REMOVED_LABEL:
+            return label
+        return OTHER_LABEL
+
+    # The flows between the folded categories, and each folded source's rows and removed rows
+    folded_flows = {}
+    folded_source_rows = {}
+    folded_removed_rows = {}
+    for pair in pairs:
+        source = fold(pair["source"])
+        target = fold(pair["target"])
+        folded_flows[(source, target)] = folded_flows.get((source, target), 0) + pair["rows"]
+        folded_source_rows[source] = folded_source_rows.get(source, 0) + pair["rows"]
+        if target == REMOVED_LABEL:
+            folded_removed_rows[source] = folded_removed_rows.get(source, 0) + pair["rows"]
+
+    flows = []
+    present_targets = set()
+    for (source, target), rows in folded_flows.items():
+        flows.append({"source": source, "target": target, "rows": int(rows)})
+        present_targets.add(target)
 
     order = kept + [OTHER_LABEL]
-    present_sources, present_targets = set(folded["source"]), set(folded["target"])
-    removed = folded["target"] == REMOVED_LABEL
+    sources = []
+    targets = []
+    for label in order:
+        if label in folded_source_rows:
+            sources.append(label)
+        if label in present_targets:
+            targets.append(label)
+    if REMOVED_LABEL in present_targets:
+        targets.append(REMOVED_LABEL)
+
+    removal_rates = {}
+    for source in sorted(folded_source_rows):
+        removed = folded_removed_rows.get(source, 0)
+        removal_rates[str(source)] = float(removed / folded_source_rows[source])
 
     return {
         "flows": flows,
-        "sources": [label for label in order if label in present_sources],
-        "targets": [label for label in order if label in present_targets]
-                   + ([REMOVED_LABEL] if removed.any() else []),
-        "churn": churn,
-        "removal_rates": {str(label): float(rate)
-                          for label, rate in removed.groupby(folded["source"]).mean().items()},
-        "categories": int(source.nunique()),
+        "sources": sources,
+        "targets": targets,
+        "churn": float(churn),
+        "removal_rates": removal_rates,
+        "categories": len(source_rows),
         "other": other,
     }
 
@@ -578,63 +754,88 @@ def annotation(column, result, facts, detail=None, acted_on=False, flows=None):
 
 # ── Reading from the session ─────────────────────────────────────────────────
 
-# The root being measured against, read once. Every node's drift, null and detail needs it, and root's table
+# Root's data columns' kinds, decided once per root. Every node's drift is measured against them, and root's table
 # never changes; a new upload brings a new root.
-_root_cache = {"table": None, "frame": None, "kinds": None}
+_root_kinds = {"table": None, "kinds": None}
 
-# Ridgeline curves: root's fit per (root table, column), and each node's curve per (node table, column)
+# Ridgeline curves: each reference's fit per (reference table, column), and each node's curve per (reference table,
+# node table, column)
 _density_cache = {}
 
+# Node builds run on several threads at once, so the caches above are only changed under this
+_cache_lock = threading.Lock()
 
-def root_state(root_table, reload=False):
+
+def root_kinds(root_table, reload=False):
     """
-    Root's rows and its data columns' kinds, read once per root.
+    Root's data columns' kinds, decided once per root.
 
-    :param reload: read root again even if it is cached - a session's start asks for this, since tests and
+    :param reload: decide them again even if they are cached - a session's start asks for this, since tests and
                    re-uploads can reuse a table name for different data
-    :return: (frame, kinds)
+    :return: {column: kind}
     """
-    if reload or _root_cache["table"] != root_table:
-        from app import engine
-        from app.db_utils.column_types import ColumnTypes
+    with _cache_lock:
+        if not reload and _root_kinds["table"] == root_table:
+            return _root_kinds["kinds"]
 
-        frame = load_node_data(engine, root_table)
-        _root_cache.update(table=root_table, frame=frame,
-                           kinds=column_kinds(ColumnTypes(root_table, engine), frame.columns))
+    from app import engine
+    from app.db_utils.column_types import ColumnTypes
+
+    col_types = ColumnTypes.for_table(root_table, engine)
+    kinds = column_kinds(col_types, col_types.column_names)
+
+    with _cache_lock:
+        _root_kinds.update(table=root_table, kinds=kinds)
         _density_cache.clear()
-    return _root_cache["frame"], _root_cache["kinds"]
+    return kinds
+
+
+def compute_node_distortion(table_name, root_table):
+    """
+    Measure a node's drift from root, with the facts about what its wrangles did. It needs no graph node, so a node
+    can be measured before it joins the graph. Its columns are measured at the same time on the query pool, so this
+    must not itself run there - see app/server_utils/workers.py.
+
+    :param table_name: the node's table
+    :param root_table: root's table
+    :return: the distortion, facts included
+    """
+    from app import engine, db_operations
+
+    # Root's own measurement runs once, as a session starts, so that is where stale cached kinds are let go
+    is_root = table_name == root_table
+    kinds = root_kinds(root_table, reload=is_root)
+
+    if is_root:
+        row_count = db_operations.get_row_count(root_table)
+        present_cells = DriftSQL(engine, root_table, root_table, kinds).generate_present_cells("reference")
+        distortion = root_distortion(kinds, present_cells, row_count)
+        facts = {"rows_root": row_count, "rows_removed": 0, "cells_changed": {column: 0 for column in kinds}}
+    else:
+        drift = DriftSQL(engine, root_table, table_name, kinds)
+        measured_facts = measure_edit_facts(drift, list(kinds))
+        check_row_identity(measured_facts)
+        distortion = node_distortion(measure_columns(drift))
+        facts = edit_facts(measured_facts)
+
+    return {**distortion, "facts": facts}
 
 
 def refresh_node_distortion(table_name):
     """
     Compute a node's drift from root and attach it to its GraphNode, with the facts about what its wrangles
-    did. Called from refresh_node_metrics, so every path that creates a node - upload, a wrangle executed
-    from the repair panel, an accepted AI suggestion - gets it, once, when the node is made.
+    did. Called from refresh_node_metrics, so every path that creates a node gets it, once, when the node is made.
 
     :return: the distortion that was attached
     """
     import app as app_package
-    from app import engine
 
     pgraph = app_package.pgraph_for_session
     node = pgraph.node_map[table_name] if pgraph else None
     if node is None:
         raise KeyError(f"no pgraph node for table {table_name!r}, cannot attach distortion")
 
-    root_table = pgraph.root_node
-    # Root's own refresh runs once, as a session starts, so that is where a stale cached root is let go
-    root_frame, kinds = root_state(root_table, reload=table_name == root_table)
-
-    if table_name == root_table:
-        distortion = root_distortion(root_frame, kinds)
-        facts = {"rows_root": len(root_frame), "rows_removed": 0,
-                 "cells_changed": {column: 0 for column in kinds}}
-    else:
-        node_frame = load_node_data(engine, table_name)
-        distortion = node_distortion(root_frame, node_frame, kinds)
-        facts = edit_facts(root_frame, node_frame, kinds)
-
-    node.set_distortion({**distortion, "facts": facts})
+    node.set_distortion(compute_node_distortion(table_name, pgraph.root_node))
     return node.distortion
 
 
@@ -644,6 +845,35 @@ def _node_distortion_of(pgraph, node_table):
     if node.distortion is None:
         refresh_node_distortion(node_table)
     return node.distortion
+
+
+def _density(drift, base_table, node_table, column):
+    """
+    The ridgeline for one node and column: the reference's curve and the node's, both on the grid fitted to the
+    reference. Both are cached - the reference's fit per reference, the node's curve per reference and node.
+
+    :return: {"grid", "bandwidth", "root", "node"}, or None when the reference cannot be smoothed
+    """
+    params_key = ("params", base_table, column)
+    curve_key = ("curve", base_table, node_table, column)
+
+    with _cache_lock:
+        params = _density_cache.get(params_key, False)
+    if params is False:
+        params = root_density_params(drift.generate_value_masses("reference", column))
+        with _cache_lock:
+            _density_cache[params_key] = params
+    if params is None:
+        return None
+
+    with _cache_lock:
+        curve = _density_cache.get(curve_key, False)
+    if curve is False:
+        curve = node_density(drift.generate_value_masses("node", column), params)
+        with _cache_lock:
+            _density_cache[curve_key] = curve
+
+    return {"grid": params["grid"], "bandwidth": params["bandwidth"], "root": params["root_curve"], "node": curve}
 
 
 def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
@@ -665,13 +895,9 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
 
     root_table = pgraph.root_node
     base_table = base_table or root_table
-    root_frame, kinds = root_state(root_table)
+    kinds = root_kinds(root_table)
     if column not in kinds:
         raise ValueError(f"{column!r} is not a data column of the root table")
-
-    def column_frame(table):
-        """One table's "ID" and the column - root's out of the cache, any other read from the database."""
-        return root_frame[["ID", column]] if table == root_table else load_node_data(engine, table, [column])
 
     # Kinds stay root's for every reference, so a column cannot switch statistics with the reference
     kind = kinds[column]
@@ -679,7 +905,7 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     dropped = (column in distortion["structural"]["removed"]
                or column in _node_distortion_of(pgraph, base_table)["structural"]["removed"])
 
-    base_frame = node_frame = None
+    drift = DriftSQL(engine, base_table, node_table, {column: kind})
     if base_table == root_table:
         # Read off what the node already carries, so these match the drift shown everywhere else
         result, facts = distortion["columns"][column], distortion["facts"]
@@ -687,16 +913,17 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
         result = _result(kind, None, 0, 0, "column removed")
         facts = {"rows_root": 0, "rows_removed": 0, "cells_changed": {}}
     else:
-        base_frame = column_frame(base_table)
-        node_frame = base_frame if node_table == base_table else column_frame(node_table)
-        check_row_identity(base_frame, node_frame)
+        measured_facts = measure_edit_facts(drift, [column])
+        check_row_identity(measured_facts)
         if node_table == base_table:
             # Measured against itself: exactly zero, as root is against root
-            present = base_frame[column].notna().sum()
+            present = drift.generate_present_cells("reference").get(column, 0)
             result = _result(kind, 0.0, present, present)
+        elif kind == NUMERIC:
+            result = column_distortion(drift.generate_numeric_drift(column), kind)
         else:
-            result = column_distortion(base_frame[column], node_frame[column], kind)
-        facts = edit_facts(base_frame, node_frame, [column])
+            result = column_distortion(drift.generate_categorical_drift(column), kind)
+        facts = edit_facts(measured_facts)
 
     payload = {"node": node_table, "base": base_table, "column": column, "kind": kind, "distortion": result,
                "rows_root": facts["rows_root"], "rows_removed": facts["rows_removed"],
@@ -705,29 +932,19 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     if dropped:
         return payload
 
-    if base_frame is None:
-        base_frame, node_frame = root_frame, column_frame(node_table)
-    base_values, node_values = base_frame[column], node_frame[column]
-
-    detail = column_detail(base_values, node_values, kind)
+    if kind == NUMERIC:
+        detail = numeric_column_detail(drift.generate_numeric_detail(column, TAIL_GRID))
+    else:
+        detail = categorical_column_detail(drift.generate_category_shares(column))
 
     path = [pgraph.node_map[table] for table in pgraph.path_between(base_table, node_table)]
     acted_on = acted_on_column(path, column)
 
     flows = None
     if kind == NUMERIC:
-        # The curve is drawn on the grid fitted to its reference, so it is cached per reference too
-        params_key, curve_key = ("params", base_table, column), ("curve", base_table, node_table, column)
-        if params_key not in _density_cache:
-            _density_cache[params_key] = root_density_params(base_values)
-        params = _density_cache[params_key]
-        if params is not None:
-            if curve_key not in _density_cache:
-                _density_cache[curve_key] = node_density(node_values, params)
-            payload["density"] = {"grid": params["grid"], "bandwidth": params["bandwidth"],
-                                  "root": params["root_curve"], "node": _density_cache[curve_key]}
+        payload["density"] = _density(drift, base_table, node_table, column)
     else:
-        flows = category_flows(base_frame, node_frame, column, keep=keep)
+        flows = category_flows(drift.generate_category_flows(column), keep=keep)
         payload["flows"] = flows
 
     # The breakdown is what the annotation is written from; no view draws it, so it never travels

@@ -115,7 +115,19 @@ create_database_if_not_exists(connection, db_name)
  pd.read_sql_query, and .to_sql() throughout routes.py, plot_routes.py, and db_operations.py
 """
 print(f"Connecting to database: {db_name}")
-engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
+
+"""
+ The connection pool is sized for the server's worker threads at full tilt - 8 query workers and 4 node builds,
+ see app/server_utils/workers.py - plus the requests the threaded dev server is serving at the same moment.
+ SQLAlchemy's default of 5 would leave the workers queueing for connections.
+
+ Every connection also gets more working memory than Postgres' default of 4MB. Error detection, drift and the
+ compare plots sort and hash whole columns, and at 4MB a quarter-million-row column spills to disk part way.
+"""
+WORK_MEM = "64MB"
+engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}",
+                       pool_size=16, max_overflow=8,
+                       connect_args={"options": f"-c work_mem={WORK_MEM}"})
 
 from app.db_utils.db_functions_sql import DBOperations
 db_operations = DBOperations(engine)

@@ -34,6 +34,22 @@ def _is_numeric(conn, col: str, table_name: str) -> bool:
     return dtype in _NUMERIC_TYPES
 
 
+def _ids_in(ids_param: str) -> str:
+    """
+    Boolean SQL expression that is TRUE when a row's "ID" is in a bound list of IDs.
+
+    The list is unnested into a set and matched with IN, which Postgres answers with a hash join. Matching
+    with = ANY(list) instead walks the whole list for every row of the table: with a few thousand IDs on a
+    quarter-million-row table, that alone took over ten seconds.
+
+    Parameters
+    ----------
+    ids_param : str
+        Name of the bound parameter holding the IDs, e.g. "ids"
+    """
+    return f'"ID" IN (SELECT unnest(CAST(:{ids_param} AS bigint[])))'
+
+
 def _get_errors_table(table: str) -> str:
     """Get errors table name for given table."""
     return f"errors_{table}"
@@ -138,15 +154,10 @@ def remove_rows_by_ids(table: str, ids: List[int]) -> int:
     # errors_table = _get_errors_table(table)
 
     with engine.begin() as conn:
-        # removd join to try to fix bug not removing rows
         conn.execute(
             text(f"""
                 DELETE FROM "{table}"
-                WHERE "ID" IN (
-                    SELECT t."ID"
-                    FROM "{table}" t
-                    WHERE t."ID" = ANY(:ids)
-                )
+                WHERE {_ids_in("ids")}
             """),
             {"ids": ids}
         )
@@ -186,7 +197,7 @@ def impute_by_ids(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
             text(f'''
                         UPDATE "{table}"
                         SET "{col}" = :fill_val
-                        WHERE "ID" = ANY(:ids)
+                        WHERE {_ids_in("ids")}
                     '''),
             {"fill_val": fill_val, "ids": ids}
         )

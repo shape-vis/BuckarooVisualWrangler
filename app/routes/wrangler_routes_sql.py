@@ -7,11 +7,12 @@ from app.db_utils import query
 from app import engine
 import traceback
 import pandas as pd
-from app.server_utils.service_helpers import create_error_df, _safe_pg_name, create_data_profile_df, \
-    get_sqlalchemy_dtype_map
+from app.server_utils.service_helpers import _safe_pg_name, create_data_profile_df
 from sqlalchemy import inspect, text
 
+from app.db_utils.column_types import ColumnTypes
 from app.db_utils.data_profile import DataProfile
+from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils import candidates
 
 """
@@ -62,38 +63,22 @@ def update_table(updated_df, target_table_name, key_col, cols_to_remove):
 # Helper: Re-run error detection after modification
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Returns error_df for update_data_profile_table to use (so it doesn't have to get it from the database)
-def update_errors_table(table_name: str) -> pd.DataFrame:
+def update_errors_table(table_name: str) -> None:
     """
     After modifying a table in-place, re-run error detection and rebuild the errors table.
 
-    The whole frame goes to the detectors, "ID" included, and the whole errors table is rebuilt.
+    The detectors run inside Postgres over the whole table, "ID" included, and the whole errors table is rebuilt -
+    see app/db_utils/detector_sql.py.
 
-    Both of those matter. Slicing the frame down to just the wrangled columns - which this did
-    between 33f0e34 and now - drops "ID", so set_id_column mints fresh positional ids and every
-    row_id in errors_<table> ends up naming a row *position* rather than a row. And updating only
+    Both of those matter. Slicing the table down to just the wrangled columns - which this did
+    between 33f0e34 and the pandas rewrite - drops "ID", so the detectors minted fresh positional ids and every
+    row_id in errors_<table> ended up naming a row *position* rather than a row. And updating only
     the wrangled columns' rows leaves error rows for every other column pointing at ids that a
-    delete has since removed. A full rebuild has neither problem.
-
-    The cost is re-detecting every column on the whole table. That is what this did before
-    33f0e34; making it incremental again needs to be scoped by row, not by column, so "ID"
-    is never at risk. See tests/sql/test_errors_row_id.py.
+    delete has since removed. A full rebuild has neither problem. See tests/sql/test_errors_row_id.py.
     """
     try:
-        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
-
-        detected_errors_df = create_error_df(df)
-        errors_table_name = f"errors_{table_name}"
-
-        # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
-        # table names > 63 chars due to PostgreSQL identifier truncation).
-        with engine.begin() as conn:
-            conn.execute(text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
-
-        detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
-
-        print(f"✓ Updated errors table: {errors_table_name}")
-        return detected_errors_df
+        DetectorSQL(engine, table_name).generate_errors_table()
+        print(f"✓ Updated errors table: errors_{table_name}")
     except Exception as e:
         print(f"ERROR: Could not update errors table for {table_name}: {e}")
         traceback.print_exc()
@@ -133,29 +118,6 @@ def update_data_profile_table(table_name: str, columns_selected_for_wrangling: l
 
 
 
-
-# TODO: does this even do anything? Can I remove it?
-def update_preview_error_table(table_name: str, err_table_name: str) -> None:
-    """
-    After modifying a table in-place, re-run error detection
-    and update the errors table.
-    """
-    try:
-        x = None
-
-        # df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
-        # detected_errors_df = run_detectors(df)
-        # errors_table_name = f"errors_{table_name}"
-        # # Drop first via raw SQL to avoid SQLAlchemy reflection (which fails on
-        # # table names > 63 chars due to PostgreSQL identifier truncation).
-        # with engine.begin() as conn:
-        #     conn.execute(sa_text(f'DROP TABLE IF EXISTS "{errors_table_name}"'))
-        # detected_errors_df.to_sql(errors_table_name, engine, if_exists='fail', index=False)
-        # print(f"✓ Updated errors table: {errors_table_name}")
-    except Exception as e:
-        print(f"ERROR: Could not update errors table for {table_name}: {e}")
-        traceback.print_exc()
-        raise
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Wrangling Endpoints
@@ -212,14 +174,16 @@ def create_previews():
             return {"success": False, "error": "A selection is on one column or two"}, 400
 
         chart_type = "histogram" if len(cols) == 1 else (body.get("source") or "heatmap")
-        staged = [
-            candidates.materialize(
-                table, op, cols, row_ids, imputed_column=imputed, source="repair",
-                meta={"label": label, "reason": reason, "row_count": len(row_ids), "error_type": None,
-                      "chart_type": chart_type},
-            )
-            for op, imputed, label, reason in _repair_options(cols, len(row_ids))
-        ]
+
+        specs = []
+        for op, imputed, label, reason in _repair_options(cols, len(row_ids)):
+            meta = {"label": label, "reason": reason, "row_count": len(row_ids), "error_type": None,
+                    "chart_type": chart_type}
+            specs.append(candidates.CandidateSpec(op=op, cols=list(cols), row_ids=row_ids, imputed_column=imputed,
+                                                  source="repair", meta=meta))
+
+        # The repairs of one selection stand together, so they are built at once and staged all or none
+        staged = candidates.stage_all(table, specs)
         return {"success": True, "candidates": staged}
 
     except candidates.CandidateError as e:
@@ -246,8 +210,9 @@ def wrangle_delete_column():
 
         print(f"Deleting column '{column}' from table '{table_name}'")
 
-        # Delete the column
+        # Delete the column. The table keeps its name, so its cached column types have to be let go by hand
         remaining_columns = query.delete_column(table=table_name, column=column)
+        ColumnTypes.forget(table_name)
 
         # Re-run error detection
         update_errors_table(table_name)

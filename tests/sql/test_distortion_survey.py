@@ -4,8 +4,8 @@ Distortion measured through Buckaroo's own process, on the StackOverflow survey.
 tests/unit/test_distortion_fixtures.py holds the metric to doc 02's numbers, but those came from a node
 Buckaroo cannot produce: the prototype called 26 salaries bad by rules of its own. This builds nodes the way a
 user would. The survey is uploaded through load_file, so the real detectors flag it, and every wrangle goes
-through ai_wrangle.apply_suggestion - its rows come from the errors table and its change goes through
-preview and promote. Drift is then read back through the graph payload and the drift routes.
+through ai_wrangle.apply_suggestion - its rows come from the errors table and its change is staged as a candidate
+and accepted. Drift is then read back through the graph payload and the drift routes.
 
     root ─┬─ delete ConvertedSalary anomalies ── delete ConvertedSalary missing    20 rows gone
           ├─ impute ConvertedSalary missing                                        6 cells filled
@@ -19,7 +19,7 @@ from sqlalchemy import text as sa_text
 
 import app
 from app import engine
-from app.pgraph.compare import load_node_data
+from app.db_utils.column_types import ColumnTypes
 from app.pgraph.distortion import REMOVED_LABEL, SKIPPED_COLUMNS
 from app.routes.routes import load_file
 from app.server_utils import ai_wrangle as aw
@@ -35,7 +35,10 @@ def build_survey_graph():
     upload = load_file(str(SURVEY), "distortion_survey.csv")
     assert upload["success"], upload
     root = upload["table_name"]
-    columns = [column for column in load_node_data(engine, root).columns if column not in SKIPPED_COLUMNS]
+    columns = []
+    for column in ColumnTypes.for_table(root, engine).column_names:
+        if column not in SKIPPED_COLUMNS:
+            columns.append(column)
 
     def wrangle(node, **raw):
         result = aw.apply_suggestion(node, raw, columns)

@@ -17,8 +17,8 @@ import json
 DIMENSIONS = ("missing", "mismatch", "anomaly", "incomplete")
 
 # Row identifiers are not data attributes, so they are never counted as columns with quality. The
-# detectors already exclude them (see get_values_for_df_melt), so they could only ever contribute
-# zeroes and dilute the node-level totals.
+# detectors never flag "ID" (see STRUCTURAL_COLUMNS in app/db_utils/detector_sql.py), so it could only ever
+# contribute zeroes and dilute the node-level totals.
 ID_COLUMNS = ("ID", "Original_ID")
 
 
@@ -44,8 +44,9 @@ class NodeMetrics:
     Error rates for one graph node, at two granularities.
 
     columns: {column_name: {dimension: rate, ..., "total": rate}} - a rate is the fraction of rows in
-             that column carrying that error, which is the same arithmetic get_error_dist uses, so
-             these numbers agree with the attribute summary panel's existing badges.
+             that column carrying that error, which is the same arithmetic
+             DataProfile.calculate_error_distribution uses, so these numbers agree with the attribute
+             summary panel's badges.
     totals:  {dimension: rate, "total": rate} - the fraction of *cells* carrying that error, which is
              the right normalization for a node-level scalar and for a sparkline's y axis.
     """
@@ -160,6 +161,23 @@ def quality_trajectory(ordered_metrics):
     return trajectory
 
 
+def compute_node_metrics(table_name):
+    """
+    Compute a table's metrics. It needs no graph node, so a node can be measured before it joins the graph - a
+    candidate is, while it is being built.
+
+    :param table_name: the node table to profile; its data profile has to be built already
+    :return: a NodeMetrics for the table
+    """
+    from app import engine, db_operations
+    from app.db_utils.data_profile import DataProfile
+
+    return NodeMetrics.from_data_profile(
+        DataProfile(table_name, engine),
+        db_operations.get_row_count(table_name),
+    )
+
+
 def refresh_node_metrics(table_name):
     """
     Compute a table's metrics and attach them to its GraphNode.
@@ -174,18 +192,13 @@ def refresh_node_metrics(table_name):
     # The session's graph hangs off the app *package*, not the Flask object - see
     # init_pgraph_for_session in service_helpers.py
     import app as app_package
-    from app import engine, db_operations
-    from app.db_utils.data_profile import DataProfile
 
     pgraph = app_package.pgraph_for_session
     node = pgraph.node_map[table_name] if pgraph else None
     if node is None:
         raise KeyError(f"no pgraph node for table {table_name!r}, cannot attach metrics")
 
-    metrics = NodeMetrics.from_data_profile(
-        DataProfile(table_name, engine),
-        db_operations.get_row_count(table_name),
-    )
+    metrics = compute_node_metrics(table_name)
     node.set_metrics(metrics)
 
     # Drift from root is computed at the same moment, so every path that makes a node gets both. It is

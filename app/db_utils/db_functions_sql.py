@@ -1,10 +1,7 @@
 from collections import defaultdict
 
-import pandas as pd
-
-from app.server_utils import service_helpers
 from app.db_utils.filtering_sql import FilteringSQL
-from app.db_utils.execute_sql import fetch_sql, execute_sql
+from app.db_utils.execute_sql import fetch_sql, execute_sql, quote_identifier
 from app.db_utils.column_types import ColumnTypes
 
 """
@@ -59,7 +56,7 @@ class DBOperations:
         self.main_table_name = main_table_name
         self.error_table_name = error_table_name if error_table_name is not None else "errors_" + main_table_name
         self.dp_table_name = dp_table_name if dp_table_name is not None else "dp_" + main_table_name
-        self.col_types = ColumnTypes(main_table_name, self.engine)
+        self.col_types = ColumnTypes.for_table(main_table_name, self.engine)
         self.filtering_table = FilteringSQL(main_table_name, self.engine)
         self.active_hists = {}
 
@@ -71,10 +68,64 @@ class DBOperations:
         """
         return fetch_sql(f'SELECT COUNT(*) FROM "{table_name}"', True, self.engine)
 
-    def update_rankings(self, new_table_name):
-        df = pd.read_sql_table(f"errors_{new_table_name}", self.engine)
-        rankings = service_helpers.calculate_attribute_rankings(df)
-        rankings.to_sql("rankings_" + new_table_name, self.engine, if_exists='replace', index=False)
+    def update_rankings(self, new_table_name: str):
+        """
+        Ranks a table's columns by how many error flags they carry, most first, and stores the ranking in its
+        rankings_ table - the top error rows table reads its default columns from it. Ties are broken by column
+        name, so the ranking is the same every time.
+        :arg: new_table_name: the table whose errors table to rank.
+        """
+
+        errors_table = quote_identifier("errors_" + new_table_name)
+        rankings_table = quote_identifier("rankings_" + new_table_name)
+
+        rankings_query = f'''
+            DROP TABLE IF EXISTS {rankings_table};
+            CREATE TABLE {rankings_table} AS
+            SELECT
+                column_id AS attribute,
+                COUNT(*) AS total_errors,
+                ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, column_id) AS rank
+            FROM {errors_table}
+            GROUP BY column_id;
+        '''
+        execute_sql(rankings_query, self.engine)
+
+    def clone_table(self, source_table: str, dest_table: str):
+        """
+        Copies a table, replacing any table already under the copy's name. A candidate starts as a copy of its
+        parent's table, which its wrangle then changes.
+        :arg: source_table: the table to copy.
+        :arg: dest_table: the copy's name.
+        """
+
+        source = quote_identifier(source_table)
+        dest = quote_identifier(dest_table)
+
+        clone_query = f'''
+            DROP TABLE IF EXISTS {dest};
+            CREATE TABLE {dest} AS SELECT * FROM {source};
+        '''
+        execute_sql(clone_query, self.engine)
+        ColumnTypes.forget(dest_table)
+
+    def drop_node_tables(self, table_name: str):
+        """
+        Drops a node's table and every table derived from it: its errors, data profile, rankings and filtering
+        tables.
+        :arg: table_name: the node's table.
+        """
+
+        derived_names = [table_name, f"errors_{table_name}", f"dp_{table_name}", f"rankings_{table_name}",
+                         f"{table_name}_filtering"]
+
+        drop_statements = []
+        for name in derived_names:
+            quoted_name = quote_identifier(name)
+            drop_statements.append(f"DROP TABLE IF EXISTS {quoted_name};")
+            ColumnTypes.forget(name)
+
+        execute_sql("\n".join(drop_statements), self.engine)
 
     def add_data_filters(self, sql_filters) -> dict:
         """
