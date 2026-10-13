@@ -7,6 +7,7 @@ import ComparePanel from "../elements/ComparePanel.jsx";
 import { usePgraph } from "./PGraphContext.jsx";
 import { HostWindowContext } from "./HostWindowContext.jsx";
 import { normalizeSpec, specFromPair } from "../utils/comparisonSpec.js";
+import { randomKey } from "../utils/randomKey.js";
 import { savedCompareConfig, specOfCompare } from "../graph_objects/supportNodes/compareView.js";
 
 /**
@@ -73,6 +74,26 @@ function mirrorStyles(popup) {
     return () => observer.disconnect();
 }
 
+/* Whether the open comparison is this same pair, opened from the graph. One opened from a sub-node is kept
+   apart: it is linked to that sub-node, which the graph's own pair is not. */
+function isSamePairOpen(open, spec) {
+    if (!open) return false;
+
+    const openedFromGraph = !open.links;
+    if (!openedFromGraph) return false;
+
+    return open.spec.a === spec.a && open.spec.b === spec.b;
+}
+
+/* The compare sub-nodes that follow one comparison together: every one a single Save added, or just this one */
+function compareGroupOf(record, supportNodes) {
+    const group = record.config?.group;
+    if (!group) return [record.id];
+
+    const sameGroup = supportNodes.filter((one) => one.kind === record.kind && one.config?.group === group);
+    return sameGroup.map((one) => one.id);
+}
+
 /**
  * Props:
  *  - revealPlots: opens the Plots view if it is closed, so a docked comparison has somewhere to show
@@ -98,57 +119,55 @@ export function CompareProvider({ revealPlots, children }) {
        this is how that pagehide is told apart from the user closing the window. */
     const closedByApp = useRef(null);
 
+    /* Brings the open comparison into view: its popup, when it has one, or else its tab in the Plots view */
+    const bringForward = useCallback(() => {
+        if (popup && !popup.closed) {
+            popup.focus();
+            return;
+        }
+        setPlotsTab("compare");
+        revealPlots?.();
+    }, [popup, revealPlots]);
+
     /* follow says what the linked sub-nodes keep of the comparison as it changes: the whole of it (a compare
        sub-node), or only its column while it is on drift (a drift-plot sub-node, whose settings are its column). */
     const show = useCallback((spec, { links = null, follow = "spec" } = {}) => {
         serial.current += 1;
         setOpen({ spec, key: serial.current, links, follow });
-        if (popup && !popup.closed) {
-            popup.focus();
-        } else {
-            setPlotsTab("compare");
-            revealPlots?.();
-        }
-    }, [popup, revealPlots]);
+        bringForward();
+    }, [bringForward]);
 
     /** Compares the two nodes paired in the graph. The same pair again just brings the open one forward. */
     const openCompare = useCallback((pair) => {
         const nodesById = Object.fromEntries(nodes.map((node) => [node.id, node]));
         const spec = specFromPair(pair, nodesById);
-        if (open && !open.spec.id && !open.links && open.spec.a === spec.a && open.spec.b === spec.b) {
-            if (popup && !popup.closed) popup.focus();
-            else { setPlotsTab("compare"); revealPlots?.(); }
+        if (isSamePairOpen(open, spec)) {
+            bringForward();
             return;
         }
         show(spec);
-    }, [nodes, open, popup, show, revealPlots]);
-
-    /** Opens a comparison saved on the graph, as the server returned it. */
-    const openSaved = useCallback((spec) => show(normalizeSpec(spec)), [show]);
+    }, [nodes, open, show, bringForward]);
 
     /** Opens a compare sub-node in the panel. Every sub-node one Save added changes along with it. The one
         already open is just brought forward. */
     const openCompareNode = useCallback((record) => {
-        const links = record.config?.group
-            ? supportNodes.filter((one) => one.kind === record.kind && one.config?.group === record.config.group)
-                .map((one) => one.id)
-            : [record.id];
-        if (open?.links?.includes(record.id)) {
-            if (popup && !popup.closed) popup.focus();
-            else { setPlotsTab("compare"); revealPlots?.(); }
+        const alreadyOpen = open?.links?.includes(record.id);
+        if (alreadyOpen) {
+            bringForward();
             return;
         }
+        const links = compareGroupOf(record, supportNodes);
         const columns = Object.keys(serverNodesById?.[record.hostId]?.data?.metrics?.columns ?? {});
         show(specOfCompare(record, columns), { links });
-    }, [supportNodes, serverNodesById, open, popup, show, revealPlots]);
+    }, [supportNodes, serverNodesById, open, show, bringForward]);
 
     /** Opens a drift-plot sub-node in the panel: its node against root - a single-node comparison - on drift, on
         its column. Picking another column there while on drift carries back to the sub-node. The one already open
         is just brought forward. */
     const openDriftNode = useCallback((record) => {
-        if (open?.links?.includes(record.id)) {
-            if (popup && !popup.closed) popup.focus();
-            else { setPlotsTab("compare"); revealPlots?.(); }
+        const alreadyOpen = open?.links?.includes(record.id);
+        if (alreadyOpen) {
+            bringForward();
             return;
         }
         const spec = normalizeSpec({
@@ -161,24 +180,37 @@ export function CompareProvider({ revealPlots, children }) {
             errorDelta: "rootB",
         });
         show(spec, { links: [record.id], follow: "driftColumn" });
-    }, [open, popup, show, revealPlots]);
+    }, [open, show, bringForward]);
 
     // While a comparison is kept on sub-nodes, they follow its settings - all of them, or just what they keep
     const links = open?.links;
     const follow = open?.follow;
     const followSpec = useCallback((spec) => {
-        links?.forEach((id) => updateSupportNode(id, (record) => {
-            if (follow !== "driftColumn") return { config: { ...record.config, spec } };
-            return spec.kind === "drift" && spec.x ? { config: { ...record.config, column: spec.x } } : {};
-        }));
+        if (!links) return;
+
+        // What one linked sub-node takes from the comparison's new settings
+        function patchFor(record) {
+            if (follow !== "driftColumn") {
+                return { config: { ...record.config, spec } };
+            }
+            // A drift plot keeps only its column, and only while the comparison is on drift
+            const onDriftColumn = spec.kind === "drift" && spec.x;
+            if (onDriftColumn) {
+                return { config: { ...record.config, column: spec.x } };
+            }
+            return {};
+        }
+
+        links.forEach((id) => updateSupportNode(id, patchFor));
     }, [links, follow, updateSupportNode]);
 
     /* Keeps the open comparison beside both its nodes, as a compare sub-node on each, and from then on they
        follow it. Grouped, so opening either later changes both. */
     const saveToNodes = useCallback((spec) => {
-        const group = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-        const ids = [...new Set([spec.a, spec.b])]
-            .map((host) => addSupportNode(host, "compare", savedCompareConfig(spec, host, group)));
+        const group = randomKey();
+        // A single-node comparison has the one host
+        const hosts = [...new Set([spec.a, spec.b])];
+        const ids = hosts.map((host) => addSupportNode(host, "compare", savedCompareConfig(spec, host, group)));
         setOpen((was) => (was ? { ...was, links: ids, follow: "spec" } : was));
     }, [addSupportNode]);
 
@@ -295,9 +327,8 @@ export function CompareProvider({ revealPlots, children }) {
     const value = useMemo(() => ({
         spec: open?.spec ?? null,
         placement, plotsTab, setPlotsTab,
-        openCompare, openSaved, openCompareNode, openDriftNode, closeCompare, popOut, dockIn, dockSlot,
-    }), [open, placement, plotsTab, openCompare, openSaved, openCompareNode, openDriftNode, closeCompare, popOut, dockIn,
-        dockSlot]);
+        openCompare, openCompareNode, openDriftNode, closeCompare, popOut, dockIn, dockSlot,
+    }), [open, placement, plotsTab, openCompare, openCompareNode, openDriftNode, closeCompare, popOut, dockIn, dockSlot]);
 
     return (
         <CompareContext.Provider value={value}>

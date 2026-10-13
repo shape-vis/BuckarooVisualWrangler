@@ -1,7 +1,7 @@
 """
 Distortion measured through Buckaroo's own process, on the StackOverflow survey.
 
-tests/unit/test_distortion_fixtures.py holds the metric to doc 02's numbers, but those came from a node
+The "Doc 02" section of tests/sql/test_drift_sql.py holds the metric to doc 02's numbers, but those came from a node
 Buckaroo cannot produce: the prototype called 26 salaries bad by rules of its own. This builds nodes the way a
 user would. The survey is uploaded through load_file, so the real detectors flag it, and every wrangle goes
 through ai_wrangle.apply_suggestion - its rows come from the errors table and its change is staged as a candidate

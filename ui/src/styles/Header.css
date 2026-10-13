@@ -1,22 +1,18 @@
-.header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 10;
-}
-
+/* The header bar. It stays fixed at the top, 48px tall - the layout below it is offset by that height */
 #header {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 56px;
+    height: 48px;
     z-index: 10;
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    background: #f8f9fa;
-    border-bottom: 1.5px solid #dadce0;
+    background: #ffffff;
+    color: #1c1e21;
+    border-bottom: 1px solid #dddfe2;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     padding: 0 16px;
     box-sizing: border-box;
 }
@@ -28,21 +24,10 @@
     white-space: nowrap;
     flex-shrink: 0;
     line-height: 1;
-}
-
-#header h1 {
     cursor: pointer;
 }
 
 #header h1 img {
-    vertical-align: middle;
-}
-
-.header h1 {
-    cursor: pointer;
-}
-
-.header h1 img {
     vertical-align: middle;
 }
 

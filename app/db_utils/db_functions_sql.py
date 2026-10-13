@@ -1,21 +1,21 @@
-from collections import defaultdict
-
-from app.db_utils.filtering_sql import FilteringSQL
-from app.db_utils.execute_sql import fetch_sql, execute_sql, quote_identifier
-from app.db_utils.column_types import ColumnTypes
-
 """
-Provides two classes for querying and visualizing data from a PostgreSQL database table,
-with support for data filtering and error annotation overlays on all chart types.
-
---- ColumnTypes ---
-Inspects a table's schema to classify each column as numeric, categorical, or mixed-type.
+Queries and visualizes data from a PostgreSQL database table, with support for data filtering and error annotation
+overlays on all chart types. Column types come from ColumnTypes (column_types.py).
 
 --- DBOperations ---
 Wraps all core DB operations for a single primary table. Builds and executes multi-step
 CTE SQL queries that produce JSON payloads for 1D histograms, 2D histograms, and scatterplots,
 each annotated with per-bin/per-point error breakdowns. Also manages row-level data filters.
 """
+
+from collections import defaultdict
+
+import pandas as pd
+
+from app.db_utils.filtering_sql import FilteringSQL
+from app.db_utils.execute_sql import fetch_sql, execute_sql, quote_identifier
+from app.db_utils.column_types import ColumnTypes, NUMERIC_TEXT_REGEX
+
 
 # Wraps up all Core DBOperations into one class using a primary main_table.
 class DBOperations:
@@ -90,6 +90,92 @@ class DBOperations:
             GROUP BY column_id;
         '''
         execute_sql(rankings_query, self.engine)
+
+    def get_top_ranked_attributes(self, table_name: str, attribute_count=3) -> list:
+        """
+        The columns carrying the most error flags, from the table's rankings_ table - the attribute summary panel
+        shows these first.
+        :arg: table_name: the table whose rankings to read.
+        :arg: attribute_count: how many columns to return.
+        :return: the column names, most flagged first.
+        """
+
+        rankings_table = quote_identifier("rankings_" + table_name)
+
+        top_ranked_query = f'''
+            SELECT attribute
+            FROM {rankings_table}
+            ORDER BY rank ASC
+            LIMIT :attribute_count
+        '''
+        rows = fetch_sql(top_ranked_query, False, self.engine, params={"attribute_count": int(attribute_count)})
+
+        attributes = []
+        for row in rows or []:
+            attributes.append(row[0])
+        return attributes
+
+    def generate_top_error_rows(self, row_count=10):
+        """
+        Creates the SQL queries for the rows of the current table carrying the most error flags, and executes them:
+        once for the rows' data and once for their flags, for the table view.
+        :arg: row_count: how many rows to return.
+        :return: (the rows' data, their error flags), each a DataFrame.
+        """
+
+        top_data_steps = [self.gather_top_error_row_ids(row_count),
+                          self.select_top_error_data()]
+        top_errors_steps = [self.gather_top_error_row_ids(row_count),
+                            self.select_top_error_flags()]
+
+        data_rows = pd.read_sql_query("".join(top_data_steps), self.engine)
+        error_rows = pd.read_sql_query("".join(top_errors_steps), self.engine)
+        return data_rows, error_rows
+
+    def gather_top_error_row_ids(self, row_count: int) -> str:
+        """
+        Gather the IDs of the rows carrying the most error flags.
+        :arg: row_count: how many rows to gather.
+        :return: the query for the top row IDs.
+        """
+
+        errors_table = quote_identifier(self.error_table_name)
+
+        return f'''WITH
+            top_row_ids AS (
+                SELECT row_id
+                FROM {errors_table}
+                GROUP BY row_id
+                ORDER BY COUNT(*) DESC     -- most flagged rows first
+                LIMIT {int(row_count)}
+            )'''
+
+    def select_top_error_data(self) -> str:
+        """
+        Select the top rows' data from the current table.
+        :return: the query for the rows' data.
+        """
+
+        main_table = quote_identifier(self.main_table_name)
+
+        return f'''
+            SELECT d.*
+            FROM {main_table} d
+            JOIN top_row_ids t ON d."ID" = t.row_id;'''
+
+    def select_top_error_flags(self) -> str:
+        """
+        Select every error flag the top rows carry.
+        :return: the query for the rows' flags.
+        """
+
+        errors_table = quote_identifier(self.error_table_name)
+
+        return f'''
+            SELECT *
+            FROM {errors_table}
+            WHERE row_id IN (SELECT row_id FROM top_row_ids)
+            ORDER BY row_id;'''
 
     def clone_table(self, source_table: str, dest_table: str):
         """
@@ -239,17 +325,16 @@ class DBOperations:
         """
 
         if self.col_types.is_numeric_col(axis_column):
-            numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
             bin_logic = f'''CASE
-                                WHEN d.value::text ~ {numeric_regex} THEN
+                                WHEN d.value::text ~ {NUMERIC_TEXT_REGEX} THEN
                                     -- Clamp bin number to 0..(bin_count-1) range
                                     LEAST(
                                         GREATEST(
                                             COALESCE(
                                                 width_bucket(
                                                     d.value::numeric,
-                                                    (SELECT MIN(value::numeric) FROM data_rows WHERE value::text ~ {numeric_regex}),
-                                                    (SELECT MAX(value::numeric) FROM data_rows WHERE value::text ~ {numeric_regex}),
+                                                    (SELECT MIN(value::numeric) FROM data_rows WHERE value::text ~ {NUMERIC_TEXT_REGEX}),
+                                                    (SELECT MAX(value::numeric) FROM data_rows WHERE value::text ~ {NUMERIC_TEXT_REGEX}),
                                                     {bin_count}
                                                 ) - 1,
                                                 0
@@ -356,7 +441,8 @@ class DBOperations:
         :return: the query for the final JSON object
         """
 
-        numeric_regex = r"'^\d+$'"
+        # A bin label that is a bin's index, rather than a category
+        bin_index_regex = r"'^\d+$'"
         empty_set = r"'{}'"
         binned_data = '''SELECT (SELECT json_agg(json_build_array("ID", bin)) FROM binned_data),'''
 
@@ -368,9 +454,9 @@ class DBOperations:
                     (SELECT COALESCE(json_agg(
                         json_build_object(
                             'xBin', bin,
-                            'xType', CASE WHEN bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END,
+                            'xType', CASE WHEN bin ~ {bin_index_regex} THEN 'numeric' ELSE 'categorical' END,
                             'count', COALESCE(errors, {empty_set}::jsonb) || jsonb_build_object('items', total_items)
-                        ) ORDER BY CASE WHEN bin ~ {numeric_regex} THEN lpad(bin, 10, '0') ELSE bin END
+                        ) ORDER BY CASE WHEN bin ~ {bin_index_regex} THEN lpad(bin, 10, '0') ELSE bin END
                     ), '[]'::json) FROM histogram_bins),
                     'scaleX',
                 json_build_object(
@@ -383,7 +469,7 @@ class DBOperations:
                             '[]'::json
                         )
                         FROM histogram_bins
-                        WHERE NOT (bin ~ {numeric_regex})  -- Only non-numeric bin labels
+                        WHERE NOT (bin ~ {bin_index_regex})  -- Only non-numeric bin labels
                     )
                 )
             ))'''
@@ -409,7 +495,7 @@ class DBOperations:
                             '[]'::json
                         )
                         FROM histogram_bins
-                        WHERE NOT (bin ~ {numeric_regex})  -- Only non-numeric bin labels
+                        WHERE NOT (bin ~ {bin_index_regex})  -- Only non-numeric bin labels
                     )
                 )
             ))'''
@@ -460,13 +546,12 @@ class DBOperations:
         """
 
         if self.col_types.is_numeric_col(axis_column):
-            numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
             return f''', {bound_table_name} AS (
                     SELECT
                         COALESCE(MIN({col_alias}::numeric), 0) as min_val,
                         COALESCE(MAX({col_alias}::numeric), 1) as max_val
                     FROM data_rows
-                    WHERE {col_alias}::text ~ {numeric_regex}  -- only numeric values
+                    WHERE {col_alias}::text ~ {NUMERIC_TEXT_REGEX}  -- only numeric values
                 )'''
         else:
             return ""
@@ -491,11 +576,10 @@ class DBOperations:
         axis_queries = []
 
         for axis_column, bin_count, axis_alias, bounding_table in axis_info:
-            numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
 
             if self.col_types.is_numeric_col(axis_column):
                 bin_logic = f'''CASE
-                                    WHEN d.{axis_alias}::text ~ {numeric_regex} THEN
+                                    WHEN d.{axis_alias}::text ~ {NUMERIC_TEXT_REGEX} THEN
                                         -- Clamp bin number to 0..(bin_count-1) range
                                         LEAST(
                                             GREATEST(
@@ -622,21 +706,22 @@ class DBOperations:
         :return: the query for the final JSON object
         """
 
-        numeric_regex = r"'^\d+$'"
+        # A bin label that is a bin's index, rather than a category
+        bin_index_regex = r"'^\d+$'"
         empty_set = r"'{}'"
 
         # Handles mixed types in x-axis.
         if self.col_types.is_numeric_col(x_axis_column):
-            json_x_type = f'''CASE WHEN x_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
-            json_order_by_x = f'''CASE WHEN x_bin ~ {numeric_regex} THEN lpad(x_bin, 10, '0') ELSE x_bin END'''
+            json_x_type = f'''CASE WHEN x_bin ~ {bin_index_regex} THEN 'numeric' ELSE 'categorical' END'''
+            json_order_by_x = f'''CASE WHEN x_bin ~ {bin_index_regex} THEN lpad(x_bin, 10, '0') ELSE x_bin END'''
         else:
             json_x_type = "'categorical'"
             json_order_by_x = "x_bin"
 
         # Handles mixed types in y-axis.
         if self.col_types.is_numeric_col(y_axis_column):
-            json_y_type = f'''CASE WHEN y_bin ~ {numeric_regex} THEN 'numeric' ELSE 'categorical' END'''
-            json_order_by_y = f'''CASE WHEN y_bin ~ {numeric_regex} THEN lpad(y_bin, 10, '0') ELSE y_bin END'''
+            json_y_type = f'''CASE WHEN y_bin ~ {bin_index_regex} THEN 'numeric' ELSE 'categorical' END'''
+            json_order_by_y = f'''CASE WHEN y_bin ~ {bin_index_regex} THEN lpad(y_bin, 10, '0') ELSE y_bin END'''
         else:
             json_y_type = "'categorical'"
             json_order_by_y = "y_bin"
@@ -682,7 +767,7 @@ class DBOperations:
                         '[]'::json
                     )
                     FROM histogram_bins
-                    WHERE NOT ({axis_bin} ~ {numeric_regex})  -- Only non-numeric bin labels
+                    WHERE NOT ({axis_bin} ~ {bin_index_regex})  -- Only non-numeric bin labels
                 )
             ){ending_parenthesis}'''
 
@@ -834,7 +919,6 @@ class DBOperations:
         :return: returns the final JSON query for the scatterplot.
         """
 
-        numeric_regex = r"'^\s*-?\d+(\.\d+)?\s*$'"
 
 
         # Helper function to determine axis type
@@ -842,7 +926,7 @@ class DBOperations:
             if self.col_types.is_numeric_col(axis_column):
                 return "ELSE 'numeric'"
             elif self.col_types.is_mixed_col(axis_column):
-                return f"WHEN ({col_alias}::text ~ {numeric_regex}) THEN 'numeric' ELSE 'categorical'"
+                return f"WHEN ({col_alias}::text ~ {NUMERIC_TEXT_REGEX}) THEN 'numeric' ELSE 'categorical'"
             else:
                 return "ELSE 'categorical'"
 
@@ -852,7 +936,7 @@ class DBOperations:
             if self.col_types.is_numeric_col(axis_column):
                 return f"ELSE to_json({col_alias}::numeric)"
             elif self.col_types.is_mixed_col(axis_column):
-                return f"WHEN ({col_alias}::text ~ {numeric_regex}) THEN to_json({col_alias}::numeric) ELSE to_json({col_alias}::text)"
+                return f"WHEN ({col_alias}::text ~ {NUMERIC_TEXT_REGEX}) THEN to_json({col_alias}::numeric) ELSE to_json({col_alias}::text)"
             else:
                 return f"ELSE to_json({col_alias}::text)"
 
@@ -905,9 +989,9 @@ class DBOperations:
             elif self.col_types.is_mixed_col(axis_column):
                 axis_numeric_info = f'''json_build_array(
                             (SELECT COALESCE(MIN({axis_alias}::numeric), 0) FROM sampled_data
-                             WHERE {axis_alias}::text ~ {numeric_regex}),
+                             WHERE {axis_alias}::text ~ {NUMERIC_TEXT_REGEX}),
                             (SELECT COALESCE(MAX({axis_alias}::numeric), 1) + 1 FROM sampled_data
-                             WHERE {axis_alias}::text ~ {numeric_regex})
+                             WHERE {axis_alias}::text ~ {NUMERIC_TEXT_REGEX})
                         )'''
             else:
                 axis_numeric_info = "'[]'::json"
@@ -922,7 +1006,7 @@ class DBOperations:
                                 json_agg(DISTINCT COALESCE({axis_alias}::text, 'null') ORDER BY COALESCE({axis_alias}::text, 'null')),
                                 '["null"]'::json
                             ) FROM sampled_data
-                            WHERE NOT ({axis_alias}::text ~ {numeric_regex}) OR {axis_alias} IS NULL
+                            WHERE NOT ({axis_alias}::text ~ {NUMERIC_TEXT_REGEX}) OR {axis_alias} IS NULL
                         )
                     ){ending_parenthesis}'''
 

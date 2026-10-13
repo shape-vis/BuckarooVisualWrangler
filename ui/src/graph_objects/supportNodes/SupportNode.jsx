@@ -6,6 +6,9 @@ import {useSupportOpenContext} from "./supportOpen.js";
 import {EDGE_GAP} from "./supportLayout.js";
 import "../../styles/Nodes.css";
 
+// Smaller than this and nothing a resizable kind draws still reads
+const MIN_RESIZED = {width: 180, height: 120};
+
 /**
  * The one React Flow node type behind every supporting sub-node. The frame - its name, the way to remove
  * it, the link to its host - is the same for all of them; what it draws inside is its kind's Body, handed
@@ -16,9 +19,6 @@ import "../../styles/Nodes.css";
  * sub-node has no link to draw - React Flow cannot join a node to an edge - so it carries a short stub of
  * its own, pointing back across the gap at the edge's label.
  */
-// Smaller than this and nothing a resizable kind draws still reads
-const MIN_RESIZED = {width: 180, height: 120};
-
 export function SupportNode({data, width, height}) {
     const {removeSupportNode, updateSupportNode, serverNodesById} = usePgraph();
     const {record} = data;
@@ -52,6 +52,12 @@ export function SupportNode({data, width, height}) {
     // Clicks inside a sub-node are its own; they must not select, navigate or end a branch behind it
     const stop = (event) => event.stopPropagation();
 
+    // The edge stub reaches out of whichever side faces the edge
+    let stubStyle = {width: EDGE_GAP, left: -EDGE_GAP};
+    if (data.edgeSide === "left") {
+        stubStyle = {width: EDGE_GAP, right: -EDGE_GAP};
+    }
+
     return (
         <div className="support-node-shell" style={{width: size.width, height: size.height}}>
             {resizable && (
@@ -68,10 +74,7 @@ export function SupportNode({data, width, height}) {
             {/* Points back across the gap at the edge: from the left side of a sub-node right of its edge, and
                 from the right side of one on the left */}
             {onEdge && (
-                <span
-                    className="support-node-stub"
-                    style={data.edgeSide === "left" ? {width: EDGE_GAP, right: -EDGE_GAP} : {width: EDGE_GAP, left: -EDGE_GAP}}
-                />
+                <span className="support-node-stub" style={stubStyle} />
             )}
             <div
                 className={`support-node nodrag ${onEdge ? "support-node--edge" : ""}`}
@@ -103,6 +106,7 @@ export function SupportNode({data, width, height}) {
                         type="button"
                         className="support-node-remove"
                         title="Remove this sub-node"
+                        aria-label="Remove this sub-node"
                         onClick={(event) => { stop(event); removeSupportNode(record.id); }}
                     >×</button>
                 </div>

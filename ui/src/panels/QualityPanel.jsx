@@ -18,10 +18,22 @@ const asPercent = (rate) => `${((rate ?? 0) * 100).toFixed(2)}%`;
 const asPoints = (delta) => `${delta > 0 ? "+" : ""}${(delta * 100).toFixed(2)} pts`;
 const asShare = (contribution) => `${contribution > 0 ? "+" : ""}${(contribution * 100).toFixed(0)}%`;
 
-const shareClass = (contribution) =>
-  contribution < 0 ? "contribution-share--improved"
-    : contribution > 0 ? "contribution-share--worsened"
-      : "";
+function shareClass(contribution) {
+  if (contribution < 0) return "contribution-share--improved";
+  if (contribution > 0) return "contribution-share--worsened";
+  return "";
+}
+
+/** The trade-off table's order: the frontier first, then the dominated; within each, fewest errors first. */
+function compareTradeoffRows(a, b) {
+  const aDominated = Number(Boolean(a.dominator));
+  const bDominated = Number(Boolean(b.dominator));
+  if (aDominated !== bDominated) return aDominated - bDominated;
+
+  const aError = a.error ?? 0;
+  const bError = b.error ?? 0;
+  return aError - bError;
+}
 
 /* ── Shaping the trajectory into what the views render ──────────────────────────────────────── */
 
@@ -354,8 +366,7 @@ function TradeoffView({ pareto, nodesById, currentNode, onUse }) {
         dominator: pareto.dominated?.[id] ?? null,
       };
     })
-    // The frontier first, then the dominated; within each, fewest errors first
-    .sort((a, b) => (Number(Boolean(a.dominator)) - Number(Boolean(b.dominator))) || ((a.error ?? 0) - (b.error ?? 0))),
+    .sort(compareTradeoffRows),
   [pareto, nodesById]);
 
   if (rows.length === 0) return <div className="quality-empty">No finished branches to weigh up yet.</div>;
@@ -428,7 +439,9 @@ export default function QualityPanel() {
   // Columns describe wherever the branch ends, falling back to the node currently loaded
   const columnsNodeId = branchSelection.destination ?? tableName;
   // Read by the real table, so a node folded into a collapsed run still has its numbers
-  const columnsData = (serverNodesById?.[columnsNodeId] ?? nodes.find((node) => node.id === columnsNodeId))?.data;
+  const serverNode = serverNodesById?.[columnsNodeId];
+  const drawnNode = nodes.find((node) => node.id === columnsNodeId);
+  const columnsData = (serverNode ?? drawnNode)?.data;
 
   /* Which of the branch's nodes the graph currently has folded away. The trajectory itself is
      unchanged - this only lets the chart mark the points you cannot see in the graph. */

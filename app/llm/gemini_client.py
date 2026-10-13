@@ -68,6 +68,16 @@ def _generation_config() -> dict[str, Any]:
     return config
 
 
+def _timeout() -> int:
+    """How long to wait for the model, in seconds: GEMINI_TIMEOUT, or the default."""
+    return int(os.environ.get("GEMINI_TIMEOUT", str(DEFAULT_TIMEOUT)))
+
+
+def _error_detail(exc: urllib.error.HTTPError) -> str:
+    """The start of an HTTP error's response body, enough to say what went wrong."""
+    return exc.read().decode("utf-8", errors="replace")[:400]
+
+
 def _post(url: str, payload: dict[str, Any], key: str, timeout: int) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
@@ -109,9 +119,8 @@ def generate(system_instruction: str, user_text: str,
             "GEMINI_API_KEY is not set. Add it to .env - see .env.example."
         )
 
-    timeout = timeout if timeout is not None else int(
-        os.environ.get("GEMINI_TIMEOUT", str(DEFAULT_TIMEOUT))
-    )
+    if timeout is None:
+        timeout = _timeout()
     url = f"{BASE_URL}/{model_name()}:generateContent"
 
     payload = {
@@ -128,28 +137,25 @@ def generate(system_instruction: str, user_text: str,
     try:
         body = _post(url, payload, key, timeout)
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 400 and "generationConfig" in payload and _is_generation_config_complaint(detail):
+        detail = _error_detail(exc)
+        if exc.code == 400 and _is_generation_config_complaint(detail):
             # Retry once without the tuning keys rather than failing the whole request. If this
             # ever fires in practice, fix the key name - do not settle for the fallback.
             print(
                 "[gemini] generationConfig rejected, retrying without thinkingLevel. "
-                f"Fix the key name. Response was: {detail[:400]}"
+                f"Fix the key name. Response was: {detail}"
             )
             payload["generationConfig"] = {"temperature": TEMPERATURE}   # tuning keys dropped
             try:
                 body = _post(url, payload, key, timeout)
             except urllib.error.HTTPError as retry_exc:
-                raise GeminiError(
-                    f"Gemini returned {retry_exc.code}: "
-                    f"{retry_exc.read().decode('utf-8', errors='replace')[:400]}"
-                ) from retry_exc
+                raise GeminiError(f"Gemini returned {retry_exc.code}: {_error_detail(retry_exc)}") from retry_exc
         elif exc.code in (401, 403):
             raise GeminiError("Gemini rejected the API key.") from exc
         elif exc.code == 429:
             raise GeminiError("Gemini rate limit reached. Try again in a moment.") from exc
         else:
-            raise GeminiError(f"Gemini returned {exc.code}: {detail[:400]}") from exc
+            raise GeminiError(f"Gemini returned {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise GeminiError(f"Could not reach Gemini: {exc.reason}") from exc
     except TimeoutError as exc:

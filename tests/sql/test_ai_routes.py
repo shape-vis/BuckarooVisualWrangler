@@ -6,7 +6,6 @@ The network call is the only part of the workflow that cannot be tested offline,
 only part replaced here: everything downstream of "the model said to call these tools" is real -
 validation, id resolution, the guards, the wrangle, the new node.
 """
-import json
 import pytest
 import pandas as pd
 from sqlalchemy import text as sa_text
@@ -15,7 +14,7 @@ import app
 from app import engine, db_operations
 from app import app as flask_app
 from app.llm import gemini_client
-from app.routes.wrangler_routes_sql import update_errors_table
+from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 ROOT = "n0a_airoute"
@@ -26,10 +25,6 @@ def _drop_all(*tables):
         for t in tables:
             for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
                 conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
-            for suffix in ("_preview_delete", "_preview_impute",
-                           "_preview_impute_x", "_preview_impute_y"):
-                for prefix in ("", "errors_", "dp_"):
-                    conn.execute(sa_text(f'DROP TABLE IF EXISTS "{prefix}{t}{suffix}"'))
 
 
 def _make_root(flags):
@@ -38,7 +33,7 @@ def _make_root(flags):
         "a": [10.0, 20.0, None, 60.0, 30.0, 40.0, 50.0, 70.0, 80.0, 90.0],
         "b": [1.0, 2.0, 3.0, None, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
     }).to_sql(ROOT, engine, if_exists="replace", index=False)
-    update_errors_table(ROOT)
+    DetectorSQL(engine, ROOT).generate_errors_table()
     pd.DataFrame(flags, columns=["row_id", "column_id", "error_type"]).astype(
         {"row_id": "int64"}
     ).to_sql(f"errors_{ROOT}", engine, if_exists="replace", index=False)
@@ -205,16 +200,10 @@ def test_suggest_reports_a_missing_key_as_503(graph, monkeypatch):
 @pytest.mark.sql
 def test_endpoints_survive_a_session_with_no_graph_yet(monkeypatch):
     """
-    Before the first upload there is no graph at all - and the attribute does not merely hold
-    None, it does not exist.
-
-    app/__init__.py's `app.pgraph_for_session = None` sets that on the Flask object, which is
-    what `app` names inside that module. The attribute the rest of the code reads lives on the
-    app *package* and is created by init_pgraph_for_session. Reading it directly turns a fresh
-    server's first click into a 500.
+    Before the first upload there is no graph: the app package's pgraph_for_session holds None. Every endpoint
+    that reads the graph has to answer that with an error of its own, not a 500.
     """
-    monkeypatch.delattr(app, "pgraph_for_session", raising=False)
-    assert not hasattr(app, "pgraph_for_session")
+    monkeypatch.setattr(app, "pgraph_for_session", None)
 
     from app.server_utils import ai_wrangle
     assert ai_wrangle.session_graph() is None
@@ -227,4 +216,8 @@ def test_endpoints_survive_a_session_with_no_graph_yet(monkeypatch):
 
     resp = client.post("/api/candidates/accept", json={"table": "anything"})
     assert resp.status_code == 409
+    assert "no graph" in resp.get_json()["error"]
+
+    resp = client.get("/api/pgraph/comparisons")
+    assert resp.status_code == 400
     assert "no graph" in resp.get_json()["error"]

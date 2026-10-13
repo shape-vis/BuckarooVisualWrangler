@@ -16,7 +16,7 @@ from sqlalchemy import text as sa_text
 
 import app
 from app import engine, db_operations
-from app.routes.wrangler_routes_sql import update_errors_table
+from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils import ai_wrangle as aw
 from app.server_utils.service_helpers import (
     build_data_profile_table,
@@ -32,17 +32,12 @@ def _drop_all(*tables):
         for t in tables:
             for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
                 conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
-            for suffix in ("_preview_delete", "_preview_impute",
-                           "_preview_impute_x", "_preview_impute_y"):
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{t}{suffix}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "errors_{t}{suffix}"'))
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "dp_{t}{suffix}"'))
 
 
 def _make_root(data, flags=None):
     """Build a real root node: table, errors_, dp_, and a PGraph holding it."""
     pd.DataFrame(data).to_sql(ROOT, engine, if_exists="replace", index=False)
-    update_errors_table(ROOT)
+    DetectorSQL(engine, ROOT).generate_errors_table()
     if flags is not None:
         # Take control of exactly which flags exist, so a test asserts about its own layout
         # rather than about whatever the detectors happened to find.

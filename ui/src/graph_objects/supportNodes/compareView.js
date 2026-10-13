@@ -1,8 +1,7 @@
 /**
  * The compare kind of supporting sub-node: a comparison of two nodes kept beside each of them. It is not
  * offered in the add-sub-node modal; Save in the compare window makes one on each of the two nodes it
- * compares, grouped so they change together. Its design is still to come - for now it previews the
- * comparison and opens it in the compare window.
+ * compares, grouped so they change together. It previews the comparison and opens it in the compare window.
  *
  *   other - the other node of the two, a table name
  *   spec  - the comparison object it shows (utils/comparisonSpec.js), kept up to date while it is open in
@@ -40,4 +39,25 @@ export function specOfCompare(record, hostColumns) {
 export function savedCompareConfig(spec, hostId, group) {
     const other = hostId === spec.a ? spec.b : spec.a;
     return { ...COMPARE_DEFAULTS, other, spec, group };
+}
+
+/* The helpers below are shared by the compare window and the sub-nodes that draw its plots, so the two
+   always read a comparison the same way. */
+
+/**
+ * Whether a drift column is numeric or categorical, as root decided it: read from the first of the given
+ * nodes' distortions that knows the column, so callers list them in the order they trust them.
+ */
+export function columnKindOf(column, distortions) {
+    for (const distortion of distortions) {
+        const entry = distortion?.columns?.[column];
+        if (entry != null) return entry.kind;
+    }
+    return undefined;
+}
+
+/** The hidden-categories list with one more category in it - the same list when it is already there. */
+export function withCategoryHidden(hidden, category) {
+    if (hidden.includes(category)) return hidden;
+    return [...hidden, category];
 }

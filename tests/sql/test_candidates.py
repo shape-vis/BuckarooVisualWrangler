@@ -17,7 +17,7 @@ from sqlalchemy import text as sa_text
 import app
 from app import engine, db_operations
 from app import app as flask_app
-from app.routes.wrangler_routes_sql import update_errors_table
+from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 ROOT = "n0a_cands"
@@ -43,7 +43,7 @@ def _read(table):
 
 def _make_root(data):
     pd.DataFrame(data).to_sql(ROOT, engine, if_exists="replace", index=False)
-    update_errors_table(ROOT)
+    DetectorSQL(engine, ROOT).generate_errors_table()
     build_data_profile_table(ROOT)
     init_pgraph_for_session(ROOT)
     db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
@@ -262,7 +262,6 @@ def test_nothing_is_wrangled_from_a_candidate_until_it_is_accepted(graph, client
     refused = client.post("/api/wrangle/create-previews", json={"row_ids": [1], "cols": ["x"]})
     assert refused.status_code == 409
     assert "Accept this candidate" in refused.get_json()["error"]
-    assert client.post("/api/wrangle/delete-column", json={"column": "y"}).status_code == 409
     assert client.post("/api/ai/suggest", json={"node_table": table}).status_code == 409
 
     client.post("/api/candidates/accept", json={"table": table})

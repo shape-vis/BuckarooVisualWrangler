@@ -12,7 +12,7 @@ through DataProfile.calculate_column_attribute, which carries its own look-up-th
 import json
 
 # The four quality dimensions from the thesis proposal. These names match the error_type values the
-# detectors emit and ERROR_TYPES in ui/src/store/errorColors.js, so the front end can color them
+# detectors emit and ERROR_DIMENSIONS in ui/src/store/errorColors.js, so the front end can color them
 # without a translation table.
 DIMENSIONS = ("missing", "mismatch", "anomaly", "incomplete")
 
@@ -21,12 +21,17 @@ DIMENSIONS = ("missing", "mismatch", "anomaly", "incomplete")
 # contribute zeroes and dilute the node-level totals.
 ID_COLUMNS = ("ID", "Original_ID")
 
+# Not data attributes: the row identifiers, and the index columns to_sql can leave behind, which
+# DataProfile.get_col_names also skips. Drift and the AI's profile cover the same columns the error metrics do.
+SKIPPED_COLUMNS = (*ID_COLUMNS, "index", "level_0")
 
-def _parse_error_counts(raw):
+
+def parse_json_counts(raw):
     """
-    :param raw: what DataProfile returns for 'error_counts' - a JSON string on both the computed and
-                the looked-up path, or None when the column has no profile entry
-    :return: a dict of {error_type: count}, empty if there is nothing to parse
+    Read a dp_ table's counts column - 'error_counts' or 'category_counts'.
+    :param raw: a JSON string, as DataProfile stores and returns them; a dict already parsed; or None when the
+                column has no profile entry
+    :return: a dict of {key: count}, empty if there is nothing to parse
     """
     if raw is None:
         return {}
@@ -36,7 +41,9 @@ def _parse_error_counts(raw):
         parsed = json.loads(raw)
     except (TypeError, ValueError):
         return {}
-    return parsed if isinstance(parsed, dict) else {}
+    if not isinstance(parsed, dict):
+        return {}
+    return parsed
 
 
 class NodeMetrics:
@@ -70,7 +77,7 @@ class NodeMetrics:
         summed_counts = {dimension: 0 for dimension in DIMENSIONS}
 
         for col in col_names:
-            counts = _parse_error_counts(
+            counts = parse_json_counts(
                 data_profile.calculate_column_attribute('error_counts', col)
             )
 
@@ -176,34 +183,3 @@ def compute_node_metrics(table_name):
         DataProfile(table_name, engine),
         db_operations.get_row_count(table_name),
     )
-
-
-def refresh_node_metrics(table_name):
-    """
-    Compute a table's metrics and attach them to its GraphNode.
-
-    Raises if the table has no node. Every caller runs right after the node is added to the graph, so
-    a miss means the wiring is wrong - and a node that silently keeps null metrics is far harder to
-    notice than an exception here.
-
-    :param table_name: the node table to profile
-    :return: the NodeMetrics that were attached
-    """
-    # The session's graph hangs off the app *package*, not the Flask object - see
-    # init_pgraph_for_session in service_helpers.py
-    import app as app_package
-
-    pgraph = app_package.pgraph_for_session
-    node = pgraph.node_map[table_name] if pgraph else None
-    if node is None:
-        raise KeyError(f"no pgraph node for table {table_name!r}, cannot attach metrics")
-
-    metrics = compute_node_metrics(table_name)
-    node.set_metrics(metrics)
-
-    # Drift from root is computed at the same moment, so every path that makes a node gets both. It is
-    # its own object on the node, never part of these totals - see app/pgraph/distortion.py
-    from app.pgraph.distortion import refresh_node_distortion
-    refresh_node_distortion(table_name)
-
-    return metrics

@@ -3,6 +3,7 @@ import {usePgraph} from "../../store/PGraphContext.jsx";
 import {ViewContext} from "../../pages/Buckaroo.jsx";
 import DriftPlotCard from "./DriftPlotCard.jsx";
 import {SupportPlotGallery} from "./SupportPlotGallery.jsx";
+import {hostColumns} from "./registry.js";
 
 /**
  * The drift-plot kind of supporting sub-node: how far its host's data has moved from root on one column, drawn
@@ -15,14 +16,11 @@ import {SupportPlotGallery} from "./SupportPlotGallery.jsx";
  * Its config is {column}.
  */
 
-// The host's columns, in the order its metrics list them
-const columnsOf = (serverNodesById, hostId) => Object.keys(serverNodesById?.[hostId]?.data?.metrics?.columns ?? {});
-
 export function DriftGallery({hostId, onAdd}) {
     const {selectedAttributes = []} = useContext(ViewContext) ?? {};
     const {serverNodesById} = usePgraph();
 
-    const columnChoices = columnsOf(serverNodesById, hostId);
+    const columnChoices = hostColumns(serverNodesById?.[hostId]);
     const cards = selectedAttributes
         .filter((attribute) => columnChoices.includes(attribute))
         .map((column) => ({id: `drift:${column}`, columns: [column]}));
@@ -47,16 +45,20 @@ export function DriftGallery({hostId, onAdd}) {
     );
 }
 
-export function DriftBody({record}) {
-    const {serverNodesById, updateSupportNode} = usePgraph();
+export function DriftBody({record, host}) {
+    const {updateSupportNode} = usePgraph();
+
+    const changeColumn = (column) => updateSupportNode(record.id, (current) => ({
+        config: {...current.config, column},
+    }));
 
     return (
         <div className="support-plot-body">
             <DriftPlotCard
                 table={record.hostId}
                 column={record.config.column}
-                columnChoices={columnsOf(serverNodesById, record.hostId)}
-                onColumn={(column) => updateSupportNode(record.id, (current) => ({config: {...current.config, column}}))}
+                columnChoices={hostColumns(host)}
+                onColumn={changeColumn}
             />
         </div>
     );

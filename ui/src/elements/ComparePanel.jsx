@@ -15,7 +15,53 @@ import { SPEC_VERSION, driftZoomKey, settingsOf, specFromSettings } from "../uti
 import { useComparisonData } from "../visualizations/useComparisonData.js";
 import { formatDrift } from "../utils/drift.js";
 import ComparisonPlot from "../visualizations/ComparisonPlot.jsx";
+import { columnKindOf, withCategoryHidden } from "../graph_objects/supportNodes/compareView.js";
 import "../styles/ComparePanel.css";
+
+// How the compare panel's ranked attributes are ordered: by the larger of the two nodes' drift, or by how far the
+// error rate moved, largest first
+function largestDriftOf(attribute) {
+    return Math.max(attribute.driftA ?? 0, attribute.driftB ?? 0);
+}
+
+function byLargestDrift(a, b) {
+    return largestDriftOf(b) - largestDriftOf(a);
+}
+
+function byLargestErrorChange(a, b) {
+    return Math.abs(b.delta) - Math.abs(a.delta);
+}
+
+/* The compare panel's attributes that either node moved, ranked by how far their error rate moved between the two
+   states the chosen error delta names, or by the larger of the two nodes' drift. */
+function rankAttributes({attributes, metricsRoot, metricsA, metricsB, distortionA, distortionB, rankBy, errorDeltaId,
+                            single}) {
+    const metricsOf = { root: metricsRoot, a: metricsA, b: metricsB };
+
+    const deltaOptions = single ? SINGLE_ERROR_DELTAS : ERROR_DELTAS;
+    const chosenDelta = deltaOptions.find((option) => option.id === errorDeltaId);
+    const deltaFrom = chosenDelta.from;
+    const deltaTo = chosenDelta.to;
+
+    const rows = attributes.map((name) => {
+        const before = metricsOf[deltaFrom]?.columns?.[name]?.total ?? null;
+        const after = metricsOf[deltaTo]?.columns?.[name]?.total ?? null;
+        const driftA = distortionA?.columns?.[name]?.value ?? null;
+        const driftB = distortionB?.columns?.[name]?.value ?? null;
+        const delta = (after ?? 0) - (before ?? 0);
+        return { name, before, after, delta, driftA, driftB };
+    });
+
+    /* An attribute that neither node moved has nothing to say, so it is left out entirely. The test is
+       for exactly zero rather than for what the row would print: a column no operation touched usually
+       drifts by a fraction that shows as 0.000, and those are the rows the metric exists to surface. */
+    const moved = rows.filter((attribute) => attribute.delta !== 0 || attribute.driftA || attribute.driftB);
+
+    if (rankBy === "drift") {
+        return moved.sort(byLargestDrift);
+    }
+    return moved.sort(byLargestErrorChange);
+}
 
 const RANKINGS = [{ id: "error", label: "Error change" }, { id: "drift", label: "Drift" }];
 
@@ -44,14 +90,77 @@ function formatRate(rate) {
     return rate == null ? "—" : `${(rate * 100).toFixed(1)}%`;
 }
 
-const signedRows = (change) => `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString()} rows`;
+/* The hover text for one row of the most-changed list: its error rate in the two states compared, then how
+   far it has drifted from root on each node. */
+function rankedTitle(attribute, deltaFrom, deltaTo, single) {
+    const fromState = STATE_NAMES[deltaFrom];
+    const toState = STATE_NAMES[deltaTo];
+    const errorText = `${attribute.name}: error rate ${formatRate(attribute.before)} in ${fromState} → `
+        + `${formatRate(attribute.after)} in ${toState}; `;
+
+    let driftText;
+    if (single) {
+        driftText = `drift from root ${formatDrift(attribute.driftB)}.`;
+    } else {
+        driftText = `drift from root ${formatDrift(attribute.driftA)} in selection A, `
+            + `${formatDrift(attribute.driftB)} in selection B.`;
+    }
+
+    return `${errorText}${driftText} Click to plot it.`;
+}
+
+// The drift column of the most-changed list: one node's drift, or both side by side
+function rankedDrift(attribute, single) {
+    if (single) return formatDrift(attribute.driftB);
+    return `${formatDrift(attribute.driftA)} / ${formatDrift(attribute.driftB)}`;
+}
+
+// "+" or the typographic minus, for a change printed as its sign and its size
+function signOf(change) {
+    if (change > 0) return "+";
+    return "−";
+}
+
+function signedRows(change) {
+    return `${signOf(change)}${Math.abs(change).toLocaleString()} rows`;
+}
+
+/* Whether an error-rate change, in percentage points, is big enough to show as better or worse. Errors going
+   down is an improvement; anything under a twentieth of a point rounds to nothing and is flat. */
+function rateDirection(points) {
+    if (points <= -0.05) return "improved";
+    if (points >= 0.05) return "worsened";
+    return "flat";
+}
 
 /* A change in error rate, in percentage points. Errors going down is an improvement. */
 function RateDelta({ delta }) {
     const points = delta * 100;
-    const direction = points <= -0.05 ? "improved" : points >= 0.05 ? "worsened" : "flat";
-    const text = direction === "flat" ? "±0.0" : `${points > 0 ? "+" : "−"}${Math.abs(points).toFixed(1)}`;
+    const direction = rateDirection(points);
+
+    let text = "±0.0";
+    if (direction !== "flat") {
+        text = `${signOf(points)}${Math.abs(points).toFixed(1)}`;
+    }
+
     return <span className={`compare-delta compare-delta--${direction}`}>{text} pts</span>;
+}
+
+/**
+ * A pill over a comparison plot saying why it shows nothing yet - loading, failed, or nothing chosen. Shared
+ * with the sub-nodes that draw the compare window's plots, so their notes look the same.
+ */
+export function PlotStatus({ error = false, children }) {
+    let pillClass = "compare-plot-pill";
+    if (error) {
+        pillClass = "compare-plot-pill compare-plot-pill--error";
+    }
+
+    return (
+        <div className="compare-plot-status">
+            <span className={pillClass}>{children}</span>
+        </div>
+    );
 }
 
 /* One node in the header: its chip, the wrangle that produced it, and where that wrangle started.
@@ -297,8 +406,11 @@ export default function ComparePanel({
     const distortionA = dataA?.distortion;
     const distortionB = dataB?.distortion;
     // A table the graph shows folded away is the last node of that run
-    const foldedCount = (table) => nodes.find((node) => node.type === "collapsedNode" && node.data.tail === table)
-        ?.data.run?.length ?? null;
+    const foldedCount = (table) => {
+        const run = nodes.find((node) => node.type === "collapsedNode" && node.data.tail === table);
+        if (!run) return null;
+        return run.data.run?.length ?? null;
+    };
 
     // Every attribute either side knows of, in the order the metrics list them
     const attributes = useMemo(() => [...new Set([
@@ -316,28 +428,15 @@ export default function ComparePanel({
        between these two touched most. Error and drift stay two numbers: a column no operation touched can
        show no error change and still have drifted, which is exactly what this list is for. */
     const [rankBy, setRankBy] = useState(initialSpec.rankBy);
-    const [errorDeltaChoice, setErrorDeltaId] = useState(initialSpec.errorDelta);
+    const [errorDeltaChoice, setErrorDeltaChoice] = useState(initialSpec.errorDelta);
     const errorDeltas = single ? SINGLE_ERROR_DELTAS : ERROR_DELTAS;
     const errorDelta = errorDeltas.find((option) => option.id === errorDeltaChoice) ?? errorDeltas[0];
     const errorDeltaId = errorDelta.id;
-    const ranked = useMemo(() => attributes
-        .map((name) => {
-            const metricsOf = { root: metricsRoot, a: metricsA, b: metricsB };
-            const { from, to } = (single ? SINGLE_ERROR_DELTAS : ERROR_DELTAS).find((option) => option.id === errorDeltaId);
-            const before = metricsOf[from]?.columns?.[name]?.total ?? null;
-            const after = metricsOf[to]?.columns?.[name]?.total ?? null;
-            const driftA = distortionA?.columns?.[name]?.value ?? null;
-            const driftB = distortionB?.columns?.[name]?.value ?? null;
-            return { name, before, after, delta: (after ?? 0) - (before ?? 0), driftA, driftB };
-        })
-        /* An attribute that neither node moved has nothing to say, so it is left out entirely. The test is
-           for exactly zero rather than for what the row would print: a column no operation touched usually
-           drifts by a fraction that shows as 0.000, and those are the rows the metric exists to surface. */
-        .filter((attribute) => attribute.delta !== 0 || attribute.driftA || attribute.driftB)
-        .sort((a, b) => (rankBy === "drift"
-            ? Math.max(b.driftA ?? 0, b.driftB ?? 0) - Math.max(a.driftA ?? 0, a.driftB ?? 0)
-            : Math.abs(b.delta) - Math.abs(a.delta))),
-    [attributes, metricsRoot, metricsA, metricsB, distortionA, distortionB, rankBy, errorDeltaId, single]);
+    const deltaFrom = errorDelta.from;
+    const deltaTo = errorDelta.to;
+    // Not wrapped in useMemo: the React Compiler memoizes it, and a manual memo here defeats it
+    const ranked = rankAttributes({attributes, metricsRoot, metricsA, metricsB, distortionA, distortionB, rankBy,
+                                   errorDeltaId, single});
 
     const [kind, setKind] = useState(initialSpec.kind);
     /* What the Drift views measure from: root, or the two selections' common ancestor - which leaves out the
@@ -360,9 +459,16 @@ export default function ComparePanel({
     ];
     /* A new comparison opens on what moved most. When nothing moved the ranking is empty, so it falls back to
        the attributes themselves rather than leaving the panel with nothing to plot. */
-    const [x, setX] = useState(() => initialSpec.x || (ranked[0]?.name ?? attributes[0] ?? ""));
-    const [y, setY] = useState(() => initialSpec.y
-        || (ranked[1]?.name ?? ranked[0]?.name ?? attributes[1] ?? attributes[0] ?? ""));
+    const [x, setX] = useState(() => {
+        if (initialSpec.x) return initialSpec.x;
+        const mostMoved = ranked[0]?.name;
+        return mostMoved ?? attributes[0] ?? "";
+    });
+    const [y, setY] = useState(() => {
+        if (initialSpec.y) return initialSpec.y;
+        const secondMostMoved = ranked[1]?.name ?? ranked[0]?.name;
+        return secondMostMoved ?? attributes[1] ?? attributes[0] ?? "";
+    });
     const [view, setView] = useState(initialSpec.view);
     const [measure, setMeasure] = useState(initialSpec.measure);
 
@@ -384,12 +490,12 @@ export default function ComparePanel({
         kept: was.key === columnKey ? was.kept : null,
     })), [columnKey]);
 
-    const spec = PLOT_KINDS.find((plotKind) => plotKind.id === kind);
+    const plotKind = PLOT_KINDS.find((option) => option.id === kind);
     // Drift's views follow the column - numeric or categorical, as root decided it
-    const columnKind = (distortionA?.columns?.[x] ?? distortionB?.columns?.[x])?.kind;
+    const columnKind = columnKindOf(x, [distortionA, distortionB]);
     const { views, activeView } = viewsFor({ kind, view, columnKind, single });
     const usesMeasure = kind === "heatmap" || activeView === "difference";
-    const yColumn = spec.axes === 2 ? y : null;
+    const yColumn = plotKind.axes === 2 ? y : null;
 
     // While the next result loads, the last one of the same kind stays up, dimmed
     const { loading, current, plotData } = useComparisonData({
@@ -402,8 +508,10 @@ export default function ComparePanel({
     const plotOther = useMemo(
         () => (plotData?.kind === "drift" ? otherCategories(plotData) : { categories: [], more: 0 }), [plotData]);
 
-    const hideCategory = useCallback((category) => setHidden((was) => (
-        was.includes(category) ? was : [...was, category])), [setHidden]);
+    const hideCategory = useCallback(
+        (category) => setHidden((was) => withCategoryHidden(was, category)),
+        [setHidden],
+    );
 
     /* Taking categories back out of the catch-all: the server has to redraw the flows for them, so the ask is
        the categories it already draws plus these. They come back shown, whatever they were before. */
@@ -490,11 +598,12 @@ export default function ComparePanel({
                 </div>
                 <div className="compare-actions">
                     {/* Once kept on its nodes it follows along by itself, so there is nothing more to save */}
-                    {savedTo ? (
+                    {savedTo && (
                         <span className="compare-saved" title="Changes here carry over to the compare sub-nodes it is kept on">
                             Kept on {savedTo.map(nodeName).join(", ")}
                         </span>
-                    ) : onSave && (
+                    )}
+                    {!savedTo && onSave && (
                         <button
                             type="button"
                             className="compare-action"
@@ -532,18 +641,18 @@ export default function ComparePanel({
                     </section>
 
                     <section className="compare-section">
-                        <h3 className="compare-section-title">{spec.axes === 1 ? "Attribute" : "Attributes"}</h3>
+                        <h3 className="compare-section-title">{plotKind.axes === 1 ? "Attribute" : "Attributes"}</h3>
                         {attributes.length === 0 ? (
                             <div className="compare-muted">These nodes carry no attribute metrics.</div>
                         ) : (
                             <>
                                 <AttributeSelect
-                                    label={spec.axes === 1 ? "Column" : "X axis"}
+                                    label={plotKind.axes === 1 ? "Column" : "X axis"}
                                     value={x}
                                     onChange={setX}
                                     attributes={attributes}
                                 />
-                                {spec.axes === 2 && (
+                                {plotKind.axes === 2 && (
                                     <AttributeSelect label="Y axis" value={y} onChange={setY} attributes={attributes} />
                                 )}
                             </>
@@ -630,7 +739,7 @@ export default function ComparePanel({
                                 <select
                                     className="compare-select"
                                     value={errorDeltaId}
-                                    onChange={(event) => setErrorDeltaId(event.target.value)}
+                                    onChange={(event) => setErrorDeltaChoice(event.target.value)}
                                 >
                                     {errorDeltas.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
                                 </select>
@@ -647,20 +756,12 @@ export default function ComparePanel({
                                             type="button"
                                             className={`compare-ranked-item ${attribute.name === x ? "compare-ranked-item--active" : ""}`}
                                             onClick={() => setX(attribute.name)}
-                                            title={`${attribute.name}: error rate ${formatRate(attribute.before)} in `
-                                                + `${STATE_NAMES[errorDelta.from]} → ${formatRate(attribute.after)} in `
-                                                + `${STATE_NAMES[errorDelta.to]}; `
-                                                + (single
-                                                    ? `drift from root ${formatDrift(attribute.driftB)}. Click to plot it.`
-                                                    : `drift from root ${formatDrift(attribute.driftA)} in selection A, `
-                                                        + `${formatDrift(attribute.driftB)} in selection B. Click to plot it.`)}
+                                            title={rankedTitle(attribute, deltaFrom, deltaTo, single)}
                                         >
                                             <span className="compare-ranked-name">{attribute.name}</span>
                                             <RateDelta delta={attribute.delta} />
                                             <span className="compare-ranked-drift">
-                                                {single
-                                                    ? formatDrift(attribute.driftB)
-                                                    : `${formatDrift(attribute.driftA)} / ${formatDrift(attribute.driftB)}`}
+                                                {rankedDrift(attribute, single)}
                                             </span>
                                         </button>
                                     </li>
@@ -682,17 +783,9 @@ export default function ComparePanel({
                         zoom={zoom}
                         onZoom={setZoom}
                     />
-                    {loading && (
-                        <div className="compare-plot-status"><span className="compare-plot-pill">Loading…</span></div>
-                    )}
-                    {!loading && current?.error && (
-                        <div className="compare-plot-status">
-                            <span className="compare-plot-pill compare-plot-pill--error">{current.error}</span>
-                        </div>
-                    )}
-                    {!x && (
-                        <div className="compare-plot-status"><span className="compare-plot-pill">Nothing to plot</span></div>
-                    )}
+                    {loading && <PlotStatus>Loading…</PlotStatus>}
+                    {!loading && current?.error && <PlotStatus error>{current.error}</PlotStatus>}
+                    {!x && <PlotStatus>Nothing to plot</PlotStatus>}
                 </section>
             </div>
         </div>

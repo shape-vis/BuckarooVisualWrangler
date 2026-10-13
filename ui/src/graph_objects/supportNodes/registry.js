@@ -44,7 +44,7 @@ import {SparklineBody} from "./SparklineSupport.jsx";
 import {DriftBody, DriftGallery} from "./DriftSupport.jsx";
 import {openCompare, openDrift, openErrorPlot} from "./supportOpen.js";
 
-export const DEFAULT_SUPPORT_SIZE = {width: 120, height: 44};
+const DEFAULT_SUPPORT_SIZE = {width: 120, height: 44};
 
 export const SUPPORT_NODE_TYPES = {
     qualityMetrics: {
@@ -55,7 +55,6 @@ export const SUPPORT_NODE_TYPES = {
         side: "auto",
         size: {width: 160, height: 82},
         defaultConfig: {},
-        ConfigForm: null,
         Body: QualityMetricsBody,
     },
     wrangleDiff: {
@@ -66,7 +65,6 @@ export const SUPPORT_NODE_TYPES = {
         size: {width: 210, height: 198},
         unavailable: wrangleDiffUnavailable,
         defaultConfig: {},
-        ConfigForm: null,
         Body: WrangleDiffBody,
     },
     errorPlot: {
@@ -109,7 +107,6 @@ export const SUPPORT_NODE_TYPES = {
         // Only dragging a Quality panel card onto the node makes these
         addable: false,
         defaultConfig: {},
-        ConfigForm: null,
         Body: SparklineBody,
     },
     compare: {
@@ -123,7 +120,6 @@ export const SUPPORT_NODE_TYPES = {
         // Only Save in the compare window makes these
         addable: false,
         defaultConfig: COMPARE_DEFAULTS,
-        ConfigForm: null,
         Body: CompareBody,
         open: openCompare,
         openTitle: "Open in the plot analysis view",
@@ -138,9 +134,20 @@ export const getSupportType = (kind) => SUPPORT_NODE_TYPES[kind] ?? null;
 // The size one sub-node is drawn at: what the user resized it to, else its kind's - which can follow its settings
 export const recordSizeOf = (record) => {
     if (record.size) return record.size;
-    const size = getSupportType(record.kind)?.size;
-    return (typeof size === "function" ? size(record.config ?? {}) : size) ?? DEFAULT_SUPPORT_SIZE;
+
+    const kindSize = getSupportType(record.kind)?.size;
+    let size = kindSize;
+    if (typeof kindSize === "function") {
+        size = kindSize(record.config ?? {});
+    }
+    return size ?? DEFAULT_SUPPORT_SIZE;
 };
 
 // Where a record's sub-node attaches: "side" or "edge"
 export const anchorOf = (record) => getSupportType(record.kind)?.anchor ?? "side";
+
+// A host node's columns, in the order its metrics list them
+export function hostColumns(host) {
+    const columns = host?.data?.metrics?.columns ?? {};
+    return Object.keys(columns);
+}

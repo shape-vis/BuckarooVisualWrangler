@@ -24,6 +24,17 @@ const STACK_GAP = 8;
 // From the right end of an edge's own label to a sub-node beside the edge - the stub that joins them
 export const EDGE_GAP = 16;
 
+// How far a boundary stands off what it encloses
+const GROUP_PADDING = 12;
+
+// A boundary's id. Under the sub-node prefix, so every check that keeps sub-nodes out of the tree keeps it out too
+const SUPPORT_GROUP_PREFIX = "support:group:";
+
+// The boundary node drawn around a host's sub-nodes, by the host's id
+function supportGroupId(hostId) {
+    return `${SUPPORT_GROUP_PREFIX}${hostId}`;
+}
+
 /* About how wide and tall a card draws. Placement happens before React Flow has measured anything, so
    sub-nodes are set against this rather than the card's measured size - a card a little wider or narrower
    only changes the length of a link. */
@@ -165,15 +176,6 @@ function placeSideNodes(records, branch, heights) {
     return {nodes, edges};
 }
 
-/**
- * The React Flow nodes for every edge sub-node whose edge is drawn.
- *
- * React Flow draws an edge from the middle of its source card's bottom to the middle of its target's top, and
- * puts the edge's label at the halfway point - so that is where the sub-node is set beside, just past the
- * label's end on its side. The source is whatever the edge is drawn from: a parent folded into a run is the run.
- * There is no link; a short stub on the sub-node itself points back at the label.
- */
-// Where an edge sub-node goes, in the graph's own coordinates, or null when its edge is not drawn
 /* How far a host's group reaches above and below its card: a stack of side sub-nodes is centred on the card,
    so a tall one stands out past both its edges */
 function verticalReach(hostId, stacks, heights) {
@@ -183,6 +185,7 @@ function verticalReach(hostId, stacks, heights) {
     return {top: -over, bottom: height + over};
 }
 
+// Where an edge sub-node goes, in the graph's own coordinates, or null when its edge is not drawn
 function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, heights) {
     const edge = incomingEdge(drawnEdges, record.hostId);
     const from = edge && positions.get(edge.source);
@@ -209,6 +212,14 @@ function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, hei
     };
 }
 
+/**
+ * The React Flow nodes for every edge sub-node whose edge is drawn.
+ *
+ * React Flow draws an edge from the middle of its source card's bottom to the middle of its target's top, and
+ * puts the edge's label at the halfway point - so that is where the sub-node is set beside, just past the
+ * label's end on its side. The source is whatever the edge is drawn from: a parent folded into a run is the run.
+ * There is no link; a short stub on the sub-node itself points back at the label.
+ */
 function placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides, heights) {
     const stacks = sideReserve(records, sides);
     return onEdge(records)
@@ -230,6 +241,9 @@ function placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides, hei
 const GROUP_GAP = 48;
 // Shifting settles in a few passes; this only stops a pathological graph from looping
 const MAX_SPREAD_PASSES = 40;
+/* Slack when asking whether an edge sub-node is what a group's left edge is: both sides are sums of fractional
+   positions, so the two may differ by a rounding error when they are really the same */
+const LEFT_EDGE_TOLERANCE = 0.5;
 
 const overlaps = (a, b) => a.x0 < b.x1 + GROUP_GAP && b.x0 < a.x1 + GROUP_GAP && a.y0 < b.y1 && b.y0 < a.y1;
 
@@ -243,6 +257,13 @@ function groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights
     groupBoundaries(placed, positions, heights).forEach((group) => {
         const {hostId, width, height} = group.data;
         const edgeNode = placed.find((node) => node.parentId === hostId && anchorOf(node.data.record) === "edge");
+
+        let leftIsEdgeNode = false;
+        if (edgeNode) {
+            const edgeNodeLeft = edgeNode.position.x - GROUP_PADDING;
+            leftIsEdgeNode = edgeNodeLeft <= group.data.offset.x + LEFT_EDGE_TOLERANCE;
+        }
+
         boxes.set(hostId, {
             hostId,
             host: positions.get(hostId),
@@ -250,7 +271,7 @@ function groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights
             y0: group.position.y,
             x1: group.position.x + width,
             y1: group.position.y + height,
-            leftIsEdgeNode: Boolean(edgeNode) && edgeNode.position.x - GROUP_PADDING <= group.data.offset.x + 0.5,
+            leftIsEdgeNode,
         });
     });
     return [...boxes.values()];
@@ -280,18 +301,26 @@ export function spreadSupportGroups(records, layoutNodes, drawnEdges, labelWidth
         if (!childrenOf.has(edge.source)) childrenOf.set(edge.source, []);
         childrenOf.get(edge.source).push(edge.target);
     });
+    // A node and everything below it, found breadth first
     const subtreeOf = (id) => {
         const found = new Set([id]);
         const queue = [id];
-        while (queue.length) (childrenOf.get(queue.shift()) ?? []).forEach((child) => {
-            if (!found.has(child)) { found.add(child); queue.push(child); }
-        });
+        while (queue.length > 0) {
+            const next = queue.shift();
+            const children = childrenOf.get(next) ?? [];
+            for (const child of children) {
+                if (found.has(child)) continue;
+                found.add(child);
+                queue.push(child);
+            }
+        }
         return found;
     };
 
     for (let pass = 0; pass < MAX_SPREAD_PASSES; pass += 1) {
         const positions = new Map(nodes.map((node) => [node.id, node.position]));
-        const boxes = groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights).sort((a, b) => a.x0 - b.x0);
+        const boxes = groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights);
+        boxes.sort((a, b) => a.x0 - b.x0);
 
         // The first crowded pair whose right-hand group hangs from the right-hand host, which is the one that can
         // move right without dragging the other along
@@ -308,9 +337,19 @@ export function spreadSupportGroups(records, layoutNodes, drawnEdges, labelWidth
         const shift = right.leftIsEdgeNode ? 2 * shortfall : shortfall;
         const pivot = right.host;
         const moving = subtreeOf(right.hostId);
-        nodes = nodes.map((node) => (moving.has(node.id) || (node.position.y >= pivot.y - 1 && node.position.x >= pivot.x - 1)
-            ? {...node, position: {x: node.position.x + shift, y: node.position.y}}
-            : node));
+
+        // The host's subtree moves, and so does everything at or below its depth and at or right of it
+        const shouldShift = (node) => {
+            if (moving.has(node.id)) return true;
+            const atOrBelow = node.position.y >= pivot.y - 1;
+            const atOrRight = node.position.x >= pivot.x - 1;
+            return atOrBelow && atOrRight;
+        };
+
+        nodes = nodes.map((node) => {
+            if (!shouldShift(node)) return node;
+            return {...node, position: {x: node.position.x + shift, y: node.position.y}};
+        });
     }
     return nodes;
 }
@@ -337,9 +376,6 @@ export function placeSupportNodes(records, layoutNodes, layoutEdges, labelWidthO
         edges: side.edges,
     };
 }
-
-// How far a boundary stands off what it encloses
-const GROUP_PADDING = 12;
 
 /**
  * A boundary around each host and the sub-nodes that are drawn for it - beside it and beside its edge - so the
@@ -370,7 +406,7 @@ function groupBoundaries(subNodes, positions, heights) {
         const offset = {x: box.x0 - GROUP_PADDING, y: box.y0 - GROUP_PADDING};
         const host = positions.get(hostId);
         return {
-            id: `${SUPPORT_GROUP_PREFIX}${hostId}`,
+            id: supportGroupId(hostId),
             type: "supportGroup",
             position: {x: host.x + offset.x, y: host.y + offset.y},
             // Beneath the cards and the edges, which sit at 0
@@ -383,14 +419,8 @@ function groupBoundaries(subNodes, positions, heights) {
     });
 }
 
-// A boundary's id. Under the sub-node prefix, so every check that keeps sub-nodes out of the tree keeps it out too
-const SUPPORT_GROUP_PREFIX = "support:group:";
-
 // The edges the tree is made of: everything but the links out to sub-nodes
 export const treeEdgesOf = (edges) => edges.filter((edge) => !isSupportId(edge.target));
-
-// The boundary node drawn around a host's sub-nodes, by the host's id
-export const supportGroupId = (hostId) => `${SUPPORT_GROUP_PREFIX}${hostId}`;
 
 /**
  * Where a sub-node dragged in from outside the graph can be dropped on a host: over the host's group when it has

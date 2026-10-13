@@ -1,18 +1,18 @@
-// Heatmap.jsx
+// HeatMap.jsx
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { queryHistogram2d, queryHistogram2dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import { createBinnedScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../store/SelectionContext.jsx";
-import { useRowRange } from "../store/RowRangeContext.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
+import {
+  BRUSH_CLICK_GUARD_MS, HIGHLIGHT_FILL, plainColorScale, tileColor, useCachedPlotData, useLatestRef,
+} from "./errorPlots.js";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
 import { heatMapCache } from "../store/visualizationCaches.jsx";
-const baseSampleCache = heatMapCache;
 
 function Heatmap({
-  cellID,
   xPos,
   yPos,
   size,
@@ -20,59 +20,35 @@ function Heatmap({
   attrY,
   errorColors
 }) {
-  const { tableName: table_name } = useTableName();
+  const { tableName } = useTableName();
   const drawingRef = useRef(null);
   const clearSelectionRef = useRef(() => {});
-  const [histogramData, setHistogramData] = React.useState(null);
 
   // Refs to D3 elements so the highlight effect can re-color without rebuild.
   const tilesRef = useRef(null);
-  const colorScaleRef = useRef(() => "steelblue");
-  const numHistDataXRef = useRef([]);
-  const numHistDataYRef = useRef([]);
+  const colorScaleRef = useRef(plainColorScale);
 
   const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
-  const setHighlightedRef = useRef(setHighlightedRowIds);
-  const highlightRevisionRef = useRef(highlightRevision);
-  useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
-  useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
-
-  const { useRange, minId, maxId } = useRowRange();
+  const setHighlightedRef = useLatestRef(setHighlightedRowIds);
+  const highlightRevisionRef = useLatestRef(highlightRevision);
 
   // ── data fetch ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}`;
+  const histogramData = useCachedPlotData(
+    heatMapCache,
+    `${tableName}|${attrX}|${attrY}`,
+    async ({ useRange, minId, maxId }) => {
+      const response = useRange
+        ? await queryHistogram2dRange(tableName, attrX, attrY, 10, minId, maxId)
+        : await queryHistogram2d(tableName, attrX, attrY, 10);
 
-    async function fetchData() {
-      // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
-      if (!useRange && baseSampleCache.has(cacheKey)) {
-        setHistogramData(baseSampleCache.get(cacheKey));
-        return;
+      if (!response || !response.success) {
+        console.error("[HEATMAP] API call failed:", response);
+        throw new Error(`2D Histogram API failed: ${response?.error || "Unknown error"}`);
       }
-
-      try {
-        const response = useRange
-          ? await queryHistogram2dRange(table_name, attrX, attrY, 10, minId, maxId)
-          : await queryHistogram2d(table_name, attrX, attrY, 10);
-        console.log("[HEATMAP] Response:", response);
-
-        if (!response || !response.success) {
-          console.error("[HEATMAP] API call failed:", response);
-          throw new Error(`2D Histogram API failed: ${response?.error || "Unknown error"}`);
-        }
-
-        setHistogramData(response.histogram);
-
-        // Cache the base data so future mounts restore it without re-fetching.
-        if (!useRange) {
-          baseSampleCache.set(cacheKey, response.histogram);
-        }
-      } catch (err) {
-        console.error(err?.message || err);
-      }
-    }
-    fetchData();
-  }, [table_name, attrX, attrY, useRange, minId, maxId]);
+      return response.histogram;
+    },
+    [tableName, attrX, attrY],
+  );
 
   // ── draw chart ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -83,18 +59,8 @@ function Heatmap({
     const numHistDataY = histogramData.scaleY.numeric || [];
     const catHistDataY = histogramData.scaleY.categorical || [];
 
-    numHistDataXRef.current = numHistDataX;
-    numHistDataYRef.current = numHistDataY;
-
-    const numDomainX = (numHistDataX.length === 0 || !numHistDataX[0]) ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];
-    const catDomainX = catHistDataX.length === 0 ? null : catHistDataX.map(d => d);
-    const numDomainY = (numHistDataY.length === 0 || !numHistDataY[0]) ? null : [d3.min(numHistDataY, d => d.x0), d3.max(numHistDataY, d => d.x1)];
-    const catDomainY = catHistDataY.length === 0 ? null : catHistDataY.map(d => d);
-
-    console.log("[HEATMAP] Domains:", { numDomainX, catDomainX, numDomainY, catDomainY });
-
-    const xScale = createHybridScales(size, numHistDataX, catHistDataX, numDomainX, catDomainX, "horizontal");
-    const yScale = createHybridScales(size, numHistDataY, catHistDataY, numDomainY, catDomainY, "vertical");
+    const xScale = createBinnedScales(size, numHistDataX, catHistDataX, "horizontal");
+    const yScale = createBinnedScales(size, numHistDataY, catHistDataY, "vertical");
 
     const drawingGroup = d3.select(drawingRef.current);
     drawingGroup.selectAll("*").remove();
@@ -103,15 +69,10 @@ function Heatmap({
     yScale.draw(drawingGroup);
 
     const binsToRender = histogramData.histograms.filter(d => d.count.items > 0);
-    const colorScale = errorColors || (() => "steelblue");
+    const colorScale = errorColors || plainColorScale;
     colorScaleRef.current = colorScale;
 
-    const tileFill = (d) => {
-      const keys = Object.keys(d.count).filter(k => k !== "items");
-      if (keys.length === 0) return colorScale("none");
-      if (keys.length === 1) return colorScale(keys[0]);
-      return colorScale(keys[0]);
-    };
+    const tileFill = (d) => tileColor(colorScale, d);
 
     const tiles = drawingGroup.append("g")
       .attr("class", "heatmap-tiles")
@@ -178,7 +139,7 @@ function Heatmap({
           if (!pos) return;
           const { tx, ty, tw, th } = pos;
           const overlaps = tx < bx1 && tx + tw > bx0 && ty < by1 && ty + th > by0;
-          d3.select(this).attr("fill", overlaps ? "gold" : tileFill(d));
+          d3.select(this).attr("fill", overlaps ? HIGHLIGHT_FILL : tileFill(d));
           if (overlaps) brushedBins.push(d);
         });
 
@@ -226,9 +187,9 @@ function Heatmap({
         if (errorList !== "") errorList = "<br><strong>Errors: </strong> " + errorList;
         return `<strong>Bin:</strong> ${xBin} x ${yBin}<br><strong>Items: </strong>${d.count.items}${errorList}`;
       },
-      (d, _event) => {
+      (d) => {
         // Skip click if a brush drag just ended (prevents overwriting multi-select).
-        if (Date.now() - lastBrushEnd < 300) return;
+        if (Date.now() - lastBrushEnd < BRUSH_CLICK_GUARD_MS) return;
         // Left click: fetch row IDs for this tile then update context.
         const requestRevision = highlightRevisionRef.current;
         queryRowsInBin({
@@ -244,8 +205,6 @@ function Heatmap({
           }
         });
       },
-      (d) => { console.log("Right click on heatmap bin", d); },
-      (d) => { console.log("Double click on heatmap bin", d); }
     );
 
     return () => { drawingGroup.selectAll("*").remove(); };
@@ -255,13 +214,6 @@ function Heatmap({
   useEffect(() => {
     if (!tilesRef.current) return;
     const colorScale = colorScaleRef.current;
-
-    const tileFill = (d) => {
-      const keys = Object.keys(d.count).filter(k => k !== "items");
-      if (keys.length === 0) return colorScale("none");
-      if (keys.length === 1) return colorScale(keys[0]);
-      return colorScale(keys[0]);
-    };
 
     if (!highlightedRowIds || highlightedRowIds.length === 0) {
       clearSelectionRef.current();
@@ -280,7 +232,7 @@ function Heatmap({
       // Build a Set of "xBin|yBin" keys for O(1) lookup.
       const highlightSet = new Set(result.bins.map(b => `${b.xBin}|${b.yBin}`));
       tilesRef.current.attr("fill", d =>
-        highlightSet.has(`${d.xBin}|${d.yBin}`) ? "gold" : tileFill(d)
+        highlightSet.has(`${d.xBin}|${d.yBin}`) ? HIGHLIGHT_FILL : tileColor(colorScale, d)
       );
     });
 
@@ -295,12 +247,12 @@ function Heatmap({
   }
 
   return (
-    <g key={cellID} transform={`translate(${xPos}, ${yPos})`} className="heatmap-canvas">
+    <g transform={`translate(${xPos}, ${yPos})`} className="heatmap-canvas">
       <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
       <g ref={drawingRef}></g>
     </g>
   );
 }
 
-// Adds memoization (shallow copy) - may need to make a custom checker.
+// Adds memoization (shallow compare) - may need to make a custom checker.
 export default React.memo(Heatmap);

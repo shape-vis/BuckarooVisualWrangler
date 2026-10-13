@@ -1,8 +1,3 @@
-from app.db_utils.column_types import ColumnTypes
-from app.db_utils.compare_sql import NULL_LABEL
-from app.db_utils.detector_sql import missing_cell_predicate
-from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal
-
 """
 Measures how far one node's data has drifted from a reference state, inside PostgreSQL - October 12, 2026.
 
@@ -25,6 +20,12 @@ states' cumulative distributions, summed over the gaps between consecutive disti
 A value is a number by ColumnTypes.number_expression, the rule the plots read values by. In a categorical column a
 missing cell - by the Missing detector's own rule - is a category of its own, labelled null.
 """
+
+from app.db_utils.column_types import ColumnTypes
+from app.db_utils.compare_sql import NULL_LABEL
+from app.db_utils.detector_sql import missing_cell_predicate
+from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal
+
 
 NUMERIC = "numeric"
 CATEGORICAL = "categorical"
@@ -818,7 +819,8 @@ class DriftSQL:
 
     def cell_changed(self, column: str) -> str:
         """
-        Whether one matched row's cell changed between the reference (r) and the node (n), as _differs decided it.
+        Whether one matched row's cell changed between the reference (r) and the node (n): two nulls are equal, two
+        numbers are compared within np.isclose's tolerances, and anything else is compared as text.
         :arg: column: the column.
         :return: a boolean SQL expression.
         """

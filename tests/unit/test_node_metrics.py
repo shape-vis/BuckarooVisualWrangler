@@ -5,7 +5,7 @@ import app
 from app.pgraph.metrics import NodeMetrics, quality_trajectory
 from app.pgraph.node import GraphNode, format_wrangle_label
 from app.pgraph.pgraph import PGraph, node_id_for_count
-from app.server_utils.service_helpers import _parse_node_id
+from app.server_utils.service_helpers import parse_node_id
 
 
 class StubDataProfile:
@@ -204,26 +204,23 @@ class TableNamingTests(unittest.TestCase):
         app.pgraph_for_session = self.previous_pgraph
 
     def test_parse_node_id(self):
-        self.assertEqual(_parse_node_id("n0c_adult_x7f2q"), ("0c", "adult_x7f2q"))
+        self.assertEqual(parse_node_id("n0c_adult_x7f2q"), ("0c", "adult_x7f2q"))
         # A node staged as a candidate keeps its c{n} prefix for good
-        self.assertEqual(_parse_node_id("c7_adult_x7f2q"), ("c7", "adult_x7f2q"))
-        self.assertIsNone(_parse_node_id("adult_x7f2q"))
+        self.assertEqual(parse_node_id("c7_adult_x7f2q"), ("c7", "adult_x7f2q"))
+        self.assertIsNone(parse_node_id("adult_x7f2q"))
 
-    def test_labels_run_past_the_tenth_node(self):
+    def test_labels_run_past_the_twenty_sixth_node(self):
         """A node's label is handed out from node_count, and runs n0a, n0b ... n0z, n1a without a hitch."""
-        for index in range(15):
+        for index in range(26):
             app.pgraph_for_session.add_node(
                 GraphNode("n0a_adult_x7f2q", "delete", f"c{index}_adult_x7f2q", f"errors_c{index}_adult_x7f2q")
             )
 
         labels = [node.label for node in app.pgraph_for_session.node_map.values()]
-        # 1 root + 15 children, so the last label handed out is the sixteenth
+        # 1 root + 26 children, so the last label handed out is the twenty-seventh: past n0z, onto n1a
         self.assertEqual(labels[0], "n0a")
-        self.assertEqual(labels[-1], "n0p")
-
-
-if __name__ == '__main__':
-    unittest.main()
+        self.assertEqual(labels[-2], "n0z")
+        self.assertEqual(labels[-1], "n1a")
 
 
 class WrangleLabelTests(unittest.TestCase):
@@ -279,3 +276,7 @@ class WrangleLabelTests(unittest.TestCase):
 
         self.assertEqual(wrangles["n0a_x"], {"op": "root", "columns": []})
         self.assertEqual(wrangles["n0b_x"], {"op": "delete", "columns": ["salary", "region"]})
+
+
+if __name__ == '__main__':
+    unittest.main()

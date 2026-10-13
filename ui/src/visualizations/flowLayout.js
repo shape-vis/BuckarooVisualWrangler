@@ -5,27 +5,72 @@
 
 import * as d3 from "d3";
 import { FLOW_SIDES, REMOVED_LABEL, flowSides } from "../utils/comparison.js";
+import { clamp } from "../utils/visCommon.jsx";
 
 // Rows that stayed in their category, were recoded into another, or were deleted
 export const FLOW_COLORS = {stayed: "#94a3b8", recoded: "#f59e0b", removed: "#4b5563"};
+// A category's bar in a node's own column
+const CATEGORY_BAR_COLOR = "#475569";
 // The gap between one category's band and the next, at the unzoomed scale
-export const FLOW_PAD = 6;
+const FLOW_PAD = 6;
 // Room kept for a removed sink, however few rows it takes, so its label still fits
-export const REMOVED_ROOM = 14;
+const REMOVED_ROOM = 14;
 // How far a ribbon to a hidden category runs before it stops, as a share of its full span
-export const STUB = 0.5;
+const STUB = 0.5;
 
 /* What a ribbon shows, which sets its colour */
-export const flowKind = (r) => (r.target === REMOVED_LABEL ? "removed" : r.target === r.source ? "stayed" : "recoded");
+export function flowKind(r) {
+    if (r.target === REMOVED_LABEL) return "removed";
+    if (r.target === r.source) return "stayed";
+    return "recoded";
+}
 
 /* A ribbon cut short because one of its categories is hidden */
 export const isStub = (r) => r.ya === null || r.yb === null;
+
+/* How solid a ribbon is drawn: rows that stayed put are the faint background the moves stand out against, and
+   a stub fainter still */
+export function ribbonOpacity(r) {
+    if (isStub(r)) return 0.3;
+    if (flowKind(r) === "stayed") return 0.35;
+    return 0.7;
+}
+
+/* The colour of a bar in a node's own column: the sink's is the removed rows' colour, every category's slate */
+export function nodeBarColor(n) {
+    if (n.label === REMOVED_LABEL) return FLOW_COLORS.removed;
+    return CATEGORY_BAR_COLOR;
+}
 
 /* The flow a side's annotation points at: the biggest that actually moved - recoded or removed - or failing
    that the biggest of all, so a column where nothing moved can still say so */
 export function markedFlow(flows) {
     const moved = flows.flows.filter((flow) => flow.target !== flow.source);
     return d3.greatest(moved.length ? moved : flows.flows, (flow) => flow.rows);
+}
+
+/* The total of one field - size or rows - over the ribbons whose source or target (key) is a category */
+function sumWhere(ribbons, key, label, field) {
+    const matching = ribbons.filter((ribbon) => ribbon[key] === label);
+    return d3.sum(matching, (ribbon) => ribbon[field]);
+}
+
+/* Where the sinks' row goes among the categories: the slot, sinkAt, where the row's middle lands nearest the
+   middle of the whole stack. sinkAt is the index of the band the row goes before - bands.length puts it last. */
+function sinkSlot(bands, filled, scale, gaps, sinkRow) {
+    const total = d3.sum(filled, (band) => band.size * scale) + gaps + sinkRow;
+    let sinkAt = bands.length;
+    let nearest = Infinity;
+    let cursor = 0;
+    for (let i = 0; i <= bands.length; i += 1) {
+        const off = Math.abs(cursor + sinkRow / 2 - total / 2);
+        if (off < nearest) {
+            nearest = off;
+            sinkAt = i;
+        }
+        if (i < bands.length && bands[i].size) cursor += bands[i].size * scale + FLOW_PAD;
+    }
+    return sinkAt;
 }
 
 /* The Sankey's world: root's categories in the middle, each one's rows flowing out to the left into selection A
@@ -45,11 +90,10 @@ export function markedFlow(flows) {
             placed ribbons */
 export function layoutFlows(data, categories, h) {
     const shown = new Set(categories);
-    const sum = (ribbons, key, label, value) => d3.sum(ribbons.filter((ribbon) => ribbon[key] === label), (ribbon) => ribbon[value]);
 
     // A side whose node dropped the column has no flows, and leaves its half empty
     const detail = flowSides(data);
-    const sides = FLOW_SIDES.filter((side) => detail[side.id]?.flows).map((side) => {
+    const flowingSides = FLOW_SIDES.filter((side) => detail[side.id]?.flows).map((side) => {
         const flows = detail[side.id].flows;
         const ribbons = flows.flows.map((flow) => ({...flow, size: Math.sqrt(flow.rows)}));
         // A hidden category has no band for its deletes to leave from, so the sink takes only the shown ones'
@@ -58,21 +102,21 @@ export function layoutFlows(data, categories, h) {
             ...side, flows, ribbons, sunk,
             pinned: flows.targets.includes(REMOVED_LABEL),
             sinkSize: d3.sum(sunk, (ribbon) => ribbon.size),
-            out: (label) => sum(ribbons, "source", label, "size"),
-            into: (label) => sum(ribbons, "target", label, "size"),
+            out: (label) => sumWhere(ribbons, "source", label, "size"),
+            into: (label) => sumWhere(ribbons, "target", label, "size"),
         };
     });
 
     // A band is as tall as its tallest stack: either side's edge of root, or either node's own column
-    const bands = categories.map((label) => ({
-        label, size: d3.max(sides.flatMap((side) => [side.out(label), side.into(label)])) ?? 0,
+    const sized = categories.map((label) => ({
+        label, size: d3.max(flowingSides.flatMap((side) => [side.out(label), side.into(label)])) ?? 0,
     }));
 
     /* The scale that fills the plot with the bands and the bigger sink, a gap between each. A sink that takes few
        rows still gets room for its label. */
-    const pinned = sides.some((side) => side.pinned);
-    const sinkSize = d3.max(sides, (side) => side.sinkSize) ?? 0;
-    const filled = bands.filter((band) => band.size > 0);
+    const pinned = flowingSides.some((side) => side.pinned);
+    const sinkSize = d3.max(flowingSides, (side) => side.sinkSize) ?? 0;
+    const filled = sized.filter((band) => band.size > 0);
     const bandsSize = d3.sum(filled, (band) => band.size);
     const gaps = FLOW_PAD * (Math.max(0, filled.length - 1) + (pinned ? 1 : 0));
     let scale = Math.max(0, (h - gaps) / ((bandsSize + sinkSize) || 1));
@@ -83,27 +127,21 @@ export function layoutFlows(data, categories, h) {
        Sankey into a saddle; in the middle, the categories above send theirs down and those below send theirs
        up, so the removals fan in evenly and every kept category still runs level. */
     const sinkRow = pinned ? Math.max(sinkSize * scale, REMOVED_ROOM) : 0;
-    let sinkAt = bands.length;
-    if (pinned) {
-        const total = d3.sum(filled, (band) => band.size * scale) + gaps + sinkRow;
-        let nearest = Infinity;
-        let cursor = 0;
-        for (let i = 0; i <= bands.length; i += 1) {
-            const off = Math.abs(cursor + sinkRow / 2 - total / 2);
-            if (off < nearest) [nearest, sinkAt] = [off, i];
-            if (i < bands.length && bands[i].size) cursor += bands[i].size * scale + FLOW_PAD;
-        }
-    }
+    let sinkAt = sized.length;
+    if (pinned) sinkAt = sinkSlot(sized, filled, scale, gaps, sinkRow);
 
+    // Each band stacked under the last, the sinks' row taking its slot among them
     let top = 0;
     let sinkTop = null;
-    bands.forEach((band, i) => {
+    const bands = [];
+    sized.forEach((band, i) => {
         if (pinned && i === sinkAt) {
             sinkTop = top;
             top += sinkRow + FLOW_PAD;
         }
-        Object.assign(band, {y0: top, y1: top + band.size * scale});
-        if (band.size) top = band.y1 + FLOW_PAD;
+        const placed = {...band, y0: top, y1: top + band.size * scale};
+        bands.push(placed);
+        if (band.size) top = placed.y1 + FLOW_PAD;
     });
     if (pinned && sinkTop === null) sinkTop = top;
 
@@ -116,29 +154,31 @@ export function layoutFlows(data, categories, h) {
     // Both sides start from all of root's rows, so either counts a category's rows in root
     const roots = new Map();
     bands.forEach((band) => {
-        const widest = d3.greatest(sides, (side) => side.out(band.label));
+        const widest = d3.greatest(flowingSides, (side) => side.out(band.label));
         const size = widest?.out(band.label);
-        if (size) roots.set(band.label, stack(band, size, sum(widest.ribbons, "source", band.label, "rows")));
+        if (size) roots.set(band.label, stack(band, size, sumWhere(widest.ribbons, "source", band.label, "rows")));
     });
 
-    sides.forEach((side) => {
-        side.sources = new Map();
-        side.targets = new Map();
+    const sides = flowingSides.map((side) => {
+        const sources = new Map();
+        const targets = new Map();
         bands.forEach((band) => {
             const out = side.out(band.label);
             const into = side.into(band.label);
-            if (out) side.sources.set(band.label, stack(band, out, sum(side.ribbons, "source", band.label, "rows")));
-            if (into) side.targets.set(band.label, stack(band, into, sum(side.ribbons, "target", band.label, "rows")));
+            if (out) sources.set(band.label, stack(band, out, sumWhere(side.ribbons, "source", band.label, "rows")));
+            if (into) targets.set(band.label, stack(band, into, sumWhere(side.ribbons, "target", band.label, "rows")));
         });
         // Each side's sink is centred in the row, as each column's stack is in its band
         if (side.pinned) {
             const at = sinkTop + (sinkRow - side.sinkSize * scale) / 2;
-            side.targets.set(REMOVED_LABEL, {
+            targets.set(REMOVED_LABEL, {
                 label: REMOVED_LABEL, y0: at, y1: at + side.sinkSize * scale,
-                rows: d3.sum(side.sunk, (ribbon) => ribbon.rows), total: sum(side.ribbons, "target", REMOVED_LABEL, "rows"),
+                rows: d3.sum(side.sunk, (ribbon) => ribbon.rows),
+                total: sumWhere(side.ribbons, "target", REMOVED_LABEL, "rows"),
             });
         }
-        side.placed = placeRibbons(side, categories, shown, scale, sinkAt);
+        const placed = placeRibbons({...side, sources, targets}, categories, shown, scale, sinkAt);
+        return {...side, sources, targets, placed};
     });
 
     return {bands, roots, sides};
@@ -181,6 +221,8 @@ export function zoomFlows(world, range, h) {
     const [f0, f1] = range ?? [0, 1];
     const k = 1 / (f1 - f0);
     const y = (value) => (value - f0 * h) * k;
+    // A stub's missing end stays missing
+    const yOrNull = (value) => (value === null ? null : y(value));
     const node = (n) => ({...n, y0: y(n.y0), y1: y(n.y1)});
     const nodes = (map) => new Map([...map].map(([label, n]) => [label, node(n)]));
 
@@ -189,9 +231,7 @@ export function zoomFlows(world, range, h) {
         ...side,
         sources: nodes(side.sources),
         targets: nodes(side.targets),
-        placed: side.placed.map((r) => ({
-            ...r, thickness: r.thickness * k, ya: r.ya === null ? null : y(r.ya), yb: r.yb === null ? null : y(r.yb),
-        })),
+        placed: side.placed.map((r) => ({...r, thickness: r.thickness * k, ya: yOrNull(r.ya), yb: yOrNull(r.yb)})),
     }));
 
     const byLabel = new Map(bands.map((band) => [band.label, band]));
@@ -200,7 +240,9 @@ export function zoomFlows(world, range, h) {
     const where = (label) => {
         const at = label === REMOVED_LABEL ? sink : byLabel.get(label);
         if (!at) return "hidden";
-        return at.y1 <= 0 ? "above" : at.y0 >= h ? "below" : null;
+        if (at.y1 <= 0) return "above";
+        if (at.y0 >= h) return "below";
+        return null;
     };
     const inView = (n) => n.y1 > 0 && n.y0 < h;
     return {bands, roots: nodes(world.roots), sides, where, inView};
@@ -211,7 +253,7 @@ export function zoomFlows(world, range, h) {
 export function panRange(range, delta) {
     if (!range) return range;
     const span = range[1] - range[0];
-    const start = Math.min(Math.max(range[0] + delta, 0), 1 - span);
+    const start = clamp(range[0] + delta, 0, 1 - span);
     return start === range[0] ? range : [start, start + span];
 }
 

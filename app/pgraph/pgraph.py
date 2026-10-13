@@ -4,11 +4,6 @@ the class for the pgraph which creates the DAG structure - March 31, 2026 - Nico
 uses a dictionary to have parent <--> child interaction
 to traverse up and down, it access' the child's parent node
 """
-import json
-from typing import TypedDict
-
-from sqlalchemy import String
-
 from app.pgraph.node import GraphNode
 from app.pgraph.distortion import pareto_frontier
 
@@ -31,18 +26,27 @@ def node_id_for_count(count):
     return f"n{count // 26}{chr(ord('a') + count % 26)}"
 
 
+def is_scored_leaf(node: GraphNode):
+    """
+    Whether a node is ranked on the Pareto plot: it is a leaf - where a branch ended up - and carries both an
+    error total and an overall drift.
+    """
+    if node.children:
+        return False
+    if node.metrics is None or node.distortion is None:
+        return False
+    return node.distortion.get("overall") is not None
+
+
 class PGraph:
     def __init__(self):
-        self.root_node = None
-        # this will be [node_table_name, GraphNode) for easy node access
+        self.root_table_name = None
+        # {node table name: GraphNode}
         self.node_map = {}
+        # How many nodes have joined the graph for good; it hands out their labels - see node_id_for_count
         self.node_count = 0
-        # keep track of the wrangle number and what it was for meta post-processing
-        self.wrangle_map = {}
-        """
-        these are referenced by table names, and then and services should load the node from the graph
-        using the table names    
-        """
+
+        # The undo / redo / current pointers are table names; services look the node up in node_map
         self.prev_node_table_name = None
         self.next_node_table_name = None
         self.current_node_table_name = None
@@ -56,14 +60,6 @@ class PGraph:
         # counts up, so a name is never reused - not even a discarded candidate's. Candidates do not count in
         # node_count, which hands out the labels of nodes that joined the graph for good.
         self.candidate_count = 0
-
-    def serialize_node_map(self):
-        ser_map = {}
-        for key in self.node_map.keys():
-            node = self.node_map[key]
-            ser_map[key] = json.dumps(node, default=lambda o: o.__json__()
-                         if hasattr(o, '__json__') else None)
-        return ser_map
 
     def __json__(self):
         return {
@@ -86,11 +82,16 @@ class PGraph:
 
         :return: {"scored", "frontier", "dominated": {dominated id: dominating id}}
         """
-        scores = [{"id": node.table_name, "error": node.metrics.dimension("total"),
-                   "distortion": node.distortion["overall"]}
-                  for node in self.node_map.values()
-                  if not node.children and node.metrics is not None
-                  and node.distortion is not None and node.distortion.get("overall") is not None]
+        scores = []
+        for node in self.node_map.values():
+            if not is_scored_leaf(node):
+                continue
+            scores.append({
+                "id": node.table_name,
+                "error": node.metrics.dimension("total"),
+                "distortion": node.distortion["overall"],
+            })
+
         frontier, dominated = pareto_frontier(scores)
         return {"scored": [score["id"] for score in scores], "frontier": frontier, "dominated": dominated}
 
@@ -129,7 +130,7 @@ class PGraph:
         The graph is a tree - every node has exactly one parent - so the path between an ancestor and
         one of its descendants is unique, and walking up from end until start is reached finds it.
 
-        :param node_table_name: start_table_name, the node the branch runs from
+        :param start_table_name: the node the branch runs from
         :param end_table_name: the node the branch runs to
         :return: node table names ordered start to end, or None when end is not below start
         """
@@ -153,8 +154,6 @@ class PGraph:
         list_of_edges = []
         for node in self.node_map.values():
             node_name = node.table_name
-            if len(node.children) == 0:
-                continue
             for child in node.children:
                 child_node_obj = self.node_map[child]
                 list_of_edges.append(
@@ -172,14 +171,23 @@ class PGraph:
                 )
         return list_of_edges
 
+    def _assign_next_label(self, node: GraphNode):
+        """Give a node joining the graph for good the next label - n0a, n0b, ..."""
+        node.label = node_id_for_count(self.node_count)
+        self.node_count += 1
+
+    def _last_child(self, node: GraphNode):
+        """:return: the node's most recently added child - where redo goes from it - or None when it has none"""
+        if node is None or not node.children:
+            return None
+        return node.children[-1]
+
     def add_node(self, node: GraphNode):
         new_node_table_name = node.table_name
-        node.label = node_id_for_count(self.node_count)
+        self._assign_next_label(node)
         self.node_map[new_node_table_name] = node
-        self.node_count += 1
-        self.wrangle_map[self.node_count] = node.wrangle_op
 
-        #update the children of the parent node
+        # Update the children of the parent node
         if node.parent_table in self.node_map:
             self.node_map[node.parent_table].add_child(new_node_table_name)
 
@@ -187,18 +195,14 @@ class PGraph:
         self.current_node_table_name = new_node_table_name
 
     def add_root_node(self, node: GraphNode):
-        root_node_table_name = node.table_name
-        node.label = node_id_for_count(self.node_count)
-        self.node_map[root_node_table_name] = node
-        self.node_count += 1
+        root_table_name = node.table_name
+        self._assign_next_label(node)
+        self.node_map[root_table_name] = node
 
         self.prev_node_table_name = self.current_node_table_name
-        self.current_node_table_name = root_node_table_name
+        self.current_node_table_name = root_table_name
 
-        self.root_node = root_node_table_name
-
-    def get_new_node_id(self):
-        return node_id_for_count(self.node_count)
+        self.root_table_name = root_table_name
 
     # ── Candidates ───────────────────────────────────────────────────────────
     # A candidate wrangle is staged as a provisional node: a full node of the graph - a child of its parent,
@@ -236,9 +240,7 @@ class PGraph:
         if not node.provisional:
             raise ValueError(f"{table_name} is not a candidate")
         node.provisional = False
-        node.label = node_id_for_count(self.node_count)
-        self.node_count += 1
-        self.wrangle_map[self.node_count] = node.wrangle_op
+        self._assign_next_label(node)
         return node
 
     def remove_candidate(self, table_name):
@@ -261,49 +263,46 @@ class PGraph:
             return parent.table_name
         if self.next_node_table_name == table_name:
             current = self.node_map.get(self.current_node_table_name)
-            self.next_node_table_name = current.children[-1] if current and current.children else None
+            self.next_node_table_name = self._last_child(current)
         return None
 
     def undo_pgraph(self):
-        if self.prev_node_table_name == "root":
+        """
+        Step up to the current node's parent.
+        :return: the parent's table name, or None at the root, which has no parent to step up to
+        """
+        current_node = self.node_map.get(self.current_node_table_name)
+        if current_node is None or current_node.parent_table not in self.node_map:
             return None
-        self.next_node_table_name = self.current_node_table_name
-        self.current_node_table_name = self.prev_node_table_name
-        self.prev_node_table_name = self.node_map[self.prev_node_table_name].parent_table
+
+        parent_node = self.node_map[current_node.parent_table]
+        self.next_node_table_name = current_node.table_name
+        self.current_node_table_name = parent_node.table_name
+        self.prev_node_table_name = parent_node.parent_table
         return self.current_node_table_name
 
     def redo_pgraph(self):
+        """
+        Step down to the node undo last stepped up from, or the current node's most recent child.
+        :return: that node's table name, or None when there is nothing below
+        """
         if self.next_node_table_name is None:
             return None
         self.prev_node_table_name = self.current_node_table_name
         self.current_node_table_name = self.next_node_table_name
-        current_node = self.node_map[self.current_node_table_name]
-        current_node_child_list = current_node.children
-        if len(current_node_child_list) == 0:
-            self.next_node_table_name = None
-            return self.current_node_table_name
-        #set next to the last child added if there are children for this node
-        self.next_node_table_name = current_node_child_list[len(current_node_child_list)-1]
 
+        current_node = self.node_map[self.current_node_table_name]
+        self.next_node_table_name = self._last_child(current_node)
         return self.current_node_table_name
 
     def set_clicked_node_as_current(self, node_table_name):
-        #get the node from the graph the user clicked in the front-end
+        """
+        Move to the node the user clicked in the front end: its parent becomes prev, its most recent child next.
+        :return: the node's table name
+        """
         current_node = self.node_map[node_table_name]
-        child_list = current_node.children
-        #check to see if it has any children for the next node pointer
-        if len(child_list) == 0:
-            #no child for next pointer
-            self.next_node_table_name = None
-
-        # set next to the last child added if there are children for this node
-        if len(child_list) > 0:
-            self.next_node_table_name = child_list[len(child_list) - 1]
-
-        #set parent as prev pointer
+        self.next_node_table_name = self._last_child(current_node)
         self.prev_node_table_name = current_node.parent_table
-
-        #set current table name
         self.current_node_table_name = node_table_name
         return self.current_node_table_name
 

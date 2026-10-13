@@ -5,22 +5,6 @@ import { formatDrift, formatDriftDelta } from "../utils/drift.js";
 import { nodeName } from "../utils/comparison.js";
 import "../styles/Sparkline.css";
 
-/**
- * One quality dimension along the selected branch.
- *
- * Every node on the branch is plotted, whether or not the graph currently has it folded into a
- * collapsed node - collapsing is a way of looking at the tree and never changes what a step
- * contributed. Points belonging to a folded run are ringed, so it is clear which nodes the graph is
- * hiding while their values stay on the chart.
- *
- * Each step is its own line segment so it can carry its own color - green where the error rate fell,
- * red where it rose. A single path could not do that, which is why this is hand-drawn rather than
- * taken from a sparkline library.
- *
- * Drift from root is drawn with polarity "neutral": it has no better or worse direction - zero means
- * nothing was done, not that the data is good - so its steps are never green or red.
- */
-
 const PLOT_W = 176;
 const PLOT_H = 52;
 const LEFT_M = 30;   // room for the y axis' percentage labels
@@ -36,9 +20,12 @@ const UNCHANGED = "#8c939d";
 
 /* An error rate falling is an improvement and rising a regression, so its steps are green and red. A
    neutral series draws every step that moved in its own color, and only a flat step in grey. */
-const stepColor = (delta, polarity, color) => (
-  delta === 0 ? UNCHANGED : polarity === "neutral" ? color : delta < 0 ? IMPROVED : WORSENED
-);
+function stepColor(delta, polarity, color) {
+  if (delta === 0) return UNCHANGED;
+  if (polarity === "neutral") return color;
+  if (delta < 0) return IMPROVED;
+  return WORSENED;
+}
 
 /* How a series' numbers read. Error rates are percentages whose steps are points; drift is a bare
    number, W1/IQR or TVD, whose steps are differences of two values both measured from root. */
@@ -55,9 +42,31 @@ const FORMATS = {
   },
 };
 
+// What a point's tooltip says about the step into it: the first point has none to describe
+function changeText(delta, formats) {
+  if (delta === null) return "start of branch";
+  if (delta === 0) return "no change";
+  return formats.delta(delta);
+}
+
 // Axis labels have to fit in a few pixels, so each node goes by its label - "n0a", or a candidate's "c7"
 const shortNodeId = (nodeId) => nodeName(String(nodeId ?? ""));
 
+/**
+ * One quality dimension along the selected branch.
+ *
+ * Every node on the branch is plotted, whether or not the graph currently has it folded into a
+ * collapsed node - collapsing is a way of looking at the tree and never changes what a step
+ * contributed. Points belonging to a folded run are ringed, so it is clear which nodes the graph is
+ * hiding while their values stay on the chart.
+ *
+ * Each step is its own line segment so it can carry its own color - green where the error rate fell,
+ * red where it rose. A single path could not do that, which is why this is hand-drawn rather than
+ * taken from a sparkline library.
+ *
+ * Drift from root is drawn with polarity "neutral": it has no better or worse direction - zero means
+ * nothing was done, not that the data is good - so its steps are never green or red.
+ */
 export default function Sparkline({
   values = [], deltas = [], nodeIds = [], color = "steelblue", collapsedNodeIds,
   polarity = "error", format = "rate",
@@ -91,8 +100,6 @@ export default function Sparkline({
       .domain(flat ? [minValue - 1, maxValue + 1] : [minValue, maxValue])
       .range([PLOT_H, 0]);
 
-    const pointX = (i) => xScale(i);
-
     /* Axes. The y axis is the quality metric; the x axis is the branch's nodes in path order, so it
        gets one tick per node rather than the scale's own ticks. A flat branch is padded to a readable
        domain above, so its y ticks are reduced to the one real value rather than implying a spread
@@ -125,9 +132,9 @@ export default function Sparkline({
       .data(deltas.map((delta, i) => ({ delta, i })))
       .join("line")
       .attr("class", "sparkline-step")
-      .attr("x1", (d) => pointX(d.i))
+      .attr("x1", (d) => xScale(d.i))
       .attr("y1", (d) => yScale(values[d.i]))
-      .attr("x2", (d) => pointX(d.i + 1))
+      .attr("x2", (d) => xScale(d.i + 1))
       .attr("y2", (d) => yScale(values[d.i + 1]))
       .attr("stroke", (d) => stepColor(d.delta, polarity, color))
       .attr("stroke-width", 2)
@@ -138,7 +145,7 @@ export default function Sparkline({
       .data(values.map((value, i) => ({ value, i })).filter((d) => isFolded(d.i)))
       .join("circle")
       .attr("class", "sparkline-folded-ring")
-      .attr("cx", (d) => pointX(d.i))
+      .attr("cx", (d) => xScale(d.i))
       .attr("cy", (d) => yScale(d.value))
       .attr("r", 5.5);
 
@@ -148,7 +155,7 @@ export default function Sparkline({
       .data(values.map((value, i) => ({ value, i })))
       .join("circle")
       .attr("class", "sparkline-point")
-      .attr("cx", (d) => pointX(d.i))
+      .attr("cx", (d) => xScale(d.i))
       .attr("cy", (d) => yScale(d.value))
       .attr("r", 3)
       .attr("fill", color)
@@ -159,11 +166,7 @@ export default function Sparkline({
     createTooltip(dots, (d) => {
       const node = nodeIds[d.i] ?? `step ${d.i}`;
       const delta = d.i > 0 ? deltas[d.i - 1] : null;
-      const change = delta === null
-        ? "start of branch"
-        : delta === 0
-          ? "no change"
-          : formats.delta(delta);
+      const change = changeText(delta, formats);
       const foldedNote = isFolded(d.i) ? "<br/><em>hidden in a collapsed node</em>" : "";
       return `<strong>${node}</strong><br/>${formats.value(d.value)}<br/>${change}${foldedNote}`;
     });

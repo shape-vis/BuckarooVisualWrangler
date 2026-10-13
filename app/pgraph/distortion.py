@@ -30,17 +30,12 @@ from functools import partial
 import numpy as np
 
 from app.db_utils.compare_sql import MAX_LABELS, NULL_LABEL, OTHER_LABEL
-from app.db_utils.drift_sql import REMOVED_LABEL, DriftSQL
-from app.pgraph.metrics import ID_COLUMNS
+from app.db_utils.drift_sql import CATEGORICAL, NUMERIC, REMOVED_LABEL, DriftSQL
+from app.pgraph.metrics import SKIPPED_COLUMNS
 from app.server_utils.workers import run_all
 
-NUMERIC = "numeric"
-CATEGORICAL = "categorical"
 STATS = {NUMERIC: "W1/IQR", CATEGORICAL: "TVD"}
 
-# Not data attributes: the row identifiers, and the pandas index columns DataProfile.get_col_names also
-# skips. Leaving them out keeps drift over the same columns the error metrics cover.
-SKIPPED_COLUMNS = (*ID_COLUMNS, "index", "level_0")
 
 # The grid the annotation reads a numeric column's movement off. It oversamples the tails, because that is
 # where a delete of outliers moves mass - a grid of deciles understates such a change badly.
@@ -94,7 +89,11 @@ def column_kind(col_types, column):
 
 def column_kinds(col_types, columns):
     """{column: kind} for every data column, the structural ones left out."""
-    return {column: column_kind(col_types, column) for column in columns if column not in SKIPPED_COLUMNS}
+    kinds = {}
+    for column in columns:
+        if column not in SKIPPED_COLUMNS:
+            kinds[column] = column_kind(col_types, column)
+    return kinds
 
 
 # ── One column ───────────────────────────────────────────────────────────────
@@ -118,17 +117,25 @@ def _result(kind, value, n_root, n_node, reason=None):
     One column's drift. A column with nothing honest to report carries a reason instead of a value - never
     a zero, which would read as "unchanged".
     """
-    # Counts can arrive as numpy integers, which Flask cannot encode, and which would make the flag below a numpy bool
-    n_root, n_node = int(n_root), int(n_node)
+    # Counts can arrive as Decimals or numpy integers, which Flask cannot encode, and which would make the flag
+    # below something other than a bool
+    n_root = int(n_root)
+    n_node = int(n_node)
+
+    degenerate = reason is not None
+    drift_value = None
+    if not degenerate:
+        drift_value = float(value)
+
     return {
-        "value": None if reason else float(value),
+        "value": drift_value,
         "stat": STATS.get(kind),
         "kind": kind,
         "n_root": n_root,
         "n_node": n_node,
-        "degenerate": reason is not None,
+        "degenerate": degenerate,
         "reason": reason,
-        "low_confidence": reason is None and min(n_root, n_node) < LOW_CONFIDENCE_N,
+        "low_confidence": not degenerate and min(n_root, n_node) < LOW_CONFIDENCE_N,
     }
 
 
@@ -182,12 +189,14 @@ def measure_columns(drift):
         else:
             tasks.append(partial(drift.generate_categorical_drift, entry["column"]))
 
+    # Results come back in the order of the tasks: the two present-cell counts, then a column per plan entry
     results = run_all(tasks)
     present_reference = results[0]
     present_node = results[1]
+    column_results = results[2:]
 
     measurements = {}
-    for measured in results[2:]:
+    for measured in column_results:
         measurements[measured["column"]] = measured
 
     column_drift = []
@@ -617,7 +626,11 @@ def acted_on_column(path_nodes, column):
 
     :param path_nodes: GraphNodes from root down to the node
     """
-    return any(column in child.wrangle_summary()["columns"] for child in path_nodes[1:])
+    steps = path_nodes[1:]
+    for child in steps:
+        if column in child.wrangle_summary()["columns"]:
+            return True
+    return False
 
 
 # ── Across nodes ─────────────────────────────────────────────────────────────
@@ -631,8 +644,22 @@ def distortion_trajectory(ordered):
     :param ordered: each node's distortion (or None), root-most first
     :return: {"values", "deltas"}
     """
-    values = [distortion.get("overall") if distortion else None for distortion in ordered]
-    deltas = [None if a is None or b is None else b - a for a, b in zip(values, values[1:])]
+    values = []
+    for distortion in ordered:
+        if distortion:
+            values.append(distortion.get("overall"))
+        else:
+            values.append(None)
+
+    deltas = []
+    for index in range(1, len(values)):
+        previous = values[index - 1]
+        current = values[index]
+        if previous is None or current is None:
+            deltas.append(None)
+        else:
+            deltas.append(current - previous)
+
     return {"values": values, "deltas": deltas}
 
 
@@ -649,28 +676,55 @@ def pareto_frontier(scores):
     :param scores: [{"id", "error", "distortion"}]
     :return: (frontier ids, {dominated id: dominating id}), in id order
     """
-    ranked = sorted((score["id"], round(score["error"], PARETO_PRECISION),
-                     round(score["distortion"], PARETO_PRECISION)) for score in scores)
+    ranked_scores = []
+    for score in scores:
+        rounded_error = round(score["error"], PARETO_PRECISION)
+        rounded_drift = round(score["distortion"], PARETO_PRECISION)
+        ranked_scores.append((score["id"], rounded_error, rounded_drift))
+    ranked_scores.sort()
+
     dominated = {}
-    for y_id, y_error, y_drift in ranked:
-        for x_id, x_error, x_drift in ranked:
-            if x_error <= y_error and x_drift <= y_drift and (x_error < y_error or x_drift < y_drift):
+    for y_id, y_error, y_drift in ranked_scores:
+        for x_id, x_error, x_drift in ranked_scores:
+            no_worse = x_error <= y_error and x_drift <= y_drift
+            strictly_better = x_error < y_error or x_drift < y_drift
+            if no_worse and strictly_better:
                 dominated[y_id] = x_id
                 break
-    return [node_id for node_id, _, _ in ranked if node_id not in dominated], dominated
+
+    frontier = []
+    for node_id, _, _ in ranked_scores:
+        if node_id not in dominated:
+            frontier.append(node_id)
+    return frontier, dominated
 
 
 # ── Annotations ──────────────────────────────────────────────────────────────
 
 def _ordinal(quantile):
-    n = int(round(quantile * 100))
-    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
+    """A quantile as a percentile, e.g. 0.25 -> "25th", 0.01 -> "1st"."""
+    percentile = int(round(quantile * 100))
+
+    # 11th to 13th - and, as written, the rest of the teens and 20th - take "th" whatever their last digit
+    last_two_digits = percentile % 100
+    last_digit = percentile % 10
+    if 10 <= last_two_digits <= 20:
+        suffix = "th"
+    elif last_digit == 1:
+        suffix = "st"
+    elif last_digit == 2:
+        suffix = "nd"
+    elif last_digit == 3:
+        suffix = "rd"
+    else:
+        suffix = "th"
+    return f"{percentile}{suffix}"
 
 
 def _sentences(record):
     """One sentence per fact, each read straight off the record."""
-    column, sentences = record["column"], []
+    column = record["column"]
+    sentences = []
 
     if record["cells_changed"]:
         sentences.append(f"{record['cells_changed']:,} of {record['rows_root']:,} values in {column} "
@@ -683,18 +737,28 @@ def _sentences(record):
 
     shift = record.get("largest_shift")
     if shift and shift["shift"]:
-        way = "up" if shift["shift"] > 0 else "down"
+        if shift["shift"] > 0:
+            way = "up"
+        else:
+            way = "down"
         sentences.append(f"The largest move is at the {_ordinal(shift['quantile'])} percentile: {way} "
                          f"{abs(shift['shift']):.3f} IQR.")
-        if record["direction"] != "both":
-            sentences.append(f"No quantile shown moved {'down' if record['direction'] == 'up' else 'up'}.")
 
-    gained, lost = record.get("gained"), record.get("lost")
+        if record["direction"] != "both":
+            if record["direction"] == "up":
+                opposite_direction = "down"
+            else:
+                opposite_direction = "up"
+            sentences.append(f"No quantile shown moved {opposite_direction}.")
+
+    gained = record.get("gained")
+    lost = record.get("lost")
     if gained and lost and gained["change_pct"] > 0 > lost["change_pct"]:
         sentences.append(f"{gained['category']} gained {gained['change_pct']:.2f} points of share; "
                          f"{lost['category']} lost {abs(lost['change_pct']):.2f}.")
 
-    highest, lowest = record.get("removal_highest"), record.get("removal_lowest")
+    highest = record.get("removal_highest")
+    lowest = record.get("removal_lowest")
     if highest and lowest and highest[1] > lowest[1]:
         sentences.append(f"{highest[0]} rows were removed at {highest[1]:.1%}, against {lowest[1]:.1%} "
                          f"of {lowest[0]}.")
@@ -704,6 +768,42 @@ def _sentences(record):
     if "churn" in record:
         sentences.append(f"{record['churn']:.1%} of rows changed category or were removed (churn).")
     return sentences
+
+
+def _largest_shift_index(shifts):
+    """The index of the quantile that moved furthest, either way; the first of any tie."""
+    largest = 0
+    for index in range(len(shifts)):
+        if abs(shifts[index]) > abs(shifts[largest]):
+            largest = index
+    return largest
+
+
+def _direction(shifts):
+    """ "up" when no quantile moved down, "down" when none moved up, and "both" otherwise."""
+    moved_down = False
+    moved_up = False
+    for shift in shifts:
+        if shift < 0:
+            moved_down = True
+        if shift > 0:
+            moved_up = True
+
+    if not moved_down:
+        return "up"
+    if not moved_up:
+        return "down"
+    return "both"
+
+
+def _change_pct(row):
+    """How many points of share a category gained or lost - what gained and lost are picked by."""
+    return row["change_pct"]
+
+
+def _rate(item):
+    """A (label, removal rate) pair's rate."""
+    return item[1]
 
 
 def annotation(column, result, facts, detail=None, acted_on=False, flows=None):
@@ -732,22 +832,27 @@ def annotation(column, result, facts, detail=None, acted_on=False, flows=None):
 
     if detail and detail["kind"] == NUMERIC:
         shifts = detail["shift"]
-        largest = max(range(len(shifts)), key=lambda i: abs(shifts[i]))
+        largest = _largest_shift_index(shifts)
         record["largest_shift"] = {"quantile": detail["grid"][largest], "shift": shifts[largest]}
-        record["direction"] = ("up" if all(s >= 0 for s in shifts)
-                               else "down" if all(s <= 0 for s in shifts) else "both")
+        record["direction"] = _direction(shifts)
     elif detail and detail["kind"] == CATEGORICAL:
-        named = [row for row in detail["categories"] if row["category"] != OTHER_LABEL]
+        named = []
+        for row in detail["categories"]:
+            if row["category"] != OTHER_LABEL:
+                named.append(row)
         if named:
-            record["gained"] = max(named, key=lambda row: row["change_pct"])
-            record["lost"] = min(named, key=lambda row: row["change_pct"])
+            record["gained"] = max(named, key=_change_pct)
+            record["lost"] = min(named, key=_change_pct)
 
     if flows:
         record["churn"] = flows["churn"]
-        rates = {label: rate for label, rate in flows["removal_rates"].items() if label != OTHER_LABEL}
+        rates = {}
+        for label, rate in flows["removal_rates"].items():
+            if label != OTHER_LABEL:
+                rates[label] = rate
         if facts["rows_removed"] and len(rates) > 1:
-            record["removal_highest"] = max(rates.items(), key=lambda item: item[1])
-            record["removal_lowest"] = min(rates.items(), key=lambda item: item[1])
+            record["removal_highest"] = max(rates.items(), key=_rate)
+            record["removal_lowest"] = min(rates.items(), key=_rate)
 
     return {"record": record, "sentences": _sentences(record)}
 
@@ -810,7 +915,11 @@ def compute_node_distortion(table_name, root_table):
         row_count = db_operations.get_row_count(root_table)
         present_cells = DriftSQL(engine, root_table, root_table, kinds).generate_present_cells("reference")
         distortion = root_distortion(kinds, present_cells, row_count)
-        facts = {"rows_root": row_count, "rows_removed": 0, "cells_changed": {column: 0 for column in kinds}}
+
+        no_cells_changed = {}
+        for column in kinds:
+            no_cells_changed[column] = 0
+        facts = {"rows_root": row_count, "rows_removed": 0, "cells_changed": no_cells_changed}
     else:
         drift = DriftSQL(engine, root_table, table_name, kinds)
         measured_facts = measure_edit_facts(drift, list(kinds))
@@ -821,30 +930,31 @@ def compute_node_distortion(table_name, root_table):
     return {**distortion, "facts": facts}
 
 
-def refresh_node_distortion(table_name):
-    """
-    Compute a node's drift from root and attach it to its GraphNode, with the facts about what its wrangles
-    did. Called from refresh_node_metrics, so every path that creates a node gets it, once, when the node is made.
-
-    :return: the distortion that was attached
-    """
-    import app as app_package
-
-    pgraph = app_package.pgraph_for_session
-    node = pgraph.node_map[table_name] if pgraph else None
-    if node is None:
-        raise KeyError(f"no pgraph node for table {table_name!r}, cannot attach distortion")
-
-    node.set_distortion(compute_node_distortion(table_name, pgraph.root_node))
-    return node.distortion
-
-
 def _node_distortion_of(pgraph, node_table):
-    """A node's distortion, computed now if the node somehow predates it."""
+    """A node's distortion - every node is measured as it is made, see compute_node_distortion."""
     node = pgraph.node_map[node_table]
     if node.distortion is None:
-        refresh_node_distortion(node_table)
+        raise ValueError(f"{node_table} has no drift measured")
     return node.distortion
+
+
+def _cached(key, compute):
+    """
+    The density cache's entry under key, computed and stored on a miss. None is a value the cache keeps - a
+    reference that cannot be smoothed stays that way - so a miss is told apart by a sentinel.
+    """
+    missing = object()
+    with _cache_lock:
+        value = _density_cache.get(key, missing)
+    if value is not missing:
+        return value
+
+    # Computed outside the lock, so one column's fit never holds up another's; two threads racing on the same key
+    # only do the work twice
+    value = compute()
+    with _cache_lock:
+        _density_cache[key] = value
+    return value
 
 
 def _density(drift, base_table, node_table, column):
@@ -854,26 +964,46 @@ def _density(drift, base_table, node_table, column):
 
     :return: {"grid", "bandwidth", "root", "node"}, or None when the reference cannot be smoothed
     """
-    params_key = ("params", base_table, column)
-    curve_key = ("curve", base_table, node_table, column)
+    def fit_reference():
+        return root_density_params(drift.generate_value_masses("reference", column))
 
-    with _cache_lock:
-        params = _density_cache.get(params_key, False)
-    if params is False:
-        params = root_density_params(drift.generate_value_masses("reference", column))
-        with _cache_lock:
-            _density_cache[params_key] = params
+    params = _cached(("params", base_table, column), fit_reference)
     if params is None:
         return None
 
-    with _cache_lock:
-        curve = _density_cache.get(curve_key, False)
-    if curve is False:
-        curve = node_density(drift.generate_value_masses("node", column), params)
-        with _cache_lock:
-            _density_cache[curve_key] = curve
+    def curve_for_node():
+        return node_density(drift.generate_value_masses("node", column), params)
+
+    curve = _cached(("curve", base_table, node_table, column), curve_for_node)
 
     return {"grid": params["grid"], "bandwidth": params["bandwidth"], "root": params["root_curve"], "node": curve}
+
+
+def _is_dropped(pgraph, node_table, base_table, column):
+    """Whether the column is gone from the node, or from the base it is measured from."""
+    node_removed = _node_distortion_of(pgraph, node_table)["structural"]["removed"]
+    base_removed = _node_distortion_of(pgraph, base_table)["structural"]["removed"]
+    return column in node_removed or column in base_removed
+
+
+def _measure_from_base(drift, node_table, base_table, column, kind):
+    """
+    One column's drift and edit facts measured afresh from a base other than root.
+    :return: (the column's drift, the edit facts)
+    """
+    measured_facts = measure_edit_facts(drift, [column])
+    check_row_identity(measured_facts)
+
+    if node_table == base_table:
+        # Measured against itself: exactly zero, as root is against root
+        present = drift.generate_present_cells("reference").get(column, 0)
+        result = _result(kind, 0.0, present, present)
+    elif kind == NUMERIC:
+        result = column_distortion(drift.generate_numeric_drift(column), kind)
+    else:
+        result = column_distortion(drift.generate_categorical_drift(column), kind)
+
+    return result, edit_facts(measured_facts)
 
 
 def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
@@ -893,7 +1023,7 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     """
     from app import engine
 
-    root_table = pgraph.root_node
+    root_table = pgraph.root_table_name
     base_table = base_table or root_table
     kinds = root_kinds(root_table)
     if column not in kinds:
@@ -901,29 +1031,19 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
 
     # Kinds stay root's for every reference, so a column cannot switch statistics with the reference
     kind = kinds[column]
-    distortion = _node_distortion_of(pgraph, node_table)
-    dropped = (column in distortion["structural"]["removed"]
-               or column in _node_distortion_of(pgraph, base_table)["structural"]["removed"])
-
     drift = DriftSQL(engine, base_table, node_table, {column: kind})
+    dropped = _is_dropped(pgraph, node_table, base_table, column)
+
     if base_table == root_table:
         # Read off what the node already carries, so these match the drift shown everywhere else
-        result, facts = distortion["columns"][column], distortion["facts"]
+        distortion = _node_distortion_of(pgraph, node_table)
+        result = distortion["columns"][column]
+        facts = distortion["facts"]
     elif dropped:
         result = _result(kind, None, 0, 0, "column removed")
         facts = {"rows_root": 0, "rows_removed": 0, "cells_changed": {}}
     else:
-        measured_facts = measure_edit_facts(drift, [column])
-        check_row_identity(measured_facts)
-        if node_table == base_table:
-            # Measured against itself: exactly zero, as root is against root
-            present = drift.generate_present_cells("reference").get(column, 0)
-            result = _result(kind, 0.0, present, present)
-        elif kind == NUMERIC:
-            result = column_distortion(drift.generate_numeric_drift(column), kind)
-        else:
-            result = column_distortion(drift.generate_categorical_drift(column), kind)
-        facts = edit_facts(measured_facts)
+        result, facts = _measure_from_base(drift, node_table, base_table, column, kind)
 
     payload = {"node": node_table, "base": base_table, "column": column, "kind": kind, "distortion": result,
                "rows_root": facts["rows_root"], "rows_removed": facts["rows_removed"],
@@ -937,7 +1057,9 @@ def drift_detail(pgraph, node_table, column, keep=None, base_table=None):
     else:
         detail = categorical_column_detail(drift.generate_category_shares(column))
 
-    path = [pgraph.node_map[table] for table in pgraph.path_between(base_table, node_table)]
+    path = []
+    for table in pgraph.path_between(base_table, node_table):
+        path.append(pgraph.node_map[table])
     acted_on = acted_on_column(path, column)
 
     flows = None

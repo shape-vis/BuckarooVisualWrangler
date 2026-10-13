@@ -27,24 +27,29 @@ function TableStatus() {
     );
 }
 
-export default function Header( { onReset} ) {
-  onReset = onReset || (() => {});
+// The app's name and logo; clicking it goes back to the start
+function AppTitle( { onReset, logoHeight } ) {
+    return (
+        <h1 onClick={ onReset }>
+            Buckaroo Visual Wrangler{" "}
+            <img
+                src="/images/favicon/favicon-96x96.png"
+                height={logoHeight}
+                alt="Buckaroo Logo"
+            />
+        </h1>
+    );
+}
+
+export default function Header( { onReset = () => {} } ) {
   return (
     <div id="header" className="header">
-      <h1 onClick={ onReset }>
-        Buckaroo Visual Wrangler{" "}
-        <img
-          src="/images/favicon/favicon-96x96.png"
-          height="40"
-          alt="Buckaroo Logo"
-        />
-      </h1>
+      <AppTitle onReset={onReset} logoHeight="40" />
     </div>
   );
 }
 
-export function BuckarooHeader( { onReset} ) {
-    onReset = onReset || (() => {});
+export function BuckarooHeader( { onReset = () => {} } ) {
     const { openViews, toggleView } = useContext(ViewContext);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection, repairLocked } = useRepair();
@@ -61,14 +66,7 @@ export function BuckarooHeader( { onReset} ) {
 
     return (
         <div id="header">
-            <h1 onClick={ onReset }>
-                Buckaroo Visual Wrangler{" "}
-                <img
-                    src="/images/favicon/favicon-96x96.png"
-                    height="24"
-                    alt="Buckaroo Logo"
-                />
-            </h1>
+            <AppTitle onReset={onReset} logoHeight="24" />
             <TableStatus />
             {/* Only offered while two nodes are paired: a shift-clicked selection A and the current node */}
             {comparisonPair && (
@@ -83,8 +81,20 @@ export function BuckarooHeader( { onReset} ) {
             )}
             <div className="navButtonContainer">
                 {/* Each toggles its view; both can be open at once, side by side */}
-                <NavButton onClick={() => toggleView('graph')} isSelected={openViews.includes('graph')} icon={<img src="/images/icons/pgraphlogo.svg" alt="" className="navButtonSvgIcon" />}>Provenance Graph</NavButton>
-                <NavButton onClick={() => toggleView('plots')} isSelected={openViews.includes('plots')} icon={<img src="/images/icons/plotlogo.svg" alt="" className="navButtonSvgIcon" />}> Plots </NavButton>
+                <NavButton
+                    onClick={() => toggleView('graph')}
+                    isSelected={openViews.includes('graph')}
+                    icon={<img src="/images/icons/pgraphlogo.svg" alt="" className="navButtonSvgIcon" />}
+                >
+                    Provenance Graph
+                </NavButton>
+                <NavButton
+                    onClick={() => toggleView('plots')}
+                    isSelected={openViews.includes('plots')}
+                    icon={<img src="/images/icons/plotlogo.svg" alt="" className="navButtonSvgIcon" />}
+                >
+                    {" Plots "}
+                </NavButton>
             </div>
             <div className="headerActions">
                 <button
@@ -115,8 +125,8 @@ export function BuckarooHeader( { onReset} ) {
                     <span className="btn-icon">&#8618;</span>
                     Redo
                 </button>
-                <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>
-                <IconButton onClick={handleBack} title="Home">&#8962;</IconButton>
+                <IconButton onClick={() => setSettingsOpen(true)} title="Settings" ariaLabel="Settings">&#9881;</IconButton>
+                <IconButton onClick={handleBack} title="Home" ariaLabel="Home">&#8962;</IconButton>
             </div>
             <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>

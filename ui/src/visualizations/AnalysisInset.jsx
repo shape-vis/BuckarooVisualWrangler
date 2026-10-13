@@ -10,8 +10,9 @@
 import * as d3 from "d3";
 import { useState } from "react";
 import { useStore, useViewport } from "@xyflow/react";
-import { AXIS_BOTTOM, AXIS_LEFT, ROOT_COLOR, analysisTooltip, driftOf, errorOf, isPlotted } from "./analysisLayout.js";
-import { nodeName } from "../utils/comparison.js";
+import {
+    AXIS_BOTTOM, AXIS_LEFT, ROOT_COLOR, analysisTooltip, driftOf, errorOf, isInRegion, isPlotted, plotLabel, spacedTicks,
+} from "./analysisLayout.js";
 import { hideTooltip, moveTooltip, showTooltip } from "../utils/visCommon.jsx";
 
 // The panel's frame, and inside it the plot's margins: room for the tick labels on the left and bottom
@@ -24,20 +25,26 @@ const SPREAD_REACH = 2 * DOT_R + 8;
 const TOOLBAR_ROOM = 112;
 const MARGIN = 14;
 
-const clamp = (value, lo, hi) => Math.min(Math.max(value, lo), Math.max(lo, hi));
-const labelOf = (node) => (node.type === "collapsedNode"
-    ? `${nodeName(node.data.head)}…${nodeName(node.data.tail)}`
-    : nodeName(node.id));
+/* Like the shared clamp, except that when the range is empty - a canvas smaller than the panel - the low end
+   wins, so the panel stays on screen at the top left */
+function clampPreferringLow(value, lo, hi) {
+    return Math.min(Math.max(value, lo), Math.max(lo, hi));
+}
 
 /* Where the panel opens: across the canvas from the box, so the leader lines have room and the panel covers
    none of what it details. Kept off the axes, and off the toolbar at the top right. */
 function placement(box, canvas, size, axisLeft) {
     const right = (box.left + box.right) / 2 < canvas.width / 2;
     const below = (box.top + box.bottom) / 2 < canvas.height / 2;
-    return {
-        left: right ? canvas.width - size.width - MARGIN : axisLeft + MARGIN,
-        top: below ? canvas.height - AXIS_BOTTOM - size.height - MARGIN : (right ? TOOLBAR_ROOM : MARGIN),
-    };
+
+    let left = axisLeft + MARGIN;
+    if (right) left = canvas.width - size.width - MARGIN;
+
+    let top = MARGIN;
+    if (below) top = canvas.height - AXIS_BOTTOM - size.height - MARGIN;
+    else if (right) top = TOOLBAR_ROOM;
+
+    return { left, top };
 }
 
 /* The two leader lines: the edges of the outline around both the box and the panel that run from one to the
@@ -83,15 +90,20 @@ function fitted(values, [boxLo, boxHi]) {
     return [lo - margin, hi + margin];
 }
 
-// Ticks across a short range, at the precision their spacing needs. Neither drift nor error goes below zero.
-function ticksOf(scale, count, asPercent) {
+// Ticks across a scale's short range, each with where it falls in the panel
+function ticksOf(scale, count, asPercentage) {
     const [lo, hi] = scale.domain();
-    const values = d3.ticks(lo, hi, count).filter((value) => value >= 0);
-    const step = values.length > 1 ? values[1] - values[0] : hi - lo;
-    const format = asPercent
-        ? (value) => `${(value * 100).toFixed(Math.max(0, d3.precisionFixed(step * 100)))}%`
-        : d3.format(`.${Math.max(0, d3.precisionFixed(step))}f`);
-    return values.map((value) => ({ value, at: scale(value), label: format(value) }));
+    return spacedTicks(lo, hi, count, asPercentage).map((tick) => ({ ...tick, at: scale(tick.value) }));
+}
+
+/* The points that fanned-out dots share, once each: several dots spread around one point all carry it as
+   their anchor */
+function sharedAnchors(dots) {
+    const byPlace = new Map();
+    for (const dot of dots) {
+        if (dot.anchor) byPlace.set(`${dot.anchor.x},${dot.anchor.y}`, dot.anchor);
+    }
+    return [...byPlace.values()];
 }
 
 /**
@@ -119,13 +131,13 @@ export default function AnalysisInset({
     };
 
     const size = {
-        width: Math.round(clamp(canvas.width * 0.42, 280, 440)),
-        height: Math.round(clamp(canvas.height * 0.5, 230, 340)),
+        width: Math.round(clampPreferringLow(canvas.width * 0.42, 280, 440)),
+        height: Math.round(clampPreferringLow(canvas.height * 0.5, 230, 340)),
     };
     // Placed once, when the inset opens, and moved only by the reader dragging its header
     const [position, setPosition] = useState(() => placement(box, canvas, size, scales.axisLeft ?? AXIS_LEFT));
-    const left = clamp(position.left, 4, canvas.width - size.width - 4);
-    const top = clamp(position.top, 4, canvas.height - size.height - 4);
+    const left = clampPreferringLow(position.left, 4, canvas.width - size.width - 4);
+    const top = clampPreferringLow(position.top, 4, canvas.height - size.height - 4);
     const panel = { left, top, right: left + size.width, bottom: top + size.height };
 
     const startDrag = (event) => {
@@ -148,11 +160,7 @@ export default function AnalysisInset({
     };
 
     const plotted = nodes.filter(isPlotted);
-    const inside = plotted.filter((node) => {
-        const drift = driftOf(node);
-        const error = errorOf(node, metric);
-        return drift >= region.x[0] && drift <= region.x[1] && error >= region.y[0] && error <= region.y[1];
-    });
+    const inside = plotted.filter((node) => isInRegion(node, region, metric));
 
     // The nodes in the box, drawn large inside the panel
     const plotWidth = size.width;
@@ -175,6 +183,8 @@ export default function AnalysisInset({
 
     const lines = leaderLines(box, panel);
     const clipId = "analysis-inset-clip";
+    const fannedDots = dots.filter((dot) => dot.anchor);
+    const anchors = sharedAnchors(dots);
 
     return (
         <>
@@ -217,13 +227,14 @@ export default function AnalysisInset({
                                   stroke={colors?.get(edge.target) ?? ROOT_COLOR}/>
                         ))}
                         {/* Each fanned-out dot's line back to the point it shares */}
-                        {dots.filter((dot) => dot.anchor).map((dot) => (
+                        {fannedDots.map((dot) => (
                             <line key={`spoke-${dot.node.id}`} className="analysis-inset-spoke"
                                   x1={dot.anchor.x} y1={dot.anchor.y} x2={dot.at.x} y2={dot.at.y}/>
                         ))}
-                        {[...new Map(dots.filter((dot) => dot.anchor).map((dot) => [`${dot.anchor.x},${dot.anchor.y}`, dot.anchor])).values()]
-                            .map((anchor) => <circle key={`anchor-${anchor.x},${anchor.y}`} className="analysis-inset-anchor"
-                                                      cx={anchor.x} cy={anchor.y} r={2.5}/>)}
+                        {anchors.map((anchor) => (
+                            <circle key={`anchor-${anchor.x},${anchor.y}`} className="analysis-inset-anchor"
+                                    cx={anchor.x} cy={anchor.y} r={2.5}/>
+                        ))}
                     </g>
 
                     {dots.map(({ node, at }) => {
@@ -244,7 +255,7 @@ export default function AnalysisInset({
                                 {role === "current" && <circle className="analysis-inset-ring analysis-inset-ring--current" r={DOT_R + 4}/>}
                                 {role === "selection-a" && <circle className="analysis-inset-ring analysis-inset-ring--selection-a" r={DOT_R + 4}/>}
                                 <circle r={DOT_R} fill={colors?.get(node.id) ?? ROOT_COLOR}/>
-                                <text x={DOT_R + 5} y={-DOT_R - 1}>{labelOf(node)}</text>
+                                <text x={DOT_R + 5} y={-DOT_R - 1}>{plotLabel(node)}</text>
                             </g>
                         );
                     })}

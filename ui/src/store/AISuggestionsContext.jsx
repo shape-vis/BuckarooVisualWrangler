@@ -22,9 +22,9 @@ export function AISuggestionsProvider({ children }) {
     const [error, setError] = useState(null);
     const [notice, setNotice] = useState(null);             // the model's "nothing to repair"
 
-    // Only the newest request may write state; an aborted one must not report on a node it was not asked about
+    /* The newest request's AbortController. Only that request may write state; an aborted one must not report
+       on a node it was not asked about. */
     const requestRef = useRef(null);
-    const revisionRef = useRef(0);
 
     useEffect(() => {
         let stale = false;
@@ -44,7 +44,7 @@ export function AISuggestionsProvider({ children }) {
         requestRef.current?.abort();
         const controller = new AbortController();
         requestRef.current = controller;
-        const revision = ++revisionRef.current;
+        const isNewest = () => requestRef.current === controller;
 
         dismissMessages();
         setPendingNode(nodeTable);
@@ -53,7 +53,7 @@ export function AISuggestionsProvider({ children }) {
 
         try {
             const result = await requestAiSuggestions(nodeTable, controller.signal);
-            if (revision !== revisionRef.current) return;
+            if (!isNewest()) return;
             if (!result?.success) {
                 setError(result?.error || "Could not get suggestions.");
                 return;
@@ -68,7 +68,7 @@ export function AISuggestionsProvider({ children }) {
             if (e.name === "AbortError") return;
             setError(String(e.message || e));
         } finally {
-            if (revision === revisionRef.current) {
+            if (isNewest()) {
                 setBusy(false);
                 setPendingNode(null);
             }
@@ -76,22 +76,12 @@ export function AISuggestionsProvider({ children }) {
         }
     }, [addLoader, removeLoader, refreshGraph, dismissMessages]);
 
-    /* Drop any request still in flight and its messages - when the ground it was asked on moves. Candidates
-       already staged are left alone: each stays until it is accepted or declined. */
-    const invalidate = useCallback(() => {
-        requestRef.current?.abort();
-        revisionRef.current += 1;
-        setBusy(false);
-        setPendingNode(null);
-        dismissMessages();
-    }, [dismissMessages]);
-
     return (
         <AISuggestionsContext.Provider value={{
             configured,
             busy, pendingNode,
             error, notice, dismissMessages,
-            requestSuggestions, invalidate,
+            requestSuggestions,
         }}>
             {children}
         </AISuggestionsContext.Provider>

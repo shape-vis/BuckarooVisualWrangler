@@ -16,6 +16,16 @@ const MIN_VIEW_WIDTH = 280;
 const KEY_STEP = 0.02;
 export const DEFAULT_SPLIT = 0.5;
 
+// How far each arrow key moves the divider; any other key leaves it
+const KEY_STEPS = { ArrowLeft: -KEY_STEP, ArrowRight: KEY_STEP };
+
+// The width the two views have between them, read from either side of the divider
+function viewsWidth(divider) {
+    const leftWidth = divider.previousElementSibling.getBoundingClientRect().width;
+    const rightWidth = divider.nextElementSibling.getBoundingClientRect().width;
+    return leftWidth + rightWidth;
+}
+
 /**
  * Props:
  *  - split: the left view's share of the two views' width, between 0 and 1
@@ -36,8 +46,7 @@ export default function SplitDivider({ split, onSplit }) {
         if (event.button !== 0) return;
         event.preventDefault();
         const divider = event.currentTarget;
-        const total = divider.previousElementSibling.getBoundingClientRect().width
-            + divider.nextElementSibling.getBoundingClientRect().width;
+        const total = viewsWidth(divider);
         divider.setPointerCapture(event.pointerId);
         dragRef.current = { startX: event.clientX, startSplit: split, total, clamp: clampFor(total) };
     }, [split]);
@@ -57,13 +66,12 @@ export default function SplitDivider({ split, onSplit }) {
     }, []);
 
     const onKeyDown = (event) => {
-        const step = event.key === "ArrowLeft" ? -KEY_STEP : event.key === "ArrowRight" ? KEY_STEP : 0;
+        const step = KEY_STEPS[event.key] ?? 0;
         if (!step) return;
         event.preventDefault();
-        const divider = event.currentTarget;
-        const total = divider.previousElementSibling.getBoundingClientRect().width
-            + divider.nextElementSibling.getBoundingClientRect().width;
-        onSplit(clampFor(total)(split + step));
+        const total = viewsWidth(event.currentTarget);
+        const clamp = clampFor(total);
+        onSplit(clamp(split + step));
     };
 
     return (

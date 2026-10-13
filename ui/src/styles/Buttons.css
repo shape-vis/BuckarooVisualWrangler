@@ -101,10 +101,11 @@
 
 .navButton--selected {
   background-color: #ffffff;
-  border-color: #e0e0e0;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   z-index: 1;
   position: relative;
+  /* !important: the tab-shape rules above drop a side's border with selectors as specific as (0,4,0), and the
+     selected tab has to show all four */
   border: 1.5px solid #e0e0e0 !important;
 }
 

@@ -1,10 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Data Wrangling Functions for Buckaroo Visual Wrangler
 # ─────────────────────────────────────────────────────────────────────────────
-from typing import Dict, Any, List, Tuple
-from sqlalchemy import text, Engine
+from typing import List, Tuple
+from sqlalchemy import text
 from app import engine
-from sqlalchemy import inspect
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper Functions
@@ -15,22 +14,15 @@ _NUMERIC_TYPES = {
     "decimal", "numeric", "real", "double precision"
 }
 
-def get_table_dtypes(target_table_name, engine):
-    """Build a dtype dict for to_sql() by reflecting the target table's real column types."""
-    inspector = inspect(engine)
-    columns = inspector.get_columns(target_table_name)
-    # col["type"] is already a SQLAlchemy type instance we can hand straight to to_sql
-    return {col["name"]: col["type"] for col in columns}
-
 def _is_numeric(conn, col: str, table_name: str) -> bool:
     """Check if a column is numeric."""
-    sql = f"""
+    sql = """
         SELECT data_type
         FROM information_schema.columns
-        WHERE table_name = '{table_name}'
+        WHERE table_name = :table_name
           AND column_name = :col
     """
-    dtype = conn.execute(text(sql), {"col": col}).scalar_one()
+    dtype = conn.execute(text(sql), {"table_name": table_name, "col": col}).scalar_one()
     return dtype in _NUMERIC_TYPES
 
 
@@ -105,24 +97,53 @@ def _compute_imputation_value(conn, table: str, col: str, is_numeric: bool):
         ).scalar()
 
 
-def _get_numeric_bin_bounds(scale, bin_idx: int) -> Tuple[float, float]:
+def imputation_value(table: str, col: str):
     """
-    Extract (low, high) boundaries from numeric scale at given index.
-
-    Parameters
-    ----------
-    scale : dict
-        Scale dictionary with 'numeric' key containing bin boundaries
-    bin_idx : int
-        Index of the bin
+    The value an impute of this column would fill with - the same one impute_by_ids computes, so a check made
+    before a wrangle and the wrangle itself cannot disagree.
 
     Returns
     -------
-    Tuple[float, float]
-        (low_bound, high_bound) for the bin
+    Any
+        Mean value for numeric columns, mode (most frequent) for categorical, or None when the column has no
+        clean values to compute one from
     """
-    bounds = scale["numeric"][int(bin_idx)]
-    return bounds["x0"], bounds["x1"]
+    with engine.connect() as conn:
+        is_numeric = _is_numeric(conn, col, table)
+        return _compute_imputation_value(conn, table, col, is_numeric)
+
+
+def flagged_row_ids(table: str, columns: List[str], error_type: str) -> List[int]:
+    """
+    The "ID"s of the rows the errors table flags with one error type in any of the given columns, ascending.
+    Joining back to the table drops any flag whose row_id no longer names a live row.
+
+    Parameters
+    ----------
+    table : str
+        Table name
+    columns : List[str]
+        The columns whose flags count
+    error_type : str
+        The error type the flags must carry
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(f'''
+                SELECT DISTINCT e.row_id
+                FROM "{_get_errors_table(table)}" e
+                JOIN "{table}" t ON t."ID" = e.row_id
+                WHERE e.column_id = ANY(:columns) AND e.error_type = :error_type
+                ORDER BY e.row_id
+            '''),
+            {"columns": columns, "error_type": error_type}
+        ).fetchall()
+
+    # Cast explicitly - psycopg2 cannot adapt numpy integer types on the way back out
+    row_ids = []
+    for row in rows:
+        row_ids.append(int(row[0]))
+    return row_ids
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -132,9 +153,6 @@ def _get_numeric_bin_bounds(scale, bin_idx: int) -> Tuple[float, float]:
 def remove_rows_by_ids(table: str, ids: List[int]) -> int:
     """
     Remove rows by ID in-place (for scatterplot selections).
-
-    Only removes rows that have errors in the errors table.
-    Uses errors table as single source of truth for error detection.
 
     Parameters
     ----------
@@ -150,8 +168,6 @@ def remove_rows_by_ids(table: str, ids: List[int]) -> int:
     """
     if not ids:
         return 0
-
-    # errors_table = _get_errors_table(table)
 
     with engine.begin() as conn:
         conn.execute(
@@ -203,382 +219,3 @@ def impute_by_ids(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
         )
 
         return len(ids), result.rowcount
-
-
-def delete_column(table: str, column: str) -> int:
-    """
-    Delete a column from a table in-place.
-
-    Parameters
-    ----------
-    table : str
-        Table name to modify
-    column : str
-        Column name to delete
-
-    Returns
-    -------
-    int
-        Number of columns remaining in table
-    """
-    with engine.begin() as conn:
-        # Drop the column
-        conn.execute(
-            text(f'ALTER TABLE "{table}" DROP COLUMN IF EXISTS "{column}"')
-        )
-
-        # Count remaining columns
-        result = conn.execute(
-            text("""
-                SELECT COUNT(*)
-                FROM information_schema.columns
-                WHERE table_name = :table
-            """),
-            {"table": table}
-        )
-        n_cols = result.scalar_one()
-
-    return n_cols
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 1D Bin-Based Wrangling (for 1D histogram/barchart repair workflow)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def remove_flagged_rows_in_1d_bin(
-    current_selection: dict,
-    col: str,
-    table: str,
-) -> int:
-    """
-    Remove rows in-place from a 1-D histogram bin that have quality flags.
-
-    Uses errors table as single source of truth for error detection.
-
-    Parameters
-    ----------
-    current_selection : dict
-        The selection object from 1D histogram (barchart)
-    col : str
-        Column name to wrangle
-    table : str
-        Table name to modify in-place
-
-    Returns
-    -------
-    int
-        Number of rows remaining in table
-    """
-    sel = current_selection["data"][0]
-    bin_value = sel["bin"]
-    bin_type = sel["type"]
-
-    errors_table = _get_errors_table(table)
-
-    # Get bin boundaries from scale
-    if bin_type == "numeric":
-        # For numeric bins, bin value is an index into the numeric scale array
-        x_lo, x_hi = _get_numeric_bin_bounds(current_selection["scaleX"], bin_value)
-
-        sql = f"""
-        DELETE FROM "{table}"
-        WHERE "ID" IN (
-            SELECT t."ID"
-            FROM "{table}" t
-            JOIN "{errors_table}" e ON t."ID" = e.row_id
-            WHERE t."{col}" >= :x_lo
-              AND t."{col}" <= :x_hi
-              AND e.column_id = :col_name
-        )
-        """
-        params = {"x_lo": x_lo, "x_hi": x_hi, "col_name": col}
-    else:
-        # Categorical - bin value IS the category value, not an index
-        cat_value = bin_value
-
-        sql = f"""
-        DELETE FROM "{table}"
-        WHERE "ID" IN (
-            SELECT t."ID"
-            FROM "{table}" t
-            JOIN "{errors_table}" e ON t."ID" = e.row_id
-            WHERE t."{col}" = :cat_val
-              AND e.column_id = :col_name
-        )
-        """
-        params = {"cat_val": cat_value, "col_name": col}
-
-    with engine.begin() as conn:
-        conn.execute(text(sql), params)
-        n_rows = _get_row_count(conn, table)
-
-    return n_rows
-
-
-def impute_1d_bin_in_place(
-    current_selection: dict,
-    col: str,
-    table: str,
-) -> Tuple[int, int]:
-    """
-    Impute missing values in-place in a 1-D histogram bin.
-
-    Strategy: mean for numeric, mode for categorical
-
-    Parameters
-    ----------
-    current_selection : dict
-        The selection object from 1D histogram (barchart)
-    col : str
-        Column name to impute
-    table : str
-        Table name to modify in-place
-
-    Returns
-    -------
-    Tuple[int, int]
-        (rows_examined, cells_imputed)
-    """
-    sel = current_selection["data"][0]
-    bin_value = sel["bin"]
-    bin_type = sel["type"]
-
-    with engine.begin() as conn:
-        is_numeric = _is_numeric(conn, col, table)
-
-        # Build WHERE clause for the bin
-        if bin_type == "numeric":
-            # For numeric bins, bin value is an index into the numeric scale array
-            x_lo, x_hi = _get_numeric_bin_bounds(current_selection["scaleX"], bin_value)
-            bin_where_sql = f'"{col}" >= :x_lo AND "{col}" <= :x_hi'
-            params = {"x_lo": x_lo, "x_hi": x_hi}
-        else:
-            # Categorical - bin value IS the category value, not an index
-            cat_value = bin_value
-            bin_where_sql = f'"{col}" = :cat_val'
-            params = {"cat_val": cat_value}
-
-        # Count rows in bin
-        rows_examined = conn.execute(
-            text(f'SELECT COUNT(*) FROM "{table}" WHERE {bin_where_sql}'),
-            params,
-        ).scalar_one()
-
-        if rows_examined == 0:
-            return 0, 0
-
-        # Compute imputation value
-        fill_val = _compute_imputation_value(conn, table, col, is_numeric)
-
-        # Apply imputation
-        upd_sql = text(f'''
-            UPDATE "{table}"
-            SET "{col}" = :fill_val
-            WHERE {bin_where_sql}
-              AND {_missing_pred(col)}
-        ''')
-        result = conn.execute(upd_sql, dict(params, fill_val=fill_val))
-        cells_imputed = result.rowcount
-
-    return rows_examined, cells_imputed
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 2D Bin-Based Wrangling (for 2D histogram/heatmap repair workflow)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def remove_flagged_rows_in_bin(
-    current_selection: dict,
-    cols: list[str],
-    table: str,
-) -> int:
-    """
-    Remove rows in-place from a 2-D bin that have quality flags.
-
-    Removes rows that:
-    1. Fall inside the selected 2-D histogram bin
-    2. Have any error in the errors table for either X or Y column
-
-    Uses errors table as single source of truth for error detection.
-
-    Parameters
-    ----------
-    current_selection : dict
-        The object returned by the histogram endpoint
-    cols : list[str]
-        [x_col, y_col] (x = numeric, y = categorical)
-    table : str
-        Table name to modify in-place
-
-    Returns
-    -------
-    int
-        Number of rows remaining in table
-    """
-    sel   = current_selection["data"][0]
-    x_bin = sel["xBin"]
-    y_val = sel["yBin"]
-
-    # Numeric x-axis boundaries (lo ≤ value < hi)
-    x_lo, x_hi = _get_numeric_bin_bounds(current_selection["scaleX"], x_bin)
-
-    errors_table = _get_errors_table(table)
-
-    # Delete rows that are in the bin AND have errors in the errors table
-    sql = f"""
-    DELETE FROM "{table}"
-    WHERE "ID" IN (
-        SELECT t."ID"
-        FROM "{table}" t
-        JOIN "{errors_table}" e ON t."ID" = e.row_id
-        WHERE
-            /* Bin filter */
-            t."{cols[0]}" >= :x_lo
-            AND t."{cols[0]}" <= :x_hi
-            AND t."{cols[1]}" = :y_val
-
-            /* Has error in either X or Y column */
-            AND e.column_id IN (:col_x, :col_y)
-    )
-    """
-
-    with engine.begin() as conn:
-        conn.execute(
-            text(sql),
-            {
-                "x_lo": x_lo,
-                "x_hi": x_hi,
-                "y_val": y_val,
-                "col_x": cols[0],
-                "col_y": cols[1]
-            }
-        )
-        n_rows = _get_row_count(conn, table)
-
-    return n_rows
-
-
-def _bin_predicate(
-    *,
-    bin_val: Any,
-    bin_type: str,
-    scale: Dict[str, Any],
-    col: str,
-    params: Dict[str, Any],
-    pfx: str,
-) -> str:
-    """
-    Return a SQL WHERE-clause fragment that matches rows in a histogram bin.
-    Adds bound parameters to params dict.
-    """
-    if bin_type == "numeric":
-        if bin_val == 0:  # NULL bucket
-            return _missing_pred(col)
-        edge = scale["numeric"][bin_val]
-        lo, hi = edge["x0"], edge["x1"]
-        lo_key = f"{pfx}lo"
-        hi_key = f"{pfx}hi"
-        params[lo_key], params[hi_key] = lo, hi
-        # Use inclusive upper bound for all bins to match width_bucket behavior
-        return f"\"{col}\" >= :{lo_key} AND \"{col}\" <= :{hi_key}"
-    else:  # categorical
-        if bin_val == "__NULL__":
-            return _missing_pred(col)
-        key = f"{pfx}_cat"
-        params[key] = bin_val
-        return f"\"{col}\" = :{key}"
-
-
-def impute_bin_in_place(
-    current_selection: Dict[str, Any],
-    cols: List[str],
-    table: str,
-) -> Tuple[int, int]:
-    """
-    Impute missing values in-place in a selected 2-D histogram bin.
-
-    Imputation strategy:
-    - Numeric columns: mean (AVG)
-    - Categorical columns: mode (most-common non-NULL)
-
-    Parameters
-    ----------
-    current_selection : Dict[str, Any]
-        Histogram bin selection from frontend
-    cols : List[str]
-        [x_column, y_column]
-    table : str
-        Table name to modify in-place
-
-    Returns
-    -------
-    Tuple[int, int]
-        (rows_examined, cells_imputed)
-    """
-    if len(cols) != 2:
-        raise ValueError("cols must be exactly [x_column, y_column]")
-
-    x_col, y_col = cols
-    sel = current_selection["data"][0]
-    params: Dict[str, Any] = {}
-
-    # Build WHERE predicate for selected bin
-    where_parts = [
-        _bin_predicate(
-            bin_val=sel["xBin"],
-            bin_type=sel["xType"],
-            scale=current_selection["scaleX"],
-            col=x_col,
-            params=params,
-            pfx="x",
-        ),
-        _bin_predicate(
-            bin_val=sel["yBin"],
-            bin_type=sel["yType"],
-            scale=current_selection["scaleY"],
-            col=y_col,
-            params=params,
-            pfx="y",
-        ),
-    ]
-    bin_where_sql = " AND ".join(where_parts)
-
-    with engine.begin() as conn:
-        # Count rows in bin
-        rows_examined = conn.execute(
-            text(f'SELECT COUNT(*) FROM "{table}" WHERE {bin_where_sql}'),
-            params,
-        ).scalar_one()
-
-        if rows_examined == 0:
-            return 0, 0
-
-        # Compute imputation values for each column
-        modes_or_means: Dict[str, Any] = {}
-        for col in cols:
-            is_numeric = _is_numeric(conn, col, table)
-            val = _compute_imputation_value(conn, table, col, is_numeric)
-
-            # Fallback if whole column is NULL
-            if val is None:
-                val = conn.execute(
-                    text(f'SELECT "{col}" FROM "{table}" WHERE "{col}" IS NOT NULL LIMIT 1')
-                ).scalar()
-
-            modes_or_means[col] = val
-
-        # Apply imputation column-by-column
-        cells_imputed = 0
-        for col in cols:
-            upd_sql = text(
-                f'''
-                UPDATE "{table}"
-                SET    "{col}" = :fill_val
-                WHERE  {bin_where_sql}
-                  AND  {_missing_pred(col)}
-                '''
-            )
-            rc = conn.execute(upd_sql, dict(params, fill_val=modes_or_means[col])).rowcount
-            cells_imputed += rc
-
-    return rows_examined, cells_imputed

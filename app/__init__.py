@@ -1,9 +1,8 @@
 #Buckaroo Project - June 1, 2025
 #This file allows the app to use packages for maintainability
 
-
-#make it able to read the variables from the .env file
 import builtins
+import json
 import logging
 import os
 import pkgutil
@@ -11,8 +10,9 @@ import pkgutil
 import psycopg2
 from dotenv import load_dotenv
 from flask import Flask
-from sqlalchemy import create_engine
-import json
+from sqlalchemy import URL, create_engine
+
+from app.db_utils.bootstrap import create_database_if_not_exists
 
 
 #This is so that that whatever we print in the server comes out blue in the terminal
@@ -30,24 +30,6 @@ class _WhiteFormatter(logging.Formatter):
 _werkzeug_handler = logging.StreamHandler()
 _werkzeug_handler.setFormatter(_WhiteFormatter('%(message)s'))
 logging.getLogger('werkzeug').handlers = [_werkzeug_handler]
-
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-
-# Function to create the database if it does not exist
-# This function checks if the database exists and creates it if it does not
-def create_database_if_not_exists(conn, db_name):
-    conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-    cur = conn.cursor()
-
-    # Check if the database exists
-    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
-    exists = cur.fetchone()
-
-    if not exists:
-        cur.execute(f"CREATE DATABASE {db_name}")
-
-    cur.close()
-
 
 # Function to load database connection information from a JSON file or prompt the user
 def load_database_info():
@@ -87,54 +69,44 @@ def load_database_info():
 
 
 
-#load the .env file and read the different variables in there and them in the environment variables for this proccess
+# Read the variables in the .env file into this process's environment
 load_dotenv()
 
 app = Flask(__name__,
             static_folder="../ui/dist",
             static_url_path="/")
 
-#sets the URL to the DB url specified for the local postgresql db on my local machine specified in .env
-
 host, port, user, password, db_name = load_database_info()
 
-"""
-we use psycopg2 directly for the initial connection
- but only for the one-time database creation check at startup
-"""
+# psycopg2 directly, only for the one-time check at startup that the database exists
 connection = psycopg2.connect(host=host, port=port, user=user, password=password)
-
-# Create the database if it does not exist
 create_database_if_not_exists(connection, db_name)
 
-
-
-"""
- then we use SQLAlchemy (create_engine) for everything else
- this is the engine that gets passed around to fetch_sql, execute_sql, 
- pd.read_sql_query, and .to_sql() throughout routes.py, plot_routes.py, and db_operations.py
-"""
+# SQLAlchemy for everything else: this engine is what fetch_sql, execute_sql, pd.read_sql_query and .to_sql()
+# are handed throughout the app
 print(f"Connecting to database: {db_name}")
 
-"""
- The connection pool is sized for the server's worker threads at full tilt - 8 query workers and 4 node builds,
- see app/server_utils/workers.py - plus the requests the threaded dev server is serving at the same moment.
- SQLAlchemy's default of 5 would leave the workers queueing for connections.
-
- Every connection also gets more working memory than Postgres' default of 4MB. Error detection, drift and the
- compare plots sort and hash whole columns, and at 4MB a quarter-million-row column spills to disk part way.
-"""
+# The connection pool is sized for the server's worker threads at full tilt - 8 query workers and 4 node builds,
+# see app/server_utils/workers.py - plus the requests the threaded dev server is serving at the same moment.
+# SQLAlchemy's default of 5 would leave the workers queueing for connections.
+#
+# Every connection also gets more working memory than Postgres' default of 4MB. Error detection, drift and the
+# compare plots sort and hash whole columns, and at 4MB a quarter-million-row column spills to disk part way.
 WORK_MEM = "64MB"
-engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}",
+
+# URL.create rather than a formatted string, so a password holding "@" or "/" still reads as a password
+database_url = URL.create("postgresql+psycopg2", username=user, password=password, host=host, port=int(port),
+                          database=db_name)
+engine = create_engine(database_url,
                        pool_size=16, max_overflow=8,
                        connect_args={"options": f"-c work_mem={WORK_MEM}"})
 
 from app.db_utils.db_functions_sql import DBOperations
 db_operations = DBOperations(engine)
 
-""" Global vars to use throughout session """
-wrangle_occurred = False
-app.pgraph_for_session = None
+# The session's provenance graph - a PGraph once a file has been uploaded, None until then. It lives on the app
+# package, which is what every module reads it from: read it through service_helpers.session_graph.
+pgraph_for_session = None
 
 #this automatically imports any new route files added to the app/routes dir
 import app.routes as _routes_pkg

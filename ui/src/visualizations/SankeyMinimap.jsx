@@ -5,9 +5,12 @@
 // pointer handled here rather than by a brush: a brush draws selections, and this box only ever moves or resizes.
 
 import {useEffect, useRef, useState} from "react";
-import {REMOVED_LABEL} from "../utils/comparison.js";
 import {useHostWindow} from "../store/HostWindowContext.jsx";
-import {FLOW_COLORS, flowKind, isStub, markedFlow, panRange, ribbonPath, ribbonPoint} from "./flowLayout.js";
+import {DRIFT_COLOR} from "../store/errorColors.js";
+import {clamp, wheelPixels} from "../utils/visCommon.jsx";
+import {
+    FLOW_COLORS, flowKind, markedFlow, nodeBarColor, panRange, ribbonOpacity, ribbonPath, ribbonPoint,
+} from "./flowLayout.js";
 
 const WIDTH = 132;
 // The outer columns' bars, and root's boxes in the middle
@@ -17,8 +20,6 @@ const ROOT = 28;
 const EDGE = 6;
 // The box never shrinks below this, so there is always something to grab
 const MIN_BOX = 24;
-// Drift is teal wherever it is drawn - never red
-const BOX_COLOR = "#0f766e";
 const HANDLE = 8;
 
 const ROOT_LEFT = (WIDTH - ROOT) / 2;
@@ -54,8 +55,8 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
     const hostWindow = useHostWindow();
     const svgRef = useRef(null);
     const [f0, f1] = range ?? [0, 1];
-    const H = frame.height;
-    const minSpan = Math.min(1, MIN_BOX / H);
+    const sankeyHeight = frame.height;
+    const minSpan = Math.min(1, MIN_BOX / sankeyHeight);
 
     /* What a press would do where the pointer is - "top", "bottom", "move" or "jump" - which sets the cursor.
        While dragging it is "dragging-" and what the drag is doing. */
@@ -82,10 +83,10 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
     const fractionAt = (event) => {
         const rect = svgRef.current.getBoundingClientRect();
         const scale = rect.height / (svgRef.current.clientHeight || rect.height) || 1;
-        return ((event.clientY - rect.top) / scale - frame.top) / H;
+        return ((event.clientY - rect.top) / scale - frame.top) / sankeyHeight;
     };
     const modeAt = (at) => {
-        const edge = EDGE / H;
+        const edge = EDGE / sankeyHeight;
         // A box short enough for both edges to be in reach gives each the half nearer it
         if (Math.abs(at - f0) <= edge && at < (f0 + f1) / 2) return "top";
         if (Math.abs(at - f1) <= edge) return "bottom";
@@ -103,7 +104,7 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
         // A press outside the box brings the box there, centred on it, and a drag carries on from there
         if (next === "jump") {
             const span = f1 - f0;
-            const top = Math.min(Math.max(at - span / 2, 0), 1 - span);
+            const top = clamp(at - span / 2, 0, 1 - span);
             start = [top, top + span];
             send(start);
             next = "move";
@@ -124,10 +125,10 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
         const delta = at - drag.current.at;
         if (dragging === "move") {
             const span = s1 - s0;
-            const top = Math.min(Math.max(s0 + delta, 0), 1 - span);
+            const top = clamp(s0 + delta, 0, 1 - span);
             send([top, top + span]);
         } else if (dragging === "top") {
-            send([Math.min(Math.max(s0 + delta, 0), s1 - minSpan), s1]);
+            send([clamp(s0 + delta, 0, s1 - minSpan), s1]);
         } else {
             send([s0, Math.max(Math.min(s1 + delta, 1), s0 + minSpan)]);
         }
@@ -145,15 +146,14 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
     useEffect(() => {
         const svg = svgRef.current;
         const onWheel = (event) => {
-            const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : 1);
-            const next = panRange(range, pixels / H);
+            const next = panRange(range, wheelPixels(event) / sankeyHeight);
             if (next === range) return;
             event.preventDefault();
             onRange(next);
         };
         svg.addEventListener("wheel", onWheel, {passive: false});
         return () => svg.removeEventListener("wheel", onWheel);
-    }, [range, H, onRange]);
+    }, [range, sankeyHeight, onRange]);
 
     const reset = () => onRange(null);
 
@@ -167,8 +167,8 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
         return {id: side.id, color: side.color, x, y};
     }).filter(Boolean);
 
-    const boxTop = f0 * H;
-    const boxBottom = f1 * H;
+    const boxTop = f0 * sankeyHeight;
+    const boxBottom = f1 * sankeyHeight;
 
     return (
         <div className="compare-brush compare-brush--rows compare-minimap">
@@ -194,7 +194,7 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
                                 key={`${side.id}-${i}`}
                                 d={ribbonPath(r, x0, x1)}
                                 fill={FLOW_COLORS[flowKind(r)]}
-                                fillOpacity={isStub(r) ? 0.3 : flowKind(r) === "stayed" ? 0.35 : 0.7}
+                                fillOpacity={ribbonOpacity(r)}
                             />
                         ));
                     })}
@@ -205,7 +205,7 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
                     {world.sides.map((side) => [...side.targets.values()].map((n) => (
                         <rect key={`${side.id}-${n.label}`} x={FRAMES[side.id].bar} y={n.y0} width={BAR}
                               height={Math.max(0.5, n.y1 - n.y0)}
-                              fill={n.label === REMOVED_LABEL ? FLOW_COLORS.removed : "#475569"}/>
+                              fill={nodeBarColor(n)}/>
                     )))}
                     {spots.map((spot) => (
                         <circle key={spot.id} cx={spot.x} cy={spot.y} r={3} fill={spot.color} stroke="#ffffff" strokeWidth={1}/>
@@ -215,12 +215,12 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
                     {range && (
                         <>
                             <rect className="compare-minimap-shade" x={0} y={0} width={WIDTH} height={boxTop}/>
-                            <rect className="compare-minimap-shade" x={0} y={boxBottom} width={WIDTH} height={H - boxBottom}/>
+                            <rect className="compare-minimap-shade" x={0} y={boxBottom} width={WIDTH} height={sankeyHeight - boxBottom}/>
                         </>
                     )}
                     <rect
                         x={0.5} y={boxTop} width={WIDTH - 1} height={Math.max(1, boxBottom - boxTop)}
-                        fill={BOX_COLOR} fillOpacity={0.1} stroke={BOX_COLOR} strokeOpacity={0.8}
+                        fill={DRIFT_COLOR} fillOpacity={0.1} stroke={DRIFT_COLOR} strokeOpacity={0.8}
                     />
                     <Grip y={boxTop - HANDLE / 2}/>
                     <Grip y={boxBottom - HANDLE / 2}/>

@@ -8,9 +8,39 @@ import "../styles/RepairPanel.css";
 import { errorColors as ERROR_COLORS } from "../store/errorColors.js";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { nodeName } from "../utils/comparison.js";
+import { CANDIDATE_SOURCES } from "../utils/candidates.js";
 
-// What each source calls its candidates
-const SOURCE_TAGS = { repair: "Repair", ai: "AI" };
+/**
+ * The line saying what is selected: how many rows, out of how many when the table's size is known, and in
+ * which columns.
+ */
+function selectionStatus(rowIds, cols, totalRows) {
+  if (!rowIds || rowIds.length === 0) {
+    return "No selection — click a point, bin, or bar in the plots.";
+  }
+
+  const selectedText = rowIds.length.toLocaleString();
+
+  let ofTotal = "";
+  if (totalRows != null) {
+    ofTotal = ` of ${totalRows.toLocaleString()}`;
+  }
+
+  let colsText = "";
+  if (cols?.length) {
+    colsText = ` · cols: ${cols.join(", ")}`;
+  }
+
+  const statusText = `${selectedText}${ofTotal} row(s) selected${colsText}`;
+  return statusText;
+}
+
+function candidateLabel(node) {
+  const candidate = node.data.candidate ?? {};
+  const sourceTag = CANDIDATE_SOURCES[candidate.source]?.tag ?? "Candidate";
+  const candidateName = candidate.label ?? "";
+  return `${sourceTag} · ${nodeName(node.id)} · ${candidateName}`;
+}
 
 /**
  * Every candidate staged on the graph - repairs of a selection and the AI's suggestions alike - as preview
@@ -25,8 +55,6 @@ export default function RepairPanel() {
   const { serverNodesById } = usePgraph();
   // The current table's size, from the metrics its graph node already carries
   const totalRows = serverNodesById?.[tableName]?.data?.metrics?.row_count;
-
-  const hasSelection = highlightedRowIds && highlightedRowIds.length > 0;
 
   // Candidates by the node they hang off, in the order they were staged
   const groups = new Map();
@@ -45,9 +73,7 @@ export default function RepairPanel() {
 
         {/* ── Selection status ─────────────────────────────────────────── */}
         <div className="repair-selection-status">
-          {hasSelection
-            ? `${highlightedRowIds.length.toLocaleString()}${totalRows != null ? ` of ${totalRows.toLocaleString()}` : ""} row(s) selected${highlightedCols?.length ? ` · cols: ${highlightedCols.join(", ")}` : ""}`
-            : "No selection — click a point, bin, or bar in the plots."}
+          {selectionStatus(highlightedRowIds, highlightedCols, totalRows)}
         </div>
 
         {/* Nothing is repaired from a candidate until it is accepted */}
@@ -96,7 +122,7 @@ export default function RepairPanel() {
                 return (
                   <div key={node.id} className="repair-candidate">
                     <PreviewCard
-                      label={`${SOURCE_TAGS[candidate.source] ?? "Candidate"} · ${nodeName(node.id)} · ${candidate.label ?? ""}`}
+                      label={candidateLabel(node)}
                       tableName={node.id}
                       cols={candidate.cols ?? []}
                       errorColors={ERROR_COLORS}

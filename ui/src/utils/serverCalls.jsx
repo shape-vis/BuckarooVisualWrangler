@@ -1,158 +1,110 @@
 // serverCalls.jsx
 
-async function uploadFileToDB(fileToSend) {
-    const url = "/api/upload";
+/* The row range a plot covers when the user has not asked for one in Settings - see RowRangeContext */
+const DEFAULT_MIN_ID = 0;
+const DEFAULT_MAX_ID = 10000;
+
+/* Sends a request and reads the JSON reply. A failure - the server unreachable, a reply that is not JSON, or
+   an aborted request - is thrown to the caller. */
+async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    return await response.json();
+}
+
+/* What most calls here return when the request fails: nothing, once the failure is logged. */
+function returnNothing() {
+    return undefined;
+}
+
+/* What the calls whose callers show the failure return instead: the same shape a refusing server sends. */
+function failureResult(error) {
+    return { success: false, error: error.message };
+}
+
+/* Sends a request and reads the JSON reply. A failure is logged under the url and never thrown: the call
+   returns whatever onFailure makes of the error instead. */
+async function requestJson(url, options, onFailure = returnNothing) {
     try {
-        const response = await fetch(url, { method: "POST", body: fileToSend });
-        if (!response.ok) throw new Error(`Response status: ${response.status}`);
-        return response.statusText === "OK";
+        return await fetchJson(url, options);
     } catch (error) {
-        console.error(error.message);
+        console.error(`[${url}]`, error.message);
+        return onFailure(error);
     }
 }
 
-
-async function queryHistogram1d(tableName, columnName, binCount) {
-    const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: 0, max_id: 10000, bins: binCount });
-    try {
-        const response = await fetch(`/api/plots/1-d-histogram?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
+/* GET, with params as the query string when there are any */
+function getJson(path, params, onFailure) {
+    let url = path;
+    if (params) {
+        url = `${path}?${new URLSearchParams(params)}`;
     }
+    return requestJson(url, { method: "GET" }, onFailure);
 }
 
-async function queryHistogram2d(tableName, columnX, columnY, bins) {
-    const params = new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: 0, max_id: 10000, x_bins: bins, y_bins: bins });
-    try {
-        const response = await fetch(`/api/plots/2-d-histogram?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
+/* POST, with body sent as JSON when there is one. Undo, redo and reset send nothing at all. */
+function postJson(url, body, onFailure) {
+    const options = { method: "POST" };
+    if (body !== undefined) {
+        options.headers = { "Content-Type": "application/json" };
+        options.body = JSON.stringify(body);
     }
+    return requestJson(url, options, onFailure);
 }
 
-export async function queryHistogram1dRange(tableName, columnName, binCount, minId, maxId) {
-    const params = new URLSearchParams({ column: columnName, tablename: tableName, min_id: minId, max_id: maxId, bins: binCount });
-    try {
-        const response = await fetch(`/api/plots/1-d-histogram?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+
+export function queryHistogram1dRange(tableName, columnName, binCount, minId = DEFAULT_MIN_ID, maxId = DEFAULT_MAX_ID) {
+    return getJson("/api/plots/1-d-histogram", {
+        column: columnName,
+        tablename: tableName,
+        min_id: minId,
+        max_id: maxId,
+        bins: binCount,
+    });
 }
 
-export async function queryHistogram2dRange(tableName, columnX, columnY, bins, minId, maxId) {
-    const params = new URLSearchParams({ column_x: columnX, column_y: columnY, tablename: tableName, min_id: minId, max_id: maxId, x_bins: bins, y_bins: bins });
-    try {
-        const response = await fetch(`/api/plots/2-d-histogram?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+export function queryHistogram1d(tableName, columnName, binCount) {
+    return queryHistogram1dRange(tableName, columnName, binCount);
 }
 
-export async function querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples, minId, maxId) {
-    const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: minId, max_id: maxId, error_sample_count: errorSamples, total_sample_count: totalSamples });
-    try {
-        const response = await fetch(`/api/plots/scatterplot?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+export function queryHistogram2dRange(tableName, columnX, columnY, bins, minId = DEFAULT_MIN_ID, maxId = DEFAULT_MAX_ID) {
+    return getJson("/api/plots/2-d-histogram", {
+        column_x: columnX,
+        column_y: columnY,
+        tablename: tableName,
+        min_id: minId,
+        max_id: maxId,
+        x_bins: bins,
+        y_bins: bins,
+    });
 }
 
-export async function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples) {
-    const params = new URLSearchParams({ x_column: xColumn, y_column: yColumn, tablename: tableName, min_id: 0, max_id: 10000, error_sample_count: errorSamples, total_sample_count: totalSamples });
-    try {
-        const response = await fetch(`/api/plots/scatterplot?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+export function queryHistogram2d(tableName, columnX, columnY, bins) {
+    return queryHistogram2dRange(tableName, columnX, columnY, bins);
 }
 
-export async function queryAttributeSummaries(table_name) {
-
-    const params = new URLSearchParams({ tablename: table_name });
-
-    try {
-        const response = await fetch(`/api/plots/summaries?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+export function querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples,
+                                   minId = DEFAULT_MIN_ID, maxId = DEFAULT_MAX_ID) {
+    return getJson("/api/plots/scatterplot", {
+        x_column: xColumn,
+        y_column: yColumn,
+        tablename: tableName,
+        min_id: minId,
+        max_id: maxId,
+        error_sample_count: errorSamples,
+        total_sample_count: totalSamples,
+    });
 }
 
-export async function queryTopErrorRows(numRows) {
-    const params = new URLSearchParams({ num_rows: numRows });
-    try {
-        const response = await fetch(`/api/plots/top-error-rows?${params}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+export function querySample2d(tableName, xColumn, yColumn, errorSamples, totalSamples) {
+    return querySample2dRange(tableName, xColumn, yColumn, errorSamples, totalSamples);
 }
 
-export async function queryTableName() {
-    try {
-        const response = await fetch("/api/tablename", { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error(error.message);
-    }
+export function queryAttributeSummaries(table_name) {
+    return getJson("/api/plots/summaries", { tablename: table_name });
 }
 
-/**
- * POST /api/wrangle/remove
- * Removes selected rows from the DB in-place.
- */
-export async function wrangleRemove(table, currentSelection, cols) {
-    try {
-        const response = await fetch("/api/wrangle/remove", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ table, currentSelection, cols }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[wrangleRemove]", error.message);
-    }
-}
-
-/**
- * POST /api/wrangle/impute
- * Imputes values in-place. `col` specifies which column to impute (for scatterplot/heatmap).
- */
-export async function wrangleImpute(table, currentSelection, cols, col) {
-    try {
-        const response = await fetch("/api/wrangle/impute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ table, currentSelection, cols, col }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[wrangleImpute]", error.message);
-    }
-}
-
-/**
- * POST /api/wrangle/preview
- * Returns modified histogram data without writing to DB.
- * method: "remove" | "impute_x" | "impute_y"
- */
-export async function wranglePreview(table, currentSelection, cols, method) {
-    try {
-        const response = await fetch("/api/wrangle/preview", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ table, currentSelection, cols, method }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[wranglePreview]", error.message);
-    }
+export function queryTopErrorRows(numRows) {
+    return getJson("/api/plots/top-error-rows", { num_rows: numRows });
 }
 
 /**
@@ -162,17 +114,8 @@ export async function wranglePreview(table, currentSelection, cols, method) {
  * For 1-D:  { type:"1d", column, bin, bin_count }
  * For 2-D:  { type:"2d", column_x, column_y, x_bin, y_bin, x_bins, y_bins }
  */
-export async function queryRowsInBin(params) {
-    try {
-        const response = await fetch("/api/plots/rows-in-bin", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(params),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[queryRowsInBin]", error.message);
-    }
+export function queryRowsInBin(params) {
+    return postJson("/api/plots/rows-in-bin", params);
 }
 
 /**
@@ -180,6 +123,8 @@ export async function queryRowsInBin(params) {
  * When attributes are changed on the frontend, make sure associated active attributes are reflected on the backend.
  *
  * params: {list of removed attributes}
+ *
+ * Fire and forget: nothing waits on it, and its reply is never read.
  */
 export function updateBackendAttributes(params) {
     fetch("/api/plots/update-backend-attributes", {
@@ -198,17 +143,8 @@ export function updateBackendAttributes(params) {
  * For 1-D:  { type:"1d", column, row_ids, bin_count }
  * For 2-D:  { type:"2d", column_x, column_y, row_ids, x_bins, y_bins }
  */
-export async function queryBinsForRows(params) {
-    try {
-        const response = await fetch("/api/plots/bins-for-rows", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(params),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[queryBinsForRows]", error.message);
-    }
+export function queryBinsForRows(params) {
+    return postJson("/api/plots/bins-for-rows", params);
 }
 
 /**
@@ -219,103 +155,51 @@ export async function queryBinsForRows(params) {
  * source is the plot a two-column selection was made on, which its candidates' preview charts draw as.
  * Returns { success, candidates: [{table, parent, op, source, label, reason, row_count, cols, chart_type}] }.
  */
-export async function createPreviews(rowIds, cols, source = null) {
-    try {
-        const response = await fetch("/api/wrangle/create-previews", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ row_ids: rowIds, cols, source }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[createPreviews]", error.message);
-        return { success: false, error: error.message };
-    }
+export function createPreviews(rowIds, cols, source = null) {
+    return postJson("/api/wrangle/create-previews", { row_ids: rowIds, cols, source }, failureResult);
 }
 
 /**
  * GET /api/plots/preview-histogram
- * Fetch histogram data for a preview table (preview_delete / preview_impute).
+ * Fetch histogram data for a graph node's table - a candidate's preview chart draws from this.
  *
  * params shape:
  *   { type:"1d", tablename, column, bins }
  *   { type:"2d", tablename, column_x, column_y, x_bins, y_bins }
  */
-export async function queryPreviewHistogram(params) {
-    try {
-        const qs = new URLSearchParams(params);
-        const response = await fetch(`/api/plots/preview-histogram?${qs}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error("[queryPreviewHistogram]", error.message);
-    }
+export function queryPreviewHistogram(params) {
+    return getJson("/api/plots/preview-histogram", params);
 }
 
 /**
  * GET /api/plots/preview-scatterplot
- * Fetch scatterplot data for a preview table.
+ * Fetch scatterplot data for a graph node's table, as queryPreviewHistogram does.
  *
  * params shape:
  *   { tablename, x_column, y_column, error_sample_count, total_sample_count }
  */
-export async function queryPreviewScatterplot(params) {
-    try {
-        const qs = new URLSearchParams(params);
-        const response = await fetch(`/api/plots/preview-scatterplot?${qs}`, { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error("[queryPreviewScatterplot]", error.message);
-    }
+export function queryPreviewScatterplot(params) {
+    return getJson("/api/plots/preview-scatterplot", params);
 }
 
-export async function undoWrangle() {
-    try {
-        const response = await fetch("/api/undo", { method: "POST" });
-        return await response.json();
-    } catch (error) {
-        console.error("[undoWrangle]", error.message);
-    }
+export function undoWrangle() {
+    return postJson("/api/undo");
 }
 
-export async function setGraphToClickedNode(nodeId) {
-    try {
-        const response = await fetch("/api/setGraphToClickedNode", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({nodeId}),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[setGraphToClickedNode]", error.message);
-    }
+export function setGraphToClickedNode(nodeId) {
+    return postJson("/api/setGraphToClickedNode", { nodeId });
 }
 
-export async function redoWrangle() {
-    try {
-        const response = await fetch("/api/redo", { method: "POST" });
-        return await response.json();
-    } catch (error) {
-        console.error("[redoWrangle]", error.message);
-    }
+export function redoWrangle() {
+    return postJson("/api/redo");
 }
 
-export async function getPGraph(){
-    try {
-        const response = await fetch("/api/routes/update_pgraph", {method: "GET"});
-        return await response.json();
-    } catch (error) {
-        console.error("[getPGraph]", error.message)
-    }
+export function getPGraph() {
+    return getJson("/api/routes/update_pgraph");
 }
 
-export async function getBranchTrajectory(source, target, destination){
-    try {
-        const params = new URLSearchParams({ source, target, destination });
-        const response = await fetch(`/api/pgraph/branch_trajectory?${params}`, {method: "GET"});
-        return await response.json();
-    } catch (error) {
-        console.error("[getBranchTrajectory]", error.message)
-    }
+export function getBranchTrajectory(source, target, destination) {
+    return getJson("/api/pgraph/branch_trajectory", { source, target, destination });
 }
 
 /**
@@ -327,11 +211,10 @@ export async function getBranchTrajectory(source, target, destination){
  * Takes an AbortSignal so a superseded request - the user switching attribute mid-flight - is
  * dropped rather than raced. Rejects with an AbortError when that happens.
  */
-export async function getNodeComparison({ a, b, kind, x, y }, signal) {
+export function getNodeComparison({ a, b, kind, x, y }, signal) {
     const params = new URLSearchParams({ a, b, kind, x });
     if (y) params.set("y", y);
-    const response = await fetch(`/api/pgraph/compare?${params}`, { method: "GET", signal });
-    return await response.json();
+    return fetchJson(`/api/pgraph/compare?${params}`, { method: "GET", signal });
 }
 
 /**
@@ -339,79 +222,31 @@ export async function getNodeComparison({ a, b, kind, x, y }, signal) {
  * What the compare panel's Drift views draw for one node and one column: the ridgeline curves or the
  * Sankey flows, and an annotation. Takes an AbortSignal, as getNodeComparison does.
  */
-export async function getDriftDetail({ node, column, keep, base }, signal) {
+export function getDriftDetail({ node, column, keep, base }, signal) {
     const params = new URLSearchParams({ node, column });
     // The categories to keep out of the Sankey's catch-all, when the panel has been told to keep any
     keep?.forEach((category) => params.append("keep", category));
     // The ancestor to measure from instead of root, when the panel has been told to use one
     if (base) params.append("base", base);
-    const response = await fetch(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
-    return await response.json();
+    return fetchJson(`/api/pgraph/drift_detail?${params}`, { method: "GET", signal });
 }
 
-/**
- * The saved comparisons kept on the graph - see app/pgraph/comparison.py. Each takes or returns a comparison
- * object as ui/src/utils/comparisonSpec.js shapes it; saving or updating returns { success, comparison }.
- */
-async function sendComparison(url, method, spec) {
-    const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: spec ? JSON.stringify(spec) : undefined,
-    });
-    return await response.json();
+export function resetApp() {
+    return postJson("/api/reset");
 }
 
-/** POST /api/pgraph/comparisons - keeps a new comparison on the graph and returns it with its id. */
-export function saveComparison(spec) {
-    return sendComparison("/api/pgraph/comparisons", "POST", spec);
+/* What aiStatus returns when the server cannot be asked: not configured, so the AI buttons stay hidden */
+function aiNotConfigured() {
+    return { success: false, configured: false };
 }
-
-/** PUT /api/pgraph/comparisons/<id> - replaces a saved comparison's settings. */
-export function updateComparison(id, spec) {
-    return sendComparison(`/api/pgraph/comparisons/${encodeURIComponent(id)}`, "PUT", spec);
-}
-
-/** GET /api/pgraph/comparisons - every saved comparison, or only those pinned to anchor when given one. */
-export async function listComparisons(anchor) {
-    const params = anchor ? `?${new URLSearchParams({ anchor })}` : "";
-    const response = await fetch(`/api/pgraph/comparisons${params}`, { method: "GET" });
-    return await response.json();
-}
-
-/** DELETE /api/pgraph/comparisons/<id> */
-export function deleteComparison(id) {
-    return sendComparison(`/api/pgraph/comparisons/${encodeURIComponent(id)}`, "DELETE");
-}
-
-export async function resetApp() {
-    try {
-        const response = await fetch("/api/reset", { method: "POST" });
-        return await response.json();
-    } catch (error) {
-        console.error("[resetApp]", error.message);
-    }
-}
-
-export {
-    uploadFileToDB,
-    queryHistogram1d,
-    queryHistogram2d,
-};
 
 /**
  * GET /api/ai/status
  * Whether AI suggestions are configured at all, so the AI buttons can be hidden rather than
  * offered on every node only to fail the same way each time.
  */
-export async function aiStatus() {
-    try {
-        const response = await fetch("/api/ai/status", { method: "GET" });
-        return await response.json();
-    } catch (error) {
-        console.error("[aiStatus]", error.message);
-        return { success: false, configured: false };
-    }
+export function aiStatus() {
+    return getJson("/api/ai/status", undefined, aiNotConfigured);
 }
 
 /**
@@ -425,14 +260,13 @@ export async function aiStatus() {
  *
  * Takes an AbortSignal so a superseded request can be dropped rather than raced.
  */
-export async function requestAiSuggestions(nodeTable, signal) {
-    const response = await fetch("/api/ai/suggest", {
+export function requestAiSuggestions(nodeTable, signal) {
+    return fetchJson("/api/ai/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ node_table: nodeTable }),
         signal,
     });
-    return await response.json();
 }
 
 /**
@@ -442,18 +276,8 @@ export async function requestAiSuggestions(nodeTable, signal) {
  *
  * Returns { success, table, label, parent } or { success: false, error }.
  */
-export async function acceptCandidate(table) {
-    try {
-        const response = await fetch("/api/candidates/accept", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ table }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[acceptCandidate]", error.message);
-        return { success: false, error: error.message };
-    }
+export function acceptCandidate(table) {
+    return postJson("/api/candidates/accept", { table }, failureResult);
 }
 
 /**
@@ -461,44 +285,6 @@ export async function acceptCandidate(table) {
  * Decline candidates: drop their nodes and tables. Returns { success, current } - current is the table the
  * session moved to when it was on one of them, else null.
  */
-export async function discardCandidates(tables) {
-    try {
-        const response = await fetch("/api/candidates/discard", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tables }),
-        });
-        return await response.json();
-    } catch (error) {
-        console.error("[discardCandidates]", error.message);
-        return { success: false, error: error.message };
-    }
-}
-
-const serverCalls = {
-    uploadFileToDB,
-    queryHistogram1d,
-    queryHistogram2d,
-    querySample2d,
-    queryAttributeSummaries,
-    queryTopErrorRows,
-    queryTableName,
-    wrangleRemove,
-    wrangleImpute,
-    wranglePreview,
-    queryRowsInBin,
-    queryBinsForRows,
-    createPreviews,
-    queryPreviewHistogram,
-    queryPreviewScatterplot,
-    aiStatus,
-    requestAiSuggestions,
-    acceptCandidate,
-    discardCandidates,
-};
-
-export default serverCalls;
-
-if (typeof window !== "undefined" && import.meta.env.DEV) {
-    window.serverCalls = serverCalls;
+export function discardCandidates(tables) {
+    return postJson("/api/candidates/discard", { tables }, failureResult);
 }

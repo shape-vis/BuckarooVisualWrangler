@@ -19,6 +19,19 @@ export const ERROR_DIMENSIONS = ["missing", "mismatch", "anomaly", "incomplete"]
 // error types, the comparison roles or the improved/worsened steps use. See app/pgraph/distortion.py.
 export const DRIFT_COLOR = "#0f766e";
 
+// The colour of each entry of ERROR_TYPES, by its key
+const ERROR_TYPE_COLORS = {
+  total: "#00000000",
+  missing: "saddlebrown",
+  mismatch: "hotpink",
+  anomaly: "red",
+  incomplete: "gray",
+  none: "steelblue",
+};
+
+const errorTypeKeys = Object.keys(ERROR_TYPES);
+const colorsInKeyOrder = errorTypeKeys.map((type) => ERROR_TYPE_COLORS[type]);
+
 export const errorColors = d3.scaleOrdinal()
-  .domain(Object.keys(ERROR_TYPES))
-  .range(["#00000000", "saddlebrown", "hotpink", "red", "gray", "steelblue"]);
+  .domain(errorTypeKeys)
+  .range(colorsInKeyOrder);

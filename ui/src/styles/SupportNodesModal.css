@@ -97,25 +97,6 @@
   color: #65676b;
 }
 
-/* A kind's settings form lays its fields out with these, so every kind's form reads alike */
-.support-form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.support-form-field input,
-.support-form-field select {
-  padding: 6px 8px;
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 400;
-}
-
 .support-modal-add {
   cursor: pointer;
   padding: 6px 14px;

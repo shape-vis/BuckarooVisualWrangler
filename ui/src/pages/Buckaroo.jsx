@@ -38,7 +38,17 @@ function withAttributes(selected, columns) {
     return next;
 }
 
+// The open views with view added, the oldest dropped past MAX_OPEN_VIEWS
+function withView(openViews, view) {
+    return [...openViews, view].slice(-MAX_OPEN_VIEWS);
+}
 
+/* The open views with view closed - unless it is the last one open, which stays */
+function withoutView(openViews, view) {
+    const isLastOpen = openViews.length <= 1;
+    if (isLastOpen) return openViews;
+    return openViews.filter((open) => open !== view);
+}
 
 export default function Buckaroo({ onReset }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
@@ -51,10 +61,8 @@ export default function Buckaroo({ onReset }) {
 
     const toggleView = useCallback((view) => {
         setOpenViews((current) => {
-            if (current.includes(view)) {
-                return current.length > 1 ? current.filter((open) => open !== view) : current;
-            }
-            return [...current, view].slice(-MAX_OPEN_VIEWS);
+            if (current.includes(view)) return withoutView(current, view);
+            return withView(current, view);
         });
     }, []);
 
@@ -64,7 +72,10 @@ export default function Buckaroo({ onReset }) {
 
     // Opens a view if it is closed, and leaves it open if it is not - for a view asking to be shown
     const openView = useCallback((view) => {
-        setOpenViews((current) => (current.includes(view) ? current : [...current, view].slice(-MAX_OPEN_VIEWS)));
+        setOpenViews((current) => {
+            if (current.includes(view)) return current;
+            return withView(current, view);
+        });
     }, []);
     const revealPlots = useCallback(() => openView("plots"), [openView]);
 
@@ -91,76 +102,76 @@ export default function Buckaroo({ onReset }) {
         setRefreshKey(k => k + 1);
     }, []);
 
+    // selectedAttributes too: the error-plot sub-node's gallery offers the same columns the Plots view shows
+    const viewContext = { openViews, toggleView, openView, refreshKey, setRefreshKey, selectedAttributes, focusPlot };
+
     return (
-        <>
-            {/* selectedAttributes too: the error-plot sub-node's gallery offers the same columns the Plots view shows */}
-            <ViewContext.Provider value={{ openViews, toggleView, openView, refreshKey, setRefreshKey, selectedAttributes, focusPlot}}>
-                <SettingsProvider>
-                {/* Above PGraph and Repair: both ask the dock to show their tab */}
-                <DockProvider>
-                <PGraphProvider>
-                {/* Inside PGraphProvider: the server stages the AI's suggestions as candidates, which arrive with
-                    the graph; this owns asking for them. Accepting is CandidatesProvider's, below. */}
-                <AISuggestionsProvider>
-                <RowRangeProvider>
-                <SelectionProvider>
-                {/* Accepting or declining a candidate - a repair or an AI suggestion - lands like a wrangle */}
-                <CandidatesProvider onWrangleExecuted={handleWrangleExecuted}>
-                <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
-                {/* Outside the keyed container below, so an open comparison survives a wrangle. It docks
-                    into the Plots view, and opens that view to do so. */}
-                <CompareProvider revealPlots={revealPlots}>
-                    <BuckarooHeader onReset={onReset} />
-                    <div key={refreshKey} className="matrix-and-dropdown-container">
-                        <AttributeSummaryPanel
-                            selectedAttributes={selectedAttributes}
-                            setSelectedAttributes={setSelectedAttributes}
-                            setSortedAttributes={setSortedAttributes}
-                        />
+        <ViewContext.Provider value={viewContext}>
+            <SettingsProvider>
+            {/* Above PGraph and Repair: both ask the dock to show their tab */}
+            <DockProvider>
+            <PGraphProvider>
+            {/* Inside PGraphProvider: the server stages the AI's suggestions as candidates, which arrive with
+                the graph; this owns asking for them. Accepting is CandidatesProvider's, below. */}
+            <AISuggestionsProvider>
+            <RowRangeProvider>
+            <SelectionProvider>
+            {/* Accepting or declining a candidate - a repair or an AI suggestion - lands like a wrangle */}
+            <CandidatesProvider onWrangleExecuted={handleWrangleExecuted}>
+            <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
+            {/* Outside the keyed container below, so an open comparison survives a wrangle. It docks
+                into the Plots view, and opens that view to do so. */}
+            <CompareProvider revealPlots={revealPlots}>
+                <BuckarooHeader onReset={onReset} />
+                <div key={refreshKey} className="matrix-and-dropdown-container">
+                    <AttributeSummaryPanel
+                        selectedAttributes={selectedAttributes}
+                        setSelectedAttributes={setSelectedAttributes}
+                        setSortedAttributes={setSortedAttributes}
+                    />
 
-                        <div className="main-view">
-                            <div
-                                className="svg-and-toolbox"
-                                // Only while both share the row: a lone view's grow under 1 would leave it short of filling it
-                                style={openViews.length > 1 ? {"--plots-grow": split, "--graph-grow": 1 - split} : undefined}
-                            >
+                    <div className="main-view">
+                        <div
+                            className="svg-and-toolbox"
+                            // Only while both share the row: a lone view's grow under 1 would leave it short of filling it
+                            style={openViews.length > 1 ? {"--plots-grow": split, "--graph-grow": 1 - split} : undefined}
+                        >
 
-                                {/* Whichever views are open, always in this order, so the pair
-                                    does not swap sides depending on which was opened first */}
-                                {openViews.includes("plots") && (
-                                    <PlotsPane
-                                        selectedAttributes={selectedAttributes}
-                                        plotFocus={plotFocus}
-                                        onPlotFocused={dropPlotFocus}
-                                    />
-                                )}
-
-                                {openViews.length > 1 && <SplitDivider split={split} onSplit={setSplit} />}
-
-                                {openViews.includes("graph") && <PGraph />}
-
-                                {/*Repair and node details, as tabs in one resizable dock*/}
-                                <RightDock />
-                            </div>
-                            <div className={`table-panel-wrapper ${openViews.includes("plots") ? "table-panel-wrapper--visible" : ""}`}>
-                                <TablePanel
-                                    sortedAttributes={sortedAttributes}
+                            {/* Whichever views are open, always in this order, so the pair
+                                does not swap sides depending on which was opened first */}
+                            {openViews.includes("plots") && (
+                                <PlotsPane
+                                    selectedAttributes={selectedAttributes}
+                                    plotFocus={plotFocus}
+                                    onPlotFocused={dropPlotFocus}
                                 />
-                            </div>
-                        </div>
+                            )}
 
-                        <div id="tooltip" className="tooltip"></div>
+                            {openViews.length > 1 && <SplitDivider split={split} onSplit={setSplit} />}
+
+                            {openViews.includes("graph") && <PGraph />}
+
+                            {/*Repair and node details, as tabs in one resizable dock*/}
+                            <RightDock />
+                        </div>
+                        <div className={`table-panel-wrapper ${openViews.includes("plots") ? "table-panel-wrapper--visible" : ""}`}>
+                            <TablePanel
+                                sortedAttributes={sortedAttributes}
+                            />
+                        </div>
                     </div>
-                </CompareProvider>
-                </RepairProvider>
-                </CandidatesProvider>
-                </SelectionProvider>
-                </RowRangeProvider>
-                </AISuggestionsProvider>
-                </PGraphProvider>
-                </DockProvider>
-                </SettingsProvider>
-            </ViewContext.Provider>
-        </>
+
+                    <div id="tooltip" className="tooltip"></div>
+                </div>
+            </CompareProvider>
+            </RepairProvider>
+            </CandidatesProvider>
+            </SelectionProvider>
+            </RowRangeProvider>
+            </AISuggestionsProvider>
+            </PGraphProvider>
+            </DockProvider>
+            </SettingsProvider>
+        </ViewContext.Provider>
     );
 }

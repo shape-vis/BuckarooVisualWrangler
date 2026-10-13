@@ -1,21 +1,4 @@
 
-.repair-tools {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    width: 85%;
-    height: 120px;
-    background-color: #f0f2f5;
-    border: 1px solid #dddfe2;
-    border-radius: 8px;
-    padding: 6px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
 .repair-method {
     text-align: center;
     flex: 0 0 auto;
@@ -84,23 +67,9 @@
   100% { transform: translateX(350%); }
 }
 
-/* Panel height */
-.panel--repair {
-  height: 100%;
-}
-
-.panel--repair.open {
-  width: 350px;
-  flex-shrink: 0;
-}
-
 .repair-panel-title {
   font-weight: bold;
   margin: 10px auto;
-}
-
-.regButton--zoom {
-  width: 130px;
 }
 
 /* Status / feedback messages */
@@ -119,15 +88,6 @@
   margin: 12px auto;
   text-align: center;
   width: fit-content;
-}
-
-.repair-success {
-  color: #2e7d32;
-  font-weight: 600;
-}
-
-.repair-success::before {
-  content: "\2713  ";
 }
 
 .repair-error {

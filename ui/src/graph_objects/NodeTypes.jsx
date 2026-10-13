@@ -63,11 +63,23 @@ function NodeButton( { label, detail, children, ...button } ){
 }
 
 /**
- * The buttons every node carries. Its quality metrics are a supporting sub-node now, added from the
- * support button, rather than a readout of their own.
+ * The tooltip detail for a node's AI button: why it is off, or what pressing it does. Checked in order,
+ * so the most fundamental reason wins.
+ */
+function aiButtonDetail( { configured, locked, analysing, busy } ){
+    if (!configured) return "AI suggestions are not configured - add GEMINI_API_KEY to .env";
+    if (locked) return `${CANDIDATE_LOCKED}.`;
+    if (analysing) return "Switch to wrangling mode for suggestions";
+    if (busy) return "Working…";
+    return "Suggest repairs for this node";
+}
+
+/**
+ * The buttons every node carries. Quality metrics are not among them: they are added as a supporting
+ * sub-node from the support button.
  *
- * Takes the node's id rather than reading data.label, because the layout truncates a long label
- * down to the three-character node id - so the label is not a table name you can send anywhere.
+ * Takes the node's id rather than reading data.label, because the label is only what the card displays -
+ * the id is the table name the server knows the node by.
  */
 export function NodeTools( { nodeId } ){
     const { startBranchSelection, isCandidate, graphMode, openSupportModal,
@@ -85,13 +97,12 @@ export function NodeTools( { nodeId } ){
     const analysing = graphMode === "analysis";
     const locked = isCandidate(nodeId);
     const aiBlocked = !ai?.configured || ai?.busy || analysing || locked;
-    const aiTitle = !ai?.configured
-        ? "AI suggestions are not configured - add GEMINI_API_KEY to .env"
-        : locked
-            ? `${CANDIDATE_LOCKED}.`
-            : analysing
-                ? "Switch to wrangling mode for suggestions"
-                : ai?.busy ? "Working…" : "Suggest repairs for this node";
+    const aiTitle = aiButtonDetail({
+        configured: ai?.configured,
+        locked,
+        analysing,
+        busy: ai?.busy,
+    });
 
     // Off in analysis mode: sub-nodes are hidden on the plot, so adding one there would show nothing
     const openSupport = useCallback(() => openSupportModal(nodeId), [openSupportModal, nodeId]);
@@ -105,6 +116,16 @@ export function NodeTools( { nodeId } ){
     const supportHidden = hiddenSupportHosts.has(nodeId);
     const toggleSupport = useCallback(() => toggleSupportHidden(nodeId), [toggleSupportHidden, nodeId]);
     const supportNoun = supportCount === 1 ? "supporting node" : `${supportCount} supporting nodes`;
+
+    let visibilityDetail;
+    if (analysing) {
+        visibilityDetail = "Supporting nodes are hidden on the plot - switch to wrangling mode";
+    } else if (supportCount === 0) {
+        visibilityDetail = "This node's supporting nodes are hidden graph-wide - turn them back on at the graph's top left";
+    } else {
+        const showOrHide = supportHidden ? "Show" : "Hide";
+        visibilityDetail = `${showOrHide} this node's ${supportNoun}`;
+    }
 
     // The row shows on hover, but stays up while one of its buttons is switched on, so that is never hidden
     const pinned = ai?.pendingNode === nodeId;
@@ -136,7 +157,7 @@ export function NodeTools( { nodeId } ){
                     <img
                         src="/images/icons/sparkle.svg"
                         alt=""
-                        className={`nodeButtonSvgIcon ${ai?.pendingNode === nodeId ? "nodeButtonSvgIcon--active" : ""}`}
+                        className={`nodeButtonSvgIcon ${pinned ? "nodeButtonSvgIcon--active" : ""}`}
                     />
                 </NodeButton>
                 <NodeButton
@@ -152,11 +173,7 @@ export function NodeTools( { nodeId } ){
                     <NodeButton
                         className="node-sub-button-support-visibility"
                         label={supportHidden ? "Show supporting nodes" : "Hide supporting nodes"}
-                        detail={analysing
-                            ? "Supporting nodes are hidden on the plot - switch to wrangling mode"
-                            : supportCount === 0
-                                ? "This node's supporting nodes are hidden graph-wide - turn them back on at the graph's top left"
-                                : `${supportHidden ? "Show" : "Hide"} this node's ${supportNoun}`}
+                        detail={visibilityDetail}
                         onClick={toggleSupport}
                         disabled={analysing || supportCount === 0}
                     >
@@ -215,74 +232,87 @@ export function SupportHandles(){
  * simply drops the run, and the real nodes are drawn again from data that never changed.
  */
 export function CollapsedNode( { id, data, isConnectable } ){
+    const { expandRun, selectRunBranch } = usePgraph();
+    const [expanded, setExpanded] = useState(false);
 
-const { expandRun, selectRunBranch } = usePgraph();
-const [expanded, setExpanded] = useState(false);
+    // A folded run is a sequence, so its trajectory is the branch running through it, head to tail
+    const openQuality = useCallback(() => selectRunBranch(data.run), [selectRunBranch, data.run]);
 
-// A folded run is a sequence, so its trajectory is the branch running through it, head to tail
-const openQuality = useCallback(() => selectRunBranch(data.run), [selectRunBranch, data.run]);
+    const headId = String(data.head).split("_")[0];
+    const tailId = String(data.tail).split("_")[0];
 
-return (
-    <>
-        <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>
-        <div>
-            <div className={"node-node-label"}>
-                <h3 title={data.run?.join(" → ")}>{data.label}</h3>
-                <div className={"collapsed-node-range"}>
-                    {String(data.head).split("_")[0]} … {String(data.tail).split("_")[0]}
-                </div>
-                <div className={`note-node-icon-container ${expanded ? "note-node-icon-container--pinned" : ""}`}>
-                    <NodeButton
-                        className="node-sub-button-chart"
-                        label="Run quality"
-                        detail={`Plot quality across these ${data.run?.length} nodes`}
-                        onClick={openQuality}
-                    >
-                        <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
-                    </NodeButton>
-                    <NodeButton
-                        className="node-sub-button-inspect"
-                        label="Quality metrics"
-                        detail={expanded ? "Hide quality metrics" : "Show the run's resulting quality metrics"}
-                        onClick={() => setExpanded((open) => !open)}
-                    >
-                        <img
-                            src="/images/icons/inspect.svg"
-                            alt=""
-                            className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
-                        />
-                    </NodeButton>
-                    <NodeButton
-                        className="node-sub-button-expand"
-                        label="Expand run"
-                        detail={`Expand these ${data.run?.length} nodes`}
-                        onClick={() => expandRun(id)}
-                    >+</NodeButton>
+    return (
+        <>
+            <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>
+            <div>
+                <div className={"node-node-label"}>
+                    <h3 title={data.run?.join(" → ")}>{data.label}</h3>
+                    <div className={"collapsed-node-range"}>
+                        {headId} … {tailId}
+                    </div>
+                    <div className={`note-node-icon-container ${expanded ? "note-node-icon-container--pinned" : ""}`}>
+                        <NodeButton
+                            className="node-sub-button-chart"
+                            label="Run quality"
+                            detail={`Plot quality across these ${data.run?.length} nodes`}
+                            onClick={openQuality}
+                        >
+                            <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
+                        </NodeButton>
+                        <NodeButton
+                            className="node-sub-button-inspect"
+                            label="Quality metrics"
+                            detail={expanded ? "Hide quality metrics" : "Show the run's resulting quality metrics"}
+                            onClick={() => setExpanded((open) => !open)}
+                        >
+                            <img
+                                src="/images/icons/inspect.svg"
+                                alt=""
+                                className={`nodeButtonSvgIcon ${expanded ? "nodeButtonSvgIcon--active" : ""}`}
+                            />
+                        </NodeButton>
+                        <NodeButton
+                            className="node-sub-button-expand"
+                            label="Expand run"
+                            detail={`Expand these ${data.run?.length} nodes`}
+                            onClick={() => expandRun(id)}
+                        >+</NodeButton>
+                    </div>
                 </div>
             </div>
-        </div>
-        {expanded && <NodeMetricsExpansion metrics={data.metrics} />}
-        <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
-    </>
-)
+            {expanded && <NodeMetricsExpansion metrics={data.metrics} />}
+            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
+        </>
+    );
+}
+
+/**
+ * The card for a table in the wrangling tree. The root has no parent, so it is drawn without the
+ * handle an incoming edge would attach to; otherwise every card is the same.
+ */
+function NoteCard( { id, data, isConnectable, hasParent } ){
+    return (
+        <>
+            {hasParent && <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>}
+            <ComparisonBadge role={data.comparisonRole} />
+            <div>
+                <div className={"node-node-label"}>
+                    <h3>{data.label}</h3>
+                    <NodeTools nodeId={id} />
+                </div>
+            </div>
+            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
+            <SupportHandles />
+        </>
+    );
 }
 
 export function NoteNode( { id, data, isConnectable } ){
+    return <NoteCard id={id} data={data} isConnectable={isConnectable} hasParent={true} />;
+}
 
-return (
-    <>
-        <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>
-        <ComparisonBadge role={data.comparisonRole} />
-        <div>
-            <div className={"node-node-label"}>
-                <h3>{data.label}</h3>
-                <NodeTools nodeId={id} />
-            </div>
-        </div>
-        <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
-        <SupportHandles />
-    </>
-)
+export function RootNoteNode( { id, data, isConnectable } ){
+    return <NoteCard id={id} data={data} isConnectable={isConnectable} hasParent={false} />;
 }
 
 /**
@@ -311,21 +341,4 @@ export function AnalysisDotNode( { data } ){
             <Handle type="source" position={Position.Bottom} className="analysis-handle" isConnectable={false}/>
         </div>
     );
-}
-
-export function RootNoteNode( { id, data, isConnectable } ){
-
-return (
-    <>
-        <ComparisonBadge role={data.comparisonRole} />
-        <div>
-            <div className={"node-node-label"}>
-                <h3>{data.label}</h3>
-                <NodeTools nodeId={id} />
-            </div>
-        </div>
-        <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
-        <SupportHandles />
-    </>
-)
 }

@@ -104,7 +104,7 @@ export function applyCollapse(nodes, edges, collapsedRuns) {
     const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
     /* Copied, not passed through by reference. Laying the folded graph out writes node.type and
-       node.data.label onto whatever it is handed, and these objects mirror what the server sent - a
+       node.data.footprint onto whatever it is handed, and these objects mirror what the server sent - a
        view transform must not be able to scribble on them. */
     const remainingNodes = nodes
         .filter((node) => !runOf.has(node.id))
@@ -163,11 +163,9 @@ export function collapsedNodeIds(collapsedRuns) {
     return ids;
 }
 
-/* Supporting sub-nodes - nodes a user hangs beside a real node to support reading it. They are their
-   own kind, not suggestions, so they have their own prefix and their own check: whatever suggestions
-   become, sub-nodes are never a table and never part of the tree.
-
-   The same colon trick keeps the id clear of every table name. */
+/* Supporting sub-nodes - nodes a user hangs beside a real node to support reading it. They have their own
+   prefix and their own check, since a sub-node is never a table and never part of the tree. Table names
+   never contain a colon, so the prefix keeps every sub-node id clear of them. */
 export const SUPPORT_PREFIX = "support:";
 
 export const supportId = (hostId, key) => `${SUPPORT_PREFIX}${hostId}:${key}`;

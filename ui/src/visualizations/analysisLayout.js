@@ -10,6 +10,7 @@ import * as d3 from "d3";
 import { ERROR_DIMENSIONS, ERROR_TYPES } from "../store/errorColors.js";
 import { describeWrangle, nodeName } from "../utils/comparison.js";
 import { formatDrift } from "../utils/drift.js";
+import { asPercent } from "../utils/visCommon.jsx";
 
 // The error axis can be the total or any one error type. Drift has no per-type breakdown, so x never changes.
 export const ANALYSIS_METRICS = ["total", ...ERROR_DIMENSIONS];
@@ -19,7 +20,7 @@ export const metricTitle = (metric) => (metric === "total" ? "Total error" : ERR
 // A dot node's box - its label hangs outside it, so this is the whole of what React Flow measures
 export const DOT = 14;
 // What a card measures before React Flow has measured it
-const CARD = { width: 200, height: 100 };
+export const CARD = { width: 200, height: 100 };
 
 /* The axes' strips along the canvas's left and bottom edges, wide and tall enough for a tick label and the
    axis title beside it. The plot is fitted inside them, with a margin, so nothing sits under an axis - and
@@ -46,14 +47,31 @@ export function textWidth(text, font = TICK_FONT) {
     return measurer.measureText(text).width;
 }
 
-/* The error axis's ticks between two rates, as percentages at the precision their spacing needs. Shared by the
-   axes and by the strip's width, so the width is always worked out from the labels actually drawn. */
-export function errorTicks(lo, hi, count) {
+// Percentages to as many places as a step of this size between them needs
+function percentFormat(step) {
+    const digits = Math.max(0, d3.precisionFixed(step * 100));
+    return (value) => `${(value * 100).toFixed(digits)}%`;
+}
+
+// Plain numbers to as many places as a step of this size between them needs
+function fixedFormat(step) {
+    const digits = Math.max(0, d3.precisionFixed(step));
+    return d3.format(`.${digits}f`);
+}
+
+/* Ticks between two values, labelled at the precision their spacing needs - as percentages for an error rate,
+   as plain numbers for drift. Neither goes below zero, so no tick does either. Shared by the plot's axes and
+   the detail inset's, so the two always label a value the same way. */
+export function spacedTicks(lo, hi, count, asPercentage) {
     const values = d3.ticks(lo, hi, count).filter((value) => value >= 0);
     const step = values.length > 1 ? values[1] - values[0] : hi - lo;
-    const digits = Math.max(0, d3.precisionFixed(step * 100));
-    return values.map((value) => ({ value, label: `${(value * 100).toFixed(digits)}%` }));
+    const format = asPercentage ? percentFormat(step) : fixedFormat(step);
+    return values.map((value) => ({ value, label: format(value) }));
 }
+
+/* The error axis's ticks between two rates. Shared by the axes and by the strip's width, so the width is always
+   worked out from the labels actually drawn. */
+export const errorTicks = (lo, hi, count) => spacedTicks(lo, hi, count, true);
 
 // How many error ticks a canvas this tall gets - one per 70px or so
 export const errorTickCount = (height) => Math.max(2, Math.round((height - AXIS_BOTTOM) / 70));
@@ -87,15 +105,29 @@ export const ROOT_COLOR = "#4b5563";
 /* A supporting sub-node describes its host rather than being a state of the table, so it has no point of its
    own, and its position is relative to its host besides. Hidden on the plot for now. */
 // Its boundary goes with it
-export const isSupportNode = (node) => node.type === "supportNode" || node.type === "supportGroup";
+const isSupportNode = (node) => node.type === "supportNode" || node.type === "supportGroup";
 
 // Everything else is plotted - a staged candidate included, which carries its own error and drift
 export const isPlotted = (node) => !isSupportNode(node);
 
 // A folded run stands for its last node - the state it arrives at - and already carries that node's numbers
-const tableOf = (node) => (node.type === "collapsedNode" ? node.data?.tail : node.id);
+export const tableOf = (node) => (node.type === "collapsedNode" ? node.data?.tail : node.id);
 export const driftOf = (node) => node.data?.distortion?.overall ?? 0;
 export const errorOf = (node, metric) => node.data?.metrics?.totals?.[metric] ?? 0;
+
+// A node's short label on the plot: its name, or a folded run's first and last node
+export function plotLabel(node) {
+    if (node.type !== "collapsedNode") return nodeName(node.id);
+    return `${nodeName(node.data.head)}…${nodeName(node.data.tail)}`;
+}
+
+/* Whether a node's point falls inside a region of the plot, {x: [from, to], y: [from, to]} in drift and in the
+   error the y axis shows - edges included */
+export function isInRegion(node, region, metric) {
+    const drift = driftOf(node);
+    const error = errorOf(node, metric);
+    return drift >= region.x[0] && drift <= region.x[1] && error >= region.y[0] && error <= region.y[1];
+}
 
 /* The plot's scales, from the nodes it shows. Both axes start at zero: root has no drift by definition, and an
    error rate has a real floor. */
@@ -156,30 +188,54 @@ export function branchColors(nodes, serverNodesById) {
 
     const branches = new Map(nodes.filter(isPlotted).map((node) => [node.id, branchOf(tableOf(node))]));
     const order = [...new Set([...branches.values()].filter(Boolean))].sort();
-    return new Map([...branches].map(([id, branch]) => [
-        id, branch == null ? ROOT_COLOR : BRANCH_COLORS[order.indexOf(branch) % BRANCH_COLORS.length],
-    ]));
+
+    const colors = new Map();
+    for (const [id, branch] of branches) {
+        if (branch == null) {
+            colors.set(id, ROOT_COLOR);
+        } else {
+            colors.set(id, BRANCH_COLORS[order.indexOf(branch) % BRANCH_COLORS.length]);
+        }
+    }
+    return colors;
 }
 
-const asPercent = (rate) => `${((rate ?? 0) * 100).toFixed(2)}%`;
+// The line a node's hover adds for its part in the comparison, if it has one
+const ROLE_NOTES = {
+    current: "<br/><em>current node (selection B)</em>",
+    "selection-a": "<br/><em>selection A</em>",
+};
 
 /* A node's hover text in analysis mode: its numbers on both axes, how big it is, and where it stands.
    role is "current" or "selection-a"; dominator names the node that beats it outright, if any. */
 export function analysisTooltip(node, metric, { role, dominator }) {
-    const isRun = node.type === "collapsedNode";
-    const name = isRun
-        ? `${nodeName(node.data.head)} … ${nodeName(node.data.tail)} (${node.data.run?.length} steps)`
-        : nodeName(node.id);
-    const wrangle = isRun ? null : describeWrangle(node.data?.wrangle);
-    const roleNote = role === "current" ? "<br/><em>current node (selection B)</em>"
-        : role === "selection-a" ? "<br/><em>selection A</em>" : "";
-    const beaten = dominator
-        ? `<br/><em>dominated by ${nodeName(dominator)}: no worse on error or drift, and better on at least one</em>`
-        : "";
-    return `<strong>${name}</strong>${wrangle ? ` · ${wrangle}` : ""}`
-        + `<br/>${metric === "total" ? "error" : METRIC_LABELS[metric].toLowerCase()}: ${asPercent(errorOf(node, metric))}`
+    let name;
+    let wrangle = null;
+    if (node.type === "collapsedNode") {
+        name = `${nodeName(node.data.head)} … ${nodeName(node.data.tail)} (${node.data.run?.length} steps)`;
+    } else {
+        name = nodeName(node.id);
+        wrangle = describeWrangle(node.data?.wrangle);
+    }
+
+    let heading = `<strong>${name}</strong>`;
+    if (wrangle) heading += ` · ${wrangle}`;
+
+    let errorName = "error";
+    if (metric !== "total") errorName = METRIC_LABELS[metric].toLowerCase();
+
+    const rows = node.data?.metrics?.row_count?.toLocaleString() ?? "—";
+    const roleNote = ROLE_NOTES[role] ?? "";
+
+    let beaten = "";
+    if (dominator) {
+        beaten = `<br/><em>dominated by ${nodeName(dominator)}: no worse on error or drift, and better on at least one</em>`;
+    }
+
+    return heading
+        + `<br/>${errorName}: ${asPercent(errorOf(node, metric))}`
         + `<br/>drift: ${formatDrift(driftOf(node))}`
-        + `<br/>rows: ${node.data?.metrics?.row_count?.toLocaleString() ?? "—"}`
+        + `<br/>rows: ${rows}`
         + roleNote + beaten
         + "<br/><span class='analysis-hint'>double-click to go here · shift-click for selection A</span>";
 }

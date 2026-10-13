@@ -19,11 +19,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import app
-from app import engine
 from app.db_utils import query
-from app.db_utils.execute_sql import fetch_sql
 from app.server_utils import candidates
-from app.server_utils.service_helpers import WRANGLE_LOCK
+from app.server_utils.service_helpers import WRANGLE_LOCK, session_graph
 
 # The four flags the detectors produce. Matches DIMENSIONS in app/pgraph/metrics.py and
 # ERROR_DIMENSIONS in ui/src/store/errorColors.js.
@@ -42,21 +40,17 @@ class SuggestionError(ValueError):
 class Op:
     """
     One wrangle operation, as both the model and the pipeline see it.
-
-    preview_suffix names which wrangle this is - which column of a pair an impute fills - and
-    Suggestion.wrangle_op turns it into the op the staged node records.
     """
-    kind: str               # "impute" or "delete"
+    kind: str               # "impute" or "delete" - also the wrangle a node records, but for a 2D impute
     dims: int               # 1 or 2 columns
-    preview_suffix: str     # "_preview_delete", "_preview_impute", "_preview_impute_x", ...
 
 
-OPS: dict[str, Op] = {
-    "impute_rows":    Op(kind="impute", dims=1, preview_suffix="_preview_impute"),
-    "delete_rows":    Op(kind="delete", dims=1, preview_suffix="_preview_delete"),
-    # The _x / _y suffix is picked from `target` by Suggestion.preview_suffix.
-    "impute_rows_2d": Op(kind="impute", dims=2, preview_suffix="_preview_impute_x"),
-    "delete_rows_2d": Op(kind="delete", dims=2, preview_suffix="_preview_delete"),
+TOOL_OPS: dict[str, Op] = {
+    "impute_rows":    Op(kind="impute", dims=1),
+    "delete_rows":    Op(kind="delete", dims=1),
+    # Which column of the pair it fills is picked from `target` - see Suggestion.wrangle_op
+    "impute_rows_2d": Op(kind="impute", dims=2),
+    "delete_rows_2d": Op(kind="delete", dims=2),
 }
 
 
@@ -72,32 +66,23 @@ class Suggestion:
 
     @property
     def spec(self) -> Op:
-        return OPS[self.op]
-
-    @property
-    def preview_suffix(self) -> str:
-        if self.op == "impute_rows_2d":
-            return "_preview_impute_x" if self.target == "x" else "_preview_impute_y"
-        return self.spec.preview_suffix
+        return TOOL_OPS[self.op]
 
     @property
     def imputed_column(self) -> str | None:
         """The one column an impute writes to. None for deletes."""
         if self.spec.kind != "impute":
             return None
-        if self.op == "impute_rows_2d":
-            return self.columns[0] if self.target == "x" else self.columns[1]
+        if self.op == "impute_rows_2d" and self.target == "y":
+            return self.columns[1]
         return self.columns[0]
 
     @property
     def wrangle_op(self) -> str:
         """The wrangle as a node records it: delete, impute, or impute_x / impute_y for one column of a pair."""
-        return {
-            "_preview_delete": "delete",
-            "_preview_impute": "impute",
-            "_preview_impute_x": "impute_x",
-            "_preview_impute_y": "impute_y",
-        }[self.preview_suffix]
+        if self.op == "impute_rows_2d":
+            return f"impute_{self.target}"
+        return self.spec.kind
 
     def label(self) -> str:
         """Matches format_wrangle_label, so a candidate reads like the node it becomes."""
@@ -116,18 +101,6 @@ class Suggestion:
         }
 
 
-def session_graph():
-    """
-    The session's PGraph, or None before anything has been uploaded.
-
-    getattr rather than a plain attribute read: app/__init__.py's `app.pgraph_for_session = None`
-    sets that on the *Flask object*, which happens to be named `app` inside that module. The
-    attribute this reads is on the app *package*, and init_pgraph_for_session is what creates it -
-    so until the first upload it does not exist at all.
-    """
-    return getattr(app, "pgraph_for_session", None)
-
-
 def known_node(node_table: str) -> bool:
     """A table is addressable only if the graph knows it and it really exists."""
     graph = session_graph()
@@ -140,23 +113,23 @@ def validate_suggestion(node_table: str, raw: dict[str, Any], columns: list[str]
     """
     Re-derive a suggestion from scratch, trusting nothing in `raw`.
 
-    Runs on the model's output *and* again on whatever the client posts back to /accept, so a
-    tampered payload can do nothing the model could not have asked for in the first place.
+    The model's output is a tool call, so nothing in it is taken on trust: every field is checked against the
+    closed sets the model was offered.
 
     :param columns: the node's real column names - the enum the model was given
     """
     op = raw.get("op")
-    if op not in OPS:
+    if op not in TOOL_OPS:
         raise SuggestionError(f"unknown operation {op!r}")
-    spec = OPS[op]
+    spec = TOOL_OPS[op]
 
     error_type = raw.get("error_type")
     if error_type not in ERROR_TYPES:
         raise SuggestionError(f"unknown error type {error_type!r}")
 
     # Accept either shape - the 1D tools use `column`, the 2D tools use `columns`
-    if spec.dims == 1:
-        cols = [raw["column"]] if raw.get("column") else list(raw.get("columns") or [])
+    if spec.dims == 1 and raw.get("column"):
+        cols = [raw["column"]]
     else:
         cols = list(raw.get("columns") or [])
 
@@ -165,9 +138,13 @@ def validate_suggestion(node_table: str, raw: dict[str, Any], columns: list[str]
     if len(set(cols)) != len(cols):
         raise SuggestionError(f"{op} needs distinct columns, got {cols}")
 
-    unknown = [c for c in cols if c not in columns]
+    unknown = []
+    for col in cols:
+        if col not in columns:
+            unknown.append(str(col))
     if unknown:
-        raise SuggestionError(f"no such column in {node_table}: {', '.join(map(str, unknown))}")
+        unknown_list = ", ".join(unknown)
+        raise SuggestionError(f"no such column in {node_table}: {unknown_list}")
 
     target = raw.get("target")
     if op == "impute_rows_2d":
@@ -197,26 +174,11 @@ def columns_for_ids(suggestion: Suggestion) -> list[str]:
 
 def resolve_ids_for(node_table: str, suggestion: Suggestion) -> list[int]:
     """
-    The only place an id set is built. Returns the flagged row ids, ascending.
-
-    The join against the data table is the same idiom remove_flagged_rows_in_1d_bin uses, and it
-    drops any error row whose row_id no longer names a live row.
+    The only place an id set is built. Returns the flagged row ids, ascending - only rows that are still in the
+    table.
     """
     cols = columns_for_ids(suggestion)
-    errors_table = query._get_errors_table(node_table)
-
-    rows = fetch_sql(
-        f'''SELECT DISTINCT e.row_id
-            FROM "{errors_table}" e
-            JOIN "{node_table}" t ON t."ID" = e.row_id
-            WHERE e.column_id = ANY(:cols) AND e.error_type = :etype
-            ORDER BY e.row_id''',
-        False,
-        engine,
-        {"cols": cols, "etype": suggestion.error_type},
-    )
-    # Cast explicitly - psycopg2 cannot adapt numpy integer types on the way back out
-    return [int(r[0]) for r in (rows or [])]
+    return query.flagged_row_ids(node_table, cols, suggestion.error_type)
 
 
 def guard(node_table: str, suggestion: Suggestion) -> None:
@@ -255,13 +217,11 @@ def guard(node_table: str, suggestion: Suggestion) -> None:
         )
 
     col = suggestion.imputed_column
-    with engine.connect() as conn:
-        try:
-            is_numeric = query._is_numeric(conn, col, node_table)
-        except Exception as exc:
-            raise SuggestionError(f"could not read the type of {col}: {exc}") from exc
-        # The same call impute_by_ids will make, so the guard and the write cannot disagree
-        fill = query._compute_imputation_value(conn, node_table, col, is_numeric)
+    try:
+        # The same value impute_by_ids will fill with, so the guard and the write cannot disagree
+        fill = query.imputation_value(node_table, col)
+    except Exception as exc:
+        raise SuggestionError(f"could not compute a fill value for {col}: {exc}") from exc
 
     if fill is None:
         raise SuggestionError(f"{col} has no clean values to compute a fill from")
@@ -281,12 +241,17 @@ def suggestion_spec(suggestion: Suggestion) -> candidates.CandidateSpec:
     (app/server_utils/candidates.py). Only where it came from differs: the model's reason and the flag it targets
     ride along, and the row count is the server's, never the model's claim.
     """
+    if len(suggestion.columns) == 1:
+        chart_type = "histogram"
+    else:
+        chart_type = "heatmap"
+
     meta = {
         "label": suggestion.label(),
         "reason": suggestion.reason,
         "row_count": len(suggestion.row_ids),
         "error_type": suggestion.error_type,
-        "chart_type": "histogram" if len(suggestion.columns) == 1 else "heatmap",
+        "chart_type": chart_type,
         # Kept so the suggestion can be told apart from its siblings, and re-checked if ever needed
         "suggestion": {"op": suggestion.op, "columns": suggestion.columns, "target": suggestion.target,
                        "error_type": suggestion.error_type},
@@ -319,6 +284,8 @@ def stage_suggestions(node_table: str, suggestions: list[Suggestion]):
              be built)
     """
     specs = []
+    # Keyed by id() because a CandidateSpec, a plain dataclass, can't be hashed: it says which suggestion a failed
+    # spec came from
     suggestion_of_spec = {}
     for suggestion in suggestions:
         spec = suggestion_spec(suggestion)

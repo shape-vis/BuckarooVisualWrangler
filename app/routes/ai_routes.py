@@ -15,7 +15,6 @@ import traceback
 
 from flask import request
 
-import app
 from app import app as flask_app
 from app.llm import gemini_client, tools
 from app.llm.profile import build_profile_block
@@ -41,11 +40,57 @@ def ai_status():
     The front end asks once and hides the AI button when the answer is no, rather than growing a
     button on every node that can only ever produce the same error.
     """
-    return {
-        "success": True,
-        "configured": gemini_client.is_configured(),
-        "model": gemini_client.model_name() if gemini_client.is_configured() else None,
-    }
+    configured = gemini_client.is_configured()
+
+    model = None
+    if configured:
+        model = gemini_client.model_name()
+
+    return {"success": True, "configured": configured, "model": model}
+
+
+def _no_suggestions_reason(calls):
+    """
+    The model's escape hatch: a lone no-suggestions call, giving its reason. It only means anything on its own - if
+    it arrived alongside real proposals, the proposals win and it is ignored.
+    :return: the reason, or None when the model proposed something
+    """
+    if len(calls) != 1 or calls[0]["name"] != tools.NO_SUGGESTIONS:
+        return None
+    reason = str(calls[0]["args"].get("reason") or "").strip()
+    return reason or "Nothing here needs repairing."
+
+
+def _prepare_calls(node_table, calls, columns):
+    """
+    Turn the model's tool calls into prepared suggestions: validated, their rows resolved from the flags, and
+    checked as safe to run. A call that cannot be run is dropped, not surfaced - the model proposing something
+    impossible is not the user's problem - and so is a repeat of one already kept.
+    :return: (the prepared suggestions, in the model's order, and a note per dropped call)
+    """
+    prepared = []
+    seen = set()
+    rejected = []
+
+    for call in calls:
+        if call["name"] == tools.NO_SUGGESTIONS:
+            continue
+
+        raw = dict(call["args"])
+        raw["op"] = call["name"]
+        try:
+            suggestion = ai_wrangle.prepare(node_table, raw, columns)
+        except SuggestionError as exc:
+            rejected.append(f"{call['name']}: {exc}")
+            continue
+
+        key = (suggestion.op, tuple(suggestion.columns), suggestion.target, suggestion.error_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        prepared.append(suggestion)
+
+    return prepared, rejected
 
 
 @flask_app.post("/api/ai/suggest")
@@ -92,36 +137,11 @@ def ai_suggest():
         print(traceback.format_exc())
         return {"success": False, "error": str(exc)}, 500
 
-    prepared = []
-    seen = set()
-    rejected = []
+    no_suggestions_reason = _no_suggestions_reason(calls)
+    if no_suggestions_reason is not None:
+        return {"success": True, "node_table": node_table, "no_suggestions": no_suggestions_reason}
 
-    for call in calls:
-        if call["name"] == tools.NO_SUGGESTIONS:
-            # The model's escape hatch. It only means anything on its own - if it arrived
-            # alongside real proposals, the proposals win and this is ignored.
-            if len(calls) == 1:
-                reason = str(call["args"].get("reason") or "").strip()
-                return {"success": True, "node_table": node_table,
-                        "no_suggestions": reason or "Nothing here needs repairing."}
-            continue
-
-        raw = dict(call["args"])
-        raw["op"] = call["name"]
-        try:
-            suggestion = ai_wrangle.prepare(node_table, raw, columns)
-        except SuggestionError as exc:
-            # A suggestion that cannot be run is dropped, not surfaced. The model proposing
-            # something impossible is not the user's problem.
-            rejected.append(f"{call['name']}: {exc}")
-            continue
-
-        key = (suggestion.op, tuple(suggestion.columns),
-               suggestion.target, suggestion.error_type)
-        if key in seen:
-            continue
-        seen.add(key)
-        prepared.append(suggestion)
+    prepared, rejected = _prepare_calls(node_table, calls, columns)
 
     # Every suggestion that survived is built at once. One that cannot be staged is dropped like one that
     # cannot be run.
@@ -135,7 +155,8 @@ def ai_suggest():
             rejected.append(f"{suggestion.op}: {exc}")
 
     if rejected:
-        print(f"[ai] dropped {len(rejected)} unusable suggestion(s): {'; '.join(rejected)}")
+        rejected_list = "; ".join(rejected)
+        print(f"[ai] dropped {len(rejected)} unusable suggestion(s): {rejected_list}")
 
     if not suggestions:
         return {"success": True, "node_table": node_table,

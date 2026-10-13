@@ -1,14 +1,25 @@
 # This file handles all endpoints related to the pgraph - April 7, 2026
 
 from flask import request
-import app as app_package
 from app import app, db_operations, engine
-from app.pgraph.pgraph import PGraph
 from app.pgraph.metrics import quality_trajectory
 from app.db_utils.compare_sql import PLOT_KINDS, CompareSQL
 from app.pgraph.distortion import distortion_trajectory, drift_detail
 from app.pgraph.comparison import Comparison, ComparisonError
-from app.server_utils.service_helpers import get_current_pgraph, clicked_node_access_helper
+from app.server_utils.service_helpers import (
+    WRANGLE_LOCK,
+    clicked_node_access_helper,
+    get_current_pgraph,
+    session_graph,
+)
+
+
+def _graph_or_error():
+    """:return: (the session's graph, None), or (None, an error response) before anything has been uploaded"""
+    pgraph = session_graph()
+    if pgraph is None:
+        return None, ({"success": False, "error": "no graph in this session"}, 400)
+    return pgraph, None
 
 
 @app.get("/api/routes/update_pgraph")
@@ -20,8 +31,11 @@ def set_selected_node():
     try:
         body = request.get_json(force=True)
         clicked_node_id = body['nodeId']
-        current_table_name = clicked_node_access_helper(clicked_node_id)
-        db_operations.load_table(current_table_name, f"errors_{current_table_name}", f"dp_{current_table_name}")
+        # Under the lock, so a candidate can't be declined - and its tables dropped - between moving onto it and
+        # loading it
+        with WRANGLE_LOCK:
+            current_table_name = clicked_node_access_helper(clicked_node_id)
+            db_operations.load_table(current_table_name)
         return {
             "success": True,
             "current_table_name": current_table_name
@@ -44,10 +58,9 @@ def branch_trajectory():
     delta and contribution. Reads the metrics cached on each node at creation - nothing is recomputed.
     """
     try:
-        # The session's graph hangs off the app package, not the Flask object
-        pgraph = app_package.pgraph_for_session
-        if pgraph is None:
-            return {"success": False, "error": "no graph in this session"}, 400
+        pgraph, error = _graph_or_error()
+        if error:
+            return error
 
         source = request.args.get("source")
         target = request.args.get("target")
@@ -67,7 +80,12 @@ def branch_trajectory():
             return {"success": False,
                     "error": f"{destination} is not on the branch leaving through {target}"}, 400
 
-        ordered_metrics = [pgraph.node_map[table_name].metrics for table_name in path]
+        ordered_metrics = []
+        ordered_distortions = []
+        for table_name in path:
+            node = pgraph.node_map[table_name]
+            ordered_metrics.append(node.metrics)
+            ordered_distortions.append(node.distortion)
 
         return {
             "success": True,
@@ -77,7 +95,7 @@ def branch_trajectory():
             "nodes": path,
             "dimensions": quality_trajectory(ordered_metrics),
             # Beside the error dimensions rather than among them: drift is a cost, not an error
-            "distortion": distortion_trajectory([pgraph.node_map[table_name].distortion for table_name in path]),
+            "distortion": distortion_trajectory(ordered_distortions),
         }
     except Exception as e:
         return {"success": False, "error": str(e)}, 400
@@ -85,7 +103,8 @@ def branch_trajectory():
 
 def _bounded_int(name, default, low, high):
     """An integer query parameter, clamped so a request cannot ask for an absurd amount of work."""
-    return max(low, min(high, int(request.args.get(name, default))))
+    value = int(request.args.get(name, default))
+    return max(low, min(high, value))
 
 
 @app.get("/api/pgraph/compare")
@@ -99,9 +118,9 @@ def compare_nodes():
     Read-only: neither node becomes the session's current table.
     """
     try:
-        pgraph = app_package.pgraph_for_session
-        if pgraph is None:
-            return {"success": False, "error": "no graph in this session"}, 400
+        pgraph, error = _graph_or_error()
+        if error:
+            return error
 
         table_a = request.args.get("a")
         table_b = request.args.get("b")
@@ -117,7 +136,9 @@ def compare_nodes():
             return {"success": False, "error": f"unknown plot kind {kind!r}"}, 400
 
         x_column = request.args.get("x")
-        y_column = request.args.get("y") if kind != "histogram" else None
+        y_column = None
+        if kind != "histogram":
+            y_column = request.args.get("y")
         if not x_column:
             return {"success": False, "error": "missing x"}, 400
         if kind != "histogram" and not y_column:
@@ -168,9 +189,9 @@ def drift_detail_view():
     common ancestor. Read-only: the node does not become the session's current table.
     """
     try:
-        pgraph = app_package.pgraph_for_session
-        if pgraph is None:
-            return {"success": False, "error": "no graph in this session"}, 400
+        pgraph, error = _graph_or_error()
+        if error:
+            return error
 
         node, error = _requested_node(pgraph)
         if error:
@@ -199,14 +220,6 @@ def drift_detail_view():
 # The compare panel's settings, kept on the session's graph when the user saves them - see
 # app/pgraph/comparison.py. Settings only: opening one asks /api/pgraph/compare and drift_detail again.
 
-def _session_graph():
-    """:return: (graph, None), or (None, an error response) when there is no graph to keep comparisons on"""
-    pgraph = app_package.pgraph_for_session
-    if pgraph is None:
-        return None, ({"success": False, "error": "no graph in this session"}, 400)
-    return pgraph, None
-
-
 @app.post("/api/pgraph/comparisons")
 def save_comparison():
     """
@@ -215,7 +228,7 @@ def save_comparison():
     Body: a comparison record, as ui/src/utils/comparisonSpec.js builds it. Returns it with its new id.
     """
     try:
-        pgraph, error = _session_graph()
+        pgraph, error = _graph_or_error()
         if error:
             return error
         comparison = pgraph.add_comparison(Comparison.from_json(request.get_json(force=True), pgraph))
@@ -231,18 +244,22 @@ def list_comparisons():
 
     Query: [?anchor=<node>] to list only those pinned to one node.
     """
-    pgraph, error = _session_graph()
+    pgraph, error = _graph_or_error()
     if error:
         return error
     anchor = request.args.get("anchor") or None
-    return {"success": True, "comparisons": [c.__json__() for c in pgraph.comparisons_for(anchor)]}
+
+    comparisons = []
+    for comparison in pgraph.comparisons_for(anchor):
+        comparisons.append(comparison.__json__())
+    return {"success": True, "comparisons": comparisons}
 
 
 @app.put("/api/pgraph/comparisons/<comparison_id>")
 def update_comparison(comparison_id):
     """Replace a saved comparison's settings. Body: the whole record, as for saving one."""
     try:
-        pgraph, error = _session_graph()
+        pgraph, error = _graph_or_error()
         if error:
             return error
         comparison = pgraph.update_comparison(
@@ -256,7 +273,7 @@ def update_comparison(comparison_id):
 
 @app.delete("/api/pgraph/comparisons/<comparison_id>")
 def delete_comparison(comparison_id):
-    pgraph, error = _session_graph()
+    pgraph, error = _graph_or_error()
     if error:
         return error
     if pgraph.remove_comparison(comparison_id) is None:

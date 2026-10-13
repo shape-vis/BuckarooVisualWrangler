@@ -4,8 +4,8 @@ The flagged-IDs-only invariant, per operation.
     An AI-suggested operation acts only on rows that errors_<table> flags for the column(s)
     that operation touches.
 
-The case that matters most is the 2D impute. create_previews_2d writes cols[0] for every id it
-is handed, and impute_by_ids has no predicate of its own, so handing it the *union* of two
+The case that matters most is the 2D impute. impute_by_ids fills the imputed column for every id it
+is handed, with no predicate of its own, so handing it the *union* of two
 columns' flagged rows would overwrite a good value in every row whose only flag was in the other
 column. Scoping the id set to the imputed column is what prevents that, and these tests pin it.
 """
@@ -28,7 +28,7 @@ def _drop(conn, *names):
 def _seed(table, data, errors):
     pd.DataFrame(data).to_sql(table, engine, if_exists="replace", index=False)
     frame = pd.DataFrame(errors, columns=["row_id", "column_id", "error_type"])
-    # create_error_df yields an int64 row_id even when it finds nothing, so the real errors_
+    # DetectorSQL writes row_id as bigint even when it finds nothing, so the real errors_
     # table is always bigint. An empty DataFrame built by hand would be all-object and land as
     # text, which nothing in the app ever produces - and the join would fail on the type rather
     # than on anything this test is about.

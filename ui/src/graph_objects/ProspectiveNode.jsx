@@ -4,22 +4,10 @@ import PreviewCard from "../panels/PreviewCard.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
 import { showTooltip, moveTooltip, hideTooltip } from "../utils/visCommon.jsx";
+import { escapeHtml } from "../utils/html.js";
+import { CANDIDATE_SOURCES } from "../utils/candidates.js";
 import { ComparisonBadge, NodeTools, SupportHandles } from "./NodeTypes.jsx";
 import "../styles/Nodes.css";
-
-/* The reason can come from a language model, and showTooltip writes it as html. */
-function escapeHtml(text) {
-    return String(text ?? "")
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-
-/* What each source calls its candidates. An AI suggestion counts the flagged rows its wrangle touches; a
-   repair, the rows the user selected. */
-const SOURCES = {
-    ai: { tag: "AI", rowNoun: "flagged" },
-    repair: { tag: "Repair", rowNoun: "selected" },
-};
 
 /**
  * A candidate: a wrangle staged as a provisional node of the graph - a way of repairing the user's selection,
@@ -35,19 +23,33 @@ const SOURCES = {
  */
 export function ProspectiveNode({ id, data, isConnectable }) {
     const candidate = data.candidate ?? {};
-    const source = SOURCES[candidate.source] ?? SOURCES.repair;
+    const source = CANDIDATE_SOURCES[candidate.source] ?? CANDIDATE_SOURCES.repair;
     const { acceptCandidate, declineCandidate, busy, busyId } = useCandidates();
 
     const isBusy = busyId === id;
     const rowCount = candidate.row_count ?? 0;
     const rows = rowCount === 1 ? `1 ${source.rowNoun} row` : `${rowCount.toLocaleString()} ${source.rowNoun} rows`;
-    // A repair is of whatever the user selected, so it names no error type
-    const errorLabel = candidate.error_type ? (ERROR_TYPES[candidate.error_type] ?? candidate.error_type) : null;
 
+    // A repair is of whatever the user selected, so it names no error type
+    let errorLabel = null;
+    if (candidate.error_type) {
+        errorLabel = ERROR_TYPES[candidate.error_type] ?? candidate.error_type;
+    }
+
+    let rowsLine = escapeHtml(rows);
+    if (errorLabel) {
+        rowsLine += ` · ${escapeHtml(errorLabel)}`;
+    }
+
+    /* The reason can come from a language model, and showTooltip writes it as html, so all of it is escaped.
+       A missing label or reason shows as nothing rather than as "undefined". */
+    const labelText = escapeHtml(candidate.label ?? "");
+    const nodeText = escapeHtml(data.label ?? "");
+    const reasonText = escapeHtml(candidate.reason ?? "");
     const tooltip = (event) => showTooltip(
-        `<strong>${escapeHtml(candidate.label)}</strong> · ${escapeHtml(data.label)}<br/>`
-        + `${escapeHtml(rows)}${errorLabel ? ` · ${escapeHtml(errorLabel)}` : ""}<br/>`
-        + `${escapeHtml(candidate.reason)}`,
+        `<strong>${labelText}</strong> · ${nodeText}<br/>`
+        + `${rowsLine}<br/>`
+        + `${reasonText}`,
         event,
     );
 

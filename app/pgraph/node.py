@@ -2,9 +2,7 @@
 
 When the user performs a new wrangling operation, a new instance of this class is made
 and put into the provenance graph
-
 """
-
 
 
 def wrangle_operation_name(wrangle_op):
@@ -75,12 +73,6 @@ class GraphNode:
         self.error_table_name = error_table_name
         self.children = []
 
-        """ quality metric parts """
-        self.anomaly_metric = 0
-        self.missing_metric = 0
-        self.incomplete_metric = 0
-        self.mismatch_metric = 0
-
         # Per-column and node-level error rates, a NodeMetrics. Computed once when the node is
         # created and never recomputed on read - see app/pgraph/metrics.py
         self.metrics = None
@@ -90,7 +82,7 @@ class GraphNode:
         # never folded into the error totals - see app/pgraph/distortion.py
         self.distortion = None
 
-        """ staging - see app/server_utils/candidates.py """
+        # Staging - see app/server_utils/candidates.py
         # A candidate wrangle - a repair of a selection, or an AI suggestion - staged as a node so it can be
         # analysed before it is accepted. It is a full node of the graph in every way but one: nothing may be
         # wrangled from it until it is accepted. Accepting only clears this.
@@ -120,17 +112,10 @@ class GraphNode:
 
     def set_metrics(self, metrics):
         """
-        Cache this node's quality metrics and mirror the four node-level dimensions onto the scalar
-        fields above.
+        Cache this node's quality metrics.
         :param metrics: a NodeMetrics for this node's table
         """
         self.metrics = metrics
-        self.update_metrics(
-            anomaly=metrics.dimension("anomaly"),
-            missing=metrics.dimension("missing"),
-            incomplete=metrics.dimension("incomplete"),
-            mismatch=metrics.dimension("mismatch"),
-        )
 
     def set_distortion(self, distortion):
         """
@@ -138,13 +123,6 @@ class GraphNode:
         :param distortion: what distortion.node_distortion returns, plus the node's edit facts
         """
         self.distortion = distortion
-
-    def update_metrics(self, anomaly, missing, incomplete, mismatch):
-
-        self.anomaly_metric = anomaly
-        self.missing_metric = missing
-        self.incomplete_metric = incomplete
-        self.mismatch_metric = mismatch
 
     def wrangle_label(self):
         """The operation and columns that produced this node - its incoming edge's hover detail."""
@@ -164,7 +142,3 @@ class GraphNode:
     def remove_child(self, child_node: str):
         if child_node in self.children:
             self.children.remove(child_node)
-
-
-
-

@@ -9,7 +9,6 @@ import {NoteNode, RootNoteNode, CollapsedNode, AnalysisDotNode} from "../graph_o
 import {ProspectiveNode} from "../graph_objects/ProspectiveNode.jsx";
 import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
-import {SelectionContext} from "./SelectionContext.jsx";
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "./visualizationCaches.jsx";
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/serverCalls.jsx";
@@ -27,12 +26,10 @@ import "../styles/Nodes.css"
 
 export const PGraphContext = createContext(null);
 
-const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-
 /* The footprint dagre reserves per node. This has to track what the nodes actually measure in
    Nodes.css - min-width 150px plus padding, border, the label and the icon row, and the comparison
-   badge that floats above them - because dagre packs the graph to whatever size it is told. The old
-   100x75 was smaller than a rendered node, which is why they crowded. */
+   badge that floats above them - because dagre packs the graph to whatever size it is told, and a
+   footprint smaller than a rendered node crowds them. */
 const nodeWidth = 200;
 const nodeHeight = 100;
 
@@ -43,24 +40,36 @@ const PREVIEW_FOOTPRINT = {height: 340};
 // The edge into a candidate: dashed, since its wrangle has not been accepted
 const PROVISIONAL_EDGE_STYLE = {stroke: "#7c3aed", strokeDasharray: "6 4"};
 
+// The wrangles joining graph nodes, drawn heavier than React Flow's 1px so the tree reads at a glance
+export const TREE_EDGE_WIDTH = 2.5;
+
 // Gaps between siblings, between ranks, and between edges sharing a rank. Ranks get the most room:
 // that is where the edge labels sit, and where the magnifier's readout hangs.
 const NODE_SEPARATION = 50;
 const RANK_SEPARATION = 80;
 const EDGE_SEPARATION = 14;
 
-/* Roughly how wide an edge label renders, so dagre can reserve space for it. Labels are back to the
-   bare operation - "impute", "delete" - with the columns moved into the edge's hover detail, so this
-   reserves far less than it did when the columns were printed on the edge itself. */
+/* Roughly how wide an edge label renders, so dagre can reserve space for it. A label is the bare
+   operation - "impute", "delete" - with its columns in the edge's hover detail, so it stays short. */
 const EDGE_LABEL_HEIGHT = 20;
 const EDGE_LABEL_CHAR_WIDTH = 7;
 const MIN_EDGE_LABEL_WIDTH = 44;
+
+/* Nodes we build ourselves keep the type they were built with: a collapsed placeholder stands in for a run,
+   and a prospective node is a staged wrangle, with its preview and its Accept and Decline. Everything else is
+   a node the server sent, which the layout types. */
+const PRESERVED_TYPES = new Set(["collapsedNode", "prospectiveNode"]);
+
+// No branch picked out of the graph yet. Shared, so it is frozen: a branch is only ever replaced, never edited.
+const EMPTY_BRANCH = Object.freeze({source: null, target: null, destination: null});
 
 const edgeLabelSize = (label) => ({
     width: Math.max(MIN_EDGE_LABEL_WIDTH, String(label ?? "").length * EDGE_LABEL_CHAR_WIDTH),
     height: EDGE_LABEL_HEIGHT,
     labelpos: "c",
 });
+
+const labelWidthOf = (edge) => edgeLabelSize(edge.label).width;
 
 
 const nodeTypes = {
@@ -78,19 +87,79 @@ const nodeTypes = {
     supportDropZone: SupportDropZone,
 };
 
+/* What the graph draws until the server's graph arrives: the current table, alone, as the root */
+function placeholderNodes(tableName) {
+    return [{id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "rootNoteNode"}];
+}
+
+const isPreserved = (node) => PRESERVED_TYPES.has(node.type);
+
+/* Types a node the server sent: a candidate - a provisional node - is drawn as a prospective node, as tall as
+   its preview chart needs; anything else as a plain card. */
+function typeServerNode(node) {
+    if (node.data?.provisional) {
+        node.type = "prospectiveNode";
+        node.data.footprint = PREVIEW_FOOTPRINT;
+    } else {
+        node.type = "noteNode";
+    }
+}
+
+/* The size dagre is told a node is: its card, or taller for a node that draws taller than a card - a repair
+   candidate with its preview chart says so in its footprint - widened by any room reserved for its sub-nodes. */
+function layoutSizeOf(node, room) {
+    const height = node.data?.footprint?.height ?? nodeHeight;
+    if (!room) {
+        return {width: nodeWidth, height};
+    }
+    return {width: nodeWidth + room.left + room.right, height: Math.max(height, room.height)};
+}
+
+/* What dagre is told an edge's label is. Passing the label's size makes dagre lay the graph out around the
+   labels rather than letting sibling branches print theirs on top of one another. When a sub-node sits beside
+   the edge, the "label" is that sub-node's room instead, set to one side of the edge's own label. */
+function layoutLabelOf(edge, room) {
+    const label = edgeLabelSize(edge.label);
+    if (!room) {
+        return label;
+    }
+    const labelpos = room.side === "left" ? "l" : "r";
+    return {width: room.width, height: room.height, labelpos, labeloffset: label.width / 2 + EDGE_GAP};
+}
+
+/* The server sends type "edgeType", which is not a registered edge type - React Flow silently
+   falls back to its bezier default. Name that default outright so the curve is a choice rather
+   than a fallback, and so it cannot change under us. */
+function styleTreeEdge(edge) {
+    // An edge into a candidate is dashed and does not animate: its wrangle has not been accepted yet
+    const provisional = Boolean(edge.data?.provisional);
+    const provisionalStyle = provisional ? PROVISIONAL_EDGE_STYLE : {};
+
+    const styled = {
+        ...edge,
+        type: "default",
+        style: {...edge.style, ...provisionalStyle, strokeWidth: TREE_EDGE_WIDTH},
+    };
+    if (provisional) {
+        styled.animated = false;
+    }
+    return styled;
+}
+
 /* `reserve` is the room, by node id, that a node's supporting sub-nodes need on its left and right (see
    sideReserve). Dagre is told that node is that much wider, so its neighbours keep clear, and the card is
    placed inside the wider slot with the room either side of it.
 
    `edgeRoom` is the room, by target node id, that a sub-node beside that node's incoming edge needs (see
    edgeReserve). Dagre is told the edge's label is that size and sits to its right, clear of the edge's own
-   label - which also opens the gap between the two ranks to its height. */
-const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(), edgeRoom = new Map()} = {}) => {
-    const isHorizontal = direction === 'LR';
-    const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+   label - which also opens the gap between the two ranks to its height.
 
+   Writes each node's type, and a candidate's footprint, onto the nodes it is handed. */
+const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(), edgeRoom = new Map()} = {}) => {
     if (!nodes || nodes.length === 0) return {nodes: [], edges: edges || []};
 
+    const isHorizontal = direction === 'LR';
+    const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
     dagreGraph.setGraph({
         rankdir: direction,
         nodesep: NODE_SEPARATION,
@@ -98,25 +167,12 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
         edgesep: EDGE_SEPARATION,
     });
 
-    /* Nodes we build ourselves keep the type they were built with. Everything else is a node the server
-       sent, which is typed below. A collapsed placeholder stands in for a run; a candidate is drawn as a
-       prospective node - a staged wrangle, with its preview and its Accept and Decline. Labels are the server's
-       own short ones - n0b, c7 - so they need no shortening. */
-    const PRESERVED_TYPES = new Set(["collapsedNode", "prospectiveNode"]);
-    const isPreserved = (node) => PRESERVED_TYPES.has(node.type);
-
-    nodes.forEach((node) => {
+    for (const node of nodes) {
         if (!isPreserved(node)) {
-            node.type = node.data?.provisional ? "prospectiveNode" : "noteNode";
-            if (node.data?.provisional) node.data.footprint = PREVIEW_FOOTPRINT;
+            typeServerNode(node);
         }
-        // A node that draws taller than a card - a repair candidate with its preview chart - says so
-        const height = node.data?.footprint?.height ?? nodeHeight;
-        const room = reserve.get(node.id);
-        dagreGraph.setNode(node.id, room
-            ? {width: nodeWidth + room.left + room.right, height: Math.max(height, room.height)}
-            : {width: nodeWidth, height});
-    });
+        dagreGraph.setNode(node.id, layoutSizeOf(node, reserve.get(node.id)));
+    }
 
     // Find the root by its parent rather than by position: collapsing hands us a filtered list, in
     // which the root is not necessarily first
@@ -125,103 +181,164 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
     // otherwise a render with no root would promote a prospective node into the root's shape
     if (rootNode && !isPreserved(rootNode)) rootNode.type = "rootNoteNode"
 
-    edges.forEach((edge) => {
-        // Passing the label's size makes dagre lay the graph out around the labels rather than
-        // letting sibling branches print theirs on top of one another
-        const label = edgeLabelSize(edge.label);
-        const room = edgeRoom.get(edge.target);
-        dagreGraph.setEdge(edge.source, edge.target, room
-            ? {width: room.width, height: room.height, labelpos: room.side === "left" ? "l" : "r",
-               labeloffset: label.width / 2 + EDGE_GAP}
-            : label);
-    });
+    for (const edge of edges) {
+        dagreGraph.setEdge(edge.source, edge.target, layoutLabelOf(edge, edgeRoom.get(edge.target)));
+    }
 
     dagre.layout(dagreGraph);
 
     const newNodes = nodes.map((node) => {
-        const nodeWithPosition = dagreGraph.node(node.id);
+        const laidOut = dagreGraph.node(node.id);
+        // The card sits after any room reserved on its left
+        const leftRoom = reserve.get(node.id)?.left ?? 0;
+        const height = node.data?.footprint?.height ?? nodeHeight;
         return {
             ...node,
             targetPosition: isHorizontal ? 'left' : 'top',
             sourcePosition: isHorizontal ? 'right' : 'bottom',
             position: {
-                // The card sits after any room reserved on its left
-                x: nodeWithPosition.x - nodeWithPosition.width / 2 + (reserve.get(node.id)?.left ?? 0),
-                y: nodeWithPosition.y - (node.data?.footprint?.height ?? nodeHeight) / 2,
+                x: laidOut.x - laidOut.width / 2 + leftRoom,
+                y: laidOut.y - height / 2,
             },
-
         };
     });
 
-    /* The server sends type "edgeType", which is not a registered edge type - React Flow silently
-       falls back to its bezier default. Name that default outright so the curve is a choice rather
-       than a fallback, and so it cannot change under us. */
-    const newEdges = edges.map((edge) => ({
-        ...edge,
-        type: "default",
-        // An edge into a candidate is dashed and does not animate: its wrangle has not been accepted yet
-        ...(edge.data?.provisional ? {animated: false} : {}),
-        style: {...edge.style, ...(edge.data?.provisional ? PROVISIONAL_EDGE_STYLE : {}), strokeWidth: TREE_EDGE_WIDTH},
-    }));
+    const newEdges = edges.map(styleTreeEdge);
 
     return {nodes: newNodes, edges: newEdges};
 };
 
-// The wrangles joining graph nodes, drawn heavier than React Flow's 1px so the tree reads at a glance
-export const TREE_EDGE_WIDTH = 2.5;
+/* Lays the folded graph out as a tree, then places the supporting sub-nodes beside it.
+
+   Sub-nodes stay out of dagre: it only reserves room beside each host or edge, and they are placed in that
+   room afterwards. They go on the side their host's branch leans to - left for a left child - and which side
+   that is only shows once the tree is laid out. So with any to place, the bare tree is laid out once to see
+   where each host lands, and again with each one's room reserved on that side.
+
+   Returns the tree's nodes and edges, and supportPlacement: the sub-nodes and their links, as
+   placeSupportNodes gives them. */
+function layoutWithSupport(folded, supported) {
+    /* Laying out writes onto the nodes it is handed, and applyCollapse hands back the server's own node
+       objects when nothing is folded - so every layout gets copies. */
+    function layoutTree(reserve, edgeRoom) {
+        const nodeCopies = folded.nodes.map((node) => ({...node, data: {...node.data}}));
+        const edgeCopies = [...folded.edges];
+        return getLayoutedElements(nodeCopies, edgeCopies, 'TB', {reserve, edgeRoom});
+    }
+
+    const bareLayout = layoutTree(new Map(), new Map());
+    const sides = branchSides(supported, bareLayout.nodes, bareLayout.edges);
+
+    let layout = bareLayout;
+    if (supported.length > 0) {
+        layout = layoutTree(sideReserve(supported, sides), edgeReserve(supported, sides));
+    }
+
+    // Edge sub-nodes follow the drawn edge rather than dagre's, so groups can still crowd; move them apart
+    const treeNodes = spreadSupportGroups(supported, layout.nodes, layout.edges, labelWidthOf, sides);
+    const supportPlacement = placeSupportNodes(supported, treeNodes, layout.edges, labelWidthOf, sides);
+
+    return {treeNodes, treeEdges: layout.edges, supportPlacement};
+}
+
+/* The nodes to draw, each keeping the size React Flow measured it at last time.
+
+   The layout builds every node afresh, and React Flow treats one that arrives without a measured size as never
+   measured: it hides it, drops its handles - so its edges vanish too - and waits for a fresh measurement, which
+   a node whose size did not change may never get. Declining one candidate would hide its siblings that way,
+   until something else redrew the graph. A node whose size does change is measured again regardless, since
+   React Flow keeps watching its element. */
+function keepMeasuredSizes(current, drawn) {
+    const measuredSizes = new Map();
+    for (const node of current) {
+        if (node.measured) measuredSizes.set(node.id, node.measured);
+    }
+
+    return drawn.map((node) => {
+        const measured = measuredSizes.get(node.id);
+        if (!measured) return node;
+        return {...node, measured};
+    });
+}
+
+/* The tree's drawn nodes, split into the accepted ones and the candidates. A folded run's placeholder is
+   neither: it is a way of looking at nodes already drawn. */
+function splitDrawnNodes(treeNodes) {
+    const acceptedNodes = [];
+    const candidateNodes = [];
+    for (const node of treeNodes) {
+        if (node.type === "prospectiveNode") {
+            candidateNodes.push(node);
+        } else if (node.type !== "collapsedNode") {
+            acceptedNodes.push(node);
+        }
+    }
+    return {acceptedNodes, candidateNodes};
+}
+
+/* What the view should move to after a draw, by id - empty when nothing new arrived. An accepted node is new
+   once ever, including a candidate the moment it is accepted; a candidate is new whenever it was not drawn
+   just before. The focus is each new node, or the node new candidates hang from, together with all of that
+   node's candidates. */
+function newFocusIds(acceptedNodes, candidateNodes, seenNodeIds, previousCandidateIds) {
+    const anchors = new Set();
+    for (const node of acceptedNodes) {
+        if (!seenNodeIds.has(node.id)) anchors.add(node.id);
+    }
+    for (const node of candidateNodes) {
+        if (!previousCandidateIds.has(node.id)) anchors.add(node.data.parent);
+    }
+    if (anchors.size === 0) return [];
+
+    const candidateIds = [];
+    for (const node of candidateNodes) {
+        if (anchors.has(node.data.parent)) candidateIds.push(node.id);
+    }
+    return [...anchors, ...candidateIds];
+}
+
+// Which step of picking a branch the user is on: its edge, then where it ends
+function selectionStageOf(branchSelection) {
+    if (!branchSelection.target) return "edge";
+    if (!branchSelection.destination) return "destination";
+    return "complete";
+}
 
 export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();
     // Opening a node's details brings the dock forward on its tab
     const {revealTab} = useDock();
-    const initialNodes = [
-        {id: tableName, position: {x: 0, y: 0}, data: {label: tableName}, type: "rootNoteNode"}
-    ];
+    const {setRefreshKey} = useContext(ViewContext);
 
-    const viewContext = useContext(ViewContext);
-    // const setRefreshKey = viewContext.setRefreshKey();
-
-    const initialEdges = [
-        {id: "n1-n2", source: "n1", target: "n2", type: "step", label: "wrangler operation"},
-    ];
-
-    // Precompute initial layout once at module load
-    const {nodes: layoutedNodes, edges: layoutedEdges} = getLayoutedElements(
-        initialNodes,
-        initialEdges
-    );
-
-    const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
-    const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
+    const [nodes, setNodes, onNodesChange] = useNodesState(placeholderNodes(tableName));
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
     // Selection A: the node shift-clicked to compare against the current node (selection B), or null
     const [selectionAId, setSelectionAId] = useState(null);
 
     /* The pair the user set up on purpose: a shift-clicked selection A against the current node as
        selection B. The graph badges it in both its modes, and the header's Compare button opens it. */
-    const comparisonPair = useMemo(() => (
-        (selectionAId && selectionAId !== tableName)
-            ? {a: selectionAId, b: tableName}
-            : null
-    ), [selectionAId, tableName]);
+    const comparisonPair = useMemo(() => {
+        const hasSelectionA = selectionAId && selectionAId !== tableName;
+        if (!hasSelectionA) return null;
+        return {a: selectionAId, b: tableName};
+    }, [selectionAId, tableName]);
 
     /* The branch the user is picking out of the graph: an edge fixes where it starts and which way it
        leaves that node, a destination fixes where it stops. Both are chosen by clicking the graph. */
-    const [branchSelection, setBranchSelection] = useState({source: null, target: null, destination: null});
+    const [branchSelection, setBranchSelection] = useState(EMPTY_BRANCH);
     const [branchTrajectory, setBranchTrajectory] = useState(null);
     const [branchTrajectoryLoading, setBranchTrajectoryLoading] = useState(false);
 
-    const selectionStage = !branchSelection.target ? "edge"
-        : !branchSelection.destination ? "destination"
-        : "complete";
+    const selectionStage = selectionStageOf(branchSelection);
 
     const startBranchSelection = useCallback(() => {
-        setBranchSelection({source: null, target: null, destination: null});
+        setBranchSelection(EMPTY_BRANCH);
         revealTab("quality");
     }, [revealTab]);
 
     const resetBranchSelection = useCallback(() => {
-        setBranchSelection({source: null, target: null, destination: null});
+        setBranchSelection(EMPTY_BRANCH);
     }, []);
 
     /* Clears every selection the graph holds at once - the comparison's selection A and the branch alike.
@@ -229,7 +346,7 @@ export function PGraphProvider({children}) {
        matters more than being able to clear them individually. */
     const clearAllSelections = useCallback(() => {
         setSelectionAId(null);
-        setBranchSelection({source: null, target: null, destination: null});
+        setBranchSelection(EMPTY_BRANCH);
     }, []);
 
     const hasAnySelection = Boolean(selectionAId || branchSelection.target);
@@ -257,17 +374,14 @@ export function PGraphProvider({children}) {
         revealTab("quality");
     }, [revealTab]);
 
-    /* Where the branch is allowed to end: the chosen edge's target and everything below it. Computed
-       here from the edges the UI already holds, so the graph can show which nodes are pickable
+    /* Where the branch is allowed to end: the chosen edge's target and everything below it, a candidate
+       included - it is a node of the graph like any other. Links out to supporting sub-nodes are not walked.
+       Computed here from the edges the UI already holds, so the graph can show which nodes are pickable
        without a round trip. The server validates the choice independently. */
-    /* Anywhere below the start edge, a candidate included - it is a node of the graph like any other. Links
-       out to supporting sub-nodes are not walked at all. */
-    const eligibleDestinations = useMemo(
-        () => (branchSelection.target
-            ? new Set(descendantsOf(treeEdgesOf(edges), branchSelection.target))
-            : new Set()),
-        [edges, branchSelection.target]
-    );
+    const eligibleDestinations = useMemo(() => {
+        if (!branchSelection.target) return new Set();
+        return new Set(descendantsOf(treeEdgesOf(edges), branchSelection.target));
+    }, [edges, branchSelection.target]);
 
     /* Fetching lives here rather than in the panel because the graph needs the result too - it lights
        up the branch's edges. Syncing to the server when the selection changes is what effects are for. */
@@ -278,6 +392,9 @@ export function PGraphProvider({children}) {
             const {source, target, destination} = branchSelection;
             if (!source || !target || !destination) {
                 setBranchTrajectory(null);
+                // A request for the previous selection may still be out; its reply is dropped, so it cannot
+                // end the loading state itself
+                setBranchTrajectoryLoading(false);
                 return;
             }
             setBranchTrajectoryLoading(true);
@@ -325,7 +442,7 @@ export function PGraphProvider({children}) {
         takenFocusKey.current = key;
         return true;
     }, []);
-    // Every real node drawn so far, so a folded run expanding again is not mistaken for new nodes
+    // Every accepted node drawn so far, so a folded run expanding again is not mistaken for new nodes
     const seenNodeIds = useRef(new Set());
     // The candidates drawn last time, so new ones can be told from those already on the graph
     const drawnCandidateIds = useRef(new Set());
@@ -360,10 +477,9 @@ export function PGraphProvider({children}) {
     const expandAllRuns = useCallback(() => setCollapsedRuns([]), []);
 
     /* The graph as the server sent it, before any folding. Collapsing is derived from this, so
-       expanding restores the real nodes without another request. */
-    /* pareto rides along: which leaves another leaf beats outright on error and drift together, worked
-       out on the server - see PGraph.pareto */
-    const [serverGraph, setServerGraph] = useState({nodes: [], edges: [], pareto: null, comparisons: []});
+       expanding restores the real nodes without another request. pareto rides along: which leaves another
+       leaf beats outright on error and drift together, worked out on the server - see PGraph.pareto */
+    const [serverGraph, setServerGraph] = useState({nodes: [], edges: [], pareto: null});
 
     /* Every real node by id, whether or not it is drawn. A node folded into a run is gone from
        `nodes`, but anything describing it - the compare modal, say - still needs its data. */
@@ -400,79 +516,29 @@ export function PGraphProvider({children}) {
     useEffect(() => {
         if (serverGraph.nodes.length === 0) return;
 
-        function drawGraph() {
-            const folded = applyCollapse(serverGraph.nodes, serverGraph.edges, liveRuns);
-            const visible = new Set(folded.nodes.map((node) => node.id));
-            /* applyCollapse hands back the server's own node objects by reference when nothing is
-               folded, and laying out writes type and label onto whatever it is given - so build a
-               new array rather than pushing onto that one. */
-            /* Supporting sub-nodes stay out of dagre: it only reserves room beside each host or edge, and
-               they are placed in that room afterwards. Only a host that is drawn gets them - one folded into
-               a run keeps its records for when it is expanded - and hidden ones reserve no room either, so
-               hiding them lets the tree close up. */
-            const supported = supportNodes.filter((record) => visible.has(record.hostId) && isSupportShown(record));
-            const lay = (reserve, edgeRoom) => getLayoutedElements(
-                folded.nodes.map((node) => ({...node, data: {...node.data}})),
-                [...folded.edges],
-                'TB',
-                {reserve, edgeRoom},
-            );
-            /* Sub-nodes go on the side their host's branch leans to - left for a left child - and which side that
-               is only shows once the tree is laid out. So with any to place, the bare tree is laid out once to see
-               where each host lands, and again with each one's room reserved on that side. */
-            const first = lay(new Map(), new Map());
-            const sides = branchSides(supported, first.nodes, first.edges);
-            const layout = supported.length
-                ? lay(sideReserve(supported, sides), edgeReserve(supported, sides))
-                : first;
-            const labelWidthOf = (edge) => edgeLabelSize(edge.label).width;
-            // Edge sub-nodes follow the drawn edge rather than dagre's, so groups can still crowd; move them apart
-            const treeNodes = spreadSupportGroups(supported, layout.nodes, layout.edges, labelWidthOf, sides);
-            const beside = placeSupportNodes(supported, treeNodes, layout.edges, labelWidthOf, sides);
-            /* After the tree, since React Flow needs every host ahead of the sub-nodes it parents.
+        const folded = applyCollapse(serverGraph.nodes, serverGraph.edges, liveRuns);
+        const visible = new Set(folded.nodes.map((node) => node.id));
+        /* Only a host that is drawn gets its sub-nodes - one folded into a run keeps its records for when it is
+           expanded - and hidden ones reserve no room either, so hiding them lets the tree close up. */
+        const supported = supportNodes.filter((record) => visible.has(record.hostId) && isSupportShown(record));
+        const {treeNodes, treeEdges, supportPlacement} = layoutWithSupport(folded, supported);
 
-               A node drawn again keeps the size React Flow measured it at last time. The layout builds every node
-               afresh, and React Flow treats one that arrives without a measured size as never measured: it hides
-               it, drops its handles - so its edges vanish too - and waits for a fresh measurement, which a node
-               whose size did not change may never get. Declining one candidate would hide its siblings that way,
-               until something else redrew the graph. A node whose size does change is measured again regardless,
-               since React Flow keeps watching its element. */
-            setNodes((current) => {
-                const measuredSizes = new Map();
-                for (const node of current) {
-                    if (node.measured) measuredSizes.set(node.id, node.measured);
-                }
+        // The tree first, since React Flow needs every host ahead of the sub-nodes it parents
+        const drawnNodes = [...treeNodes, ...supportPlacement.nodes];
+        setNodes((current) => keepMeasuredSizes(current, drawnNodes));
+        setEdges([...treeEdges, ...supportPlacement.edges]);
 
-                const drawn = [...treeNodes, ...beside.nodes];
-                return drawn.map((node) => {
-                    const measured = measuredSizes.get(node.id);
-                    return measured ? {...node, measured} : node;
-                });
-            });
-            setEdges([...layout.edges, ...beside.edges]);
+        /* The graph's first draw is the whole graph, which the view fits anyway, so it only records what
+           was drawn. */
+        const {acceptedNodes, candidateNodes} = splitDrawnNodes(treeNodes);
+        const firstDraw = seenNodeIds.current.size === 0;
+        const focusIds = newFocusIds(acceptedNodes, candidateNodes, seenNodeIds.current, drawnCandidateIds.current);
+        acceptedNodes.forEach((node) => seenNodeIds.current.add(node.id));
+        drawnCandidateIds.current = new Set(candidateNodes.map((node) => node.id));
 
-            /* What arrived with this draw. An accepted node is new once ever - including a candidate the moment
-               it is accepted; a candidate whenever it was not drawn just before. A folded run's placeholder is a
-               way of looking at nodes already seen. The graph's first draw is the whole graph, which the view
-               fits anyway, so it only records. */
-            const isStaged = (node) => node.type === "prospectiveNode";
-            const real = treeNodes.filter((node) => !isStaged(node) && node.type !== "collapsedNode");
-            const staged = treeNodes.filter(isStaged);
-            const firstDraw = seenNodeIds.current.size === 0;
-            const newReal = real.filter((node) => !seenNodeIds.current.has(node.id)).map((node) => node.id);
-            const newStaged = staged.filter((node) => !drawnCandidateIds.current.has(node.id));
-            real.forEach((node) => seenNodeIds.current.add(node.id));
-            drawnCandidateIds.current = new Set(staged.map((node) => node.id));
-
-            // The node in focus: a new node, or the one new candidates hang from - with its candidates
-            const anchors = new Set([...newReal, ...newStaged.map((node) => node.data.parent)]);
-            if (!firstDraw && anchors.size > 0) {
-                const children = staged.filter((node) => anchors.has(node.data.parent)).map((node) => node.id);
-                setFocus((current) => ({ids: [...anchors, ...children], key: current.key + 1}));
-            }
+        if (!firstDraw && focusIds.length > 0) {
+            setFocus((current) => ({ids: focusIds, key: current.key + 1}));
         }
-
-        drawGraph();
     }, [serverGraph, liveRuns, supportNodes, isSupportShown, setNodes, setEdges]);
 
     // The edges making up the selected branch, keyed "source->target", for highlighting in the graph
@@ -489,8 +555,7 @@ export function PGraphProvider({children}) {
        graph is, so anything that names a node by nodeName reads the new labels on the render that follows. */
     const receiveGraph = useCallback((result) => {
         setNodeLabels(new Map(result.nodes.map((node) => [node.id, node.data?.label ?? node.id])));
-        setServerGraph({nodes: result.nodes, edges: result.edges, pareto: result.pareto,
-            comparisons: result.comparisons ?? []});
+        setServerGraph({nodes: result.nodes, edges: result.edges, pareto: result.pareto});
     }, []);
 
     // Pull the graph from the server and re-layout it. Every path that mutates the graph - executing a
@@ -503,13 +568,9 @@ export function PGraphProvider({children}) {
         receiveGraph(pGraphResult);
     }, [receiveGraph]);
 
-    /* Pull the graph as soon as there is a table to pull it for.
-
-       Nothing did this before: refreshGraph was only called after a wrangle, undo or redo, so a
-       freshly uploaded table rendered the seeded placeholder node above instead of its own root,
-       and serverGraph stayed empty. The effect that draws the graph returns early while that is
-       true, which meant anything derived from the real graph - the AI's suggestions among them -
-       had nothing to attach to and silently never appeared. */
+    /* Pull the graph as soon as there is a table to pull it for. Until it arrives the placeholder node is
+       drawn and serverGraph is empty - and the effect that draws the graph waits on it, as does anything
+       derived from the real graph, the AI's suggestions among them. */
     useEffect(() => {
         if (!tableName) return;
 
@@ -536,21 +597,10 @@ export function PGraphProvider({children}) {
         [setEdges],
     );
 
-    const onLayout = useCallback(
-        (direction) => {
-            const {nodes: ln, edges: le} = getLayoutedElements(nodes, edges, direction);
-            setNodes([...ln]);
-            setEdges([...le]);
-        },
-        [nodes, edges, setNodes, setEdges],
-    );
-
-    /* https://reactflow.dev/api-reference/types/node-mouse-handler - this is how you know the params */
     /* Makes a node the current one: the server's session moves to its table and every view is pulled again.
        Double-clicking a node does this, and so does a sub-node's "Open in Plot Wrangler". */
     const navigateToNode = useCallback(
         async (nodeId) => {
-            //setTableName is a dependency you have to list for this to work
             await setGraphToClickedNode(nodeId);
             setTableName(nodeId);
             /* Navigating picks a new current node, so the comparison falls back to that node's own
@@ -559,14 +609,14 @@ export function PGraphProvider({children}) {
                click, so without this, double-clicking a node while choosing where a branch ends
                would both end the branch there and navigate away from it. */
             clearAllSelections();
-            // clearHighlight();
             clearScatterPlotCache();
             clearHistogramCache();
             clearHeatMapCache();
-            viewContext.setRefreshKey(k => k + 1);
-        }, [setTableName, viewContext, clearAllSelections]
+            setRefreshKey(k => k + 1);
+        }, [setTableName, setRefreshKey, clearAllSelections]
     )
 
+    // React Flow's node mouse handlers take (event, node) - see https://reactflow.dev/api-reference/types/node-mouse-handler
     const onNodeDoubleClick = useCallback(
         async (event, node) => {
             // A supporting sub-node only ever describes its host, and has no table to navigate to. A candidate
@@ -609,19 +659,16 @@ export function PGraphProvider({children}) {
 
     return (
         <PGraphContext.Provider value={{
-            nodes, setNodes,
-            edges, setEdges,
+            nodes,
+            edges,
             nodeTypes,
-            onNodesChange, onEdgesChange, onConnect, onLayout, navigateToNode,
-            getLayoutedElements, onNodeDoubleClick, onNodeClick, onEdgeClick,
-            selectionAId, setSelectionAId, comparisonPair, serverNodesById,
+            onNodesChange, onEdgesChange, onConnect, navigateToNode,
+            onNodeDoubleClick, onNodeClick, onEdgeClick,
+            comparisonPair, serverNodesById,
             pareto: serverGraph.pareto,
-            // The comparisons saved on the graph, each a comparison object - see utils/comparisonSpec.js
-            comparisons: serverGraph.comparisons,
             branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             // Staged wrangles, as nodes of the graph - see CandidatesContext for accepting and declining them
             candidates, isCandidate, currentIsCandidate,
-            hasCandidates: candidates.length > 0,
             // supportNodes, add/update/removeSupportNode, supportModalHost, open/closeSupportModal
             ...support,
             startBranchSelection, resetBranchSelection,

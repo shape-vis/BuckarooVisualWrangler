@@ -11,11 +11,9 @@ from sqlalchemy import types as sql_types
 import pandas as pd
 
 import app
-from app.db_utils import query
 from app.db_utils.detector_sql import DetectorSQL
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
-from app.server_utils.set_id_column import set_id_column
 from app.server_utils.workers import run_queries
 from app.db_utils.data_profile import DataProfile
 from app.pgraph.metrics import compute_node_metrics
@@ -26,22 +24,35 @@ from app.pgraph.metrics import compute_node_metrics
 NODE_PREFIX_PATTERN = re.compile(r'^n(\d[a-z])_(.+)$')
 CANDIDATE_PREFIX_PATTERN = re.compile(r'^(c\d+)_(.+)$')
 
-"""
-Serializes the moments candidates (app/server_utils/candidates.py) touch the graph: claiming their table names,
-joining the graph, being accepted or declined. Those are not safe to run concurrently - a candidate's table name
-and an accepted node's label are both handed out by reading a counter, so two requests in flight would claim the
-same one. Flask's dev server is threaded, so this is reachable simply by clicking twice. It is held for moments
-only: the candidates' tables are built between those moments, without it. Re-entrant, since accepting an AI
-suggestion in one step stages it then accepts it.
-"""
+# Postgres caps identifiers at 63 characters, and the longest name derived from a node's table is
+# "<name>_filtering" - 10 more - so a node's table name is kept to this length. See safe_pg_name.
+MAX_TABLE_NAME_LENGTH = 63 - len("_filtering")
+
+# Serializes the moments candidates (app/server_utils/candidates.py) touch the graph: claiming their table names,
+# joining the graph, being accepted or declined. Those are not safe to run concurrently - a candidate's table name
+# and an accepted node's label are both handed out by reading a counter, so two requests in flight would claim the
+# same one. Flask's dev server is threaded, so this is reachable simply by clicking twice. It is held for moments
+# only: the candidates' tables are built between those moments, without it. Re-entrant, since accepting an AI
+# suggestion in one step stages it then accepts it.
 WRANGLE_LOCK = threading.RLock()
+
+def _to_json(value):
+    """How json.dumps writes the graph's objects: through their own __json__, and anything else as null."""
+    if hasattr(value, '__json__'):
+        return value.__json__()
+    return None
+
+
+def session_graph():
+    """:return: the session's PGraph, or None before anything has been uploaded"""
+    return app.pgraph_for_session
+
 
 def get_current_pgraph():
     """
-    uses the custom json function in graph to send a json version of the graph back to the view
-    :return:
+    :return: the session's graph as a JSON string, written through each object's __json__
     """
-    return json.dumps(app.pgraph_for_session, default=lambda o: o.__json__() if hasattr(o, '__json__') else None)
+    return json.dumps(app.pgraph_for_session, default=_to_json)
 
 def clicked_node_access_helper(node_table_name):
     return app.pgraph_for_session.set_clicked_node_as_current(node_table_name)
@@ -58,12 +69,20 @@ def _validate_identifier(name: str) -> str:
     return name
 
 def get_pgraph_redo():
-    return app.pgraph_for_session.redo_pgraph()
+    """:return: the table redo moves to, or None when there is nothing to redo - or no graph yet"""
+    graph = session_graph()
+    if graph is None:
+        return None
+    return graph.redo_pgraph()
 
 def get_pgraph_undo():
-    return app.pgraph_for_session.undo_pgraph()
+    """:return: the table undo moves to, or None at the root - or with no graph yet"""
+    graph = session_graph()
+    if graph is None:
+        return None
+    return graph.undo_pgraph()
 
-def _safe_pg_name(base: str, suffix: str) -> str:
+def safe_pg_name(base: str, suffix: str) -> str:
     """
     Build a table name guaranteed to keep both itself and all derived
     sibling tables within PostgreSQL's 63-char identifier limit.
@@ -76,72 +95,31 @@ def _safe_pg_name(base: str, suffix: str) -> str:
     If base+suffix already fits, use it as-is. Otherwise truncate the base
     and append an 8-char MD5 hash so the name stays unique.
     """
-    MAX_LEN = 53  # 63 - len("_filtering")
-    candidate = f"{base}{suffix}"
-    if len(candidate) <= MAX_LEN:
-        return candidate
-    h = hashlib.md5(base.encode()).hexdigest()[:8]
-    max_base = MAX_LEN - len(suffix) - 9  # 9 = 1 underscore + 8 hash chars
-    return f"{base[:max_base]}_{h}{suffix}"
+    name = f"{base}{suffix}"
+    if len(name) <= MAX_TABLE_NAME_LENGTH:
+        return name
+
+    base_hash = hashlib.md5(base.encode()).hexdigest()[:8]
+    # Room for the suffix, and for the underscore and 8 hash characters that keep a shortened name unique
+    max_base_length = MAX_TABLE_NAME_LENGTH - len(suffix) - 9
+    return f"{base[:max_base_length]}_{base_hash}{suffix}"
 
 
 def generate_table_name(csv_name):
     """
-    Cleans the file name so that it is ready to be used to make a table in the database, it needs to:
-    - Remove file extension (.csv), replace spaces/special chars with underscores, ensure it starts with a letter (SQL requirement)
+    Turn an uploaded file's name into a table name: the .csv extension dropped, anything but letters, digits and
+    underscores replaced with an underscore, lower-cased, and a random suffix added so two uploads of the same file
+    get tables of their own.
     :param csv_name: csv name from user upload
-    :return: cleaned name without
+    :return: the table name
     """
     if ".csv" in csv_name:
         csv_name = csv_name[0:len(csv_name)-4]
 
     clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', csv_name).lower()
     random_string = "".join(random.choices(string.ascii_letters + string.digits, k=5))
-    return _safe_pg_name(clean_name, "_" + random_string)
+    return safe_pg_name(clean_name, "_" + random_string)
 
-
-def fetch_detected_and_undetected_current_dataset_from_db(cleaned_table_name, engine):
-    """
-    Fetches the undetected and detected dataframes from the database.
-    :param cleaned_table_name: the name of the table in the database
-    :param engine: the database connection
-    :return: None
-    """
-    try:
-        full_df_query = get_whole_table_query(cleaned_table_name, False)
-        error_df_query = get_whole_table_query(cleaned_table_name, True)
-        pd.read_sql_query(full_df_query, engine)
-        pd.read_sql_query(error_df_query, engine)
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-def get_whole_table_query(table_name, get_errors):
-    """
-    Constructs the sql query to get the whole table from the database, either the undetected or detected
-    :param table_name: the name of the table to fetch from the database
-    :param get_errors: boolean to determine if the query is for the error table or the undetected table
-    :return: the query string to fetch the whole table
-    """
-    _validate_identifier(table_name)
-    if get_errors:
-        return f'SELECT * FROM "errors_{table_name}"'
-    return f'SELECT * FROM "{table_name}"'
-
-def get_range_of_ids_query(min_id,max_id,table_name, get_errors):
-    """
-    Constructs the sql query to get a range of IDs from the table in the database, either the undetected or detected
-    :param min_id: the minimum ID to bound the window of IDs to fetch
-    :param max_id: the maximum ID to bound the window of IDs to fetch
-    :param table_name: the name of the table to fetch from the database
-    :param get_errors: boolean to determine if the query is for the error table or the undetected table
-    :return: the query string to fetch the range of IDs
-    """
-    _validate_identifier(table_name)
-    min_id_int = int(min_id)
-    max_id_int = int(max_id)
-    if get_errors:
-        return f'SELECT * FROM "errors_{table_name}" WHERE "ID" BETWEEN {min_id_int} AND {max_id_int}'
-    return f'SELECT * FROM "{table_name}" WHERE "ID" BETWEEN {min_id_int} AND {max_id_int}'
 
 def create_data_profile_df(data_profile, col_names=None):
     """
@@ -149,12 +127,9 @@ def create_data_profile_df(data_profile, col_names=None):
     :param col_names: the column names of interest in the table
     :return: a dataframe of the data profile for the table
     """
-    print("CREATED DATA_PROFILE DF FOR TABLE", data_profile.table_name)
-
     # Every attribute the data profile knows how to calculate goes in, so a new one only has to be
     # registered in DataProfile
     default_attributes = list(data_profile.name_to_func)
-
 
     # If col_names is not provided (no specific columns to create a dp for), use all column names from the data profile
     if col_names is None:
@@ -180,8 +155,7 @@ def create_data_profile_df(data_profile, col_names=None):
 
 def build_data_profile_table(table_name):
     """
-    Build a table's data profile from scratch, covering every column. Used when a table becomes a
-    node, since preview tables don't get a profile of their own.
+    Build a table's data profile from scratch, covering every column, as its dp_ table.
     :param table_name: the table to profile
     """
     from app import engine
@@ -214,115 +188,30 @@ def build_node(table_name, root_table):
     return metrics, distortion
 
 
-def create_error_dict(df, error_size):
+def is_categorical(column):
     """
-    Creates a dictionary of errors from the error dataframe
-    :param df: the error dataframe to create the dictionary from
-    :param error_size: the size of the error to limit the dictionary to
-    :return: a dictionary of errors in the format {column_name: {row_id: [error_type, ...]}} for
-    the view to use
-    """
-    try:
-        error_size_df = df[df['row_id'].between(1, error_size)]
-        result_dict = {}
-        for _, row in error_size_df.iterrows():
-            col = row['column_id']
-            row_id = row['row_id']
-            error_type = row['error_type']
-            if pd.notna(error_type):
-                if col not in result_dict:
-                    result_dict[col] = {}
-                if row_id not in result_dict[col]:
-                    result_dict[col][row_id] = []
-                result_dict[col][row_id].append(error_type)
-        return result_dict
-    except Exception as e:
-        return {"success": False, "error in the error_dictionary service helper": str(e)}
-
-def group_by_attribute(df, column_a, group_by):
-    """
-    Groups the dataframe by the specified column and aggregates the count of IDs in each group for the group_by endpoint
-    :param df: the dataframe to group
-    :param column_a: the column to group by
-    :param group_by: the column to aggregate by
-    :return: a pivot table with the count of IDs in each group
-    """
-    ret = df.pivot_table("ID", index=column_a, columns=group_by, aggfunc="count")
-    return ret
-
-def get_2d_bins(column_a,column_b, range,bin_count):
-    column_a_categorical = is_categorical(column_a)
-    column_b_categorical = is_categorical(column_b)
-    column_a_bins = column_a
-    column_b_bins = column_b
-    if not column_a_categorical:
-        column_a_bins = create_bins_for_a_numeric_column(column_a,bin_count)
-    if not column_b_categorical:
-        column_b_bins = create_bins_for_a_numeric_column(column_b,bin_count )
-    print("before crosstab")
-    return pd.crosstab(column_a_bins, column_b_bins,dropna=True)
-
-    #make the number of bins for numeric be an option
-
-def slice_data_by_min_max_ranges(min_val,max_val,df,error_df):
-    """
-    Slices the dataframe and error dataframe by the min and max values provided, this is used
-    to get a range of IDs from the dataframe and error dataframe, used in various endpoints
-    :param min_val: the minimum value to slice the dataframe by
-    :param max_val: the maximum value to slice the dataframe by
-    :param df: the dataframe to slice
-    :param error_df: the error dataframe to slice
-    :return: the sliced dataframe and error dataframe
-    """
-    min_val_int = int(min_val)
-    max_val_int = int(max_val)
-
-    if "ID" not in df.columns:
-        df = set_id_column(df)
-
-    id_col = "ID" if "ID" in df.columns else "index"
-    sliced_max_df = df[df[id_col] <= max_val_int]
-    sliced_min_max_df = sliced_max_df[sliced_max_df[id_col] >= min_val_int]
-
-    sliced_error_max_df = error_df[error_df["row_id"] <= max_val_int]
-    sliced_min_max_error_df = sliced_error_max_df[sliced_error_max_df["row_id"] >= min_val_int]
-
-    return sliced_min_max_df, sliced_min_max_error_df
-
-def is_categorical(column_a):
-    """
-    Checks if the column is categorical, used in endpoints which need to determine if the column is categorical or not
-    such as the attribute summaries endpoint
-    :param column_a: the column to check
+    Whether an uploaded column is mostly text. Each value is classed by its Python type, except that a string
+    holding a plain number counts as numeric; the class covering the most rows decides. A column with no values at
+    all counts as categorical.
+    :param column: the column, as a pandas Series
     :return: True if the column is categorical, False otherwise
     """
-    value_counts = column_a.value_counts()
-    type_count = {}
-    type_key = {}
-    largest_type = 0
-    value_type = None
-    # populate the count of each type in the column
-    for key, value in value_counts.items():
-        type_of_key = type(key).__name__
-        if (isinstance(key, str)) and (bool(re.fullmatch(r'^\d+(\.\d+)?$', key.strip()))): type_of_key = "numeric"
-        if type_of_key in type_count:
-            type_count[type_of_key] += value
-            if type_of_key in type_key:
-                type_key[type_of_key].append(key)
-        else:
-            type_count[type_of_key] = value
-            type_key[type_of_key] = [key]
-    types = type_count.items()
-    for key, value in types:
-        if value > largest_type:
-            largest_type = value
-            value_type = key
-    if value_type == "str":
-        return True
-    if value_type is None:
-        return True
-    else:
-        return False
+    rows_by_value_type = {}
+    for value, count in column.value_counts().items():
+        value_type = type(value).__name__
+        if isinstance(value, str) and re.fullmatch(r'^\d+(\.\d+)?$', value.strip()):
+            value_type = "numeric"
+        rows_by_value_type[value_type] = rows_by_value_type.get(value_type, 0) + count
+
+    # The first type to reach the largest count wins a tie, as value_counts orders the values
+    majority_type = None
+    majority_rows = 0
+    for value_type, rows in rows_by_value_type.items():
+        if rows > majority_rows:
+            majority_rows = rows
+            majority_type = value_type
+
+    return majority_type in ("str", None)
 
 def get_sqlalchemy_dtype_map(df):
     """
@@ -353,18 +242,6 @@ def get_sqlalchemy_dtype_map(df):
                     dtype_map[col] = sql_types.Float()
     return dtype_map
 
-def create_bins_for_a_numeric_column(column,bin_count):
-    """
-    Creates bins for a numeric column, used in endpoints which need to create bins for numeric columns
-    such as attribute summaries and 2D histogram endpoints
-    :param column: the column to create bins for
-    :param bin_count: the number of bins to create
-    :return: bins for the column as a pandas object
-    """
-    column_numeric = pd.to_numeric(column, errors='coerce')
-    return pd.cut(column_numeric, bins=bin_count)
-
-
 def init_pgraph_for_session(root_table, metrics=None, distortion=None):
     """
     Start the session's graph, with the root as its only node.
@@ -381,18 +258,19 @@ def init_pgraph_for_session(root_table, metrics=None, distortion=None):
 
     app.pgraph_for_session = PGraph()
 
-    # create the root node, add it to the pgraph as the root
     root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
     root_node.set_metrics(metrics)
     root_node.set_distortion(distortion)
     app.pgraph_for_session.add_root_node(root_node)
 
-def _parse_node_id(table_name):
+def parse_node_id(table_name):
     """
     Parse a node table's name into its prefix and base: 'n0c_rest_of_name' into ('0c', 'rest_of_name'), and a
     candidate's 'c7_rest_of_name' into ('c7', 'rest_of_name'). Returns None for anything else.
     """
-    m = NODE_PREFIX_PATTERN.match(table_name) or CANDIDATE_PREFIX_PATTERN.match(table_name)
-    if not m:
+    match = NODE_PREFIX_PATTERN.match(table_name)
+    if match is None:
+        match = CANDIDATE_PREFIX_PATTERN.match(table_name)
+    if match is None:
         return None
-    return m.group(1), m.group(2)
+    return match.group(1), match.group(2)

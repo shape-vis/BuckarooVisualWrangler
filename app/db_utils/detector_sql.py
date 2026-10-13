@@ -1,6 +1,3 @@
-from app.db_utils.column_types import ColumnTypes, NUMERIC_TEXT_REGEX
-from app.db_utils.execute_sql import execute_sql, quote_identifier, quote_literal
-
 """
 Runs the error detectors over one table inside PostgreSQL - October 12, 2026.
 
@@ -15,6 +12,10 @@ fast. A text column is judged by its distinct values, so each one is parsed once
 the values found wanting are joined back to the rows that hold them. And every numeric column is measured in a
 single scan of the table.
 """
+
+from app.db_utils.column_types import ColumnTypes, NUMERIC_TEXT_REGEX
+from app.db_utils.execute_sql import execute_sql, quote_identifier, quote_literal
+
 
 # Row identifiers, and the index columns pandas leaves behind: never data, so never flagged
 STRUCTURAL_COLUMNS = ("ID", "index", "level_0")

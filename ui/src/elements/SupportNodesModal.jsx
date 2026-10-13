@@ -43,16 +43,26 @@ function SupportNodesForm({hostId, onClose}) {
     const attached = supportNodes.filter((record) => record.hostId === hostId);
 
     // Why each kind cannot be added here, if it cannot - the root has no incoming edge, for one
-    const reasons = Object.fromEntries(ADDABLE_KINDS.map((option) => (
-        [option.id, option.unavailable?.({host, records: attached}) ?? null])));
+    const reasons = {};
+    for (const option of ADDABLE_KINDS) {
+        const reason = option.unavailable?.({host, records: attached}) ?? null;
+        reasons[option.id] = reason;
+    }
 
     // Opens on the first kind that can be added, so the form is not greeted by a refusal
-    const [kind, setKind] = useState(
-        () => (ADDABLE_KINDS.find((option) => !reasons[option.id]) ?? ADDABLE_KINDS[0])?.id ?? null);
+    const [kind, setKind] = useState(() => {
+        const firstAvailable = ADDABLE_KINDS.find((option) => !reasons[option.id]);
+        const opening = firstAvailable ?? ADDABLE_KINDS[0];
+        return opening?.id ?? null;
+    });
     // A kind's starting settings, which can depend on the host and on what is selected in the graph
     const configFor = (next) => {
         const defaults = getSupportType(next)?.defaultConfig;
-        return (typeof defaults === "function" ? defaults({hostId, comparisonPair, serverNodesById}) : defaults) ?? {};
+        let config = defaults;
+        if (typeof defaults === "function") {
+            config = defaults({hostId, comparisonPair, serverNodesById});
+        }
+        return config ?? {};
     };
     const [config, setConfig] = useState(() => configFor(kind));
 
@@ -62,7 +72,12 @@ function SupportNodesForm({hostId, onClose}) {
     const Gallery = type?.Gallery;
     const reason = reasons[kind];
     // What the settings still need before one can be added, if anything
-    const incomplete = reason ? null : type?.incomplete?.(config) ?? null;
+    let incomplete = null;
+    if (!reason) {
+        incomplete = type?.incomplete?.(config) ?? null;
+    }
+    // A gallery is only shown when this kind can be added here at all
+    const showGallery = Boolean(Gallery) && !reason;
 
     const pickKind = (next) => {
         setKind(next);
@@ -79,7 +94,7 @@ function SupportNodesForm({hostId, onClose}) {
         <div className={`support-modal ${Gallery ? "support-modal--wide" : ""}`}>
             <div className="support-modal-header">
                 <h2>Supporting nodes · {nodeName(hostId)}</h2>
-                <button type="button" className="support-modal-close" onClick={onClose} title="Close">×</button>
+                <button type="button" className="support-modal-close" onClick={onClose} title="Close" aria-label="Close">×</button>
             </div>
 
             <div className="support-modal-body">
@@ -108,9 +123,10 @@ function SupportNodesForm({hostId, onClose}) {
                         <>
                             <p className="support-modal-description">{type.description}</p>
                             {reason && <p className="support-modal-reason">{reason}</p>}
-                            {Gallery ? (
-                                !reason && <Gallery hostId={hostId} onAdd={(chosen) => addSupportNode(hostId, type.id, chosen)} />
-                            ) : (
+                            {showGallery && (
+                                <Gallery hostId={hostId} onAdd={(chosen) => addSupportNode(hostId, type.id, chosen)} />
+                            )}
+                            {!Gallery && (
                                 <>
                                     {ConfigForm && !reason && <ConfigForm value={config} onChange={setConfig} hostId={hostId} />}
                                     {incomplete && <p className="support-modal-incomplete">{incomplete}</p>}

@@ -1,9 +1,8 @@
 import { createContext, useCallback, useContext, useState } from "react";
 import { acceptCandidate as acceptOnServer, discardCandidates } from "../utils/serverCalls.jsx";
-import { useTableName } from "./TableNameContext.jsx";
 import { useLoading } from "./LoadingContext.jsx";
-import { SelectionContext } from "./SelectionContext.jsx";
 import { usePgraph } from "./PGraphContext.jsx";
+import { useMoveToTable } from "./useMoveToTable.js";
 
 const CandidatesContext = createContext(null);
 
@@ -19,10 +18,9 @@ const CandidatesContext = createContext(null);
  * node and its sub-nodes; if the session was on it, the server moves it to the parent.
  */
 export function CandidatesProvider({ onWrangleExecuted, children }) {
-    const { setTableName } = useTableName();
     const { addLoader, removeLoader } = useLoading();
-    const { clearHighlight } = useContext(SelectionContext);
     const { refreshGraph, candidates, removeSupportNodesOf } = usePgraph();
+    const moveToTable = useMoveToTable(onWrangleExecuted);
 
     const [busy, setBusy] = useState(false);
     const [busyId, setBusyId] = useState(null);
@@ -30,57 +28,70 @@ export function CandidatesProvider({ onWrangleExecuted, children }) {
 
     const dismissError = useCallback(() => setError(null), []);
 
-    const acceptCandidate = useCallback(async (table) => {
+    /* Runs one accept or decline, with the candidate it is about marked busy - or none, for several declined
+       at once - and any earlier error cleared. Returns what work returns. */
+    const runBusy = useCallback(async (id, work) => {
         setError(null);
         setBusy(true);
-        setBusyId(table);
+        setBusyId(id);
         addLoader();
-        const result = await acceptOnServer(table);
-        if (result?.success) {
-            await refreshGraph();
-            setTableName(result.table);
-            clearHighlight();
-            onWrangleExecuted?.();
-        } else {
-            setError(result?.error || "Could not accept that candidate.");
-        }
+
+        const result = await work();
+
         setBusy(false);
         setBusyId(null);
         removeLoader();
         return result;
-    }, [refreshGraph, setTableName, clearHighlight, onWrangleExecuted, addLoader, removeLoader]);
+    }, [addLoader, removeLoader]);
+
+    const acceptCandidate = useCallback((table) => {
+        async function accept() {
+            const result = await acceptOnServer(table);
+            if (!result?.success) {
+                setError(result?.error || "Could not accept that candidate.");
+                return result;
+            }
+
+            await refreshGraph();
+            moveToTable(result.table);
+            return result;
+        }
+
+        return runBusy(table, accept);
+    }, [runBusy, refreshGraph, moveToTable]);
 
     const declineCandidates = useCallback(async (tables) => {
         if (tables.length === 0) return null;
-        setError(null);
-        setBusy(true);
-        setBusyId(tables.length === 1 ? tables[0] : null);
-        addLoader();
-        const result = await discardCandidates(tables);
-        if (result?.success) {
+
+        async function decline() {
+            const result = await discardCandidates(tables);
+            if (!result?.success) {
+                setError(result?.error || "Could not decline that candidate.");
+                return result;
+            }
+
             removeSupportNodesOf(tables);
             await refreshGraph();
             // The session was on one of them, and the server moved it to the parent
             if (result.current) {
-                setTableName(result.current);
-                clearHighlight();
-                onWrangleExecuted?.();
+                moveToTable(result.current);
             }
-        } else {
-            setError(result?.error || "Could not decline that candidate.");
+            return result;
         }
-        setBusy(false);
-        setBusyId(null);
-        removeLoader();
-        return result;
-    }, [refreshGraph, removeSupportNodesOf, setTableName, clearHighlight, onWrangleExecuted, addLoader, removeLoader]);
+
+        const busyTable = tables.length === 1 ? tables[0] : null;
+        return runBusy(busyTable, decline);
+    }, [runBusy, refreshGraph, removeSupportNodesOf, moveToTable]);
 
     const declineCandidate = useCallback((table) => declineCandidates([table]), [declineCandidates]);
 
     /** Decline every candidate staged under one node. */
-    const declineAll = useCallback((parent) => declineCandidates(
-        candidates.filter((node) => node.data?.parent === parent).map((node) => node.id),
-    ), [candidates, declineCandidates]);
+    const declineAll = useCallback((parent) => {
+        const tablesUnder = candidates
+            .filter((node) => node.data?.parent === parent)
+            .map((node) => node.id);
+        return declineCandidates(tablesUnder);
+    }, [candidates, declineCandidates]);
 
     return (
         <CandidatesContext.Provider value={{

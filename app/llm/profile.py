@@ -10,14 +10,10 @@ many tokens, and a small model reads a column-per-line layout at least as well.
 """
 from typing import Any
 
-from app import engine
-from app.db_utils.execute_sql import fetch_sql
-from app.pgraph.metrics import _parse_error_counts
+from app import db_operations, engine
+from app.db_utils.data_profile import DataProfile
+from app.pgraph.metrics import DIMENSIONS, SKIPPED_COLUMNS, parse_json_counts
 from app.llm.tools import MAX_ENUM_COLUMNS
-
-# Structural columns. "ID" is the row identifier and the others are pandas leftovers; none of
-# them is data the user would ever want repaired.
-STRUCTURAL_COLUMNS = ("ID", "Original_ID", "index", "level_0")
 
 # A column with more distinct values than this is almost certainly free text that the profiler
 # has typed as categorical. Listing its categories would flood the prompt, so only the count goes.
@@ -25,10 +21,11 @@ MAX_CATEGORIES_TO_DESCRIBE = 50
 TOP_CATEGORIES = 8
 MAX_LABEL_CHARS = 40
 
-DIMENSIONS = ("missing", "mismatch", "anomaly", "incomplete")
+# The numeric statistics a numeric column is described by, in the order they are listed
+NUMERIC_STATISTICS = ("mean", "median", "min", "max")
 
 
-def _fmt(value) -> str:
+def _format_number(value) -> str:
     """Numbers short enough to scan; Decimals from Postgres come back as objects."""
     if value is None:
         return "?"
@@ -45,61 +42,140 @@ def _fmt(value) -> str:
     return f"{number:.2f}".rstrip("0").rstrip(".")
 
 
+def _count_of(counts: dict[str, Any], key: str) -> int:
+    """One entry of a counts dict as an int, with a missing or null entry read as 0."""
+    return int(counts.get(key) or 0)
+
+
 def _categories(raw) -> tuple[list[tuple[str, int]], int]:
-    counts = _parse_error_counts(raw)
+    """
+    :return: (the most common categories with their counts, most common first, and how many more there are)
+    """
+    counts = parse_json_counts(raw)
     if not counts:
         return [], 0
-    ordered = sorted(counts.items(), key=lambda kv: -int(kv[1] or 0))
-    return ordered[:TOP_CATEGORIES], max(0, len(ordered) - TOP_CATEGORIES)
+
+    def rows_holding(item):
+        return _count_of(counts, item[0])
+
+    ordered = sorted(counts.items(), key=rows_holding, reverse=True)
+    remaining = max(0, len(ordered) - TOP_CATEGORIES)
+    return ordered[:TOP_CATEGORIES], remaining
 
 
 def _flags_cell(counts: dict[str, Any]) -> tuple[str, int]:
-    parts = [f"{d}={int(counts[d])}" for d in DIMENSIONS if int(counts.get(d, 0) or 0) > 0]
-    total = sum(int(counts.get(d, 0) or 0) for d in DIMENSIONS)
-    return (", ".join(parts) if parts else "(none)"), total
+    """
+    :return: (the column's flag counts per error type, e.g. "missing=3, anomaly=1", and their total)
+    """
+    parts = []
+    total = 0
+    for dimension in DIMENSIONS:
+        count = _count_of(counts, dimension)
+        total += count
+        if count > 0:
+            parts.append(f"{dimension}={count}")
+
+    if not parts:
+        return "(none)", total
+    return ", ".join(parts), total
+
+
+def _numeric_description(row: dict[str, Any]) -> str:
+    """A numeric column's statistics, e.g. "mean=4.2 median=4 min=0 max=12"."""
+    parts = []
+    for name in NUMERIC_STATISTICS:
+        parts.append(f"{name}={_format_number(row.get(name))}")
+    return " ".join(parts)
+
+
+def _category_listing(raw_counts) -> str | None:
+    """The most common categories with their counts, e.g. "Male=342, Female=26 (+3 more)", or None if none."""
+    top, remaining = _categories(raw_counts)
+    if not top:
+        return None
+
+    entries = []
+    for label, count in top:
+        entries.append(f"{str(label)[:MAX_LABEL_CHARS]}={int(count)}")
+    listing = ", ".join(entries)
+
+    if remaining:
+        listing += f" (+{remaining} more)"
+    return listing
+
+
+def _categorical_description(row: dict[str, Any]) -> str:
+    """A categorical column's category count, mode and - for a column with few enough - its top categories."""
+    parts = []
+
+    n_categories = row.get("n_categories")
+    if n_categories is not None:
+        parts.append(f"{int(n_categories)} categories")
+
+    mode = row.get("mode")
+    if mode is not None:
+        parts.append(f'mode="{str(mode)[:MAX_LABEL_CHARS]}"')
+
+    if n_categories is not None and int(n_categories) <= MAX_CATEGORIES_TO_DESCRIBE:
+        listing = _category_listing(row.get("category_counts"))
+        if listing is not None:
+            parts.append(listing)
+
+    if not parts:
+        return "-"
+    return "; ".join(parts)
 
 
 def _stats_cell(row: dict[str, Any]) -> tuple[str, str]:
     """Returns (kind, description). A column is numeric exactly when it has a mean."""
     if row.get("mean") is not None:
-        stats = " ".join(
-            f"{name}={_fmt(row.get(name))}" for name in ("mean", "median", "min", "max")
-        )
-        return "numeric", stats
-
-    bits = []
-    if row.get("n_categories") is not None:
-        bits.append(f"{int(row['n_categories'])} categories")
-    if row.get("mode") is not None:
-        bits.append(f'mode="{str(row["mode"])[:MAX_LABEL_CHARS]}"')
-
-    n_categories = row.get("n_categories")
-    if n_categories is not None and int(n_categories) <= MAX_CATEGORIES_TO_DESCRIBE:
-        top, remaining = _categories(row.get("category_counts"))
-        if top:
-            listed = ", ".join(
-                f"{str(label)[:MAX_LABEL_CHARS]}={int(count)}" for label, count in top
-            )
-            bits.append(listed + (f" (+{remaining} more)" if remaining else ""))
-
-    return "categorical", "; ".join(bits) if bits else "-"
+        return "numeric", _numeric_description(row)
+    return "categorical", _categorical_description(row)
 
 
 def read_profile_rows(node_table: str) -> list[dict[str, Any]]:
     """One dict per real column of dp_<node_table>, structural columns dropped."""
-    placeholders = ", ".join(f"'{c}'" for c in STRUCTURAL_COLUMNS)
-    rows = fetch_sql(
-        f'''SELECT column_name, mean, median, min, max, n_categories, mode,
-                   error_counts, category_counts
-            FROM "dp_{node_table}"
-            WHERE column_name NOT IN ({placeholders})
-            ORDER BY column_name''',
-        False,
-        engine,
-    )
-    keys = ["column_name", "mean", "median", "min", "max", "n_categories", "mode",
-            "error_counts", "category_counts"]
-    return [dict(zip(keys, row)) for row in (rows or [])]
+    return DataProfile(node_table, engine).read_stored_profile(SKIPPED_COLUMNS)
+
+
+def _keep_most_flagged(described: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """
+    A very wide table would spend the whole prompt on its enums, so keep the columns that actually carry flags.
+    :return: (at most MAX_ENUM_COLUMNS columns, back in name order, and how many were left out)
+    """
+    if len(described) <= MAX_ENUM_COLUMNS:
+        return described, 0
+
+    def flagged_cells(column):
+        return column["total"]
+
+    def name_of(column):
+        return column["name"]
+
+    most_flagged = sorted(described, key=flagged_cells, reverse=True)
+    kept = most_flagged[:MAX_ENUM_COLUMNS]
+    kept.sort(key=name_of)
+    return kept, len(described) - MAX_ENUM_COLUMNS
+
+
+def _render_table(described: list[dict[str, Any]]) -> list[str]:
+    """The columns as aligned text rows: name | kind | flagged cells | statistics, with a header row."""
+    # Widths cover the headers too, or the header row runs wider than the rows beneath it
+    name_width = len("name")
+    flag_width = len("flagged cells")
+    for column in described:
+        name_width = max(name_width, len(column["name"]))
+        flag_width = max(flag_width, len(column["flags"]))
+    kind_width = len("categorical")
+
+    header = " | ".join(["name".ljust(name_width), "kind".ljust(kind_width), "flagged cells".ljust(flag_width),
+                         "statistics"])
+    lines = [header]
+    for column in described:
+        cells = [column["name"].ljust(name_width), column["kind"].ljust(kind_width),
+                 column["flags"].ljust(flag_width), column["stats"]]
+        lines.append(" | ".join(cells))
+    return lines
 
 
 def build_profile_block(node_table: str) -> tuple[str, list[str]]:
@@ -109,14 +185,12 @@ def build_profile_block(node_table: str) -> tuple[str, list[str]]:
     The two are kept in step on purpose: the tool enums are built from the same list, so the
     model can never name a column it was not shown.
     """
-    from app import db_operations
-
     rows = read_profile_rows(node_table)
     row_count = int(db_operations.get_row_count(node_table))
 
     described = []
     for row in rows:
-        counts = _parse_error_counts(row.get("error_counts"))
+        counts = parse_json_counts(row.get("error_counts"))
         flags, total = _flags_cell(counts)
         kind, stats = _stats_cell(row)
         described.append({
@@ -127,35 +201,19 @@ def build_profile_block(node_table: str) -> tuple[str, list[str]]:
             "total": total,
         })
 
-    # A very wide table would spend the whole prompt on its enums, so keep the columns that
-    # actually carry flags and say plainly that the rest were left out.
-    omitted = 0
-    if len(described) > MAX_ENUM_COLUMNS:
-        described.sort(key=lambda c: -c["total"])
-        omitted = len(described) - MAX_ENUM_COLUMNS
-        described = described[:MAX_ENUM_COLUMNS]
-        described.sort(key=lambda c: c["name"])
+    described, omitted = _keep_most_flagged(described)
 
-    columns = [c["name"] for c in described]
-
-    # Widths cover the headers too, or the header row runs wider than the rows beneath it
-    name_width = max([len(c["name"]) for c in described] + [len("name")])
-    flag_width = max([len(c["flags"]) for c in described] + [len("flagged cells")])
-    kind_width = len("categorical")
+    columns = []
+    for column in described:
+        columns.append(column["name"])
 
     lines = [
         f"table: {node_table}",
         f"rows: {row_count}",
         f"columns: {len(described)} (the row identifier is not shown and cannot be repaired)",
         "",
-        f"{'name'.ljust(name_width)} | {'kind'.ljust(kind_width)} | "
-        f"{'flagged cells'.ljust(flag_width)} | statistics",
     ]
-    for c in described:
-        lines.append(
-            f"{c['name'].ljust(name_width)} | {c['kind'].ljust(kind_width)} | "
-            f"{c['flags'].ljust(flag_width)} | {c['stats']}"
-        )
+    lines.extend(_render_table(described))
 
     if omitted:
         lines.append("")

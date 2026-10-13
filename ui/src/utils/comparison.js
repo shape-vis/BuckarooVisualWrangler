@@ -13,17 +13,22 @@ export function setNodeLabels(labels) {
     nodeLabels = labels;
 }
 
+/* The prefix a node table's name starts with: n0a…n9z for a node of the graph, c7 for a staged candidate */
+const TABLE_PREFIX = String.raw`n\d[a-z]|c\d+`;
+const PREFIX_OF_TABLE = new RegExp(`^(${TABLE_PREFIX})_`);
+const BASE_OF_TABLE = new RegExp(`^(?:${TABLE_PREFIX})_(.+)$`);
+
 /* A node's short name: its label, or for a table the graph has not labelled, the prefix its name starts with
    - n0a, c7. The full table name stays available in a title attribute. */
 export function nodeName(id) {
     if (nodeLabels.has(id)) return nodeLabels.get(id);
-    const match = id?.match(/^(n\d[a-z]|c\d+)_/);
+    const match = id?.match(PREFIX_OF_TABLE);
     return match ? match[1] : truncateText(id, 16);
 }
 
 /* The base a node table's name carries after its prefix - the uploaded file's cleaned name */
 export function baseName(id) {
-    const match = id?.match(/^(?:n\d[a-z]|c\d+)_(.+)$/);
+    const match = id?.match(BASE_OF_TABLE);
     return match ? match[1] : null;
 }
 
@@ -45,12 +50,26 @@ export function describeWrangle(wrangle) {
    :param nodesByTable: the server's nodes keyed by table, as PGraphContext's serverNodesById holds them
    :return: the table, or null when the two share none */
 export function commonAncestor(nodesByTable, a, b) {
+    // Everything a descends from, a included
     const lineage = new Set();
-    for (let table = a; nodesByTable?.[table]; table = nodesByTable[table].data?.parent) lineage.add(table);
-    for (let table = b; nodesByTable?.[table]; table = nodesByTable[table].data?.parent) {
+    let table = a;
+    while (nodesByTable?.[table]) {
+        lineage.add(table);
+        table = parentTableOf(nodesByTable, table);
+    }
+
+    // The first of b's ancestors, b included, that a shares
+    table = b;
+    while (nodesByTable?.[table]) {
         if (lineage.has(table)) return table;
+        table = parentTableOf(nodesByTable, table);
     }
     return null;
+}
+
+/* The table a node was made from - "root" for the root node itself */
+function parentTableOf(nodesByTable, table) {
+    return nodesByTable[table].data?.parent;
 }
 
 // The pair's colors, matching the graph's comparison rings (Nodes.css) in both its modes
@@ -154,10 +173,16 @@ export const VIEW_LABELS = {
  * @param columnKind drift's column kind, "numeric" or "categorical", as root decided it
  */
 export function viewsFor({ kind, view, columnKind, single }) {
-    const views = kind === "drift"
-        ? DRIFT_VIEWS[columnKind] ?? DRIFT_VIEWS.numeric
-        : single ? ["side"] : PLOT_KINDS.find((plotKind) => plotKind.id === kind).views;
-    return { views, activeView: views.includes(view) ? view : views[0] };
+    const views = viewsOfKind(kind, columnKind, single);
+    const activeView = views.includes(view) ? view : views[0];
+    return { views, activeView };
+}
+
+function viewsOfKind(kind, columnKind, single) {
+    if (kind === "drift") return DRIFT_VIEWS[columnKind] ?? DRIFT_VIEWS.numeric;
+    if (single) return ["side"];
+    const plotKind = PLOT_KINDS.find((one) => one.id === kind);
+    return plotKind.views;
 }
 
 /**
@@ -167,5 +192,9 @@ export function viewsFor({ kind, view, columnKind, single }) {
 export function referenceBase({ kind, reference, a, b }, nodesByTable) {
     if (kind !== "drift" || reference !== "ancestor" || a === b) return null;
     const ancestor = commonAncestor(nodesByTable, a, b);
-    return !ancestor || nodesByTable?.[ancestor]?.data?.parent === "root" ? null : ancestor;
+    if (!ancestor) return null;
+
+    const ancestorIsRoot = nodesByTable?.[ancestor]?.data?.parent === "root";
+    if (ancestorIsRoot) return null;
+    return ancestor;
 }

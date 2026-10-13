@@ -1059,15 +1059,6 @@
     cursor: grabbing;
 }
 
-.compare-brush-name {
-    font-size: 10px;
-    fill: #1c1e21;
-}
-
-.compare-brush-track {
-    fill: #eef0f2;
-}
-
 /* A thought bubble pointing at where a node moved; hovering it fills the readout under the plot */
 .compare-bubble {
     cursor: help;

@@ -1,7 +1,5 @@
-// vis_common.js
+// visCommon.jsx
 import * as d3 from "d3";
-
-/* original functions (copied exactly) */
 
 const TOOLTIP_GAP = 10;
 
@@ -52,7 +50,10 @@ export function hideTooltip() {
     d3.select("#tooltip").style("display", "none");
 }
 
-export function createTooltip(target_objects, html_function, left_click_handler = (d)=>{}, right_click_handler = (d)=>{}, double_click_handler = (d)=>{} ) {
+// Handlers default to doing nothing, so a chart passes only the clicks it reacts to
+function ignoreClick() {}
+
+export function createTooltip(target_objects, html_function, left_click_handler = ignoreClick, right_click_handler = ignoreClick, double_click_handler = ignoreClick) {
 
     const tooltip = d3.select("#tooltip");
     target_objects.on("mouseover", function(event, d) {
@@ -80,28 +81,7 @@ export function createTooltip(target_objects, html_function, left_click_handler 
         });    
 }
 
-export function showSectionOptions(x,y) {
-    const sectionOptions = d3.select("#previewPanel");
-    sectionOptions.style("display", "block")
-        .style("left", `${x}px`)
-        .style("top", `${y}px`);
-}
-export function hideSectionOptions() {
-    d3.select("#previewPanel").style("display", "none");
-}
-
-
-export function createBackgroundBox(canvas, width, height) {
-    return canvas.append("rect")
-            .attr("width", width)
-            .attr("height", height)
-            .attr("fill", "#ffffff00")        
-}
-
-
 export function createHybridScales(size, numHistData, catHistData, numDomain, catDomain, direction = "horizontal") {
-
-    // console.log("[createHybridScales] size:", size);
 
     let sizeDistNum = 0, sizeDistCat = 0 
 
@@ -208,106 +188,44 @@ export function createHybridScales(size, numHistData, catHistData, numDomain, ca
     return { scaleNum, scaleCat, draw, apply, categoricalBandwidth, numericalBandwidth, numHistData, catHistData }
 }
 
-
-export function createSelectionBox(canvas){
-    const box = canvas.append("rect")
-        .attr("stroke", "transparent")
-        .attr("fill", "none")
-        .attr("stroke-width", 3)
-
-    let selectStart = [0,0];
-    let selectEnd = [0,0];
-
-    function start(x,y) {
-        selectStart = selectEnd = [x,y];
-    }
-
-    function update(x,y) {
-        selectEnd = [x,y];
-        box
-            .attr("width", Math.abs(selectStart[0] - selectEnd[0]))
-            .attr("height", Math.abs(selectStart[1] - selectEnd[1]))
-            .attr("x", Math.min(selectStart[0], selectEnd[0]))
-            .attr("y", Math.min(selectStart[1], selectEnd[1]))
-            .attr("stroke", "black" )
-            .attr("fill", "#0000ff20")
-    }
-
-    function end(x,y) {
-        selectEnd = [x,y];
-        box
-            .attr("stroke", "transparent" )
-            .attr("fill", "none");
-    }
-
-    function inRange( x,y ) {
-        return x > Math.min(selectStart[0], selectEnd[0]) &&
-               x < Math.max(selectStart[0], selectEnd[0]) &&
-               y > Math.min(selectStart[1], selectEnd[1]) &&
-               y < Math.max(selectStart[1], selectEnd[1]);
-    }
-
-    return { start, update, end, box, inRange }
+/* A numeric axis's domain from its bins: the lowest bin edge to the highest, or null when the axis has no
+   numeric bins */
+function numericDomainOf(bins) {
+    if (bins.length === 0 || !bins[0]) return null;
+    return [d3.min(bins, (bin) => bin.x0), d3.max(bins, (bin) => bin.x1)];
 }
 
-
-
-export function generate_pattern( svg, colorScale, errorArray) {
-    let patternSize = 30;
-
-    let defs = svg.select("defs");
-    if( defs.empty() ){
-        defs = svg.append("defs");
-    }
-
-    let patternName = errorArray.join("_") + "_pattern";
-    if( defs.selectAll(`#${patternName}`).empty() ){
-        let pattern = defs.append("pattern")
-                            .attr("id", patternName)
-                            .attr("width", patternSize)
-                            .attr("height", patternSize)
-                            .attr("patternUnits", "userSpaceOnUse")
-
-        for( let i = -patternSize; i < patternSize; ){
-            errorArray.forEach( (error, idx) => {
-                pattern.append("line")
-                            .attr("x1", i-1)
-                            .attr("y1", 0-1)
-                            .attr("x2", i + patternSize+1)
-                            .attr("y2", patternSize+1)
-                            .attr("stroke", colorScale(error))
-                            .attr("stroke-width", 2)
-                i += 2.5
-            })
-        }
-
-    }
-
-    return `url(#${patternName})`;
+// A categorical axis's domain is its labels, or null when it has none
+function categoricalDomainOf(labels) {
+    if (labels.length === 0) return null;
+    return labels;
 }
 
-/* Package up everything as default export for convenience */
-const visCommon = {
-  createTooltip,
-  showSectionOptions,
-  hideSectionOptions,
-  createBackgroundBox,
-  createHybridScales,
-  createSelectionBox,
-  generate_pattern
-};
+/**
+ * createHybridScales fed the shape the server sends for a binned axis - numeric bins with x0 and x1 edges, and
+ * categorical labels - either of which may be empty.
+ */
+export function createBinnedScales(size, numericBins, categories, direction) {
+    const numericDomain = numericDomainOf(numericBins);
+    const categoricalDomain = categoricalDomainOf(categories);
+    return createHybridScales(size, numericBins, categories, numericDomain, categoricalDomain, direction);
+}
 
-export default visCommon;
+/* value held between lo and hi. When the range is empty - hi below lo - hi wins. */
+export function clamp(value, lo, hi) {
+    return Math.min(Math.max(value, lo), hi);
+}
 
-/* Backwards-compatibility: attach to window if available */
-if (typeof window !== "undefined") {
-  window.visCommon = visCommon;
-  // also attach the individual functions for extremely old code that expects global names
-  window.createTooltip = createTooltip;
-  window.showSectionOptions = showSectionOptions;
-  window.hideSectionOptions = hideSectionOptions;
-  window.createBackgroundBox = createBackgroundBox;
-  window.createHybridScales = createHybridScales;
-  window.createSelectionBox = createSelectionBox;
-  window.generate_pattern = generate_pattern;
+// Firefox can report a wheel's movement in lines rather than pixels
+const WHEEL_LINE_PIXELS = 16;
+
+/* How far a wheel event scrolls, in pixels */
+export function wheelPixels(event) {
+    if (event.deltaMode === 1) return event.deltaY * WHEEL_LINE_PIXELS;
+    return event.deltaY;
+}
+
+/* An error rate as a percentage to two places. A missing rate reads as zero. */
+export function asPercent(rate) {
+    return `${((rate ?? 0) * 100).toFixed(2)}%`;
 }

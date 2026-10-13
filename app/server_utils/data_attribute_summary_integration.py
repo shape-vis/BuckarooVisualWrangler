@@ -1,32 +1,25 @@
 """
-Converts the current datastate data into JSON the view can use
+Converts the current table's attribute summaries into JSON the view can use: each column's error rates and summary
+statistics, read from the data profile, and the columns to show first.
 """
 
-"""
-Refactored to use jacobs new backend sql files March 11,2026 - db_functions_sql.py, execute_sql.py, filtering_sql.py 
-"""
-
-from app.db_utils.execute_sql import fetch_sql
+import app
 from app.server_utils.service_helpers import _validate_identifier
 from app.server_utils.workers import run_queries
 from app.db_utils.data_profile import DataProfile
 
-def get_default_attributes_from_rankings(tablename, engine):
+
+def get_default_attributes_from_rankings(tablename):
     """
-    Fetch top 3 attributes from pre-computed rankings table.
+    The three columns carrying the most error flags, from the pre-computed rankings table.
     :param tablename: Name of the data table
-    :param engine: SQLAlchemy engine
-    :return: List of top 3 attribute names
+    :return: List of top 3 attribute names, or [] when they cannot be read
     """
     try:
-        _validate_identifier(tablename)
-        query = f'SELECT attribute FROM "rankings_{tablename}" ORDER BY rank ASC LIMIT 3'
-        rows = fetch_sql(query, False, engine)
-        return [row[0] for row in rows] if rows else []
+        return app.db_operations.get_top_ranked_attributes(tablename, 3)
     except Exception as e:
         print(f"Error fetching rankings for table '{tablename}': {e}")
         return []
-
 
 
 def generate_complete_json(tablename):
@@ -41,7 +34,6 @@ def generate_complete_json(tablename):
         return {"columnErrors": {}, "attributes": [], "attributeDistributions": {}, "defaultAttributes": []}
 
     _validate_identifier(tablename)
-    print(f"Generating JSON for table: {tablename}")
 
     data_profile = DataProfile(tablename, engine)
     attributes = list(data_profile.get_col_names())
@@ -51,7 +43,7 @@ def generate_complete_json(tablename):
         "columnErrors": data_profile.calculate_error_distribution(),
         "attributes": attributes,
         "attributeDistributions": build_attribute_distributions(data_profile, attributes),
-        "defaultAttributes": get_default_attributes_from_rankings(tablename, engine)
+        "defaultAttributes": get_default_attributes_from_rankings(tablename)
     }
 
 def get_attribute_stats(data_profile, column):
@@ -86,7 +78,7 @@ def build_attribute_distributions(data_profile, columns):
 
 def get_categorical_stats(data_profile, column):
     """
-    Get statistics for a categorical attribute in the DataFrame
+    Get statistics for a categorical attribute
     :param data_profile: DataProfile class instance with optimized summary stat calculation functions
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the categorical column
@@ -100,7 +92,7 @@ def get_categorical_stats(data_profile, column):
 
 def get_numeric_stats(data_profile, column):
     """
-    Get statistics for a numeric attribute in the DataFrame
+    Get statistics for a numeric attribute
     :param data_profile: DataProfile class instance with optimized summary stat calculation functions
     :param column: name of the column to get statistics for
     :return: dictionary containing statistics for the numeric column

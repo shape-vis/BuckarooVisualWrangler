@@ -1,7 +1,3 @@
-from app.db_utils.column_types import ColumnTypes
-from app.db_utils.detector_sql import ERROR_TYPES
-from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal
-
 """
 Bins two pgraph nodes' tables on shared axes, inside PostgreSQL - October 12, 2026.
 
@@ -24,6 +20,11 @@ of labels by their text, which for a column of long free text would cost far mor
 labels are grouped by hashing, ranked with a hash of the text breaking ties, and only the few kept are sorted by name.
 The queries build the panel's JSON themselves, as DBOperations' do.
 """
+
+from app.db_utils.column_types import ColumnTypes
+from app.db_utils.detector_sql import ERROR_TYPES
+from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal
+
 
 # The plots CompareSQL draws
 PLOT_KINDS = ("histogram", "heatmap")
@@ -597,33 +598,31 @@ class CompareSQL:
         return f"{error_type}_rows"
 
 
-    def _label_columns(self, axes: list, prefix: str = "") -> list:
+    def _label_columns(self, axes: list) -> list:
         """
         The columns naming a distinct value: its label on every axis.
         :arg: axes: (axis name, column) pairs.
-        :arg: prefix: a table alias to qualify them with, e.g. "side_rows.".
         :return: the column references.
         """
 
         columns = []
         for axis, _ in axes:
-            columns.append(f"{prefix}{axis}_label")
+            columns.append(f"{axis}_label")
         return columns
 
 
-    def _bin_key_columns(self, axes: list, prefix: str = "") -> list:
+    def _bin_key_columns(self, axes: list) -> list:
         """
         The columns naming a bin: per axis, its type, its numeric bin and its label.
         :arg: axes: (axis name, column) pairs.
-        :arg: prefix: a table alias to qualify them with, e.g. "b.".
         :return: the column references.
         """
 
         columns = []
         for axis, _ in axes:
-            columns.append(f"{prefix}{axis}_type")
-            columns.append(f"{prefix}{axis}_bin_index")
-            columns.append(f"{prefix}{axis}_bin_label")
+            columns.append(f"{axis}_type")
+            columns.append(f"{axis}_bin_index")
+            columns.append(f"{axis}_bin_label")
         return columns
 
 

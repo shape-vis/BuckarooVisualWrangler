@@ -10,14 +10,6 @@
     color: #1c1e21;
 }
 
-.node-detail-title {
-    font-weight: 700;
-    font-size: 1.08em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .quality-empty,
 .quality-nochange {
     color: #65676b;
@@ -25,8 +17,7 @@
     font-size: 0.92em;
 }
 
-.quality-views,
-.node-detail-branches {
+.quality-views {
     display: flex;
     flex-wrap: wrap;
 }

@@ -1,22 +1,21 @@
 import { BaseEdge, getStraightPath, useInternalNode } from "@xyflow/react";
 
+const centreOf = (node) => ({
+    x: node.internals.positionAbsolute.x + node.measured.width / 2,
+    y: node.internals.positionAbsolute.y + node.measured.height / 2,
+});
+
 /* Where a line from a node's centre toward a point leaves the node's box */
 function borderPoint(node, toward) {
-    const { x, y } = node.internals.positionAbsolute;
     const halfWidth = node.measured.width / 2;
     const halfHeight = node.measured.height / 2;
-    const centre = { x: x + halfWidth, y: y + halfHeight };
+    const centre = centreOf(node);
     const dx = toward.x - centre.x;
     const dy = toward.y - centre.y;
     if (!dx && !dy) return centre;
     const scale = 1 / Math.max(Math.abs(dx) / halfWidth, Math.abs(dy) / halfHeight);
     return { x: centre.x + dx * scale, y: centre.y + dy * scale };
 }
-
-const centreOf = (node) => ({
-    x: node.internals.positionAbsolute.x + node.measured.width / 2,
-    y: node.internals.positionAbsolute.y + node.measured.height / 2,
-});
 
 /**
  * An edge in the graph's analysis mode: a straight line from a parent to its child, centre to centre and cut

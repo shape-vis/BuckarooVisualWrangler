@@ -6,5 +6,13 @@
 export const formatDrift = (value) => (value == null ? "—" : value.toFixed(3));
 
 /** A change in drift between two nodes, both measured from root. */
-export const formatDriftDelta = (delta) =>
-    `${delta > 0 ? "+" : delta < 0 ? "−" : "±"}${Math.abs(delta).toFixed(3)}`;
+export function formatDriftDelta(delta) {
+    return `${signOf(delta)}${Math.abs(delta).toFixed(3)}`;
+}
+
+// A typographic minus rather than a hyphen, and ± for no change at all
+function signOf(delta) {
+    if (delta > 0) return "+";
+    if (delta < 0) return "−";
+    return "±";
+}

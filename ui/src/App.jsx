@@ -4,38 +4,42 @@ import { useState } from 'react';
 import { TableNameProvider } from './store/TableNameContext.jsx';
 import { LoadingProvider } from './store/LoadingContext.jsx';
 
+// The upload is remembered for the browser tab, so reloading the page stays on the dataset
+function readStoredUploadResponse() {
+  return JSON.parse(sessionStorage.getItem("uploadResponse"));
+}
+
 export default function App() {
 
-  // Single source of truth for whether the user uploaded
-  const [uploaded, setUploaded] = useState(sessionStorage.getItem("userUploaded") === "yes"); // "yes" or "no"
-  const [uploadResponse, setUploadResponse] = useState(JSON.parse(sessionStorage.getItem("uploadResponse"))); // e.g. "my_uploaded_file.csv"
-  // const [uploaded, setUploaded] = useState(false); // "yes" or "no"
-  // const [uploadResponse, setUploadResponse] = useState(null); // e.g. "my_uploaded_file.csv"
+  // Whether a dataset has been uploaded, stored as "yes" or "no"
+  const [uploaded, setUploaded] = useState(() => sessionStorage.getItem("userUploaded") === "yes");
+  // The server's reply to the upload, which names the table it created
+  const [uploadResponse, setUploadResponse] = useState(readStoredUploadResponse);
 
-  console.log("App state - uploaded:", uploaded, "uploadResponse:", uploadResponse);
+  function handleReset() {
+    setUploaded(false);
+    sessionStorage.setItem("userUploaded", "no");
+    sessionStorage.setItem("uploadResponse", null);
+  }
+
+  function handleUploadSuccess(response) {
+    setUploaded(true);
+    setUploadResponse(response);
+    sessionStorage.setItem("userUploaded", "yes");
+    sessionStorage.setItem("uploadResponse", JSON.stringify(response));
+  }
 
   return (
     <div>
-      {/* Centralized rendering logic lives here in App.jsx */}
       {uploaded ? (
         <TableNameProvider initialTableName={uploadResponse?.table_name}>
           <LoadingProvider>
-            <Buckaroo onReset={() => {
-              setUploaded(false);
-              sessionStorage.setItem("userUploaded", "no");
-              sessionStorage.setItem("uploadResponse", null);}}
-            />
+            <Buckaroo onReset={handleReset} />
           </LoadingProvider>
         </TableNameProvider>
       ) : (
         // Home only handles the upload action and calls onSuccess
-        <Home onSuccess={(response) => {
-          setUploaded(true);
-          setUploadResponse(response);
-          sessionStorage.setItem("userUploaded", "yes");
-          sessionStorage.setItem("uploadResponse", JSON.stringify(response));
-          console.log("Upload successful, response:", response);
-        }} />
+        <Home onSuccess={handleUploadSuccess} />
       )}
     </div>
   );

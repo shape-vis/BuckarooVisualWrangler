@@ -1,14 +1,15 @@
+"""
+Thin wrapper around SQLAlchemy for executing and fetching results from a PostgreSQL database.
+Also the small helpers the query builders in db_utils share: quoting names into SQL, and bulk-loading a DataFrame
+through COPY.
+"""
+
 import csv
 import io
 
 from sqlalchemy import text
 from sqlalchemy import types as sql_types
 
-"""
-Thin wrapper around SQLAlchemy for executing and fetching results from a PostgreSQL database.
-Also the small helpers the query builders in db_utils share: quoting names into SQL, and bulk-loading a DataFrame
-through COPY.
-"""
 
 def execute_sql(query: str, engine):
     """

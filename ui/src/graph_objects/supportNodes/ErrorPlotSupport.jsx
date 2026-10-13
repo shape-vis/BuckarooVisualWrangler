@@ -3,6 +3,7 @@ import {usePgraph} from "../../store/PGraphContext.jsx";
 import {ViewContext} from "../../pages/Buckaroo.jsx";
 import ErrorPlotCard from "./ErrorPlotCard.jsx";
 import {SupportPlotGallery} from "./SupportPlotGallery.jsx";
+import {hostColumns} from "./registry.js";
 
 /**
  * The error-plot kind of supporting sub-node: one error plot of its host node's table - a histogram of a
@@ -18,8 +19,24 @@ import {SupportPlotGallery} from "./SupportPlotGallery.jsx";
  * Its config is {plot: "histogram" | "heatmap", columns: [x] | [x, y]}.
  */
 
-// The host's columns, in the order its metrics list them
-const columnsOf = (serverNodesById, hostId) => Object.keys(serverNodesById?.[hostId]?.data?.metrics?.columns ?? {});
+/** One histogram card per attribute, then one heatmap card for each pair of them. */
+function galleryCards(attributes) {
+    const cards = [];
+
+    for (const x of attributes) {
+        cards.push({id: `histogram:${x}`, plot: "histogram", columns: [x]});
+    }
+
+    for (let i = 0; i < attributes.length; i++) {
+        for (let j = i + 1; j < attributes.length; j++) {
+            const x = attributes[i];
+            const y = attributes[j];
+            cards.push({id: `heatmap:${x}:${y}`, plot: "heatmap", columns: [x, y]});
+        }
+    }
+
+    return cards;
+}
 
 /**
  * The modal's picker for this kind: the selected attributes' histograms, then their pairs' heatmaps, for the
@@ -29,13 +46,9 @@ export function ErrorPlotGallery({hostId, onAdd}) {
     const {selectedAttributes = []} = useContext(ViewContext) ?? {};
     const {serverNodesById} = usePgraph();
 
-    const columnChoices = columnsOf(serverNodesById, hostId);
+    const columnChoices = hostColumns(serverNodesById?.[hostId]);
     const attributes = selectedAttributes.filter((attribute) => columnChoices.includes(attribute));
-    const cards = [
-        ...attributes.map((x) => ({id: `histogram:${x}`, plot: "histogram", columns: [x]})),
-        ...attributes.flatMap((x, i) => attributes.slice(i + 1)
-            .map((y) => ({id: `heatmap:${x}:${y}`, plot: "heatmap", columns: [x, y]}))),
-    ];
+    const cards = galleryCards(attributes);
 
     return (
         <SupportPlotGallery
@@ -57,9 +70,13 @@ export function ErrorPlotGallery({hostId, onAdd}) {
     );
 }
 
-export function ErrorPlotBody({record}) {
-    const {serverNodesById, updateSupportNode} = usePgraph();
+export function ErrorPlotBody({record, host}) {
+    const {updateSupportNode} = usePgraph();
     const {plot, columns} = record.config;
+
+    const changeColumns = (next) => updateSupportNode(record.id, (current) => ({
+        config: {...current.config, columns: next},
+    }));
 
     return (
         <div className="support-plot-body">
@@ -67,8 +84,8 @@ export function ErrorPlotBody({record}) {
                 table={record.hostId}
                 plot={plot}
                 columns={columns}
-                columnChoices={columnsOf(serverNodesById, record.hostId)}
-                onColumns={(next) => updateSupportNode(record.id, (current) => ({config: {...current.config, columns: next}}))}
+                columnChoices={hostColumns(host)}
+                onColumns={changeColumns}
             />
         </div>
     );

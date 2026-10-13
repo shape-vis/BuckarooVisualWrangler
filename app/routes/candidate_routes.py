@@ -37,6 +37,16 @@ def accept_candidate():
         return {"success": False, "error": str(exc)}, 500
 
 
+def _is_list_of_names(value):
+    """Whether a request field is a non-empty list of strings."""
+    if not isinstance(value, list) or not value:
+        return False
+    for item in value:
+        if not isinstance(item, str):
+            return False
+    return True
+
+
 @app.post("/api/candidates/discard")
 def discard_candidates():
     """
@@ -47,7 +57,7 @@ def discard_candidates():
     """
     body = request.get_json(force=True, silent=True) or {}
     tables = body.get("tables")
-    if not isinstance(tables, list) or not tables or not all(isinstance(t, str) for t in tables):
+    if not _is_list_of_names(tables):
         return {"success": False, "error": "tables is required"}, 400
     try:
         return candidates.discard(tables)

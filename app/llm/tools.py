@@ -6,7 +6,7 @@ node's real columns, so the model cannot name a column that does not exist; `err
 fixed enum; and there is no row_ids parameter at all, so the model has no way to name a row.
 What it returns is a choice among enumerated operations, never a query.
 
-Keep the names in step with OPS in app/server_utils/ai_wrangle.py - that module validates every
+Keep the names in step with TOOL_OPS in app/server_utils/ai_wrangle.py - that module validates every
 call against them and is what actually decides which rows an operation touches.
 """
 from typing import Any
@@ -32,10 +32,10 @@ def _reason_property() -> dict[str, Any]:
     return {"type": "STRING", "description": _REASON}
 
 
-def _error_type_property(allowed=ERROR_TYPES) -> dict[str, Any]:
+def _error_type_property() -> dict[str, Any]:
     return {
         "type": "STRING",
-        "enum": list(allowed),
+        "enum": list(ERROR_TYPES),
         "description": (
             "Which class of flagged cell this acts on. 'missing' is empty or null, 'mismatch' is "
             "the wrong data type for the column, 'anomaly' is a statistical outlier, 'incomplete' "
@@ -48,7 +48,7 @@ def build_tool_declarations(columns: list[str]) -> list[dict[str, Any]]:
     """
     Build the tool list for one node.
 
-    :param columns: that node's real column names, already filtered of ID/Original_ID/index
+    :param columns: that node's real column names, already filtered of ID/Original_ID/index/level_0
     """
     cols = list(columns)
 

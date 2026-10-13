@@ -3,7 +3,9 @@ import {usePgraph} from "../../store/PGraphContext.jsx";
 import {nodeName, viewsFor, VIEW_LABELS} from "../../utils/comparison.js";
 import {useComparisonData} from "../../visualizations/useComparisonData.js";
 import ComparisonPlot from "../../visualizations/ComparisonPlot.jsx";
+import {PlotStatus} from "../../elements/ComparePanel.jsx";
 import {ColumnPicker, SupportPlotCard} from "./SupportPlotCard.jsx";
+import {columnKindOf, withCategoryHidden} from "./compareView.js";
 import "../../styles/ComparePanel.css";
 
 /**
@@ -26,13 +28,17 @@ import "../../styles/ComparePanel.css";
    so another column starts unzoomed with every category shown. */
 function DriftPlot({table, column, columnKind, enabled}) {
     // A node measured against itself is a single-node result: one side, against root
+    const requestedColumn = enabled ? column : "";
     const {loading, current, plotData} = useComparisonData({
-        a: table, b: table, kind: "drift", x: enabled ? column : "", keep: null, base: null,
+        a: table, b: table, kind: "drift", x: requestedColumn, keep: null, base: null,
     });
     // The node says which kind of column this is; a column it has no drift for is told by the result instead
-    const {activeView: view} = viewsFor({kind: "drift", view: null, columnKind: columnKind ?? plotData?.b?.kind, single: true});
+    const knownKind = columnKind ?? plotData?.b?.kind;
+    const {activeView: view} = viewsFor({kind: "drift", view: null, columnKind: knownKind, single: true});
     const [zoom, setZoom] = useState({key: null, range: null});
     const [hidden, setHidden] = useState([]);
+
+    const hideCategory = (category) => setHidden((was) => withCategoryHidden(was, category));
 
     return (
         // nowheel and nopan keep the graph from zooming or panning under a plot being read
@@ -44,16 +50,12 @@ function DriftPlot({table, column, columnKind, enabled}) {
                 labelA={nodeName(table)}
                 labelB={nodeName(table)}
                 hidden={hidden}
-                onHide={(category) => setHidden((was) => (was.includes(category) ? was : [...was, category]))}
+                onHide={hideCategory}
                 zoom={zoom}
                 onZoom={setZoom}
             />
-            {loading && <div className="compare-plot-status"><span className="compare-plot-pill">Loading…</span></div>}
-            {!loading && current?.error && (
-                <div className="compare-plot-status">
-                    <span className="compare-plot-pill compare-plot-pill--error">{current.error}</span>
-                </div>
-            )}
+            {loading && <PlotStatus>Loading…</PlotStatus>}
+            {!loading && current?.error && <PlotStatus error>{current.error}</PlotStatus>}
         </div>
     );
 }
@@ -61,12 +63,21 @@ function DriftPlot({table, column, columnKind, enabled}) {
 export default function DriftPlotCard({table, column, columnChoices, onColumn, actions = null, enabled = true}) {
     const {serverNodesById} = usePgraph();
     // Ridgeline or Sankey follows the column, numeric or categorical, as root decided it
-    const columnKind = serverNodesById?.[table]?.data?.distortion?.columns?.[column]?.kind;
-    const view = columnKind && viewsFor({kind: "drift", view: null, columnKind, single: true}).activeView;
+    const distortion = serverNodesById?.[table]?.data?.distortion;
+    const columnKind = columnKindOf(column, [distortion]);
+
+    // Until the node says which kind the column is, the title names no view
+    let title = `Drift · ${column}`;
+    if (columnKind) {
+        const view = viewsFor({kind: "drift", view: null, columnKind, single: true}).activeView;
+        if (view) {
+            title = `Drift · ${column} (${VIEW_LABELS[view]})`;
+        }
+    }
 
     return (
         <SupportPlotCard
-            title={view ? `Drift · ${column} (${VIEW_LABELS[view]})` : `Drift · ${column}`}
+            title={title}
             actions={actions}
             pickers={<ColumnPicker label="Column" value={column} choices={columnChoices} onChange={onColumn} />}
         >

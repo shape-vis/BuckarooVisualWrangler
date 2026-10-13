@@ -1,6 +1,6 @@
 // WrangleDiffChart.jsx
 // What one wrangle did to the data, small enough to hang beside the edge that made it: the parent's state
-// against the node's, binned on axes both share by /api/pgraph/compare - see app/pgraph/compare.py.
+// against the node's, binned on axes both share by /api/pgraph/compare - see app/db_utils/compare_sql.py.
 //
 // One column draws as the repair preview's histogram - the node's bars stacked by error type - with the
 // parent's bars outlined behind them. Rows the wrangle took away are the hatched red gap up to the outline;
@@ -10,8 +10,13 @@
 import {useEffect, useId, useRef, useState} from "react";
 import * as d3 from "d3";
 import {getNodeComparison} from "../utils/serverCalls.jsx";
-import {createHybridScales, showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
-import {ERROR_DIMENSIONS, errorColors} from "../store/errorColors.js";
+import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
+import {domSafeId, escapeHtml} from "../utils/html.js";
+import {errorColors} from "../store/errorColors.js";
+import {
+    GREEN, RED,
+    binLabel, binScale, divergingFill, drawXAxisOnFloor, formatCount, formatDelta, spanX, spanY, stackSegments,
+} from "./binnedPlot.js";
 import "../styles/WrangleDiffChart.css";
 
 // The chart's own coordinates; the svg scales to whatever width its frame gives it
@@ -21,58 +26,17 @@ const PLOT = {width: VIEW.width - MARGIN.left - MARGIN.right, height: VIEW.heigh
 
 /* Lost and gained. The error types already use a solid red for anomalies, so lost rows are hatched, and sit
    where the node has no bar at all - they cannot be read as a flag. */
-const LOST = "#c1121f";
-const GAINED = "#1a7f37";
+const LOST = RED;
+const GAINED = GREEN;
 const OUTLINE = "#6b7280";
-// A tile that exists on either side but did not change
-const UNCHANGED = "#eef0f2";
+// A heatmap tile's change starts this far toward its colour, so a small change still reads
+const CHANGE_FLOOR = 0.3;
 
-const formatCount = d3.format(",");
-const formatDelta = (value) => (value > 0 ? `+${formatCount(value)}` : formatCount(value));
-const formatValue = (value) => (Math.abs(value) >= 1e4 ? d3.format(".3~s")(value) : d3.format(".4~g")(value));
+// ── Axes ─────────────────────────────────────────────────────────────────────
 
-// Bin labels are the user's data, and the shared tooltip is set as html
-const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => (
-    {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[character]));
-
-// ── Scales ───────────────────────────────────────────────────────────────────
-
-// The shared hybrid scale, fed the backend's binned axis: numeric bin edges, then categorical labels
-function binScale(scale, size, direction) {
-    const numeric = scale.numeric ?? [];
-    const categorical = scale.categorical ?? [];
-    const numericDomain = numeric.length ? [numeric[0].x0, numeric[numeric.length - 1].x1] : null;
-    return createHybridScales(size, numeric, categorical, numericDomain,
-        categorical.length ? categorical : null, direction);
-}
-
-function spanX(xScale, scale, datum) {
-    if (datum.xType === "numeric") {
-        const {x0, x1} = scale.numeric[datum.xBin];
-        return {x: xScale.apply(x0, "numeric"), w: xScale.numericalBandwidth(x0, x1)};
-    }
-    return {x: xScale.apply(datum.xBin, "categorical"), w: xScale.categoricalBandwidth()};
-}
-
-// The vertical scale runs bottom to top, so a numeric bin's top edge is its x1
-function spanY(yScale, scale, datum) {
-    if (datum.yType === "numeric") {
-        const {x0, x1} = scale.numeric[datum.yBin];
-        return {y: yScale.apply(x1, "numeric"), h: yScale.numericalBandwidth(x1, x0)};
-    }
-    return {y: yScale.apply(datum.yBin, "categorical"), h: yScale.categoricalBandwidth()};
-}
-
-function binLabel(scale, type, bin) {
-    if (type !== "numeric") return String(bin);
-    const {x0, x1} = scale.numeric[bin];
-    return `${formatValue(x0)} – ${formatValue(x1)}`;
-}
-
-/* createHybridScales draws its x axis at y = size, which assumes a square plot. This one is wider than it is
-   tall, so the axis goes into a group shifted by the difference, landing it on the plot's floor. */
+// This plot is wider than it is tall, so its x axis is moved down onto its floor
 function drawXAxis(g, xScale) {
-    xScale.draw(g.append("g").attr("transform", `translate(0, ${PLOT.height - PLOT.width})`));
+    drawXAxisOnFloor(g.append("g"), xScale, PLOT.width, PLOT.height);
 }
 
 // ── Tooltips ─────────────────────────────────────────────────────────────────
@@ -90,20 +54,6 @@ function attachTooltip(selection, html) {
 }
 
 // ── Histogram ────────────────────────────────────────────────────────────────
-
-/* One bar's stack: error flags from the top down, clean rows beneath - the preview's and main histograms' order */
-function stackSegments(count) {
-    const segments = [];
-    let top = count.items;
-    ERROR_DIMENSIONS.forEach((type) => {
-        const value = count[type] ?? 0;
-        if (!value) return;
-        segments.push({type, top, bottom: Math.max(0, top - value)});
-        top -= value;
-    });
-    if (top > 0) segments.push({type: "none", top, bottom: 0});
-    return segments;
-}
 
 function drawHistogram(g, data, hatchId) {
     const xScale = binScale(data.scaleX, PLOT.width, "horizontal");
@@ -173,15 +123,19 @@ function drawHistogram(g, data, hatchId) {
 
 // ── Heatmap ──────────────────────────────────────────────────────────────────
 
+// A tile's title in its tooltip: its bin on each axis
+function tileTitle(data, tile) {
+    const xPart = `${data.x}: ${binLabel(data.scaleX, tile.xType, tile.xBin)}`;
+    const yPart = `${data.y}: ${binLabel(data.scaleY, tile.yType, tile.yBin)}`;
+    return `${xPart} · ${yPart}`;
+}
+
 function drawHeatmap(g, data) {
     const xScale = binScale(data.scaleX, PLOT.width, "horizontal");
     const yScale = binScale(data.scaleY, PLOT.height, "vertical");
     const delta = (tile) => tile.b.items - tile.a.items;
     const extent = d3.max(data.tiles, (tile) => Math.abs(delta(tile))) || 1;
-    // Stronger for a bigger change, from a visible floor so a small change still reads
-    const fill = (tile) => (delta(tile) === 0
-        ? UNCHANGED
-        : d3.interpolateRgb(UNCHANGED, delta(tile) > 0 ? GAINED : LOST)(0.3 + 0.7 * Math.min(1, Math.abs(delta(tile)) / extent)));
+    const fill = (tile) => divergingFill(delta(tile), extent, {fewer: LOST, more: GAINED, floor: CHANGE_FLOOR});
 
     const tiles = g.append("g").selectAll("rect").data(data.tiles).join("rect")
         .attr("x", (tile) => spanX(xScale, data.scaleX, tile).x)
@@ -191,9 +145,7 @@ function drawHeatmap(g, data) {
         .attr("fill", fill)
         .attr("stroke", "white")
         .attr("stroke-width", 0.5);
-    attachTooltip(tiles, (tile) => changeTooltip(
-        `${data.x}: ${binLabel(data.scaleX, tile.xType, tile.xBin)} · ${data.y}: ${binLabel(data.scaleY, tile.yType, tile.yBin)}`,
-        tile.a.items, tile.b.items));
+    attachTooltip(tiles, (tile) => changeTooltip(tileTitle(data, tile), tile.a.items, tile.b.items));
 
     drawXAxis(g, xScale);
     yScale.draw(g.append("g"));
@@ -208,7 +160,7 @@ function drawHeatmap(g, data) {
  */
 export default function WrangleDiffChart({parent, node, columns}) {
     const svgRef = useRef(null);
-    const hatchId = `wrangle-diff-lost-${useId().replace(/:/g, "")}`;
+    const hatchId = `wrangle-diff-lost-${domSafeId(useId())}`;
     const [x, y] = columns;
     const kind = y ? "heatmap" : "histogram";
 
@@ -221,9 +173,13 @@ export default function WrangleDiffChart({parent, node, columns}) {
     useEffect(() => {
         const controller = new AbortController();
         getNodeComparison({a: parent, b: node, kind, x, y}, controller.signal)
-            .then((response) => setReply(response?.success
-                ? {request, status: "ready", data: response}
-                : {request, status: "error", data: response?.error ?? "Could not compare the two states"}))
+            .then((response) => {
+                if (response?.success) {
+                    setReply({request, status: "ready", data: response});
+                } else {
+                    setReply({request, status: "error", data: response?.error ?? "Could not compare the two states"});
+                }
+            })
             .catch((error) => {
                 if (error.name !== "AbortError") setReply({request, status: "error", data: error.message});
             });

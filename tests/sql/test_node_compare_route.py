@@ -2,7 +2,7 @@
 The compare endpoint against a real graph: two nodes whose tables live in Postgres, read through the
 same Flask route the compare modal calls.
 
-The comparison arithmetic is covered in tests/unit/test_node_compare.py. What this pins is the part
+The binning itself is covered in tests/sql/test_compare_sql.py. What this pins is the part
 only a database exercises - reading both tables and their error flags - and a payload that survives
 Flask's JSON encoding.
 """
@@ -12,7 +12,7 @@ from sqlalchemy import text as sa_text
 
 import app
 from app import engine, db_operations
-from app.routes.wrangler_routes_sql import update_errors_table
+from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils import ai_wrangle as aw
 from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
@@ -32,7 +32,7 @@ def graph():
     """A root whose row 3 is missing height, and a child node that imputed it."""
     pd.DataFrame({"ID": [1, 2, 3, 4, 5], "height": [10.0, 20.0, None, 60.0, 30.0],
                   "weight": [1.0, 2.0, 3.0, 4.0, 5.0]}).to_sql(ROOT, engine, if_exists="replace", index=False)
-    update_errors_table(ROOT)
+    DetectorSQL(engine, ROOT).generate_errors_table()
     # Take control of exactly which flags exist, so the assertions are about this layout rather than
     # about whatever the detectors happened to find
     pd.DataFrame([(3, "height", "missing")], columns=["row_id", "column_id", "error_type"]).astype(

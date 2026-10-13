@@ -1,6 +1,7 @@
 import Sparkline from "./Sparkline.jsx";
 import { ERROR_TYPES, errorColors, DRIFT_COLOR } from "../store/errorColors.js";
 import { formatDrift } from "../utils/drift.js";
+import { asPercent } from "../utils/visCommon.jsx";
 import "../styles/QualityPanel.css";
 
 /**
@@ -11,8 +12,6 @@ import "../styles/QualityPanel.css";
  * is an improvement, so its steps are green and red; drift from root has no better direction - see
  * Sparkline's polarity - and reads in its own units.
  */
-
-const asPercent = (rate) => `${((rate ?? 0) * 100).toFixed(2)}%`;
 
 const isDrift = (dimension) => dimension === "drift";
 

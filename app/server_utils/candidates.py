@@ -28,11 +28,11 @@ from dataclasses import dataclass, field
 import app
 from app.db_utils import query
 from app.pgraph.node import GraphNode
-from app.server_utils.service_helpers import WRANGLE_LOCK, _parse_node_id, _safe_pg_name, build_node
+from app.server_utils.service_helpers import WRANGLE_LOCK, build_node, parse_node_id, safe_pg_name, session_graph
 from app.server_utils.workers import NODE_POOL
 
 # The wrangle a candidate stages, as GraphNode records it: the _x / _y of a 2D impute says which column it filled
-OPS = ("delete", "impute", "impute_x", "impute_y")
+WRANGLE_OPS = ("delete", "impute", "impute_x", "impute_y")
 
 SOURCES = ("repair", "ai")
 
@@ -46,7 +46,7 @@ class CandidateSpec:
     """
     One candidate to stage.
 
-    op:             one of OPS
+    op:             one of WRANGLE_OPS
     cols:           the column(s) the wrangle was chosen on, as the node records them
     row_ids:        the rows it touches
     imputed_column: the column an impute fills
@@ -62,7 +62,7 @@ class CandidateSpec:
 
 
 @dataclass
-class _Build:
+class _CandidateBuild:
     """One candidate's build: its spec, its claimed table, and what building it produced or why it failed."""
     spec: CandidateSpec
     table: str
@@ -71,13 +71,8 @@ class _Build:
     error: Exception | None = None
 
 
-def _session_graph():
-    # The session's graph hangs off the app package, and does not exist at all until the first upload
-    return getattr(app, "pgraph_for_session", None)
-
-
 def _graph():
-    graph = _session_graph()
+    graph = session_graph()
     if graph is None:
         raise CandidateError("There is no graph in this session yet.")
     return graph
@@ -88,7 +83,7 @@ def require_accepted(table_name):
     Refuse to wrangle from a candidate. Every path that would make a new node from a table - repairing a
     selection, asking the AI, deleting a column - calls this first, so none can get around it.
     """
-    graph = _session_graph()
+    graph = session_graph()
     if graph is not None and graph.is_provisional(table_name):
         raise CandidateError("Accept this candidate before wrangling from it.")
 
@@ -101,7 +96,7 @@ def candidate_json(node):
 
 def _check(spec):
     """Refuse a spec that could not be staged, before anything is claimed or built."""
-    if spec.op not in OPS:
+    if spec.op not in WRANGLE_OPS:
         raise CandidateError(f"Unknown wrangle {spec.op!r}.")
     if spec.source not in SOURCES:
         raise CandidateError(f"Unknown candidate source {spec.source!r}.")
@@ -123,13 +118,16 @@ def _claim(parent, count):
             raise CandidateError(f"{parent} is not a node in this graph.")
         require_accepted(parent)
 
-        parsed = _parse_node_id(parent)
-        base = parsed[1] if parsed else parent
+        # A candidate's table is named for the base of its parent's: the parent's own prefix gives way to its own
+        base = parent
+        parsed = parse_node_id(parent)
+        if parsed is not None:
+            base = parsed[1]
 
         tables = []
         for _ in range(count):
             prefix = graph.take_candidate_prefix()
-            tables.append(_safe_pg_name(f"{prefix}_{base}", ""))
+            tables.append(safe_pg_name(f"{prefix}_{base}", ""))
 
     return graph, tables
 
@@ -153,7 +151,7 @@ def _build_all(parent, specs):
     """
     Claim a table for each spec and build them all at once, each on its own node-build thread. A candidate whose
     build fails has its tables dropped here, and carries its error.
-    :return: (the graph the names were claimed in, a _Build per spec, in order)
+    :return: (the graph the names were claimed in, a _CandidateBuild per spec, in order)
     """
     for spec in specs:
         _check(spec)
@@ -163,18 +161,29 @@ def _build_all(parent, specs):
     builds = []
     futures = []
     for spec, table in zip(specs, tables):
-        build = _Build(spec=spec, table=table)
+        build = _CandidateBuild(spec=spec, table=table)
         builds.append(build)
-        futures.append(NODE_POOL.submit(_build, parent, build, graph.root_node))
+        futures.append(NODE_POOL.submit(_build, parent, build, graph.root_table_name))
 
     for build, future in zip(builds, futures):
         try:
             build.metrics, build.distortion = future.result()
         except Exception as error:
             build.error = error
-            app.db_operations.drop_node_tables(build.table)
+            _drop_quietly(build.table)
 
     return graph, builds
+
+
+def _drop_quietly(table):
+    """
+    Drop a failed candidate's tables. A drop that fails too is only reported, so it can't stop the other candidates'
+    results being collected - and their tables dropped in turn if need be.
+    """
+    try:
+        app.db_operations.drop_node_tables(table)
+    except Exception as error:
+        print(f"[candidates] could not drop the tables of {table}: {error}")
 
 
 def _register(graph, parent, builds):
@@ -185,7 +194,7 @@ def _register(graph, parent, builds):
     :return: the staged candidates, as candidate_json gives them
     """
     with WRANGLE_LOCK:
-        if _session_graph() is not graph or parent not in graph.node_map:
+        if session_graph() is not graph or parent not in graph.node_map:
             for build in builds:
                 app.db_operations.drop_node_tables(build.table)
             raise CandidateError("The session changed while these candidates were being built.")
@@ -254,24 +263,6 @@ def stage_each(parent, specs):
     return staged, failures
 
 
-def materialize(parent, op, cols, row_ids, imputed_column=None, source="repair", meta=None):
-    """
-    Stage one candidate: run the wrangle on a copy of parent and register the copy as a provisional node.
-
-    :param parent: the node table the wrangle runs on - an accepted node
-    :param op: one of OPS
-    :param cols: the column(s) the wrangle was chosen on, as the node records them
-    :param row_ids: the rows it touches
-    :param imputed_column: the column an impute fills
-    :param source: "repair" (the user's selection) or "ai" (the model's suggestion)
-    :param meta: how to present it - {label, reason, row_count, error_type, chart_type}
-    :return: the candidate, as candidate_json gives it
-    """
-    spec = CandidateSpec(op=op, cols=list(cols), row_ids=row_ids, imputed_column=imputed_column, source=source,
-                         meta=meta or {})
-    return stage_all(parent, [spec])[0]
-
-
 def accept(table):
     """
     Publish a candidate into the graph for good, and move the session onto it. Nothing is renamed: it keeps its
@@ -285,7 +276,7 @@ def accept(table):
         node = graph.publish(table)
         # It may branch off a node other than the current one, so the cursor is set from the tree
         graph.set_clicked_node_as_current(table)
-        app.db_operations.load_table(table, f"errors_{table}", f"dp_{table}")
+        app.db_operations.load_table(table)
     return {"success": True, "table": table, "label": node.label, "parent": node.parent_table}
 
 
@@ -306,13 +297,13 @@ def discard(tables):
                 moved_to = moved
             app.db_operations.drop_node_tables(table)
         if moved_to:
-            app.db_operations.load_table(moved_to, f"errors_{moved_to}", f"dp_{moved_to}")
+            app.db_operations.load_table(moved_to)
     return {"success": True, "current": moved_to}
 
 
 def discard_all():
     """Drop every candidate still staged - when the session is reset, so none is left behind in the database."""
-    graph = _session_graph()
+    graph = session_graph()
     if graph is None:
         return
     tables = []

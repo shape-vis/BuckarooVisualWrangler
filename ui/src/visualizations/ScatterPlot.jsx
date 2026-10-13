@@ -1,17 +1,18 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { querySample2d, querySample2dRange } from "../utils/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import { createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../store/SelectionContext.jsx";
-import { useRowRange } from "../store/RowRangeContext.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
+import {
+  BRUSH_CLICK_GUARD_MS, HIGHLIGHT_FILL, plainColorScale, pointColor, useCachedPlotData, useLatestRef,
+} from "./errorPlots.js";
+import { scatterScales } from "./previewPlots.js";
 
 // Module-level cache so base samples survive component unmount/remount (e.g. focus zoom in/out).
 import { scatterPlotCache } from "../store/visualizationCaches.jsx";
-const baseSampleCache = scatterPlotCache;
 
 function ScatterPlot({
-  cellID,
   xPos,
   yPos,
   size,
@@ -21,64 +22,41 @@ function ScatterPlot({
   errorSampleCount = 300,
   totalSampleCount = 1000,
 }) {
-  const { tableName: table_name } = useTableName();
+  const { tableName } = useTableName();
   const drawingRef = useRef(null);
   const clearSelectionRef = useRef(() => {});
-  const [sampleData, setSampleData] = React.useState(null);
 
   // Refs to D3 selections / scales so the highlight effect can re-color
   // without rebuilding the whole chart.
   const circlesRef = useRef(null);
-  const colorScaleRef = useRef(() => "steelblue");
+  const colorScaleRef = useRef(plainColorScale);
 
-  const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
+  const { highlightedRowIds, setHighlightedRowIds, clearHighlight } = useSelection();
 
   // Keep a stable ref to setHighlightedRowIds so closures inside the draw
   // effect always call the latest version without stale captures.
-  const setHighlightedRef = useRef(setHighlightedRowIds);
-  const highlightRevisionRef = useRef(highlightRevision);
-  useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
-  useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
-
-  const { useRange, minId, maxId } = useRowRange();
+  const setHighlightedRef = useLatestRef(setHighlightedRowIds);
 
   // ── data fetch ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const cacheKey = `${table_name}|${attrX}|${attrY}`;
+  const sampleData = useCachedPlotData(
+    scatterPlotCache,
+    `${tableName}|${attrX}|${attrY}`,
+    async ({ useRange, minId, maxId }) => {
+      const response = useRange
+        ? await querySample2dRange(tableName, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId)
+        : await querySample2d(tableName, attrX, attrY, errorSampleCount, totalSampleCount);
 
-    async function fetchData() {
-      // Restore cached base sample instead of re-fetching (survives unmount/remount from focus zoom).
-      if (!useRange && baseSampleCache.has(cacheKey)) {
-        setSampleData(baseSampleCache.get(cacheKey));
-        return;
+      if (!response || !response.success) {
+        console.error("[SCATTERPLOT] API call failed:", response);
+        throw new Error(`2D ScatterPlot API failed: ${response?.error || "Unknown error"}`);
       }
 
-      try {
-        const response = useRange
-          ? await querySample2dRange(table_name, attrX, attrY, errorSampleCount, totalSampleCount, minId, maxId)
-          : await querySample2d(table_name, attrX, attrY, errorSampleCount, totalSampleCount);
-        console.log("[SCATTERPLOT] Response:", response);
-
-        if (!response || !response.success) {
-          console.error("[SCATTERPLOT] API call failed:", response);
-          throw new Error(`2D ScatterPlot API failed: ${response?.error || "Unknown error"}`);
-        }
-
-        const data = response.scatterplot_data;
-        if (!data) throw new Error("No scatterplot data returned from server");
-
-        setSampleData(data);
-
-        // Cache the base sample so future mounts restore it without re-fetching.
-        if (!useRange) {
-          baseSampleCache.set(cacheKey, data);
-        }
-      } catch (err) {
-        console.error(err?.message || err);
-      }
-    }
-    fetchData();
-  }, [table_name, attrX, attrY, errorSampleCount, totalSampleCount, useRange, minId, maxId]);
+      const data = response.scatterplot_data;
+      if (!data) throw new Error("No scatterplot data returned from server");
+      return data;
+    },
+    [tableName, attrX, attrY, errorSampleCount, totalSampleCount],
+  );
 
   // ── draw chart ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -87,53 +65,29 @@ function ScatterPlot({
     const canvas = d3.select(drawingRef.current);
     canvas.selectAll("*").remove();
 
-    const colorScale = errorColors || (() => "steelblue");
+    const colorScale = errorColors || plainColorScale;
     colorScaleRef.current = colorScale;
 
-    const numHistDataX = sampleData.scaleX.numeric || [];
-    const numHistDataY = sampleData.scaleY.numeric || [];
-
-    const actualXCats = new Set((sampleData.data || []).filter(d => d.xType === "categorical").map(d => d.x));
-    const actualYCats = new Set((sampleData.data || []).filter(d => d.yType === "categorical").map(d => d.y));
-    const catHistDataX = errorColors ? (sampleData.scaleX.categorical || []).filter(v => actualXCats.has(v)) : [];
-    const catHistDataY = errorColors ? (sampleData.scaleY.categorical || []).filter(v => actualYCats.has(v)) : [];
-
-    const xScale = createHybridScales(
-      size, numHistDataX, catHistDataX,
-      numHistDataX.length === 0 ? null : numHistDataX,
-      catHistDataX.length === 0 ? null : catHistDataX,
-      "horizontal"
-    );
-    const yScale = createHybridScales(
-      size, numHistDataY, catHistDataY,
-      numHistDataY.length === 0 ? null : numHistDataY,
-      catHistDataY.length === 0 ? null : catHistDataY,
-      "vertical"
-    );
+    // Without error colours the categorical (null) values are left off the axes
+    const { xScale, yScale } = scatterScales(sampleData, size, Boolean(errorColors));
 
     xScale.draw(canvas);
     yScale.draw(canvas);
 
-    const circleFill = (d, highlightSet) => {
-      if (highlightSet && highlightSet.has(d.ID)) return "gold";
-      if (!d.errors || d.errors.length === 0) return colorScale("none");
-      if (d.errors.length === 1) return colorScale(d.errors[0]);
-      return colorScale(d.errors[0]);
-    };
+    const circleFill = (d) => pointColor(colorScale, d);
 
     // When no null columns, filter out categorical-null points so no null area is rendered.
-    const chartData = errorColors
-      ? (sampleData.data || [])
-      : (sampleData.data || []).filter(d => d.xType !== "categorical" && d.yType !== "categorical");
+    let chartData = sampleData.data || [];
+    if (!errorColors) chartData = chartData.filter(d => d.xType !== "categorical" && d.yType !== "categorical");
 
     const circles = canvas.selectAll("circle")
       .data(chartData)
       .join("circle")
-      .attr("cx", d => xScale ? xScale.apply(d.x, d.xType, true) : 0)
-      .attr("cy", d => yScale ? yScale.apply(d.y, d.yType, true) : 0)
+      .attr("cx", d => xScale.apply(d.x, d.xType, true))
+      .attr("cy", d => yScale.apply(d.y, d.yType, true))
       .attr("r", 4)
       .attr("cursor", "pointer")
-      .attr("fill", d => circleFill(d, null));
+      .attr("fill", circleFill);
 
     circlesRef.current = circles;
 
@@ -147,7 +101,7 @@ function ScatterPlot({
       .on("brush end", (event) => {
         if (event.type === "end") lastBrushEnd = Date.now();
         if (!event.selection) {
-          circles.attr("fill", d => circleFill(d, null));
+          circles.attr("fill", circleFill);
           if (event.type === "end" && event.sourceEvent) {
             clearHighlight();
           }
@@ -155,17 +109,15 @@ function ScatterPlot({
         }
         const [[x0, y0], [x1, y1]] = event.selection;
         const brushedIds = [];
-        const requestRevision = highlightRevisionRef.current;
         circles.each(function (d) {
           const cx = +d3.select(this).attr("cx");
           const cy = +d3.select(this).attr("cy");
           const inside = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-          d3.select(this).attr("fill", inside ? "gold" : circleFill(d, null));
+          d3.select(this).attr("fill", inside ? HIGHLIGHT_FILL : circleFill(d));
           if (inside) brushedIds.push(d.ID);
         });
 
         if (event.type === "end" && brushedIds.length > 0) {
-          if (highlightRevisionRef.current !== requestRevision) return;
           setHighlightedRef.current([...new Set(brushedIds)], [attrX, attrY], "scatterplot");
         }
       });
@@ -174,7 +126,7 @@ function ScatterPlot({
     brushGroup.lower();
 
     clearSelectionRef.current = () => {
-      circles.attr("fill", d => circleFill(d, null));
+      circles.attr("fill", circleFill);
       brushGroup.call(brush.move, null);
     };
 
@@ -186,14 +138,12 @@ function ScatterPlot({
         if (d.errors && d.errors.length > 1) d.errors.slice(1).forEach(k => { errorList += `, ${k}`; });
         return `<strong>Data:</strong> ${bin}${errorList}`;
       },
-      (d, event) => {
+      (d) => {
         // Skip click if a brush drag just ended (prevents overwriting multi-select).
-        if (Date.now() - lastBrushEnd < 300) return;
+        if (Date.now() - lastBrushEnd < BRUSH_CLICK_GUARD_MS) return;
         // Left click: set this point's ID as the cross-chart highlight.
         setHighlightedRef.current([d.ID], [attrX, attrY], "scatterplot");
       },
-      (d) => { /* right click – unused */ },
-      (d) => { /* double click – unused */ }
     );
 
     return () => { canvas.selectAll("*").remove(); };
@@ -205,10 +155,8 @@ function ScatterPlot({
     const rowIdSet = highlightedRowIds ? new Set(highlightedRowIds) : null;
     const colorScale = colorScaleRef.current;
     circlesRef.current.attr("fill", d => {
-      if (rowIdSet && rowIdSet.has(d.ID)) return "gold";
-      if (!d.errors || d.errors.length === 0) return colorScale("none");
-      if (d.errors.length === 1) return colorScale(d.errors[0]);
-      return colorScale(d.errors[0]);
+      if (rowIdSet && rowIdSet.has(d.ID)) return HIGHLIGHT_FILL;
+      return pointColor(colorScale, d);
     });
   }, [highlightedRowIds, sampleData]);
 
@@ -218,12 +166,12 @@ function ScatterPlot({
   }
 
   return (
-    <g key={cellID} transform={`translate(${xPos}, ${yPos})`} className="scatter-canvas">
+    <g transform={`translate(${xPos}, ${yPos})`} className="scatter-canvas">
       <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
       <g ref={drawingRef}></g>
     </g>
   );
 }
 
-// Adds memoization (shallow copy) - may need to make a custom checker.
+// Adds memoization (shallow compare) - may need to make a custom checker.
 export default React.memo(ScatterPlot);

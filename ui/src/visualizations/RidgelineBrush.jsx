@@ -10,6 +10,8 @@ import * as d3 from "d3";
 import {Brush} from "@visx/brush";
 import {ROLE_COLORS} from "../utils/comparison.js";
 import {useHostWindow} from "../store/HostWindowContext.jsx";
+import {DRIFT_COLOR} from "../store/errorColors.js";
+import {clamp} from "../utils/visCommon.jsx";
 
 // The pins above the curves and the tick labels below. The curves' own height comes from the plot, which
 // sizes root's row to match the ridgeline's; this is the height to use when it gives none.
@@ -21,8 +23,6 @@ export const STRIP_CHROME = PIN + AXIS;
 /* How much of a row's height its tallest curve may take. The rest is left clear above it, so a peak never
    runs into the row above - the ridgeline's rows use the same, so root's row still matches theirs. */
 export const RIDGE_HEADROOM = 0.9;
-// Drift is teal wherever it is drawn - never red
-const BRUSH_COLOR = "#0f766e";
 const HANDLE = 8;
 // The narrowest window, in grid steps. Past this a zoomed curve has too few points to be smooth.
 const MIN_STEPS = 40;
@@ -89,10 +89,11 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
             onRange(null);
             return;
         }
-        let [from, to] = [Math.max(lo, bounds.x0), Math.min(hi, bounds.x1)];
+        let from = Math.max(lo, bounds.x0);
+        let to = Math.min(hi, bounds.x1);
         if (to - from < minSpan) {
             const middle = (from + to) / 2;
-            from = Math.min(Math.max(lo, middle - minSpan / 2), hi - minSpan);
+            from = clamp(middle - minSpan / 2, lo, hi - minSpan);
             to = from + minSpan;
         }
         onRange([from, to]);
@@ -152,8 +153,8 @@ export default function RidgelineBrush({density, curves, spots, frame, rootColor
                             onChange={changed}
                             useWindowMoveEvents={inThisWindow}
                             selectedBoxStyle={{
-                                fill: BRUSH_COLOR, fillOpacity: 0.12,
-                                stroke: BRUSH_COLOR, strokeWidth: 1, strokeOpacity: 0.8,
+                                fill: DRIFT_COLOR, fillOpacity: 0.12,
+                                stroke: DRIFT_COLOR, strokeWidth: 1, strokeOpacity: 0.8,
                             }}
                             renderBrushHandle={(props) => <Grip {...props}/>}
                         />

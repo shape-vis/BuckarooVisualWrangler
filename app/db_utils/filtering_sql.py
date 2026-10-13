@@ -1,11 +1,11 @@
-
-from app.db_utils.execute_sql import execute_sql
-
 """
 Manages a persistent PostgreSQL filtering table that tracks which row IDs satisfy the
 currently active set of filters. This table is then joined against by DBOperations to
 scope all histogram and scatterplot queries to only the matching rows.
 """
+
+from app.db_utils.execute_sql import execute_sql
+
 
 class FilteringSQL:
     def __init__(self, main_table_name, engine):
@@ -26,17 +26,19 @@ class FilteringSQL:
         condensed_sql_filter = " AND ".join(sql_filters)
         try:
             if len(self.applied_filters) == 0:
-                self.table_exists = True
-
                 # Create fresh filtering table and compute satisfying indices.
                 table_creation_query = self.create_filtering_table(condensed_sql_filter)
                 execute_sql(table_creation_query, self.engine)
+
+                # Only once the table is made, so a filter that fails to apply doesn't leave the plots joining
+                # against a table that isn't there
+                self.table_exists = True
             else:
                 # New satisfying indices have to be a subset of indices that already satisfy the other filters.
                 new_satisfying_indices = f"""
                 DELETE FROM "{self.filtering_table_name}"
                 USING "{self.main_table_name}"
-                WHERE "{self.filtering_table_name}".ID = "{self.main_table_name}".ID AND NOT ({condensed_sql_filter});
+                WHERE "{self.filtering_table_name}"."ID" = "{self.main_table_name}"."ID" AND NOT ({condensed_sql_filter});
                 """
                 execute_sql(new_satisfying_indices, self.engine)
 
