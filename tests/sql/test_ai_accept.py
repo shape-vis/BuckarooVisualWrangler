@@ -12,62 +12,30 @@ Two things here are regressions waiting to happen and are pinned deliberately:
 """
 import pytest
 import pandas as pd
-from sqlalchemy import text as sa_text
 
 import app
 from app import engine, db_operations
-from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils import ai_wrangle as aw
-from app.server_utils.service_helpers import (
-    build_data_profile_table,
-    init_pgraph_for_session,
-)
 
 ROOT = "n0a_aiacc"
 COLUMNS = ["a", "b"]
 
 
-def _drop_all(*tables):
-    with engine.begin() as conn:
-        for t in tables:
-            for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
-
-
-def _make_root(data, flags=None):
-    """Build a real root node: table, errors_, dp_, and a PGraph holding it."""
-    pd.DataFrame(data).to_sql(ROOT, engine, if_exists="replace", index=False)
-    DetectorSQL(engine, ROOT).generate_errors_table()
-    if flags is not None:
-        # Take control of exactly which flags exist, so a test asserts about its own layout
-        # rather than about whatever the detectors happened to find.
-        pd.DataFrame(flags, columns=["row_id", "column_id", "error_type"]).astype(
-            {"row_id": "int64"}
-        ).to_sql(f"errors_{ROOT}", engine, if_exists="replace", index=False)
-    build_data_profile_table(ROOT)
-    init_pgraph_for_session(ROOT)
-    db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
+@pytest.fixture
+def root(make_root):
+    """:return: a function building the root from its data and, when given, exactly these flags"""
+    def build(data, flags=None):
+        make_root(ROOT, data, flags)
+    return build
 
 
 def _read(table):
     return pd.read_sql_query(f'SELECT * FROM "{table}" ORDER BY "ID"', engine)
 
 
-@pytest.fixture
-def clean_graph():
-    """Every test here mutates the process-wide session graph, so reset it around each one."""
-    created = [ROOT]
-    yield created
-    # Candidates and the nodes they became have tables of their own
-    if getattr(app, "pgraph_for_session", None) is not None:
-        created.extend(app.pgraph_for_session.node_map.keys())
-    app.pgraph_for_session = None
-    _drop_all(*created)
-
-
 @pytest.mark.sql
-def test_accept_creates_a_node_and_runs_the_wrangle(clean_graph):
-    _make_root(
+def test_accept_creates_a_node_and_runs_the_wrangle(root, session_graph):
+    root(
         {"ID": [1, 2, 3, 4, 5], "a": [10.0, 20.0, None, 60.0, 30.0],
          "b": [1.0, 2.0, 3.0, 4.0, 5.0]},
         flags=[(3, "a", "missing")],
@@ -77,7 +45,7 @@ def test_accept_creates_a_node_and_runs_the_wrangle(clean_graph):
         ROOT, {"op": "impute_rows", "column": "a", "error_type": "missing"}, COLUMNS
     )
     new_table = result["table"]
-    clean_graph.append(new_table)
+    session_graph.append(new_table)
 
     assert result["success"] is True
     assert result["row_count"] == 1
@@ -106,8 +74,8 @@ def test_accept_creates_a_node_and_runs_the_wrangle(clean_graph):
 
 
 @pytest.mark.sql
-def test_delete_removes_only_the_flagged_rows(clean_graph):
-    _make_root(
+def test_delete_removes_only_the_flagged_rows(root, session_graph):
+    root(
         {"ID": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
          "a": [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
          "b": [1.0] * 10},
@@ -117,7 +85,7 @@ def test_delete_removes_only_the_flagged_rows(clean_graph):
     result = aw.apply_suggestion(
         ROOT, {"op": "delete_rows", "column": "a", "error_type": "missing"}, COLUMNS
     )
-    clean_graph.append(result["table"])
+    session_graph.append(result["table"])
 
     after = _read(result["table"])
     assert sorted(after["ID"]) == [1, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -125,7 +93,7 @@ def test_delete_removes_only_the_flagged_rows(clean_graph):
 
 
 @pytest.mark.sql
-def test_2d_impute_leaves_the_other_column_s_rows_alone(clean_graph):
+def test_2d_impute_leaves_the_other_column_s_rows_alone(root, session_graph):
     """
     The corruption regression.
 
@@ -133,7 +101,7 @@ def test_2d_impute_leaves_the_other_column_s_rows_alone(clean_graph):
     be in its id set. The fill value (30.0) differs from row 4's own value (60.0), so an
     overwrite would be plainly visible - picking values that way is the whole point.
     """
-    _make_root(
+    root(
         {"ID": [1, 2, 3, 4, 5], "a": [10.0, 20.0, None, 60.0, 30.0],
          "b": [1.0, 2.0, 3.0, None, 5.0]},
         flags=[(3, "a", "missing"), (4, "b", "missing")],
@@ -148,7 +116,7 @@ def test_2d_impute_leaves_the_other_column_s_rows_alone(clean_graph):
          "error_type": "missing"},
         COLUMNS,
     )
-    clean_graph.append(result["table"])
+    session_graph.append(result["table"])
 
     assert result["row_count"] == 1, "only row 3 is flagged in `a`"
 
@@ -166,12 +134,12 @@ def test_2d_impute_leaves_the_other_column_s_rows_alone(clean_graph):
 
 
 @pytest.mark.sql
-def test_second_accept_branches_off_the_same_parent(clean_graph):
+def test_second_accept_branches_off_the_same_parent(root, session_graph):
     """
     Accept, then accept again off the *original* node - the sibling case, and the one that
     exposes the undo cursor.
     """
-    _make_root(
+    root(
         {"ID": [1, 2, 3, 4, 5], "a": [10.0, 20.0, None, 60.0, 30.0],
          "b": [1.0, 2.0, 3.0, None, 5.0]},
         flags=[(3, "a", "missing"), (4, "b", "missing")],
@@ -181,7 +149,7 @@ def test_second_accept_branches_off_the_same_parent(clean_graph):
     first = aw.apply_suggestion(
         ROOT, {"op": "impute_rows", "column": "a", "error_type": "missing"}, COLUMNS
     )
-    clean_graph.append(first["table"])
+    session_graph.append(first["table"])
     assert db_operations.main_table_name == first["table"]
 
     # ROOT is no longer the current node. Accepting off it must still work, and must leave the
@@ -189,7 +157,7 @@ def test_second_accept_branches_off_the_same_parent(clean_graph):
     second = aw.apply_suggestion(
         ROOT, {"op": "impute_rows", "column": "b", "error_type": "missing"}, COLUMNS
     )
-    clean_graph.append(second["table"])
+    session_graph.append(second["table"])
 
     graph = app.pgraph_for_session
     assert second["table"] != first["table"]
@@ -213,8 +181,8 @@ def test_second_accept_branches_off_the_same_parent(clean_graph):
 
 
 @pytest.mark.sql
-def test_accept_refuses_a_table_that_is_not_a_node(clean_graph):
-    _make_root({"ID": [1, 2], "a": [1.0, None], "b": [1.0, 2.0]}, flags=[(2, "a", "missing")])
+def test_accept_refuses_a_table_that_is_not_a_node(root, session_graph):
+    root({"ID": [1, 2], "a": [1.0, None], "b": [1.0, 2.0]}, flags=[(2, "a", "missing")])
 
     with pytest.raises(aw.SuggestionError, match="not a node"):
         aw.apply_suggestion(
@@ -225,9 +193,9 @@ def test_accept_refuses_a_table_that_is_not_a_node(clean_graph):
 
 
 @pytest.mark.sql
-def test_a_guarded_suggestion_never_touches_the_table(clean_graph):
+def test_a_guarded_suggestion_never_touches_the_table(root, session_graph):
     """A refusal must leave the graph and the data exactly as they were."""
-    _make_root(
+    root(
         {"ID": [1, 2, 3], "a": [1.0, None, 3.0], "b": [1.0, 2.0, 3.0]},
         flags=[(1, "a", "missing"), (2, "a", "missing"), (3, "a", "missing")],
     )

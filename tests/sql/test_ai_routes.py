@@ -8,49 +8,29 @@ validation, id resolution, the guards, the wrangle, the new node.
 """
 import pytest
 import pandas as pd
-from sqlalchemy import text as sa_text
 
 import app
 from app import engine, db_operations
 from app import app as flask_app
 from app.llm import gemini_client
-from app.db_utils.detector_sql import DetectorSQL
-from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 ROOT = "n0a_airoute"
 
 
-def _drop_all(*tables):
-    with engine.begin() as conn:
-        for t in tables:
-            for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
-
-
-def _make_root(flags):
-    pd.DataFrame({
-        "ID": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        "a": [10.0, 20.0, None, 60.0, 30.0, 40.0, 50.0, 70.0, 80.0, 90.0],
-        "b": [1.0, 2.0, 3.0, None, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
-    }).to_sql(ROOT, engine, if_exists="replace", index=False)
-    DetectorSQL(engine, ROOT).generate_errors_table()
-    pd.DataFrame(flags, columns=["row_id", "column_id", "error_type"]).astype(
-        {"row_id": "int64"}
-    ).to_sql(f"errors_{ROOT}", engine, if_exists="replace", index=False)
-    build_data_profile_table(ROOT)
-    init_pgraph_for_session(ROOT)
-    db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
+# Ten rows over two columns; each test names which of their cells are flagged
+DATA = {
+    "ID": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "a": [10.0, 20.0, None, 60.0, 30.0, 40.0, 50.0, 70.0, 80.0, 90.0],
+    "b": [1.0, 2.0, 3.0, None, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+}
 
 
 @pytest.fixture
-def graph():
-    created = [ROOT]
-    yield created
-    # Candidates and the nodes they became have tables of their own
-    if getattr(app, "pgraph_for_session", None) is not None:
-        created.extend(app.pgraph_for_session.node_map.keys())
-    app.pgraph_for_session = None
-    _drop_all(*created)
+def root(make_root):
+    """:return: a function building the root from DATA, flagged exactly as given"""
+    def build(flags):
+        make_root(ROOT, DATA, flags)
+    return build
 
 
 @pytest.fixture
@@ -66,8 +46,8 @@ def stub_model(monkeypatch):
 
 
 @pytest.mark.sql
-def test_suggest_returns_validated_suggestions(graph, stub_model):
-    _make_root([(3, "a", "missing"), (4, "b", "missing")])
+def test_suggest_returns_validated_suggestions(root, stub_model):
+    root([(3, "a", "missing"), (4, "b", "missing")])
     stub_model([
         {"name": "impute_rows",
          "args": {"column": "a", "error_type": "missing", "reason": "One blank age."}},
@@ -95,9 +75,9 @@ def test_suggest_returns_validated_suggestions(graph, stub_model):
 
 
 @pytest.mark.sql
-def test_suggest_drops_what_it_cannot_run(graph, stub_model):
+def test_suggest_drops_what_it_cannot_run(root, stub_model):
     """A hallucinated column, and a delete that would gut the table, are dropped silently."""
-    _make_root([(i, "a", "missing") for i in range(1, 8)] + [(3, "b", "missing")])
+    root([(i, "a", "missing") for i in range(1, 8)] + [(3, "b", "missing")])
     stub_model([
         {"name": "impute_rows",
          "args": {"column": "not_a_column", "error_type": "missing", "reason": "nope"}},
@@ -116,8 +96,8 @@ def test_suggest_drops_what_it_cannot_run(graph, stub_model):
 
 
 @pytest.mark.sql
-def test_suggest_honours_no_suggestions(graph, stub_model):
-    _make_root([])
+def test_suggest_honours_no_suggestions(root, stub_model):
+    root([])
     stub_model([{"name": "no_suggestions", "args": {"reason": "Everything looks clean."}}])
 
     body = flask_app.test_client().post(
@@ -129,9 +109,9 @@ def test_suggest_honours_no_suggestions(graph, stub_model):
 
 
 @pytest.mark.sql
-def test_suggest_does_not_move_the_session(graph, stub_model):
+def test_suggest_does_not_move_the_session(root, stub_model):
     """Asking for suggestions must not change which table the app is on."""
-    _make_root([(3, "a", "missing")])
+    root([(3, "a", "missing")])
     stub_model([{"name": "impute_rows",
                  "args": {"column": "a", "error_type": "missing", "reason": "x"}}])
 
@@ -141,8 +121,8 @@ def test_suggest_does_not_move_the_session(graph, stub_model):
 
 
 @pytest.mark.sql
-def test_accepting_a_suggestion_runs_the_wrangle(graph, stub_model):
-    _make_root([(3, "a", "missing")])
+def test_accepting_a_suggestion_runs_the_wrangle(root, stub_model):
+    root([(3, "a", "missing")])
     stub_model([{"name": "impute_rows",
                  "args": {"column": "a", "error_type": "missing", "reason": "x"}}])
     client = flask_app.test_client()
@@ -159,9 +139,9 @@ def test_accepting_a_suggestion_runs_the_wrangle(graph, stub_model):
 
 
 @pytest.mark.sql
-def test_accept_only_takes_a_candidate(graph):
+def test_accept_only_takes_a_candidate(root):
     """Nothing but a staged candidate can be accepted - not a node that already is one, not a stranger."""
-    _make_root([(3, "a", "missing")])
+    root([(3, "a", "missing")])
     client = flask_app.test_client()
 
     assert client.post("/api/candidates/accept", json={"table": ROOT}).status_code == 409
@@ -171,15 +151,15 @@ def test_accept_only_takes_a_candidate(graph):
 
 
 @pytest.mark.sql
-def test_unknown_node_is_refused(graph):
-    _make_root([])
+def test_unknown_node_is_refused(root):
+    root([])
     resp = flask_app.test_client().post("/api/ai/suggest", json={"node_table": "../etc/passwd"})
     assert resp.status_code == 400
     assert "not a node" in resp.get_json()["error"]
 
 
 @pytest.mark.sql
-def test_status_reports_configuration(graph, monkeypatch):
+def test_status_reports_configuration(root, monkeypatch):
     monkeypatch.setattr(gemini_client, "api_key", lambda: None)
     assert flask_app.test_client().get("/api/ai/status").get_json()["configured"] is False
 
@@ -188,8 +168,8 @@ def test_status_reports_configuration(graph, monkeypatch):
 
 
 @pytest.mark.sql
-def test_suggest_reports_a_missing_key_as_503(graph, monkeypatch):
-    _make_root([(3, "a", "missing")])
+def test_suggest_reports_a_missing_key_as_503(root, monkeypatch):
+    root([(3, "a", "missing")])
     monkeypatch.setattr(gemini_client, "api_key", lambda: None)
 
     resp = flask_app.test_client().post("/api/ai/suggest", json={"node_table": ROOT})

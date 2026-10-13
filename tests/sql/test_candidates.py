@@ -17,36 +17,12 @@ from sqlalchemy import text as sa_text
 import app
 from app import engine, db_operations
 from app import app as flask_app
-from app.db_utils.detector_sql import DetectorSQL
-from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 ROOT = "n0a_cands"
 
 
-def _drop_all(*tables):
-    with engine.begin() as conn:
-        for t in tables:
-            for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
-
-
-def _table_exists(name):
-    with engine.connect() as conn:
-        return conn.execute(sa_text(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :n)"
-        ), {"n": name}).scalar()
-
-
 def _read(table):
     return pd.read_sql_query(f'SELECT * FROM "{table}" ORDER BY "ID"', engine)
-
-
-def _make_root(data):
-    pd.DataFrame(data).to_sql(ROOT, engine, if_exists="replace", index=False)
-    DetectorSQL(engine, ROOT).generate_errors_table()
-    build_data_profile_table(ROOT)
-    init_pgraph_for_session(ROOT)
-    db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
 
 
 NUMERIC = {"ID": list(range(1, 11)),
@@ -55,17 +31,11 @@ NUMERIC = {"ID": list(range(1, 11)),
 
 
 @pytest.fixture
-def graph():
-    yield
-    tables = list(getattr(app, "pgraph_for_session", None).node_map.keys()) \
-        if getattr(app, "pgraph_for_session", None) is not None else []
-    app.pgraph_for_session = None
-    _drop_all(ROOT, *tables)
-
-
-@pytest.fixture
-def client():
-    return flask_app.test_client()
+def root(make_root):
+    """:return: a function building the root from its data, flagged by the detectors"""
+    def build(data):
+        make_root(ROOT, data)
+    return build
 
 
 def _stage(client, row_ids, cols, source=None):
@@ -84,8 +54,8 @@ def _graph():
 # ─── Staging ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.sql
-def test_a_1d_selection_stages_a_delete_and_an_impute(graph, client):
-    _make_root(NUMERIC)
+def test_a_1d_selection_stages_a_delete_and_an_impute(root, client):
+    root(NUMERIC)
     staged = _stage(client, [2, 5], ["x"])
 
     assert set(staged) == {"delete", "impute"}
@@ -101,7 +71,7 @@ def test_a_1d_selection_stages_a_delete_and_an_impute(graph, client):
         assert node.metrics is not None and node.distortion is not None
         # Everything an accepted node has, so it can be navigated to
         for companion in (table, f"errors_{table}", f"dp_{table}", f"rankings_{table}"):
-            assert _table_exists(companion), companion
+            assert db_operations.table_exists(companion), companion
 
     # Staging takes no label and does not move the session
     assert _graph().node_count == 1
@@ -117,8 +87,8 @@ def test_a_1d_selection_stages_a_delete_and_an_impute(graph, client):
 
 
 @pytest.mark.sql
-def test_a_2d_impute_fills_only_its_own_column(graph, client):
-    _make_root(NUMERIC)
+def test_a_2d_impute_fills_only_its_own_column(root, client):
+    root(NUMERIC)
     staged = _stage(client, [2, 3, 5, 7], ["x", "y"], source="scatterplot")
 
     assert set(staged) == {"delete", "impute_x", "impute_y"}
@@ -130,15 +100,15 @@ def test_a_2d_impute_fills_only_its_own_column(graph, client):
 
 
 @pytest.mark.sql
-def test_a_categorical_impute_fills_with_the_most_common_value(graph, client):
-    _make_root({"ID": [1, 2, 3, 4, 5], "c": ["a", "a", None, "b", None]})
+def test_a_categorical_impute_fills_with_the_most_common_value(root, client):
+    root({"ID": [1, 2, 3, 4, 5], "c": ["a", "a", None, "b", None]})
     imputed = _read(_stage(client, [3, 5], ["c"])["impute"]["table"])
     assert list(imputed["c"]) == ["a", "a", "a", "b", "a"]
 
 
 @pytest.mark.sql
-def test_its_edge_is_marked_provisional(graph, client):
-    _make_root(NUMERIC)
+def test_its_edge_is_marked_provisional(root, client):
+    root(NUMERIC)
     table = _stage(client, [2], ["x"])["delete"]["table"]
 
     edge = next(e for e in _graph().serialize_edges() if e["target"] == table)
@@ -149,8 +119,8 @@ def test_its_edge_is_marked_provisional(graph, client):
 
 
 @pytest.mark.sql
-def test_the_compare_endpoints_take_a_candidate(graph, client):
-    _make_root(NUMERIC)
+def test_the_compare_endpoints_take_a_candidate(root, client):
+    root(NUMERIC)
     table = _stage(client, [2, 5], ["x"])["impute"]["table"]
 
     compare = client.get("/api/pgraph/compare", query_string={"a": ROOT, "b": table, "kind": "histogram", "x": "x"})
@@ -162,8 +132,8 @@ def test_the_compare_endpoints_take_a_candidate(graph, client):
 # ─── Accepting and declining ─────────────────────────────────────────────────
 
 @pytest.mark.sql
-def test_accepting_publishes_it_and_leaves_its_siblings(graph, client):
-    _make_root(NUMERIC)
+def test_accepting_publishes_it_and_leaves_its_siblings(root, client):
+    root(NUMERIC)
     staged = _stage(client, [2, 5], ["x"])
     table = staged["impute"]["table"]
 
@@ -180,8 +150,8 @@ def test_accepting_publishes_it_and_leaves_its_siblings(graph, client):
 
 
 @pytest.mark.sql
-def test_declining_drops_it_and_its_name_is_never_reused(graph, client):
-    _make_root(NUMERIC)
+def test_declining_drops_it_and_its_name_is_never_reused(root, client):
+    root(NUMERIC)
     first = _stage(client, [2], ["x"])
     table = first["delete"]["table"]
 
@@ -190,15 +160,15 @@ def test_declining_drops_it_and_its_name_is_never_reused(graph, client):
     assert body["success"] is True
     assert table not in _graph().node_map
     assert table not in _graph().node_map[ROOT].children
-    assert not _table_exists(table) and not _table_exists(f"errors_{table}")
+    assert not db_operations.table_exists(table) and not db_operations.table_exists(f"errors_{table}")
 
     later = _stage(client, [2], ["x"])
     assert table not in {c["table"] for c in later.values()}
 
 
 @pytest.mark.sql
-def test_declining_the_current_node_moves_the_session_to_its_parent(graph, client):
-    _make_root(NUMERIC)
+def test_declining_the_current_node_moves_the_session_to_its_parent(root, client):
+    root(NUMERIC)
     table = _stage(client, [2], ["x"])["delete"]["table"]
     client.post("/api/setGraphToClickedNode", json={"nodeId": table})
     assert db_operations.main_table_name == table
@@ -211,21 +181,21 @@ def test_declining_the_current_node_moves_the_session_to_its_parent(graph, clien
 
 
 @pytest.mark.sql
-def test_reset_drops_every_candidate(graph, client):
-    _make_root(NUMERIC)
+def test_reset_drops_every_candidate(root, client):
+    root(NUMERIC)
     tables = [c["table"] for c in _stage(client, [2], ["x"]).values()]
 
     client.post("/api/reset")
 
     for table in tables:
-        assert not _table_exists(table)
+        assert not db_operations.table_exists(table)
 
 
 # ─── A node like any other ───────────────────────────────────────────────────
 
 @pytest.mark.sql
-def test_pareto_scores_it_as_a_leaf_and_its_parent_stops_being_one(graph, client):
-    _make_root(NUMERIC)
+def test_pareto_scores_it_as_a_leaf_and_its_parent_stops_being_one(root, client):
+    root(NUMERIC)
     tables = {c["table"] for c in _stage(client, [2], ["x"]).values()}
 
     scored = set(_graph().pareto()["scored"])
@@ -234,8 +204,8 @@ def test_pareto_scores_it_as_a_leaf_and_its_parent_stops_being_one(graph, client
 
 
 @pytest.mark.sql
-def test_navigating_to_it_and_back(graph, client):
-    _make_root(NUMERIC)
+def test_navigating_to_it_and_back(root, client):
+    root(NUMERIC)
     table = _stage(client, [2], ["x"])["impute"]["table"]
 
     resp = client.post("/api/setGraphToClickedNode", json={"nodeId": table})
@@ -254,8 +224,8 @@ def test_navigating_to_it_and_back(graph, client):
 
 
 @pytest.mark.sql
-def test_nothing_is_wrangled_from_a_candidate_until_it_is_accepted(graph, client):
-    _make_root(NUMERIC)
+def test_nothing_is_wrangled_from_a_candidate_until_it_is_accepted(root, client):
+    root(NUMERIC)
     table = _stage(client, [2, 5], ["x"])["impute"]["table"]
     client.post("/api/setGraphToClickedNode", json={"nodeId": table})
 
@@ -280,8 +250,8 @@ def _candidate_tables():
 
 
 @pytest.mark.sql
-def test_a_2d_selection_stages_three_at_once_named_in_order(graph, client):
-    _make_root(NUMERIC)
+def test_a_2d_selection_stages_three_at_once_named_in_order(root, client):
+    root(NUMERIC)
 
     resp = client.post("/api/wrangle/create-previews", json={"row_ids": [2, 3, 5], "cols": ["x", "y"]})
     assert resp.status_code == 200, resp.get_json()
@@ -296,9 +266,9 @@ def test_a_2d_selection_stages_three_at_once_named_in_order(graph, client):
 
 
 @pytest.mark.sql
-def test_if_one_build_fails_none_of_its_set_is_staged(graph):
+def test_if_one_build_fails_none_of_its_set_is_staged(root):
     from app.server_utils import candidates
-    _make_root(NUMERIC)
+    root(NUMERIC)
     specs = [candidates.CandidateSpec(op="delete", cols=["x"], row_ids=[2]),
              candidates.CandidateSpec(op="impute", cols=["x"], row_ids=[2], imputed_column="no_such_column")]
 
@@ -312,10 +282,10 @@ def test_if_one_build_fails_none_of_its_set_is_staged(graph):
 
 
 @pytest.mark.sql
-def test_a_reset_while_building_stages_nothing(graph, monkeypatch):
+def test_a_reset_while_building_stages_nothing(root, monkeypatch):
     from app.pgraph.pgraph import PGraph
     from app.server_utils import candidates
-    _make_root(NUMERIC)
+    root(NUMERIC)
     session_graph = _graph()
     build_node = candidates.build_node
 
@@ -336,10 +306,10 @@ def test_a_reset_while_building_stages_nothing(graph, monkeypatch):
 
 
 @pytest.mark.sql
-def test_builds_run_without_holding_the_graph_lock(graph, monkeypatch):
+def test_builds_run_without_holding_the_graph_lock(root, monkeypatch):
     from app.server_utils import candidates
     from app.server_utils.service_helpers import WRANGLE_LOCK
-    _make_root(NUMERIC)
+    root(NUMERIC)
     build_node = candidates.build_node
     lock_was_free = []
 

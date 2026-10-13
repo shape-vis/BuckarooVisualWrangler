@@ -21,7 +21,7 @@ def _drop_tables(conn, *names):
 
 
 @pytest.mark.sql
-def test_row_id_is_the_id_not_the_position(db_transaction):
+def test_row_id_is_the_id_not_the_position():
     """A gapped ID sequence: row_id must be the "ID", not the row's 0-based-plus-one position."""
     table = "t_errid_gapped"
     # IDs deliberately not 1..N, so position and ID can never be confused.
@@ -49,7 +49,7 @@ def test_row_id_is_the_id_not_the_position(db_transaction):
 
 
 @pytest.mark.sql
-def test_every_row_id_joins_back_to_a_real_row(db_transaction):
+def test_every_row_id_joins_back_to_a_real_row():
     """After rows are deleted, no error row may reference an ID that is gone."""
     table = "t_errid_orphan"
     df = pd.DataFrame({
@@ -81,7 +81,7 @@ def test_every_row_id_joins_back_to_a_real_row(db_transaction):
 
 
 @pytest.mark.sql
-def test_flags_survive_on_the_columns_not_wrangled(db_transaction):
+def test_flags_survive_on_the_columns_not_wrangled():
     """A full rebuild keeps flags for every column, not just the one just wrangled."""
     table = "t_errid_allcols"
     df = pd.DataFrame({

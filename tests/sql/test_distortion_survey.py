@@ -15,10 +15,9 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text as sa_text
 
 import app
-from app import engine
+from app import db_operations, engine
 from app.db_utils.column_types import ColumnTypes
 from app.pgraph.distortion import REMOVED_LABEL, SKIPPED_COLUMNS
 from app.routes.routes import load_file
@@ -56,10 +55,8 @@ def build_survey_graph():
 
 
 def drop_survey_graph(nodes):
-    with engine.begin() as conn:
-        for table in nodes.values():
-            for name in (table, f"errors_{table}", f"dp_{table}", f"rankings_{table}", f"{table}_filtering"):
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
+    for table in nodes.values():
+        db_operations.drop_node_tables(table)
     app.pgraph_for_session = None
 
 

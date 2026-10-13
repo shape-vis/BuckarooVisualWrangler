@@ -19,7 +19,7 @@ def drop_tables_afterwards():
 
 
 @pytest.mark.sql
-def test_remove_rows_by_ids(db_transaction):
+def test_remove_rows_by_ids():
     """Removing rows by ID removes exactly those rows, flagged or not"""
     df = pd.DataFrame({'ID': range(1, 21), 'value': range(100, 300, 10)})
     df.to_sql('test_remove', engine, if_exists='replace', index=False)
@@ -29,7 +29,7 @@ def test_remove_rows_by_ids(db_transaction):
 
 
 @pytest.mark.sql
-def test_impute_by_ids_numeric(db_transaction):
+def test_impute_by_ids_numeric():
     """Test imputing numeric values by ID"""
     df = pd.DataFrame({
         'ID': range(1, 21),
@@ -43,7 +43,7 @@ def test_impute_by_ids_numeric(db_transaction):
 
 
 @pytest.mark.sql
-def test_impute_by_ids_categorical(db_transaction):
+def test_impute_by_ids_categorical():
     """Test imputing categorical values by ID"""
     df = pd.DataFrame({
         'ID': range(1, 21),

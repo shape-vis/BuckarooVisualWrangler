@@ -7,55 +7,26 @@ only a database exercises - reading both tables and their error flags - and a pa
 Flask's JSON encoding.
 """
 import pytest
-import pandas as pd
-from sqlalchemy import text as sa_text
 
 import app
 from app import engine, db_operations
-from app.db_utils.detector_sql import DetectorSQL
 from app.server_utils import ai_wrangle as aw
-from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 ROOT = "n0a_cmpnodes"
 COLUMNS = ["height", "weight"]
 
 
-def _drop_all(*tables):
-    with engine.begin() as conn:
-        for t in tables:
-            for name in (t, f"errors_{t}", f"dp_{t}", f"rankings_{t}", f"{t}_filtering"):
-                conn.execute(sa_text(f'DROP TABLE IF EXISTS "{name}"'))
-
-
 @pytest.fixture
-def graph():
+def graph(make_root):
     """A root whose row 3 is missing height, and a child node that imputed it."""
-    pd.DataFrame({"ID": [1, 2, 3, 4, 5], "height": [10.0, 20.0, None, 60.0, 30.0],
-                  "weight": [1.0, 2.0, 3.0, 4.0, 5.0]}).to_sql(ROOT, engine, if_exists="replace", index=False)
-    DetectorSQL(engine, ROOT).generate_errors_table()
-    # Take control of exactly which flags exist, so the assertions are about this layout rather than
-    # about whatever the detectors happened to find
-    pd.DataFrame([(3, "height", "missing")], columns=["row_id", "column_id", "error_type"]).astype(
-        {"row_id": "int64"}
-    ).to_sql(f"errors_{ROOT}", engine, if_exists="replace", index=False)
-    build_data_profile_table(ROOT)
-    init_pgraph_for_session(ROOT)
-    db_operations.load_table(ROOT, f"errors_{ROOT}", f"dp_{ROOT}")
+    data = {"ID": [1, 2, 3, 4, 5], "height": [10.0, 20.0, None, 60.0, 30.0], "weight": [1.0, 2.0, 3.0, 4.0, 5.0]}
+    make_root(ROOT, data, flags=[(3, "height", "missing")])
 
     result = aw.apply_suggestion(ROOT, {"op": "impute_rows", "column": "height", "error_type": "missing"}, COLUMNS)
     assert result["success"] is True, result
     child = result["table"]
 
-    yield ROOT, child
-
-    tables = list(app.pgraph_for_session.node_map.keys())
-    app.pgraph_for_session = None
-    _drop_all(ROOT, child, *tables)
-
-
-@pytest.fixture
-def client():
-    return app.app.test_client()
+    return ROOT, child
 
 
 def _compare(client, **params):

@@ -57,7 +57,7 @@ FLAGS = [
 
 
 @pytest.mark.sql
-def test_ids_are_scoped_per_operation(db_transaction):
+def test_ids_are_scoped_per_operation():
     table = "t_ai_resolve"
     _seed(table, LAYOUT, FLAGS)
 
@@ -86,7 +86,7 @@ def test_ids_are_scoped_per_operation(db_transaction):
 
 
 @pytest.mark.sql
-def test_error_type_partitions_the_rows(db_transaction):
+def test_error_type_partitions_the_rows():
     """A suggestion names one flag; rows carrying only some other flag are not its business."""
     table = "t_ai_resolve_etype"
     _seed(table, LAYOUT, [(2, "a", "missing"), (4, "a", "anomaly")])
@@ -101,7 +101,7 @@ def test_error_type_partitions_the_rows(db_transaction):
 
 
 @pytest.mark.sql
-def test_error_rows_naming_dead_ids_are_dropped(db_transaction):
+def test_error_rows_naming_dead_ids_are_dropped():
     """The join is what keeps a stale errors table from resurrecting deleted rows."""
     table = "t_ai_resolve_orphan"
     _seed(table, LAYOUT, FLAGS + [(99, "a", "missing"), (404, "a", "missing")])
@@ -115,7 +115,7 @@ def test_error_rows_naming_dead_ids_are_dropped(db_transaction):
 
 
 @pytest.mark.sql
-def test_gapped_ids_resolve_by_id_not_position(db_transaction):
+def test_gapped_ids_resolve_by_id_not_position():
     table = "t_ai_resolve_gapped"
     _seed(
         table,
@@ -151,7 +151,7 @@ def test_validation_rejects(raw, expected):
 # ─── guards ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.sql
-def test_guard_rejects_an_empty_id_set(db_transaction):
+def test_guard_rejects_an_empty_id_set():
     table = "t_ai_guard_empty"
     _seed(table, LAYOUT, [])
 
@@ -165,7 +165,7 @@ def test_guard_rejects_an_empty_id_set(db_transaction):
 
 
 @pytest.mark.sql
-def test_guard_refuses_a_delete_that_takes_too_much(db_transaction):
+def test_guard_refuses_a_delete_that_takes_too_much():
     """3 of 5 rows is 60%, well past the ceiling."""
     table = "t_ai_guard_share"
     _seed(table, LAYOUT, [(1, "a", "missing"), (2, "a", "missing"), (3, "a", "missing")])
@@ -180,7 +180,7 @@ def test_guard_refuses_a_delete_that_takes_too_much(db_transaction):
 
 
 @pytest.mark.sql
-def test_guard_refuses_to_empty_the_table(db_transaction):
+def test_guard_refuses_to_empty_the_table():
     table = "t_ai_guard_all"
     _seed(table, LAYOUT, [(i, "a", "missing") for i in range(1, 6)])
 
@@ -194,7 +194,7 @@ def test_guard_refuses_to_empty_the_table(db_transaction):
 
 
 @pytest.mark.sql
-def test_guard_refuses_an_impute_with_nothing_to_learn_from(db_transaction):
+def test_guard_refuses_an_impute_with_nothing_to_learn_from():
     """Every value flagged and blank means the mean has no clean value to come from."""
     table = "t_ai_guard_nofill"
     _seed(
@@ -213,7 +213,7 @@ def test_guard_refuses_an_impute_with_nothing_to_learn_from(db_transaction):
 
 
 @pytest.mark.sql
-def test_a_good_suggestion_survives_prepare(db_transaction):
+def test_a_good_suggestion_survives_prepare():
     table = "t_ai_guard_ok"
     _seed(table, LAYOUT, FLAGS)
 
