@@ -429,8 +429,26 @@ export function PGraphProvider({children}) {
             // Edge sub-nodes follow the drawn edge rather than dagre's, so groups can still crowd; move them apart
             const treeNodes = spreadSupportGroups(supported, layout.nodes, layout.edges, labelWidthOf, sides);
             const beside = placeSupportNodes(supported, treeNodes, layout.edges, labelWidthOf, sides);
-            // After the tree, since React Flow needs every host ahead of the sub-nodes it parents
-            setNodes([...treeNodes, ...beside.nodes]);
+            /* After the tree, since React Flow needs every host ahead of the sub-nodes it parents.
+
+               A node drawn again keeps the size React Flow measured it at last time. The layout builds every node
+               afresh, and React Flow treats one that arrives without a measured size as never measured: it hides
+               it, drops its handles - so its edges vanish too - and waits for a fresh measurement, which a node
+               whose size did not change may never get. Declining one candidate would hide its siblings that way,
+               until something else redrew the graph. A node whose size does change is measured again regardless,
+               since React Flow keeps watching its element. */
+            setNodes((current) => {
+                const measuredSizes = new Map();
+                for (const node of current) {
+                    if (node.measured) measuredSizes.set(node.id, node.measured);
+                }
+
+                const drawn = [...treeNodes, ...beside.nodes];
+                return drawn.map((node) => {
+                    const measured = measuredSizes.get(node.id);
+                    return measured ? {...node, measured} : node;
+                });
+            });
             setEdges([...layout.edges, ...beside.edges]);
 
             /* What arrived with this draw. An accepted node is new once ever - including a candidate the moment
