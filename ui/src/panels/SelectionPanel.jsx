@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import HeatMap from "../visualizations/HeatMap.jsx";
-import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
-import ScatterPlot from "../visualizations/ScatterPlot.jsx";
+import { useEffect, useRef, useState } from "react";
+import FocusedPlot, { CellPlot } from "../visualizations/FocusedPlot.jsx";
 import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
 import { errorColors } from "../store/errorColors.js";
@@ -26,82 +24,6 @@ function MagnifierIcon({ x, y, onClick }) {
                 stroke="#444" strokeWidth={1.5} strokeLinecap="round"
             />
         </g>
-    );
-}
-
-// ── Icon: minimize (compress arrows) ─────────────────────────────────────────
-function MinimizeIcon({ x, y, onClick }) {
-    const s = 16;
-    const m = 3;
-    const arm = 5;
-    return (
-        <g
-            className="plot-minimize-icon"
-            onClick={e => { e.stopPropagation(); onClick(); }}
-        >
-            <rect x={x - 1} y={y - 1} width={s + 2} height={s + 2} rx={3} fill="white" fillOpacity={0.85} />
-            {/* top-left corner arrows pointing inward */}
-            <polyline
-                points={`${x + m},${y + m + arm} ${x + m},${y + m} ${x + m + arm},${y + m}`}
-                fill="none" stroke="#444" strokeWidth={1.5} strokeLinejoin="round"
-            />
-            {/* bottom-right corner arrows pointing inward */}
-            <polyline
-                points={`${x + s - m},${y + s - m - arm} ${x + s - m},${y + s - m} ${x + s - m - arm},${y + s - m}`}
-                fill="none" stroke="#444" strokeWidth={1.5} strokeLinejoin="round"
-            />
-        </g>
-    );
-}
-
-// ── One cell's plot ───────────────────────────────────────────────────────────
-/**
- * The plot for cell (i, j) of the matrix: a histogram on the diagonal, a scatterplot above it and a heatmap
- * below it. Used for the matrix's own cells and for the one zoomed in on.
- *
- * The histogram takes its position and size as objects and redraws whenever they change, so they are
- * memoised here rather than built fresh on every render of the panel.
- */
-function CellPlot({ i, j, cellID, xPos, yPos, size, xCol, yCol, errorColors }) {
-    const histogramPos = useMemo(() => ({ x: xPos, y: yPos }), [xPos, yPos]);
-    const histogramSize = useMemo(() => ({ w: size, h: size }), [size]);
-
-    if (i === j) {
-        return (
-            <HistogramBarChart
-                cellID={cellID}
-                pos={histogramPos}
-                size={histogramSize}
-                attrX={xCol}
-                errorColors={errorColors}
-            />
-        );
-    }
-
-    if (i < j) {
-        return (
-            <ScatterPlot
-                cellID={cellID}
-                xPos={xPos}
-                yPos={yPos}
-                size={size}
-                attrX={xCol}
-                attrY={yCol}
-                errorColors={errorColors}
-            />
-        );
-    }
-
-    return (
-        <HeatMap
-            cellID={cellID}
-            xPos={xPos}
-            yPos={yPos}
-            size={size}
-            attrX={xCol}
-            attrY={yCol}
-            errorColors={errorColors}
-        />
     );
 }
 
@@ -239,62 +161,18 @@ function SelectionPanel({ selectedAttributes, w, h, errorColors, plotFocus, onPl
     // ── Focused (expanded) view ───────────────────────────────────────────────
     if (focusedCell !== null) {
         const { i, j } = focusedCell;
-        const xCol = columns[j];
-        const yCol = columns[i];
-        const cellID = `cell-${xCol}-${yCol}`;
-
-        // Leave room for axis labels.
-        // focusedXPos needs to accommodate D3 left-axis tick labels (up to ~80px for 10-char strings).
-        // Bottom needs ~50px for D3 bottom-axis tick labels rendered below plot area.
-        const focusedXPos = 90;
-        const focusedYPos = 70;
-        const focusedSize = Math.min(
-            w - focusedXPos - 40,
-            h - focusedYPos - 100
-        );
-        const clampedSize = Math.max(80, focusedSize);
 
         return (
             <g id="matrix-plot-area">
-                {/* X axis label */}
-                <text
-                    x={focusedXPos + clampedSize / 2}
-                    y={focusedYPos - 28}
-                    textAnchor="middle"
-                    fontSize={14}
-                    fontWeight="500"
-                >
-                    {xCol}
-                </text>
-                {/* Y axis label (only for 2-D plots) */}
-                {i !== j && (
-                    <text
-                        x={focusedXPos - 65}
-                        y={focusedYPos + clampedSize / 2}
-                        textAnchor="middle"
-                        fontSize={13}
-                        fontWeight="500"
-                        transform={`rotate(-90, ${focusedXPos - 65}, ${focusedYPos + clampedSize / 2})`}
-                    >
-                        {yCol}
-                    </text>
-                )}
-                <CellPlot
+                <FocusedPlot
                     i={i}
                     j={j}
-                    cellID={cellID}
-                    xPos={focusedXPos}
-                    yPos={focusedYPos}
-                    size={clampedSize}
-                    xCol={xCol}
-                    yCol={yCol}
+                    xCol={columns[j]}
+                    yCol={columns[i]}
+                    w={w}
+                    h={h}
                     errorColors={errorColors}
-                />
-                {/* Minimize icon — top-right corner of the focused plot */}
-                <MinimizeIcon
-                    x={focusedXPos + clampedSize - 18}
-                    y={focusedYPos + 2}
-                    onClick={() => setFocusedCell(null)}
+                    onMinimize={() => setFocusedCell(null)}
                 />
             </g>
         );

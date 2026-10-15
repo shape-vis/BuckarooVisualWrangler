@@ -1,5 +1,5 @@
-/* The handle between the two main views: a thin rule that turns accent blue under the pointer, the way the
-   right dock's resize edge does. Above the graph, which sits above the plot matrix's overflow. */
+/* The handle between the two main views: a thin rule that turns accent blue under the pointer. Above the graph,
+   which sits above the plot matrix's overflow. */
 .split-divider {
     flex: 0 0 6px;
     position: relative;

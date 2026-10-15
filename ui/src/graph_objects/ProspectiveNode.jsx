@@ -1,5 +1,6 @@
-import { Handle, Position } from "@xyflow/react";
+import { Handle, NodeResizer, Position } from "@xyflow/react";
 import { useCandidates } from "../store/CandidatesContext.jsx";
+import { usePgraph } from "../store/PGraphContext.jsx";
 import PreviewCard from "../panels/PreviewCard.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
@@ -7,7 +8,11 @@ import { showTooltip, moveTooltip, hideTooltip } from "../utils/visCommon.jsx";
 import { escapeHtml } from "../utils/html.js";
 import { CANDIDATE_SOURCES } from "../utils/candidates.js";
 import { ComparisonBadge, NodeTools, SupportHandles } from "./NodeTypes.jsx";
+import { SupportBadges } from "./supportNodes/SupportBadges.jsx";
 import "../styles/ProspectiveNode.css";
+
+// Smaller than this and its preview chart no longer reads; it starts larger
+const MIN_SIZE = { width: 170, height: 300 };
 
 /**
  * A candidate: a wrangle staged as a provisional node of the graph - a way of repairing the user's selection,
@@ -20,11 +25,15 @@ import "../styles/ProspectiveNode.css";
  *
  * The row count is not the model's claim - the server resolved it from the rows the wrangle touches - so it
  * is worth showing plainly.
+ *
+ * Its corners can be dragged to make it larger, and its preview chart with it - the graph makes room for the new
+ * size (PGraphContext's candidateSizes).
  */
 export function ProspectiveNode({ id, data, isConnectable }) {
     const candidate = data.candidate ?? {};
     const source = CANDIDATE_SOURCES[candidate.source] ?? CANDIDATE_SOURCES.repair;
     const { acceptCandidate, declineCandidate, busy, busyId } = useCandidates();
+    const { setCandidateSize } = usePgraph();
 
     const isBusy = busyId === id;
     const rowCount = candidate.row_count ?? 0;
@@ -60,8 +69,19 @@ export function ProspectiveNode({ id, data, isConnectable }) {
 
     return (
         <>
+            <NodeResizer
+                minWidth={MIN_SIZE.width}
+                minHeight={MIN_SIZE.height}
+                lineClassName="prospective-resize-line"
+                handleClassName="prospective-resize-handle"
+                onResizeEnd={(event, params) => setCandidateSize(id, {
+                    width: Math.round(params.width),
+                    height: Math.round(params.height),
+                })}
+            />
             <Handle type="target" position={Position.Top} isConnectable={isConnectable} />
             <ComparisonBadge role={data.comparisonRole} />
+            <SupportBadges hostId={id} />
             <div className="prospective-node nodrag">
                 {/* The full label and reason, on hovering the text they are cut short in - not the chart or buttons */}
                 <div
@@ -91,13 +111,14 @@ export function ProspectiveNode({ id, data, isConnectable }) {
                     </div>
                 </div>
 
-                {/* Its own table, drawn as the Repair panel draws it - for either source, since both are staged */}
+                {/* Its own table's preview chart - for either source, since both are staged */}
                 <div className="prospective-node-chart">
                     <PreviewCard
                         tableName={id}
                         cols={candidate.cols ?? []}
                         errorColors={errorColors}
                         chartType={candidate.chart_type}
+                        fill
                     />
                 </div>
 

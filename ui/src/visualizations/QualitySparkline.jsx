@@ -2,11 +2,12 @@ import Sparkline from "./Sparkline.jsx";
 import { ERROR_TYPES, errorColors, DRIFT_COLOR } from "../store/errorColors.js";
 import { formatDrift } from "../utils/drift.js";
 import { asPercent } from "../utils/visCommon.jsx";
-import "../styles/QualityPanel.css";
+import "../styles/QualitySparkline.css";
 
 /**
  * One quality dimension along a branch - its name, where it starts and ends, and its sparkline - drawn the
- * same wherever it appears: on the Quality panel's cards, and in the sub-node a card is dragged into.
+ * same wherever it appears: in a sparkline sub-node, and on the blank cards the support-nodes window adds them
+ * from.
  *
  * dimension is an error type ("missing", "mismatch", "anomaly", "incomplete") or "drift". An error rate falling
  * is an improvement, so its steps are green and red; drift from root has no better direction - see
@@ -15,15 +16,13 @@ import "../styles/QualityPanel.css";
 
 const isDrift = (dimension) => dimension === "drift";
 
-/** The swatch, the dimension's name, and its first and last values - left off when a value is missing. grip
-    marks a card that can be dragged. */
-export function QualitySparklineHeader({ dimension, values, grip = false }) {
+/** The swatch, the dimension's name, and its first and last values - left off when a value is missing. */
+export function QualitySparklineHeader({ dimension, values }) {
   const measured = values.length > 0 && values.every((value) => value != null);
   const format = isDrift(dimension) ? formatDrift : asPercent;
 
   return (
     <div className="quality-dimension-header">
-      {grip && <span className="quality-grip" aria-hidden="true">⠿</span>}
       <span
         className={`quality-swatch ${isDrift(dimension) ? "quality-swatch--drift" : ""}`}
         data-error-type={isDrift(dimension) ? undefined : dimension}

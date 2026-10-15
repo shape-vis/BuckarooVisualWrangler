@@ -216,6 +216,24 @@ export function clamp(value, lo, hi) {
     return Math.min(Math.max(value, lo), hi);
 }
 
+/**
+ * Where the pointer is on an svg, in the svg's own pixels from its top-left corner.
+ *
+ * Read from the event's client position against the svg's box, which holds in any window: a plot popped out
+ * into a window of its own sends events made by that window, which checks like `event instanceof Event` against
+ * this page's classes reject. And scaled back by the svg's drawn size against its own, so it holds under a CSS
+ * scale too - a plot in a graph sub-node sits under the graph's zoom.
+ */
+export function localSvgPoint(svg, event) {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = rect.width / (svg.clientWidth || rect.width) || 1;
+    const scaleY = rect.height / (svg.clientHeight || rect.height) || 1;
+    return {
+        x: (event.clientX - rect.left) / scaleX,
+        y: (event.clientY - rect.top) / scaleY,
+    };
+}
+
 // Firefox can report a wheel's movement in lines rather than pixels
 const WHEEL_LINE_PIXELS = 16;
 

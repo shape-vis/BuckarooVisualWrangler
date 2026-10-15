@@ -195,6 +195,31 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
+/* Asking for a sparkline's source: which edge to click, in the sub-nodes' turquoise since it is one of theirs */
+.pgraph-pick-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--support-tint);
+  border: 1px solid var(--support-accent);
+  color: var(--support-ink);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.pgraph-pick-error {
+  font-weight: 500;
+  color: #a3261c;
+}
+
+/* An edge a sparkline's source can be picked from */
+.react-flow__edge.pgraph-edge--pickable {
+  cursor: pointer;
+}
+
 /* Shares the main area with another view: grows into whatever that view leaves. The plot matrix beside it
    draws with overflow visible, and in a narrow pane its last column spills over this one - so the graph sits
    above it on its own background - the main area's grey, so the two views still read as one surface - and a

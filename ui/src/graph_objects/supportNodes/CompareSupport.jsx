@@ -1,23 +1,26 @@
 import {useState} from "react";
 import {usePgraph} from "../../store/PGraphContext.jsx";
-import {PLOT_KINDS, nodeName, referenceBase, viewsFor} from "../../utils/comparison.js";
+import {nodeName, referenceBase, viewsFor} from "../../utils/comparison.js";
 import {driftZoomKey, settingsOf} from "../../utils/comparisonSpec.js";
 import {useComparisonData} from "../../visualizations/useComparisonData.js";
 import ComparisonPlot from "../../visualizations/ComparisonPlot.jsx";
 import {PlotStatus} from "../../elements/ComparePanel.jsx";
-import {columnKindOf, specOfCompare, withCategoryHidden} from "./compareView.js";
+import {FULL_COMPARE_SIZE, columnKindOf, compareSummary, specOfCompare, withCategoryHidden} from "./compareView.js";
+import {CompareGlyph} from "./supportGlyphs.jsx";
 import {hostColumns} from "./registry.js";
 import "../../styles/ComparePanel.css";
 import "../../styles/CompareSupport.css";
 
 /**
- * The compare kind of supporting sub-node - see compareView.js. It previews its comparison through the compare
- * window's own plot and data, and the Open in its header shows it there, where changes carry back to it.
+ * The compare kind of supporting sub-node - see compareView.js. It zooms semantically: while it is small it
+ * shows its badge's picture of the comparison, large, rather than a plot squeezed past reading; resized to
+ * FULL_COMPARE_SIZE or more, it shows the whole plot the compare window was last left on, through the window's
+ * own plot and data. The Open in its header shows it in the window, where changes carry back to it.
  */
 
-/* The comparison's plot, small. Zoom and hidden categories start from the comparison's and are the reader's to
+/* The comparison's plot, whole. Zoom and hidden categories start from the comparison's and are the reader's to
    change here; the caller keys this on the comparison, so a change made in the compare window starts it afresh. */
-function ComparePreview({spec}) {
+function ComparePlotFull({spec}) {
     const {serverNodesById} = usePgraph();
     const {kind, a, b} = spec;
     const x = spec.x;
@@ -53,27 +56,31 @@ function ComparePreview({spec}) {
                 onHide={hideCategory}
                 zoom={zoom}
                 onZoom={setZoom}
-                compact
             />
+            {loading && <PlotStatus>Loading…</PlotStatus>}
             {!loading && current?.error && <PlotStatus error>{current.error}</PlotStatus>}
             {!x && <PlotStatus>Nothing to plot</PlotStatus>}
         </div>
     );
 }
 
-/** One line naming what the comparison shows: its two nodes, its plot kind and its column. */
-function compareSummary(spec) {
-    const plotKind = PLOT_KINDS.find((option) => option.id === spec.kind);
-    const kindLabel = plotKind?.label ?? spec.kind;
-
-    let summary = `${nodeName(spec.a)} → ${nodeName(spec.b)} · ${kindLabel}`;
-    if (spec.x) {
-        summary += ` · ${spec.x}`;
-    }
-    return summary;
+// Too small for the whole plot: its badge's picture of it, filling the room, with how to see more
+function ComparePicture({record}) {
+    return (
+        <div className="compare-support-picture">
+            <CompareGlyph record={record} />
+            <span className="compare-support-hint">Resize to see the plot</span>
+        </div>
+    );
 }
 
-export function CompareBody({record, host}) {
+// Whether the sub-node is drawn large enough for the whole plot to read without squeezing
+function fitsFullPlot(size) {
+    if (!size) return false;
+    return size.width >= FULL_COMPARE_SIZE.width && size.height >= FULL_COMPARE_SIZE.height;
+}
+
+export function CompareBody({record, host, size}) {
     const spec = specOfCompare(record, hostColumns(host));
     const summary = compareSummary(spec);
 
@@ -82,7 +89,11 @@ export function CompareBody({record, host}) {
             <div className="compare-support-summary">
                 <span className="compare-support-summary-text" title={summary}>{summary}</span>
             </div>
-            <ComparePreview key={settingsOf(spec)} spec={spec} />
+            {fitsFullPlot(size) ? (
+                <ComparePlotFull key={settingsOf(spec)} spec={spec} />
+            ) : (
+                <ComparePicture record={record} />
+            )}
         </div>
     );
 }

@@ -68,6 +68,28 @@
   opacity: 0.6;
 }
 
+/* Minimise, beside remove: hides the sub-node and leaves its badge on the host */
+.support-node-minimize {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+/* Without an action ahead of it, it takes the header's spare room, so it and remove stay on the right */
+.support-node-minimize--first {
+  margin-left: auto;
+}
+
+.support-node-minimize:hover {
+  color: var(--ink);
+}
+
 .support-node-remove {
   cursor: pointer;
   border: none;
@@ -144,30 +166,116 @@
   background: color-mix(in srgb, var(--support-accent) 8%, transparent);
 }
 
-/* Where a sub-node dragged in from the Quality panel can be dropped - over its host's group, only while dragging */
-.support-drop-zone {
-  box-sizing: border-box;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 6px;
-  border: 2px dashed var(--support-accent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--support-accent) 12%, transparent);
-  transition: background-color 0.12s ease, border-color 0.12s ease;
-}
-
-.support-drop-zone--over {
-  border-style: solid;
-  background: color-mix(in srgb, var(--support-accent) 28%, transparent);
-}
-
-.support-drop-zone-label {
-  padding: 2px 8px;
-  border-radius: 999px;
+/* A button inside a sub-node's body - a sparkline's Pick source, an error plot's Repair selection and Done */
+.support-node-inline-action {
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 1px 7px;
+  border: 1px solid var(--support-accent);
+  border-radius: 4px;
   background: #ffffff;
-  font-size: 11px;
+  font-family: inherit;
+  font-size: 10px;
   font-weight: 600;
   color: var(--support-ink);
-  pointer-events: none;
+}
+
+.support-node-inline-action:hover:not(:disabled) {
+  background: var(--support-tint-strong);
+}
+
+.support-node-inline-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.support-node-inline-action--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.support-node-inline-action--primary:hover:not(:disabled) {
+  background: #166fe0;
+}
+
+/* ── An error plot being wrangled on ─────────────────────────────────────────
+   The matrix's own plot, filling the sub-node, with the selection and Repair under it */
+.support-wrangle {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.support-wrangle-plot {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.support-wrangle-plot > svg {
+  display: block;
+  overflow: visible;
+}
+
+.support-wrangle-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.support-wrangle-selection {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────────
+   A node's hidden sub-nodes, in a row across its top edge, each a small rimmed chip holding its kind's picture.
+   Absolutely placed, so they cost the dagre layout nothing; to the right of the comparison badge, which takes
+   the edge's left end. */
+.support-badges {
+  position: absolute;
+  top: -12px;
+  right: 6px;
+  display: flex;
+  gap: 3px;
+  z-index: 5;
+}
+
+.support-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 1.5px solid var(--support-accent);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px #ffffff, 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.support-badge:hover {
+  background: var(--support-tint);
+  transform: translateY(-1px) scale(1.12);
+}
+
+/* A kind's tiny picture of itself, in a badge or anywhere else it is shown */
+.support-glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
 }

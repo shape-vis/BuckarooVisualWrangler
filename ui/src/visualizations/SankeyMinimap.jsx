@@ -7,7 +7,7 @@
 import {useEffect, useRef, useState} from "react";
 import {useHostWindow} from "../store/HostWindowContext.jsx";
 import {DRIFT_COLOR} from "../store/errorColors.js";
-import {clamp, wheelPixels} from "../utils/visCommon.jsx";
+import {clamp, localSvgPoint, wheelPixels} from "../utils/visCommon.jsx";
 import {
     FLOW_COLORS, flowKind, markedFlow, nodeBarColor, panRange, ribbonOpacity, ribbonPath, ribbonPoint,
 } from "./flowLayout.js";
@@ -81,9 +81,8 @@ export default function SankeyMinimap({world, frame, range, onRange}) {
     /* The pointer's height on the minimap, as a share of the Sankey's - in the svg's own pixels, so it holds
        under the graph's zoom when the plot is in a sub-node */
     const fractionAt = (event) => {
-        const rect = svgRef.current.getBoundingClientRect();
-        const scale = rect.height / (svgRef.current.clientHeight || rect.height) || 1;
-        return ((event.clientY - rect.top) / scale - frame.top) / sankeyHeight;
+        const point = localSvgPoint(svgRef.current, event);
+        return (point.y - frame.top) / sankeyHeight;
     };
     const modeAt = (at) => {
         const edge = EDGE / sankeyHeight;

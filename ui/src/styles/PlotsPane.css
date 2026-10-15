@@ -18,13 +18,20 @@
     display: none;
 }
 
-/* The plot matrix's svg is 100% wide, which as a flex item would claim the whole row */
-.plots-pane-body > #main-svg {
+/* The plot matrix fills what its window's header leaves. Its svg is 100% wide, which as a flex item would
+   claim the whole row. */
+.plots-pane-matrix {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+.plots-pane-matrix > #main-svg {
     flex: 1 1 0;
     min-width: 0;
 }
 
-/* Tab strip, in the manner of editor file tabs - the right dock's, so the two read as one family */
+/* Tab strip, in the manner of editor file tabs */
 .plots-pane-tabstrip {
     display: flex;
     align-items: stretch;

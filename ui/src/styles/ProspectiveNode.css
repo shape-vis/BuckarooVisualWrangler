@@ -10,10 +10,37 @@
   padding: 6px 8px;
   font-size: 11px;
   text-align: center;
-  /* Matches the other node types, so dagre's fixed 200x100 footprint still describes it */
-  min-width: 150px;
-  max-width: 190px;
+  /* Its width - and once resized, its height - is set by the layout (PGraphContext's PREVIEW_FOOTPRINT), which
+     reserves room for it in dagre */
   cursor: default;
+}
+
+/* The card fills the node, so a resized node's preview chart grows into the room it was given */
+.prospective-node {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A candidate's resize grips, shown only while the pointer is over it so a graph of them stays quiet */
+.react-flow__node-prospectiveNode .prospective-resize-handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid var(--candidate);
+  background: #ffffff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.react-flow__node-prospectiveNode .prospective-resize-line {
+  border-color: var(--candidate);
+  opacity: 0;
+}
+
+.react-flow__node-prospectiveNode:hover .prospective-resize-handle,
+.react-flow__node-prospectiveNode:hover .prospective-resize-line {
+  opacity: 1;
 }
 
 .prospective-node-title {
@@ -89,8 +116,12 @@
   text-align: left;
 }
 
-/* A repair candidate's preview chart: the Repair panel's card, untitled - the node's own title names it */
+/* A candidate's preview chart, untitled - the node's own title names it. It takes whatever height the card
+   has left, which is only more than it needs once the node is resized. */
 .prospective-node-chart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   margin-bottom: 6px;
 }
 

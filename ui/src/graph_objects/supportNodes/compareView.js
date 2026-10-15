@@ -1,7 +1,8 @@
 /**
  * The compare kind of supporting sub-node: a comparison of two nodes kept beside each of them. It is not
- * offered in the add-sub-node modal; Save in the compare window makes one on each of the two nodes it
- * compares, grouped so they change together. It previews the comparison and opens it in the compare window.
+ * offered in the support-nodes window; Save in the compare window makes one on each of the two nodes it
+ * compares, grouped so they change together. It shows the comparison - as a picture until it is resized large
+ * enough for the whole plot - and opens it in the compare window.
  *
  *   other - the other node of the two, a table name
  *   spec  - the comparison object it shows (utils/comparisonSpec.js), kept up to date while it is open in
@@ -10,13 +11,17 @@
  *
  * Plain JSON throughout, since records are saved as they are.
  */
-import { PLOT_KINDS } from "../../utils/comparison.js";
+import { PLOT_KINDS, nodeName } from "../../utils/comparison.js";
 import { normalizeSpec } from "../../utils/comparisonSpec.js";
 
 export const COMPARE_DEFAULTS = { other: null, spec: null, group: null };
 
-// The size a compare sub-node starts at: room for its preview
+// The size a compare sub-node starts at: room for its picture of the comparison, which it shows until it is larger
 export const COMPARE_SIZE = { width: 260, height: 206 };
+
+/* The smallest a compare sub-node shows its whole plot at: room for the compare window's plot with its zoom strip,
+   hover note and legend - the drift plot's own sub-node size - without squeezing it. Smaller, it shows its picture. */
+export const FULL_COMPARE_SIZE = { width: 440, height: 480 };
 
 /**
  * The comparison the sub-node shows: what it last showed, or - for a record without one - this node against
@@ -33,6 +38,18 @@ export function specOfCompare(record, hostColumns) {
         x: hostColumns[0] || "",
         y: hostColumns[1] || hostColumns[0] || null,
     });
+}
+
+/** One line naming what a comparison shows: its two nodes, its plot kind and its column. */
+export function compareSummary(spec) {
+    const plotKind = PLOT_KINDS.find((option) => option.id === spec.kind);
+    const kindLabel = plotKind?.label ?? spec.kind;
+
+    let summary = `${nodeName(spec.a)} → ${nodeName(spec.b)} · ${kindLabel}`;
+    if (spec.x) {
+        summary += ` · ${spec.x}`;
+    }
+    return summary;
 }
 
 /** The settings Save in the compare window keeps a comparison with, on one of its two nodes. */

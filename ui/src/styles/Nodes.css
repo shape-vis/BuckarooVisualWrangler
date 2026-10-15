@@ -156,13 +156,6 @@
   text-decoration: line-through;
 }
 
-/* While the end of a branch is being chosen, the nodes it may end on invite the click */
-.react-flow__node.pgraph-node--eligible {
-  outline: 2px dashed var(--accent);
-  outline-offset: 3px;
-  cursor: pointer;
-}
-
 /* A staged candidate on the plot's full view: a card like the rest, dashed violet like its tree card */
 .react-flow__node.pgraph-node--provisional:not(.pgraph-node--current) {
   border: 2px dashed var(--candidate);
@@ -205,45 +198,12 @@
   box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
 }
 
+/* A node's buttons, always showing */
 .note-node-icon-container{
     background-color: rgb(255 255 255);
     display: flex;
     justify-content: center;
     border-radius: 4px;
-    /* Hidden until the node is hovered. Faded rather than removed, so the card keeps its height - dagre
-       laid the graph out from a fixed footprint, and the edges leaving its bottom would jump otherwise. */
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.12s ease;
-}
-
-/* Shown on hover, while one of its buttons has keyboard focus, and while a button in it is switched on */
-.react-flow__node:hover .note-node-icon-container,
-.note-node-icon-container:focus-within,
-.note-node-icon-container--pinned{
-    opacity: 1;
-    pointer-events: auto;
-}
-
-/* A node whose supporting sub-nodes are hidden: a count on its top-right corner, opposite the comparison
-   badge, that shows them again. Floats, so it adds nothing to the dagre layout. */
-.node-support-hidden-pill {
-  position: absolute;
-  top: -15px;
-  right: 0;
-  padding: 1px 6px;
-  border: 1px solid var(--support-accent);
-  border-radius: 8px;
-  background: var(--support-tint);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--support-ink);
-  cursor: pointer;
-}
-
-.node-support-hidden-pill:hover {
-  background: var(--support-tint-strong);
 }
 
 /* Wraps each node button so its tooltip still works while the button is disabled; lays out as the button */

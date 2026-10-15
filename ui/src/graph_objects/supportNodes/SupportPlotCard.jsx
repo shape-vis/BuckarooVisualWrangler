@@ -2,7 +2,7 @@ import {useState} from "react";
 import "../../styles/SupportPlot.css";
 
 /**
- * The frame every sub-node plot card shares - error plots and drift plots, in the modal's gallery and in the
+ * The frame every sub-node plot card shares - error plots and drift plots, in the window's gallery and in the
  * sub-node: a title, the plot, and the card's buttons. Change Columns swaps the title for the column pickers;
  * each pick is reported at once and the plot follows, so Done only puts the title back.
  *

@@ -5,8 +5,9 @@ import { Handle, Position} from "@xyflow/react";
 import {IconButton} from "../elements/Buttons.jsx";
 import {usePgraph} from "../store/PGraphContext.jsx";
 import {useAISuggestions} from "../store/AISuggestionsContext.jsx";
-import {CANDIDATE_LOCKED} from "../store/RepairContext.jsx";
+import {aiAvailability} from "../store/aiAvailability.js";
 import {NodeMetrics} from "./NodeMetrics.jsx";
+import {SupportBadges} from "./supportNodes/SupportBadges.jsx";
 import {showTooltip, moveTooltip, hideTooltip} from "../utils/visCommon.jsx";
 import "../styles/Buttons.css"
 
@@ -63,32 +64,24 @@ function NodeButton( { label, detail, children, ...button } ){
     );
 }
 
-/**
- * The tooltip detail for a node's AI button: why it is off, or what pressing it does. Checked in order,
- * so the most fundamental reason wins.
- */
-function aiButtonDetail( { configured, locked, analysing, busy } ){
-    if (!configured) return "AI suggestions are not configured - add GEMINI_API_KEY to .env";
-    if (locked) return `${CANDIDATE_LOCKED}.`;
-    if (analysing) return "Switch to wrangling mode for suggestions";
-    if (busy) return "Working…";
-    return "Suggest repairs for this node";
+// "supporting node", or "3 supporting nodes"
+function supportNoun(count) {
+    if (count === 1) return "supporting node";
+    return `${count} supporting nodes`;
 }
 
 /**
- * The buttons every node carries. Quality metrics are not among them: they are added as a supporting
- * sub-node from the support button.
+ * The buttons every node carries, always showing: the AI's repairs, the support-nodes window, and - once the node
+ * has supporting sub-nodes - the eye that hides them all, each leaving its badge on the node, and shows them
+ * again. Quality metrics are not among them: they are added as a supporting sub-node from the support button.
  *
  * Takes the node's id rather than reading data.label, because the label is only what the card displays -
  * the id is the table name the server knows the node by.
  */
 export function NodeTools( { nodeId } ){
-    const { startBranchSelection, isCandidate, graphMode, openSupportModal,
-            supportCountByHost, hiddenSupportHosts, toggleSupportHidden, hideAllNodeSupports,
-            hideAllEdgeSupports } = usePgraph();
+    const { isCandidate, graphMode, openSupportWindow, supportNodes, isSupportShown,
+            toggleSupportHidden } = usePgraph();
     const ai = useAISuggestions();
-
-    const openQuality = useCallback(() => startBranchSelection(), [startBranchSelection]);
 
     const askAI = useCallback(() => ai?.requestSuggestions(nodeId), [ai, nodeId]);
 
@@ -96,114 +89,77 @@ export function NodeTools( { nodeId } ){
        wrangled from a candidate until it is accepted, so a candidate's own AI button is off; and in analysis
        mode the new candidates would land somewhere the tree is not drawn. */
     const analysing = graphMode === "analysis";
-    const locked = isCandidate(nodeId);
-    const aiBlocked = !ai?.configured || ai?.busy || analysing || locked;
-    const aiTitle = aiButtonDetail({
+    const aiState = aiAvailability({
         configured: ai?.configured,
-        locked,
+        locked: isCandidate(nodeId),
         analysing,
         busy: ai?.busy,
     });
 
     // Off in analysis mode: sub-nodes are hidden on the plot, so adding one there would show nothing
-    const openSupport = useCallback(() => openSupportModal(nodeId), [openSupportModal, nodeId]);
+    const openSupport = useCallback(() => openSupportWindow(nodeId), [openSupportWindow, nodeId]);
 
-    /* Hiding and showing this node's sub-nodes - beside it and beside its incoming edge - offered once it has
-       some. What the graph's own toggles already hide is not this button's to show, so it counts only the rest,
-       and goes inert when there is none. */
-    const counts = supportCountByHost.get(nodeId) ?? {side: 0, edge: 0};
-    const hasSupport = counts.side + counts.edge > 0;
-    const supportCount = (hideAllNodeSupports ? 0 : counts.side) + (hideAllEdgeSupports ? 0 : counts.edge);
-    const supportHidden = hiddenSupportHosts.has(nodeId);
+    /* The eye: while any of this node's sub-nodes shows, it hides them all, each leaving its badge; once none
+       does, it shows them all again. Offered once the node has some. */
+    const ofNode = supportNodes.filter((record) => record.hostId === nodeId);
+    const hasSupport = ofNode.length > 0;
+    const shownCount = ofNode.filter((record) => isSupportShown(record)).length;
+    const anyShown = shownCount > 0;
     const toggleSupport = useCallback(() => toggleSupportHidden(nodeId), [toggleSupportHidden, nodeId]);
-    const supportNoun = supportCount === 1 ? "supporting node" : `${supportCount} supporting nodes`;
 
     let visibilityDetail;
     if (analysing) {
         visibilityDetail = "Supporting nodes are hidden on the plot - switch to wrangling mode";
-    } else if (supportCount === 0) {
-        visibilityDetail = "This node's supporting nodes are hidden graph-wide - turn them back on at the graph's top left";
+    } else if (anyShown) {
+        visibilityDetail = `Hide this node's ${supportNoun(shownCount)} - each leaves a badge on the node`;
     } else {
-        const showOrHide = supportHidden ? "Show" : "Hide";
-        visibilityDetail = `${showOrHide} this node's ${supportNoun}`;
+        visibilityDetail = `Show this node's ${supportNoun(ofNode.length)} again`;
     }
 
-    // The row shows on hover, but stays up while one of its buttons is switched on, so that is never hidden
-    const pinned = ai?.pendingNode === nodeId;
+    const asking = ai?.pendingNode === nodeId;
 
     return (
-        <>
-            {/* stopPropagation on click does not stop dblclick, and React Flow navigates the app
-                on a node double-click - so a quick double-tap on any of these would move the
-                current table out from under the user */}
-            <div
-                className={`note-node-icon-container ${pinned ? "note-node-icon-container--pinned" : ""}`}
-                onDoubleClick={(e) => e.stopPropagation()}
+        // stopPropagation on click does not stop dblclick, and React Flow navigates the app on a node
+        // double-click - so a quick double-tap on any of these would move the current table out from under the user
+        <div className="note-node-icon-container" onDoubleClick={(e) => e.stopPropagation()}>
+            <NodeButton
+                className="node-sub-button-ai"
+                label="AI repairs"
+                detail={aiState.detail}
+                onClick={askAI}
+                disabled={aiState.blocked}
             >
+                <img
+                    src="/images/icons/sparkle.svg"
+                    alt=""
+                    className={`nodeButtonSvgIcon ${asking ? "nodeButtonSvgIcon--active" : ""}`}
+                />
+            </NodeButton>
+            <NodeButton
+                className="node-sub-button-support"
+                label="Supporting nodes"
+                detail={analysing ? "Switch to wrangling mode to add supporting nodes" : "Add supporting nodes beside this node"}
+                onClick={openSupport}
+                disabled={analysing}
+            >
+                <img src="/images/icons/support.svg" alt="" className="nodeButtonSvgIcon" />
+            </NodeButton>
+            {hasSupport && (
                 <NodeButton
-                    className="node-sub-button-chart"
-                    label="Branch quality"
-                    detail="Measure quality along a branch"
-                    onClick={openQuality}
-                >
-                    <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
-                </NodeButton>
-                <NodeButton
-                    className="node-sub-button-ai"
-                    label="AI repairs"
-                    detail={aiTitle}
-                    onClick={askAI}
-                    disabled={aiBlocked}
-                >
-                    <img
-                        src="/images/icons/sparkle.svg"
-                        alt=""
-                        className={`nodeButtonSvgIcon ${pinned ? "nodeButtonSvgIcon--active" : ""}`}
-                    />
-                </NodeButton>
-                <NodeButton
-                    className="node-sub-button-support"
-                    label="Supporting nodes"
-                    detail={analysing ? "Switch to wrangling mode to add supporting nodes" : "Add supporting nodes beside this node"}
-                    onClick={openSupport}
+                    className="node-sub-button-support-visibility"
+                    label={anyShown ? "Hide supporting nodes" : "Show supporting nodes"}
+                    detail={visibilityDetail}
+                    onClick={toggleSupport}
                     disabled={analysing}
                 >
-                    <img src="/images/icons/support.svg" alt="" className="nodeButtonSvgIcon" />
+                    <img
+                        src={anyShown ? "/images/icons/eye.svg" : "/images/icons/eye-off.svg"}
+                        alt=""
+                        className="nodeButtonSvgIcon"
+                    />
                 </NodeButton>
-                {hasSupport && (
-                    <NodeButton
-                        className="node-sub-button-support-visibility"
-                        label={supportHidden ? "Show supporting nodes" : "Hide supporting nodes"}
-                        detail={visibilityDetail}
-                        onClick={toggleSupport}
-                        disabled={analysing || supportCount === 0}
-                    >
-                        <img
-                            src={supportHidden ? "/images/icons/eye-off.svg" : "/images/icons/eye.svg"}
-                            alt=""
-                            className="nodeButtonSvgIcon"
-                        />
-                    </NodeButton>
-                )}
-            </div>
-
-            {/* While they are hidden, a pill on the card's corner keeps them from being forgotten. It floats,
-                like the comparison badge, so it costs the layout nothing; clicking it shows them again. */}
-            {supportHidden && supportCount > 0 && !analysing && (
-                <button
-                    type="button"
-                    className="node-support-hidden-pill"
-                    onClick={(event) => { event.stopPropagation(); toggleSupport(); }}
-                    onDoubleClick={(event) => event.stopPropagation()}
-                    onMouseEnter={(event) => showTooltip(`<strong>${supportCount} hidden</strong><br/>Click to show this node's ${supportNoun}`, event)}
-                    onMouseMove={moveTooltip}
-                    onMouseLeave={hideTooltip}
-                    aria-label={`Show this node's ${supportNoun}`}
-                >
-                    +{supportCount}
-                </button>
             )}
-        </>
+        </div>
     );
 }
 
@@ -233,11 +189,8 @@ export function SupportHandles(){
  * simply drops the run, and the real nodes are drawn again from data that never changed.
  */
 export function CollapsedNode( { id, data, isConnectable } ){
-    const { expandRun, selectRunBranch } = usePgraph();
+    const { expandRun } = usePgraph();
     const [expanded, setExpanded] = useState(false);
-
-    // A folded run is a sequence, so its trajectory is the branch running through it, head to tail
-    const openQuality = useCallback(() => selectRunBranch(data.run), [selectRunBranch, data.run]);
 
     const headId = String(data.head).split("_")[0];
     const tailId = String(data.tail).split("_")[0];
@@ -251,15 +204,7 @@ export function CollapsedNode( { id, data, isConnectable } ){
                     <div className={"collapsed-node-range"}>
                         {headId} … {tailId}
                     </div>
-                    <div className={`note-node-icon-container ${expanded ? "note-node-icon-container--pinned" : ""}`}>
-                        <NodeButton
-                            className="node-sub-button-chart"
-                            label="Run quality"
-                            detail={`Plot quality across these ${data.run?.length} nodes`}
-                            onClick={openQuality}
-                        >
-                            <img src="/images/icons/trend.svg" alt="" className="nodeButtonSvgIcon" />
-                        </NodeButton>
+                    <div className="note-node-icon-container">
                         <NodeButton
                             className="node-sub-button-inspect"
                             label="Quality metrics"
@@ -296,6 +241,7 @@ function NoteCard( { id, data, isConnectable, hasParent } ){
         <>
             {hasParent && <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>}
             <ComparisonBadge role={data.comparisonRole} />
+            <SupportBadges hostId={id} />
             <div>
                 <div className="node-tools">
                     <h3>{data.label}</h3>

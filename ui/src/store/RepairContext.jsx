@@ -3,7 +3,6 @@ import { undoWrangle, redoWrangle, createPreviews } from "../utils/serverCalls.j
 import { useLoading } from "./LoadingContext.jsx";
 import { SelectionContext } from "./SelectionContext.jsx";
 import { usePgraph } from "./PGraphContext.jsx";
-import { useDock } from "./DockContext.jsx";
 import { useMoveToTable } from "./useMoveToTable.js";
 import { ViewContext } from "../pages/Buckaroo.jsx";
 
@@ -17,8 +16,8 @@ export const CANDIDATE_LOCKED = "Accept this candidate before wrangling from it"
  * repaired.
  *
  * Asking stages each repair as a candidate on the server - a provisional node under the current node, its
- * wrangle already run on a copy of the table - and pulls the graph, where they appear. They are accepted and
- * declined through CandidatesContext, the same as the AI's suggestions; the Repair panel lists them all.
+ * wrangle already run on a copy of the table - and pulls the graph, where they appear as prospective nodes. They
+ * are accepted and declined there, through CandidatesContext, the same as the AI's suggestions.
  *
  * Nothing can be repaired from a candidate until it is accepted, so asking is refused while one is current.
  */
@@ -29,8 +28,6 @@ export function RepairProvider({ onWrangleExecuted, children }) {
     const { refreshGraph, currentIsCandidate } = usePgraph();
     const moveToTable = useMoveToTable(onWrangleExecuted);
 
-    // The repair panel is one of the dock's tabs, so landing on another node puts the dock away
-    const { hideDock } = useDock();
     // The candidates are drawn in the graph, so asking for them opens the graph if it is closed
     const { openView } = useContext(ViewContext);
 
@@ -51,10 +48,9 @@ export function RepairProvider({ onWrangleExecuted, children }) {
 
         if (result?.success) {
             moveToTable(result.table_name);
-            hideDock();
         }
         return result;
-    }, [addLoader, removeLoader, refreshGraph, moveToTable, hideDock]);
+    }, [addLoader, removeLoader, refreshGraph, moveToTable]);
 
     const handleUndo = useCallback(() => stepHistory(undoWrangle), [stepHistory]);
     const handleRedo = useCallback(() => stepHistory(redoWrangle), [stepHistory]);
@@ -81,8 +77,8 @@ export function RepairProvider({ onWrangleExecuted, children }) {
     }, [hasSelection, highlightedRowIds, highlightedCols, selectionSource, currentIsCandidate, refreshGraph,
         addLoader, removeLoader]);
 
-    /* The header's Repair button: stage the repairs into the graph. The panel is not opened - the graph is
-       where the candidates are chosen - but lists them too whenever the user opens it. */
+    /* The header's Repair button, and an error-plot sub-node's Repair selection: stage the repairs into the
+       graph, where the candidates are chosen. */
     const triggerRepairSelection = useCallback(() => {
         openView("graph");
         requestRepairs();

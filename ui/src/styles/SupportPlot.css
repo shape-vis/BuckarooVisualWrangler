@@ -1,5 +1,5 @@
 /* A sub-node plot card - an error plot or a drift plot: its title or column pickers, the plot, and its buttons -
-   in the modal's gallery and in the sub-node */
+   in the support-nodes window's gallery and in the sub-node */
 .support-plot-card {
   display: flex;
   flex-direction: column;
@@ -114,7 +114,7 @@
   border-radius: 6px;
 }
 
-/* ── The gallery in the modal ───────────────────────────────────────────── */
+/* ── The gallery in the support-nodes window ───────────────────────────────── */
 
 .support-plot-gallery {
   display: grid;
@@ -134,14 +134,90 @@
   box-sizing: border-box;
 }
 
-/* Drift plots carry the compare window's furniture - a zoom strip, the hover note, a legend - so their cards are
-   larger, tall enough for all of it beside the plot */
-.support-plot-gallery--wide {
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+/* A gallery a card a page - drift plots, which carry the compare window's zoom strip, hover note and legend: the
+   pager, then the current card filling the rest of the window */
+.support-plot-pages {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.support-plot-gallery--wide .support-plot-gallery-item {
-  height: 470px;
+.support-plot-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.support-plot-pager-pages {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.support-plot-pager-step,
+.support-plot-pager-page {
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.support-plot-pager-page {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.support-plot-pager-step:hover:not(:disabled),
+.support-plot-pager-page:hover {
+  background: var(--surface-muted);
+}
+
+.support-plot-pager-step:disabled {
+  cursor: default;
+  color: #8a8d91;
+}
+
+.support-plot-pager-page--current {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.support-plot-pager-page--current:hover {
+  background: var(--accent-tint);
+}
+
+.support-plot-pager-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.support-plot-page {
+  flex: 1;
+  min-height: 0;
+}
+
+.support-plot-page .support-plot-gallery-item {
+  height: 100%;
+}
+
+/* .support-plot-gallery-item is a block, but the page's hidden cards need saying outright */
+.support-plot-gallery-item[hidden] {
+  display: none;
 }
 
 .support-plot-gallery-empty {

@@ -1,5 +1,5 @@
 // SelectionContext.jsx
-// Global context shared by all plots and the RepairPanel.
+// Global context shared by all plots and by Repair, which repairs what they select.
 //
 // highlightedRowIds  – row IDs currently lit up across all charts (null = nothing)
 // highlightedCols    – the column name(s) involved in the selection (for imputation)

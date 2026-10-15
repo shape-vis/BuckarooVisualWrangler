@@ -1,6 +1,8 @@
 // PreviewCard.jsx
-// Renders a small histogram (1D), heatmap (2D), or scatterplot for a preview table.
+// Renders a small histogram (1D), heatmap (2D), or scatterplot for a preview table - a candidate's own.
 // The fetching and drawing are shared with the error-plot sub-node - see visualizations/previewPlots.js.
+// With fill, the chart grows into whatever height its holder gives it, keeping its shape; otherwise it is as
+// tall as its width makes it.
 
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
@@ -9,7 +11,7 @@ import {
 } from "../visualizations/previewPlots.js";
 import "../styles/PreviewCard.css";
 
-export default function PreviewCard({ label, tableName, cols, errorColors, chartType = "histogram" }) {
+export default function PreviewCard({ label, tableName, cols, errorColors, chartType = "histogram", fill = false }) {
   const svgRef = useRef(null);
   const { data, loading, error } = usePreviewPlotData({ table: tableName, kind: chartType, columns: cols });
 
@@ -32,14 +34,21 @@ export default function PreviewCard({ label, tableName, cols, errorColors, chart
     }
   }, [data, chartType]);
 
+  let cardClass = "repair-method preview-card";
+  let svgStyle = { width: "100%", height: "auto" };
+  if (fill) {
+    cardClass += " preview-card--fill";
+    svgStyle = { width: "100%", height: "100%" };
+  }
+
   return (
-    <div className="repair-method preview-card">
+    <div className={cardClass}>
       <div className="preview-card-chart">
         <div className="preview-card-label">{label}</div>
         {loading && <div className="preview-card-loading">Loading…</div>}
         {error   && <div className="preview-card-error">{error}</div>}
         {!loading && !error && (
-          <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ width: "100%", height: "auto" }} />
+          <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={svgStyle} />
         )}
       </div>
     </div>

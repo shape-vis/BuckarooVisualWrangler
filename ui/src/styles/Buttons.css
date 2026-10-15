@@ -183,7 +183,6 @@
   font-size: 9px;
 }
 
-.iconButton-node-sub-button-chart,
 .iconButton-node-sub-button-inspect,
 .iconButton-node-sub-button-ai,
 .iconButton-node-sub-button-support,
@@ -205,7 +204,6 @@
   align-self: center;
 }
 
-.iconButton-node-sub-button-chart:hover:not(:disabled),
 .iconButton-node-sub-button-inspect:hover:not(:disabled),
 .iconButton-node-sub-button-ai:hover:not(:disabled),
 .iconButton-node-sub-button-support:hover:not(:disabled),
@@ -217,7 +215,6 @@
 /* A disabled node button has to read as deliberately off rather than broken. The AI button
    spends most of its life disabled - while suggestions are already on the graph - so this
    carries real weight. */
-.iconButton-node-sub-button-chart:disabled,
 .iconButton-node-sub-button-inspect:disabled,
 .iconButton-node-sub-button-ai:disabled,
 .iconButton-node-sub-button-support:disabled,

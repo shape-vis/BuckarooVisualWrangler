@@ -1,0 +1,119 @@
+/* The frame every window of the Plots view shares - see PlotsWindow.jsx. It fills whatever holds it - its tab
+   in the Plots view, or a popped-out window of its own - and is never transformed, since a transformed ancestor
+   would become the containing block for a plot's own tooltip. */
+
+.plots-window-host {
+    width: 100%;
+    height: 100%;
+}
+
+/* A popped-out window is a blank page with only the window in it */
+.plots-window-popup-body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.plots-window {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    overflow: hidden;
+}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+
+.plots-window-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    padding: 10px 18px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e4e6eb;
+}
+
+.plots-window-heading {
+    min-width: 0;
+}
+
+.plots-window-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+/* Whatever a window says under its title. Wraps rather than truncating, since what it says - a comparison's
+   two wrangles, say - is exactly the detail worth reading in full. */
+.plots-window-subtitle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--ink-muted);
+}
+
+/* The window's own actions, then pop out or dock, and close */
+.plots-window-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.plots-window-action {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #ffffff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.plots-window-action:hover:not(:disabled) {
+    background: var(--surface-muted);
+    border-color: #bcc0c4;
+}
+
+.plots-window-action:disabled {
+    color: #8a8d91;
+    cursor: default;
+}
+
+.plots-window-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.plots-window-close:hover {
+    background: #e4e6eb;
+    color: var(--ink);
+}
+
+.plots-window-action:focus-visible,
+.plots-window-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}

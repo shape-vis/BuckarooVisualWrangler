@@ -16,9 +16,7 @@ import {nodeName} from "../utils/comparison.js";
 import AnalysisAxes from "./AnalysisAxes.jsx";
 import AnalysisInset from "./AnalysisInset.jsx";
 import AnalysisEdge from "../graph_objects/AnalysisEdge.jsx";
-import SupportNodesModal from "../elements/SupportNodesModal.jsx";
-import {dropZoneBox} from "../graph_objects/supportNodes/supportLayout.js";
-import {recordSizeOf} from "../graph_objects/supportNodes/registry.js";
+import {ERROR_TYPES} from "../store/errorColors.js";
 import {
     ANALYSIS_METRICS, CARD, DOT, METRIC_LABELS, ROOT_COLOR, plotFitPadding,
     analysisPositions, analysisScales, analysisTooltip, branchColors, isInRegion, isPlotted, plotLabel, tableOf,
@@ -89,13 +87,12 @@ function groupBoundaryAt(boundary, host, shown) {
     return {...boundary, position: {x: at.x + boundary.data.offset.x, y: at.y + boundary.data.offset.y}};
 }
 
-/* The simple view's dot. Its role travels in data rather than as a class: the role classes style a card. Root,
-   the pair and anything chosen are named outright; the rest on hover. A staged candidate is plotted like any
-   node, marked as provisional rather than drawn as its full card. */
-function toAnalysisDot(node, {position, role, isEligible, isDominated}, color) {
+/* The simple view's dot. Its role travels in data rather than as a class: the role classes style a card. Root
+   and the pair are named outright; the rest on hover. A staged candidate is plotted like any node, marked as
+   provisional rather than drawn as its full card. */
+function toAnalysisDot(node, {position, role, isDominated}, color) {
     const className = [
         PLOTTED_NODE_CLASS,
-        isEligible ? "pgraph-node--eligible" : "",
         isDominated ? "pgraph-node--dominated" : "",
     ].filter(Boolean).join(" ");
 
@@ -111,7 +108,7 @@ function toAnalysisDot(node, {position, role, isEligible, isDominated}, color) {
                 color,
                 role,
                 label: plotLabel(node),
-                showLabel: node.data?.parent === "root" || Boolean(role) || isEligible,
+                showLabel: node.data?.parent === "root" || Boolean(role),
                 provisional: Boolean(node.data?.provisional),
             },
         },
@@ -120,47 +117,31 @@ function toAnalysisDot(node, {position, role, isEligible, isDominated}, color) {
 
 /* A node drawn as its card, with the marks that say where it stands. A node with nothing to mark, in the place
    the tree put it, is passed through as it is. */
-function toStyledCard(node, {position, role, isEligible, isDominated}, analysing, selectionAId) {
+function toStyledCard(node, {position, role, isDominated}, analysing, selectionAId) {
     const moved = position !== node.position;
-    if (!role && !isEligible && !isDominated && !moved && !analysing) return node;
+    if (!role && !isDominated && !moved && !analysing) return node;
 
     const provisional = Boolean(node.data?.provisional);
     const className = [
         analysing ? PLOTTED_NODE_CLASS : "",
         analysing && provisional ? "pgraph-node--provisional" : "",
         role ? `pgraph-node--${role}` : "",
-        isEligible ? "pgraph-node--eligible" : "",
         // Alongside the other marks rather than instead of them - a dominated node can still be current
         isDominated ? "pgraph-node--dominated" : "",
     ].filter(Boolean).join(" ");
 
     const card = {...node, position, className};
-    // On the plot a candidate is a card like the rest - its preview and buttons belong to the tree
-    if (analysing && provisional) card.type = "noteNode";
+    // On the plot a candidate is a card like the rest - its preview, its buttons and the size it was given belong to the tree
+    if (analysing && provisional) {
+        card.type = "noteNode";
+        card.width = undefined;
+        card.height = undefined;
+    }
     // A card's place on the plot is its data, so it cannot be dragged off it
     if (analysing) card.draggable = false;
     // The node components render a badge from this, so the pair is readable in a large graph
     if (role && selectionAId) card.data = {...node.data, comparisonRole: role};
     return card;
-}
-
-/* While a sub-node is dragged in from the Quality panel, the one place it can land: over its host's group, or a
-   group of the default size when the host has none yet. Above the cards, so the drop reaches it. */
-function dropZoneNode(zone, hostId) {
-    return {
-        id: "support:dropzone",
-        type: "supportDropZone",
-        position: zone.position,
-        /* Sized outright: it is not in the graph's node state, so React Flow's measurement of it goes nowhere,
-           and an unmeasured node without a size is never shown */
-        width: zone.width,
-        height: zone.height,
-        zIndex: 10,
-        draggable: false,
-        selectable: false,
-        focusable: false,
-        data: {width: zone.width, height: zone.height, hostId},
-    };
 }
 
 /* Recentres the tree on whatever just arrived - the node a wrangle made, or a node's new prospective children -
@@ -188,7 +169,7 @@ function FocusNewNodes({analysing}) {
 }
 
 /* In analysis mode the plot fills the canvas, as a chart fills its frame: when the canvas changes size - the
-   window resized, the dock opened beside it - the camera fits the plot to it again. Rendered inside React
+   window resized, the other view opened beside it - the camera fits the plot to it again. Rendered inside React
    Flow, which is where the canvas's size and camera can be read. */
 function FitPlotOnResize({x, y, width, height, axisLeft}) {
     const canvasWidth = useStore((state) => state.width);
@@ -238,6 +219,42 @@ function Segmented({label, options, value, onChange}) {
     );
 }
 
+/* What a sparkline being given its source measures, for the prompt that asks for its edge */
+function dimensionName(dimension) {
+    if (dimension === "drift") return "Drift from root";
+    return ERROR_TYPES[dimension] ?? dimension;
+}
+
+/* Asks for a sparkline's source while one is being picked: which edges to click, or why none can be. Escape, or
+   Cancel, stops picking and leaves the sparkline as it was. */
+function SparklinePickPrompt({pick, dimension, edgeCount, analysing, error, onCancel}) {
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key === "Escape") onCancel();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [onCancel]);
+
+    const host = nodeName(pick.hostId);
+    let message = `Click a highlighted edge above ${host} where its ${dimensionName(dimension)} sparkline should start`;
+    if (analysing) {
+        message = "Switch to wrangling mode to pick where the sparkline starts";
+    } else if (edgeCount === 0) {
+        message = `No edge above ${host} is drawn - expand the run it is folded into`;
+    }
+
+    return (
+        <Panel position="top-center">
+            <div className="pgraph-pick-prompt">
+                <span>{message}</span>
+                {error && <span className="pgraph-pick-error">{error}</span>}
+                <button type="button" className="pgraph-action-button" onClick={onCancel}>Cancel</button>
+            </div>
+        </Panel>
+    );
+}
+
 /* A message over the top of the graph that a click dismisses: a failure, or the AI saying it found nothing to do.
    None of them is a node, so they share the one top-center panel. */
 function DismissibleMessage({className = "pgraph-collapse-error", onDismiss, children}) {
@@ -256,20 +273,21 @@ export default function PGraph() {
        repairing. Neither is a node, so both live in the same top-center panel the collapse error
        already uses. */
     const ai = useAISuggestions();
-    // Repairs are previewed straight into the graph without opening the Repair panel, so a failure is told here
+    // Repairs are previewed straight into the graph, so a failure is told here
     const repair = useRepair();
     const candidateActions = useCandidates();
 
     const { onNodesChange, onEdgesChange, onConnect, onNodeDoubleClick, onNodeClick,
             onEdgeClick, nodeTypes, comparisonPair, pareto, serverNodesById,
-            selectionStage, eligibleDestinations, selectedBranchEdges,
             clearAllSelections, hasAnySelection,
             nodes, edges,
             collapsedRuns, collapseNodes, expandAllRuns,
             collapseError, setCollapseError,
             graphMode, setGraphMode, analysisStyle, setAnalysisStyle, analysisMetric, setAnalysisMetric,
             supportCountByAnchor, hideAllNodeSupports, setHideAllNodeSupports,
-            hideAllEdgeSupports, setHideAllEdgeSupports, supportDrag } = usePgraph();
+            hideAllEdgeSupports, setHideAllEdgeSupports,
+            supportNodes, sparklinePick, sparklinePickError, cancelSparklinePick, isPickableEdge,
+            pickableEdgeCount } = usePgraph();
 
     const analysing = graphMode === "analysis";
 
@@ -383,9 +401,6 @@ export default function PGraph() {
         // Only a comparison the user set up with shift-click is signposted
         const selectionAId = comparisonPair?.a ?? null;
 
-        // While the branch's end is being chosen, the nodes it may end on are marked as pickable
-        const markEligible = selectionStage === "destination";
-
         // Where each node is, for the group boundaries that follow their host without being its child
         const byId = new Map(nodes.map((node) => [node.id, node]));
 
@@ -404,7 +419,6 @@ export default function PGraph() {
             const marks = {
                 position: shown.get(node.id) ?? node.position,
                 role: roleOf(node),
-                isEligible: markEligible && eligibleDestinations.has(node.id),
                 isDominated: Boolean(dominatorOf(node)),
             };
             if (analysing && analysisStyle === "simple") {
@@ -413,36 +427,24 @@ export default function PGraph() {
                 drawn.push(toStyledCard(node, marks, analysing, selectionAId));
             }
         }
-
-        // The plot hides sub-nodes, so it offers nowhere to drop one
-        if (!supportDrag || analysing) return drawn;
-        const dropSize = recordSizeOf({kind: supportDrag.kind, config: supportDrag.config});
-        const zone = dropZoneBox(supportDrag.hostId, drawn, dropSize);
-        if (!zone) return drawn;
-        return [...drawn, dropZoneNode(zone, supportDrag.hostId)];
-    }, [nodes, roleOf, comparisonPair, selectionStage, eligibleDestinations, dominatorOf, shown, analysing,
-        analysisStyle, colors, supportDrag]);
+        return drawn;
+    }, [nodes, roleOf, comparisonPair, dominatorOf, shown, analysing, analysisStyle, colors]);
 
 
-    // The selected branch is lit up in the graph, so the trajectory in the panel is tied to a visible
-    // path through the tree. Edges are untouched when no branch is selected.
+    /* While a sparkline's source is being picked, the edges it may start from are lit up and the rest of the tree
+       fades, so the choice is plain. Edges are untouched otherwise. */
+    const picking = Boolean(sparklinePick);
     const styledEdges = useMemo(() => {
-        // A step heavier than every other edge, so the picked branch still stands out from the tree
-        const selectedStyle = {stroke: "#1877F2", strokeWidth: TREE_EDGE_WIDTH + 1.5};
+        // A step heavier than every other edge, so the pickable edges stand out from the tree
+        const pickableStyle = {stroke: "#1877F2", strokeWidth: TREE_EDGE_WIDTH + 1.5};
 
         /* Analysis mode draws each edge as a straight arrow from parent to child in the child's branch colour,
            without its label - the operation and its columns are still in the hover detail */
         if (analysing) {
             const hidden = new Set(nodes.filter((node) => !isPlotted(node)).map((node) => node.id));
             return edges.map((edge) => {
-                const selected = selectedBranchEdges.has(`${edge.source}->${edge.target}`);
-
-                let color = colors?.get(edge.target) ?? ROOT_COLOR;
-                let style = {stroke: color, strokeWidth: TREE_EDGE_WIDTH, opacity: 0.85};
-                if (selected) {
-                    color = selectedStyle.stroke;
-                    style = {...selectedStyle};
-                }
+                const color = colors?.get(edge.target) ?? ROOT_COLOR;
+                const style = {stroke: color, strokeWidth: TREE_EDGE_WIDTH, opacity: 0.85};
                 // The edge into a candidate stays dashed on the plot too
                 if (edge.data?.provisional) style.strokeDasharray = "6 4";
 
@@ -460,22 +462,27 @@ export default function PGraph() {
             });
         }
 
-        if (selectedBranchEdges.size === 0) return edges;
+        if (!picking) return edges;
 
         return edges.map((edge) => {
-            if (!selectedBranchEdges.has(`${edge.source}->${edge.target}`)) return edge;
-
-            return {...edge, style: {...edge.style, ...selectedStyle}};
+            if (isPickableEdge(edge)) {
+                return {...edge, className: "pgraph-edge--pickable", style: {...edge.style, ...pickableStyle}};
+            }
+            return {...edge, style: {...edge.style, opacity: 0.3}};
         });
-    }, [edges, nodes, selectedBranchEdges, analysing, colors]);
+    }, [edges, nodes, picking, isPickableEdge, analysing, colors]);
 
     /* The edge is labelled with just the operation, so the columns it acted on live in its hover detail.
        Uses the same shared #tooltip element as every chart, so placement stays edge-aware. */
     const onEdgeMouseEnter = useCallback((event, edge) => {
         const detail = edge.data?.detail;
         if (!detail) return;
-        showTooltip(`<strong>${detail}</strong><br/>click to start a branch here`, event);
-    }, []);
+        let html = `<strong>${detail}</strong>`;
+        if (isPickableEdge(edge)) {
+            html += "<br/>click to start the sparkline here";
+        }
+        showTooltip(html, event);
+    }, [isPickableEdge]);
 
     const onEdgeMouseMove = useCallback((event) => moveTooltip(event), []);
     const onEdgeMouseLeave = useCallback(() => hideTooltip(), []);
@@ -611,9 +618,9 @@ export default function PGraph() {
                             <button
                                 className="pgraph-action-button"
                                 onClick={clearAllSelections}
-                                title="Clear selection A and the selected branch"
+                                title="Clear selection A"
                             >
-                                Clear selections
+                                Clear selection
                             </button>
                         )}
                         <Segmented
@@ -647,6 +654,17 @@ export default function PGraph() {
                         </div>
                     )}
                 </Panel>
+
+                {sparklinePick && (
+                    <SparklinePickPrompt
+                        pick={sparklinePick}
+                        dimension={supportNodes.find((record) => record.id === sparklinePick.recordId)?.config?.dimension}
+                        edgeCount={pickableEdgeCount}
+                        analysing={analysing}
+                        error={sparklinePickError}
+                        onCancel={cancelSparklinePick}
+                    />
+                )}
 
                 {repair?.repairError && (
                     <DismissibleMessage onDismiss={repair.dismissRepairError}>
@@ -707,8 +725,6 @@ export default function PGraph() {
                 {/* Out of the way of the axes, which take the canvas's left and bottom edges in analysis mode */}
                 <Controls position={analysing ? "bottom-right" : "bottom-left"} />
             </ReactFlow>
-            {/* Opened from a node's support button; outside the canvas, which transforms whatever is inside it */}
-            <SupportNodesModal />
         </div>
     );
 }

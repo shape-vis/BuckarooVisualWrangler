@@ -12,12 +12,9 @@ import {useTableName} from "./TableNameContext"
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "./visualizationCaches.jsx";
 import {ViewContext} from "../pages/Buckaroo.jsx";
 import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/serverCalls.jsx";
-import {useDock} from "./DockContext.jsx";
-import {descendantsOf, orderCollapsibleRun, collapsedRunId, applyCollapse,
-        isSupportId} from "../utils/graphTopology.js";
+import {orderCollapsibleRun, collapsedRunId, applyCollapse, isSupportId} from "../utils/graphTopology.js";
 import {SupportNode} from "../graph_objects/supportNodes/SupportNode.jsx";
 import {SupportGroup} from "../graph_objects/supportNodes/SupportGroup.jsx";
-import {SupportDropZone} from "../graph_objects/supportNodes/SupportDropZone.jsx";
 import {EDGE_GAP, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf} from "../graph_objects/supportNodes/supportLayout.js";
 import {useSupportNodes} from "./supportNodes.js";
 import {setNodeLabels} from "../utils/comparison.js";
@@ -37,8 +34,12 @@ const nodeWidth = 200;
 const nodeHeight = 100;
 
 /* A candidate draws its preview chart, so it is about three cards tall: its title, rows and reason, the chart,
-   its buttons and the node tools. Dagre reserves that, so the chart does not run into the rank below. */
-const PREVIEW_FOOTPRINT = {height: 340};
+   its buttons and the node tools. Dagre reserves that, so the chart does not run into the rank below. It is drawn
+   this wide until the user resizes it, and then as large as they made it. */
+const PREVIEW_FOOTPRINT = {width: 190, height: 340};
+
+// Room dagre keeps beside a card wider than the usual, as nodeWidth keeps beside a usual one
+const CARD_MARGIN = 30;
 
 // The edge into a candidate: dashed, since its wrangle has not been accepted
 const PROVISIONAL_EDGE_STYLE = {stroke: "#7c3aed", strokeDasharray: "6 4"};
@@ -63,8 +64,8 @@ const MIN_EDGE_LABEL_WIDTH = 44;
    a node the server sent, which the layout types. */
 const PRESERVED_TYPES = new Set(["collapsedNode", "prospectiveNode"]);
 
-// No branch picked out of the graph yet. Shared, so it is frozen: a branch is only ever replaced, never edited.
-const EMPTY_BRANCH = Object.freeze({source: null, target: null, destination: null});
+// Every candidate the user has not resized. Shared, so it is frozen: a new size is a new map.
+const NO_CANDIDATE_SIZES = Object.freeze(new Map());
 
 const edgeLabelSize = (label) => ({
     width: Math.max(MIN_EDGE_LABEL_WIDTH, String(label ?? "").length * EDGE_LABEL_CHAR_WIDTH),
@@ -86,8 +87,6 @@ const nodeTypes = {
     supportNode: SupportNode,
     // The boundary around a node and its sub-nodes
     supportGroup: SupportGroup,
-    // Where a sub-node dragged in from the Quality panel is dropped, only while one is being dragged
-    supportDropZone: SupportDropZone,
 };
 
 /* What the graph draws until the server's graph arrives: the current table, alone, as the root */
@@ -97,25 +96,42 @@ function placeholderNodes(tableName) {
 
 const isPreserved = (node) => PRESERVED_TYPES.has(node.type);
 
-/* Types a node the server sent: a candidate - a provisional node - is drawn as a prospective node, as tall as
-   its preview chart needs; anything else as a plain card. */
-function typeServerNode(node) {
-    if (node.data?.provisional) {
-        node.type = "prospectiveNode";
-        node.data.footprint = PREVIEW_FOOTPRINT;
-    } else {
+/* Types a node the server sent: a candidate - a provisional node - is drawn as a prospective node, as large as its
+   preview chart needs or as large as the user resized it (candidateSizes, by id); anything else as a plain card.
+   A candidate is drawn at its width, and at its height once resized, so React Flow sizes it rather than its
+   content. */
+function typeServerNode(node, candidateSizes) {
+    if (!node.data?.provisional) {
         node.type = "noteNode";
+        return;
+    }
+
+    node.type = "prospectiveNode";
+    const resized = candidateSizes.get(node.id);
+    if (resized) {
+        node.data.footprint = resized;
+        node.width = resized.width;
+        node.height = resized.height;
+    } else {
+        node.data.footprint = PREVIEW_FOOTPRINT;
+        node.width = PREVIEW_FOOTPRINT.width;
     }
 }
 
-/* The size dagre is told a node is: its card, or taller for a node that draws taller than a card - a repair
+/* The size dagre is told a node is: its card, or larger for a node that draws larger than a card - a repair
    candidate with its preview chart says so in its footprint - widened by any room reserved for its sub-nodes. */
 function layoutSizeOf(node, room) {
-    const height = node.data?.footprint?.height ?? nodeHeight;
-    if (!room) {
-        return {width: nodeWidth, height};
+    const footprint = node.data?.footprint;
+    const height = footprint?.height ?? nodeHeight;
+    let width = nodeWidth;
+    if (footprint?.width) {
+        width = Math.max(nodeWidth, footprint.width + CARD_MARGIN);
     }
-    return {width: nodeWidth + room.left + room.right, height: Math.max(height, room.height)};
+
+    if (!room) {
+        return {width, height};
+    }
+    return {width: width + room.left + room.right, height: Math.max(height, room.height)};
 }
 
 /* What dagre is told an edge's label is. Passing the label's size makes dagre lay the graph out around the
@@ -157,8 +173,11 @@ function styleTreeEdge(edge) {
    edgeReserve). Dagre is told the edge's label is that size and sits to its right, clear of the edge's own
    label - which also opens the gap between the two ranks to its height.
 
-   Writes each node's type, and a candidate's footprint, onto the nodes it is handed. */
-const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(), edgeRoom = new Map()} = {}) => {
+   `candidateSizes` is the size, by id, of every candidate the user has resized.
+
+   Writes each node's type, and a candidate's footprint and size, onto the nodes it is handed. */
+const getLayoutedElements = (nodes, edges, direction = 'TB',
+                             {reserve = new Map(), edgeRoom = new Map(), candidateSizes = NO_CANDIDATE_SIZES} = {}) => {
     if (!nodes || nodes.length === 0) return {nodes: [], edges: edges || []};
 
     const isHorizontal = direction === 'LR';
@@ -172,7 +191,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
 
     for (const node of nodes) {
         if (!isPreserved(node)) {
-            typeServerNode(node);
+            typeServerNode(node, candidateSizes);
         }
         dagreGraph.setNode(node.id, layoutSizeOf(node, reserve.get(node.id)));
     }
@@ -220,13 +239,13 @@ const getLayoutedElements = (nodes, edges, direction = 'TB', {reserve = new Map(
 
    Returns the tree's nodes and edges, and supportPlacement: the sub-nodes and their links, as
    placeSupportNodes gives them. */
-function layoutWithSupport(folded, supported) {
+function layoutWithSupport(folded, supported, candidateSizes) {
     /* Laying out writes onto the nodes it is handed, and applyCollapse hands back the server's own node
        objects when nothing is folded - so every layout gets copies. */
     function layoutTree(reserve, edgeRoom) {
         const nodeCopies = folded.nodes.map((node) => ({...node, data: {...node.data}}));
         const edgeCopies = [...folded.edges];
-        return getLayoutedElements(nodeCopies, edgeCopies, 'TB', {reserve, edgeRoom});
+        return getLayoutedElements(nodeCopies, edgeCopies, 'TB', {reserve, edgeRoom, candidateSizes});
     }
 
     const bareLayout = layoutTree(new Map(), new Map());
@@ -300,18 +319,60 @@ function newFocusIds(acceptedNodes, candidateNodes, seenNodeIds, previousCandida
     return [...anchors, ...candidateIds];
 }
 
-// Which step of picking a branch the user is on: its edge, then where it ends
-function selectionStageOf(branchSelection) {
-    if (!branchSelection.target) return "edge";
-    if (!branchSelection.destination) return "destination";
-    return "complete";
+/* The drawn tree edges on the way down from root to a host, nearest the host first - where a sparkline ending at
+   the host may start. The walk starts at the host as drawn: the host itself, or the folded run it is in. */
+function edgesAbove(hostId, drawnNodes, treeEdges) {
+    let current = hostId;
+    const hostDrawn = drawnNodes.some((node) => node.id === hostId);
+    if (!hostDrawn) {
+        const run = drawnNodes.find((node) => node.type === "collapsedNode" && node.data.run?.includes(hostId));
+        if (!run) return [];
+        current = run.id;
+    }
+
+    const path = [];
+    const visited = new Set();
+    while (!visited.has(current)) {
+        visited.add(current);
+        const incoming = treeEdges.find((edge) => edge.target === current);
+        if (!incoming) break;
+        path.push(incoming);
+        current = incoming.source;
+    }
+    return path;
 }
+
+/* An edge as the server knows it. A folded run is drawn as one node, so an edge out of it leaves the run's last
+   node, and an edge into it reaches the run's first. */
+function realEnds(edge, drawnNodes) {
+    const byId = new Map(drawnNodes.map((node) => [node.id, node]));
+
+    let source = edge.source;
+    const sourceNode = byId.get(edge.source);
+    if (sourceNode?.type === "collapsedNode") {
+        source = sourceNode.data.tail;
+    }
+
+    let target = edge.target;
+    const targetNode = byId.get(edge.target);
+    if (targetNode?.type === "collapsedNode") {
+        target = targetNode.data.head;
+    }
+    return {source, target};
+}
+
+// A branch's series for one dimension, from a branch trajectory: drift's, or one error type's
+function seriesOf(trajectory, dimension) {
+    if (dimension === "drift") return trajectory.distortion;
+    return trajectory.dimensions?.[dimension];
+}
+
+// The key an edge is looked up by while a sparkline's source is picked
+const edgeKeyOf = (edge) => `${edge.source}->${edge.target}`;
 
 export function PGraphProvider({children}) {
     const {tableName, setTableName} = useTableName();
-    // Opening a node's details brings the dock forward on its tab
-    const {revealTab} = useDock();
-    const {setRefreshKey} = useContext(ViewContext);
+    const {setRefreshKey, openView} = useContext(ViewContext);
 
     const [nodes, setNodes, onNodesChange] = useNodesState(placeholderNodes(tableName));
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -327,92 +388,12 @@ export function PGraphProvider({children}) {
         return {a: selectionAId, b: tableName};
     }, [selectionAId, tableName]);
 
-    /* The branch the user is picking out of the graph: an edge fixes where it starts and which way it
-       leaves that node, a destination fixes where it stops. Both are chosen by clicking the graph. */
-    const [branchSelection, setBranchSelection] = useState(EMPTY_BRANCH);
-    const [branchTrajectory, setBranchTrajectory] = useState(null);
-    const [branchTrajectoryLoading, setBranchTrajectoryLoading] = useState(false);
-
-    const selectionStage = selectionStageOf(branchSelection);
-
-    const startBranchSelection = useCallback(() => {
-        setBranchSelection(EMPTY_BRANCH);
-        revealTab("quality");
-    }, [revealTab]);
-
-    const resetBranchSelection = useCallback(() => {
-        setBranchSelection(EMPTY_BRANCH);
-    }, []);
-
-    /* Clears every selection the graph holds at once - the comparison's selection A and the branch alike.
-       They are picked with overlapping gestures (shift-click, click, edge click), so a single way out
-       matters more than being able to clear them individually. */
+    // Clears the comparison's selection A - the selection made by clicking the graph
     const clearAllSelections = useCallback(() => {
         setSelectionAId(null);
-        setBranchSelection(EMPTY_BRANCH);
     }, []);
 
-    const hasAnySelection = Boolean(selectionAId || branchSelection.target);
-
-    // Choosing an edge always restarts the branch, since the old destination may not lie beyond it
-    const pickBranchEdge = useCallback((source, target) => {
-        setBranchSelection({source, target, destination: null});
-    }, []);
-
-    const pickBranchDestination = useCallback((destination) => {
-        setBranchSelection(current => ({...current, destination}));
-    }, []);
-
-    /* A folded run stands for a sequence of wrangles, so its trajectory is the branch running through
-       it: from its head, out through its first step, down to its tail. Selecting it this way means a
-       collapsed node's sparkline is the same thing as any other branch's - just one already named. */
-    const selectRunBranch = useCallback((runNodes) => {
-        if (!runNodes || runNodes.length < 2) return;
-
-        setBranchSelection({
-            source: runNodes[0],
-            target: runNodes[1],
-            destination: runNodes[runNodes.length - 1],
-        });
-        revealTab("quality");
-    }, [revealTab]);
-
-    /* Where the branch is allowed to end: the chosen edge's target and everything below it, a candidate
-       included - it is a node of the graph like any other. Links out to supporting sub-nodes are not walked.
-       Computed here from the edges the UI already holds, so the graph can show which nodes are pickable
-       without a round trip. The server validates the choice independently. */
-    const eligibleDestinations = useMemo(() => {
-        if (!branchSelection.target) return new Set();
-        return new Set(descendantsOf(treeEdgesOf(edges), branchSelection.target));
-    }, [edges, branchSelection.target]);
-
-    /* Fetching lives here rather than in the panel because the graph needs the result too - it lights
-       up the branch's edges. Syncing to the server when the selection changes is what effects are for. */
-    useEffect(() => {
-        let stale = false;
-
-        async function fetchTrajectory() {
-            const {source, target, destination} = branchSelection;
-            if (!source || !target || !destination) {
-                setBranchTrajectory(null);
-                // A request for the previous selection may still be out; its reply is dropped, so it cannot
-                // end the loading state itself
-                setBranchTrajectoryLoading(false);
-                return;
-            }
-            setBranchTrajectoryLoading(true);
-
-            const result = await getBranchTrajectory(source, target, destination);
-            // The selection can change while this request is out, so late replies are dropped
-            if (stale) return;
-
-            setBranchTrajectory(result?.success ? result : null);
-            setBranchTrajectoryLoading(false);
-        }
-
-        fetchTrajectory();
-        return () => { stale = true; };
-    }, [branchSelection]);
+    const hasAnySelection = Boolean(selectionAId);
 
     /* Runs of nodes folded into a single placeholder in the view. Purely a way of looking at the
        graph: the underlying nodes, their tables and their metrics are untouched, so collapsing can
@@ -428,10 +409,21 @@ export function PGraphProvider({children}) {
     const [analysisStyle, setAnalysisStyle] = useState("full");
     const [analysisMetric, setAnalysisMetric] = useState("total");
 
-    /* The supporting sub-nodes hung beside nodes, and the modal that adds them. Their records live here
+    /* The supporting sub-nodes hung beside nodes, and the window that adds them. Their records live here
        for the same reason: the effect below draws them. */
     const support = useSupportNodes();
-    const {supportNodes, isSupportShown} = support;
+    const {supportNodes, isSupportShown, updateSupportNode, wranglingSupportId, endWrangling} = support;
+
+    /* The size of every candidate the user has resized, by id - a way of looking at it, like folding, so it is
+       kept here rather than on the server's node. The layout reserves it, so its neighbours make room. */
+    const [candidateSizes, setCandidateSizes] = useState(NO_CANDIDATE_SIZES);
+    const setCandidateSize = useCallback((id, size) => {
+        setCandidateSizes((current) => {
+            const next = new Map(current);
+            next.set(id, size);
+            return next;
+        });
+    }, []);
 
     /* Where the view should go next: whenever new nodes appear - the node a wrangle made, or a set of
        prospective nodes - the graph recentres on that node and its prospective children rather than leaving
@@ -485,7 +477,7 @@ export function PGraphProvider({children}) {
     const [serverGraph, setServerGraph] = useState({nodes: [], edges: [], pareto: null});
 
     /* Every real node by id, whether or not it is drawn. A node folded into a run is gone from
-       `nodes`, but anything describing it - the compare modal, say - still needs its data. */
+       `nodes`, but anything describing it - the compare window, say - still needs its data. */
     const serverNodesById = useMemo(
         () => Object.fromEntries(serverGraph.nodes.map((node) => [node.id, node])),
         [serverGraph]
@@ -524,7 +516,7 @@ export function PGraphProvider({children}) {
         /* Only a host that is drawn gets its sub-nodes - one folded into a run keeps its records for when it is
            expanded - and hidden ones reserve no room either, so hiding them lets the tree close up. */
         const supported = supportNodes.filter((record) => visible.has(record.hostId) && isSupportShown(record));
-        const {treeNodes, treeEdges, supportPlacement} = layoutWithSupport(folded, supported);
+        const {treeNodes, treeEdges, supportPlacement} = layoutWithSupport(folded, supported, candidateSizes);
 
         // The tree first, since React Flow needs every host ahead of the sub-nodes it parents
         const drawnNodes = [...treeNodes, ...supportPlacement.nodes];
@@ -542,17 +534,73 @@ export function PGraphProvider({children}) {
         if (!firstDraw && focusIds.length > 0) {
             setFocus((current) => ({ids: focusIds, key: current.key + 1}));
         }
-    }, [serverGraph, liveRuns, supportNodes, isSupportShown, setNodes, setEdges]);
+    }, [serverGraph, liveRuns, supportNodes, isSupportShown, candidateSizes, setNodes, setEdges]);
 
-    // The edges making up the selected branch, keyed "source->target", for highlighting in the graph
-    const selectedBranchEdges = useMemo(() => {
-        const path = branchTrajectory?.nodes ?? [];
-        const keys = new Set();
-        for (let step = 0; step < path.length - 1; step++) {
-            keys.add(`${path[step]}->${path[step + 1]}`);
+    /* A sparkline sub-node's source being picked: {recordId, hostId}, or null. While it is set the graph lights up
+       the edges above the host, and clicking one fetches the branch from there down to the host and keeps it on
+       the sparkline. A pick whose sparkline has since been removed is no pick at all. */
+    const [sparklinePickRequest, setSparklinePickRequest] = useState(null);
+    const [sparklinePickError, setSparklinePickError] = useState(null);
+    const sparklinePickRecord = supportNodes.find((record) => record.id === sparklinePickRequest?.recordId);
+    let sparklinePick = null;
+    if (sparklinePickRecord) {
+        sparklinePick = sparklinePickRequest;
+    }
+
+    const startSparklinePick = useCallback((recordId, hostId) => {
+        setSparklinePickError(null);
+        setSparklinePickRequest({recordId, hostId});
+        // The edges are picked in the graph, so it opens if it is closed
+        openView("graph");
+    }, [openView]);
+
+    const cancelSparklinePick = useCallback(() => {
+        setSparklinePickError(null);
+        setSparklinePickRequest(null);
+    }, []);
+
+    // The edges a sparkline's source may be picked from: those above its host, as drawn
+    const pickableEdges = useMemo(() => {
+        if (!sparklinePick) return [];
+        return edgesAbove(sparklinePick.hostId, nodes, treeEdgesOf(edges));
+    }, [sparklinePick, nodes, edges]);
+    const pickableEdgeKeys = useMemo(() => new Set(pickableEdges.map(edgeKeyOf)), [pickableEdges]);
+    const isPickableEdge = useCallback((edge) => pickableEdgeKeys.has(edgeKeyOf(edge)), [pickableEdgeKeys]);
+
+    /* Keeps the branch from this edge down to the host on the sparkline being picked for. The branch is the
+       server's, read from the metrics each node already carries. */
+    const pickSparklineSource = useCallback(async (edge) => {
+        if (!sparklinePick || !sparklinePickRecord) return;
+        const {recordId, hostId} = sparklinePick;
+        const {source, target} = realEnds(edge, nodes);
+
+        const result = await getBranchTrajectory(source, target, hostId);
+        if (!result?.success) {
+            setSparklinePickError(result?.error || "Could not measure that branch.");
+            return;
         }
-        return keys;
-    }, [branchTrajectory]);
+
+        const dimension = sparklinePickRecord.config?.dimension;
+        const series = seriesOf(result, dimension);
+        updateSupportNode(recordId, (record) => ({
+            config: {
+                ...record.config,
+                branch: {source, target, destination: hostId},
+                nodes: result.nodes,
+                values: series?.values ?? [],
+                deltas: series?.deltas ?? [],
+            },
+        }));
+        cancelSparklinePick();
+    }, [sparklinePick, sparklinePickRecord, nodes, updateSupportNode, cancelSparklinePick]);
+
+    /* An error plot is only wrangled on while its node is the current one - a selection and a repair are always of
+       the current node - so landing anywhere else puts it back. */
+    const wranglingRecord = supportNodes.find((record) => record.id === wranglingSupportId);
+    const wranglingHost = wranglingRecord?.hostId ?? null;
+    useEffect(() => {
+        if (wranglingHost && wranglingHost !== tableName) endWrangling();
+    }, [wranglingHost, tableName, endWrangling]);
 
     /* Take a graph the server sent. Every node's label - n2b, or a candidate's c7 - is registered before the
        graph is, so anything that names a node by nodeName reads the new labels on the render that follows. */
@@ -601,16 +649,13 @@ export function PGraphProvider({children}) {
     );
 
     /* Makes a node the current one: the server's session moves to its table and every view is pulled again.
-       Double-clicking a node does this, and so does a sub-node's "Open in Plot Wrangler". */
+       Double-clicking a node does this, and so does Repair on an error-plot sub-node. */
     const navigateToNode = useCallback(
         async (nodeId) => {
             await setGraphToClickedNode(nodeId);
             setTableName(nodeId);
             /* Navigating picks a new current node, so the comparison falls back to that node's own
-               parent rather than keeping a selection A chosen for somewhere else in the graph. The
-               branch goes with it: React Flow fires onNodeClick on the first click of a double
-               click, so without this, double-clicking a node while choosing where a branch ends
-               would both end the branch there and navigate away from it. */
+               parent rather than keeping a selection A chosen for somewhere else in the graph. */
             clearAllSelections();
             clearScatterPlotCache();
             clearHistogramCache();
@@ -629,35 +674,25 @@ export function PGraphProvider({children}) {
         }, [navigateToNode]
     )
 
-    /* Shift-click re-targets selection A. A plain click ends a branch that is mid-selection,
-       and otherwise does nothing so it does not compete with double-click navigation. Cmd/Ctrl-click
-       stays free for React Flow's multi-select. */
+    /* Shift-click re-targets selection A. A plain click does nothing, so it does not compete with
+       double-click navigation. Cmd/Ctrl-click stays free for React Flow's multi-select. */
     const onNodeClick = useCallback(
         (event, node) => {
-            if (!event.shiftKey) {
-                if (selectionStage === "destination" && eligibleDestinations.has(node.id)) {
-                    event.stopPropagation();
-                    pickBranchDestination(node.id);
-                }
-                return;
-            }
+            if (!event.shiftKey) return;
             event.stopPropagation();
             // A supporting sub-node cannot be selection A; a candidate can, to compare it before accepting it
             if (isSupportId(node.id)) return;
             setSelectionAId(current => (current === node.id ? null : node.id));
-        }, [selectionStage, eligibleDestinations, pickBranchDestination]
+        }, []
     )
 
-    /* Clicking an edge starts a branch there. Allowed at any stage so the branch can be re-aimed
-       without resetting first. */
+    // Clicking an edge picks it as a sparkline's source, while one is being picked and the edge is above its host
     const onEdgeClick = useCallback(
         (event, edge) => {
             event.stopPropagation();
-            // A link out to a sub-node is not a wrangle, so no branch runs along it
-            if (isSupportId(edge.target)) return;
-            pickBranchEdge(edge.source, edge.target);
-            revealTab("quality");
-        }, [pickBranchEdge, revealTab]
+            if (!isPickableEdge(edge)) return;
+            pickSparklineSource(edge);
+        }, [isPickableEdge, pickSparklineSource]
     )
 
     return (
@@ -669,17 +704,16 @@ export function PGraphProvider({children}) {
             onNodeDoubleClick, onNodeClick, onEdgeClick,
             comparisonPair, serverNodesById,
             pareto: serverGraph.pareto,
-            branchSelection, selectionStage, eligibleDestinations, selectedBranchEdges,
             // Staged wrangles, as nodes of the graph - see CandidatesContext for accepting and declining them
-            candidates, isCandidate, currentIsCandidate,
-            // supportNodes, add/update/removeSupportNode, supportModalHost, open/closeSupportModal
+            candidates, isCandidate, currentIsCandidate, setCandidateSize,
+            // supportNodes, add/update/removeSupportNode, supportWindowHost, open/closeSupportWindow, ...
             ...support,
-            startBranchSelection, resetBranchSelection,
+            sparklinePick, sparklinePickError, startSparklinePick, cancelSparklinePick, isPickableEdge,
+            pickableEdgeCount: pickableEdges.length,
             clearAllSelections, hasAnySelection,
-            collapsedRuns, collapseNodes, expandRun, expandAllRuns, selectRunBranch,
+            collapsedRuns, collapseNodes, expandRun, expandAllRuns,
             graphMode, setGraphMode, analysisStyle, setAnalysisStyle, analysisMetric, setAnalysisMetric,
             collapseError, setCollapseError,
-            branchTrajectory, branchTrajectoryLoading,
             refreshGraph,
             focus, takeFocus,
         }}>

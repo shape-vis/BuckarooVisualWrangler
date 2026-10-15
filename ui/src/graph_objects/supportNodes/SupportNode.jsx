@@ -2,7 +2,7 @@ import {useState} from "react";
 import {Handle, NodeResizer, Position} from "@xyflow/react";
 import {usePgraph} from "../../store/PGraphContext.jsx";
 import {anchorOf, getSupportType, recordSizeOf} from "./registry.js";
-import {useSupportOpenContext} from "./supportOpen.js";
+import {useSupportActionContext} from "./supportActions.js";
 import {EDGE_GAP} from "./supportLayout.js";
 import "../../styles/SupportNode.css";
 
@@ -10,42 +10,56 @@ import "../../styles/SupportNode.css";
 const MIN_RESIZED = {width: 180, height: 120};
 
 /**
- * The one React Flow node type behind every supporting sub-node. The frame - its name, the way to remove
- * it, the link to its host - is the same for all of them; what it draws inside is its kind's Body, handed
- * the host node so it can show anything about it. A kind that holds a plot also gets an Open in the header,
- * which takes it to the Plots view - see supportOpen.js.
+ * The one React Flow node type behind every supporting sub-node. The frame - its name, the ways to minimise and
+ * remove it, the link to its host - is the same for all of them; what it draws inside is its kind's Body, handed
+ * the host node so it can show anything about it, and the size it is drawn at. A kind with an action gets its
+ * button in the header: Repair on an error plot, Open on a plot the compare window can show - see
+ * supportActions.js.
+ *
+ * Minimising hides it and leaves its badge on the host (SupportBadges), which brings it back.
  *
  * A side sub-node faces its host: one on the left links in on its right side, and the reverse. An edge
  * sub-node has no link to draw - React Flow cannot join a node to an edge - so it carries a short stub of
  * its own, pointing back across the gap at the edge's label.
  */
 export function SupportNode({data, width, height}) {
-    const {removeSupportNode, updateSupportNode, serverNodesById} = usePgraph();
+    const {removeSupportNode, updateSupportNode, minimizeSupportNode, serverNodesById, wranglingSupportId} = usePgraph();
     const {record} = data;
     const type = getSupportType(record.kind);
     const Body = type?.Body;
-    /* React Flow hands over the width and height a resize in progress has reached; otherwise it is the size the
-       record says. Once the drag ends the record keeps it, and the layout makes room for it.
-       Until it has measured a node, React Flow hands over 0 for both, not undefined - and a node drawn 0 by 0
-       is never measured, so it would stay hidden for good. Every redraw starts unmeasured (a wrangle redraws
-       them all), so 0 has to fall back to the record's size like a missing value does. */
-    const recorded = recordSizeOf(record);
-    const size = {width: width || recorded.width, height: height || recorded.height};
+    /* Drawn at the size the record says. While the user drags its corner, React Flow hands over the width and
+       height the drag has reached, and it follows them; once the drag ends the record keeps that size, and the
+       layout makes room for it.
+       Only during a drag: otherwise React Flow hands over the size it last measured - 0 before it has measured at
+       all - and drawing at that would pin the node to it, so a size the record is given in code (an error plot
+       growing to be wrangled on) would never show. */
+    const [resizing, setResizing] = useState(false);
+    let size = recordSizeOf(record);
+    if (resizing && width && height) {
+        size = {width, height};
+    }
     const resizable = type?.resizable?.(record) ?? false;
     const onEdge = anchorOf(record) === "edge";
     const host = serverNodesById[record.hostId];
 
-    // Open, for a kind that holds a plot - async, since an error plot may first make its node the current one
-    const openContext = useSupportOpenContext();
-    const canOpen = Boolean(type?.open) && (type.canOpen?.({record, host}) ?? true);
-    const [opening, setOpening] = useState(false);
-    const open = async (event) => {
+    /* The kind's action - async, since a repair may first make its node the current one. An error plot being
+       wrangled on has its own Done instead. */
+    const actionContext = useSupportActionContext();
+    const action = type?.action;
+    const wrangling = wranglingSupportId === record.id;
+    const showAction = Boolean(action) && !wrangling;
+    let blocked = null;
+    if (showAction) {
+        blocked = action.blockedReason?.(record, actionContext) ?? null;
+    }
+    const [running, setRunning] = useState(false);
+    const runAction = async (event) => {
         event.stopPropagation();
-        setOpening(true);
+        setRunning(true);
         try {
-            await type.open(record, openContext);
+            await action.run(record, actionContext);
         } finally {
-            setOpening(false);
+            setRunning(false);
         }
     };
 
@@ -66,9 +80,13 @@ export function SupportNode({data, width, height}) {
                     minHeight={MIN_RESIZED.height}
                     lineClassName="support-resize-line"
                     handleClassName="support-resize-handle"
-                    onResizeEnd={(event, params) => updateSupportNode(record.id, {
-                        size: {width: Math.round(params.width), height: Math.round(params.height)},
-                    })}
+                    onResizeStart={() => setResizing(true)}
+                    onResizeEnd={(event, params) => {
+                        setResizing(false);
+                        updateSupportNode(record.id, {
+                            size: {width: Math.round(params.width), height: Math.round(params.height)},
+                        });
+                    }}
                 />
             )}
             {/* Points back across the gap at the edge: from the left side of a sub-node right of its edge, and
@@ -91,17 +109,24 @@ export function SupportNode({data, width, height}) {
                 )}
                 <div className="support-node-header">
                     <span className="support-node-title">{type?.label ?? record.kind}</span>
-                    {canOpen && (
+                    {showAction && (
                         <button
                             type="button"
                             className="support-node-open"
-                            title={type.openTitle ?? "Open in the Plots view"}
-                            onClick={open}
-                            disabled={opening}
+                            title={blocked ?? action.title}
+                            onClick={runAction}
+                            disabled={running || Boolean(blocked)}
                         >
-                            {opening ? "Opening…" : "Open ↗"}
+                            {running ? action.busyLabel : action.label}
                         </button>
                     )}
+                    <button
+                        type="button"
+                        className={`support-node-minimize ${showAction ? "" : "support-node-minimize--first"}`}
+                        title="Minimise to a badge on its node"
+                        aria-label="Minimise this sub-node"
+                        onClick={(event) => { stop(event); minimizeSupportNode(record.id); }}
+                    >–</button>
                     <button
                         type="button"
                         className="support-node-remove"
@@ -110,7 +135,7 @@ export function SupportNode({data, width, height}) {
                         onClick={(event) => { stop(event); removeSupportNode(record.id); }}
                     >×</button>
                 </div>
-                {Body && <Body record={record} host={host} />}
+                {Body && <Body record={record} host={host} size={size} />}
             </div>
         </div>
     );

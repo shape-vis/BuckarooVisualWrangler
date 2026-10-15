@@ -40,10 +40,23 @@ function supportGroupId(hostId) {
    only changes the length of a link. */
 const HOST_CARD = {width: 170, height: 80};
 
-/* How tall each host's card draws, by id. Most are HOST_CARD's height; a staged candidate carries its preview
-   chart, and says how tall it is in its footprint, which dagre already reserved for it. */
-const heightsOf = (nodes) => new Map(nodes.map((node) => [node.id, node.data?.footprint?.height ?? HOST_CARD.height]));
-const cardHeight = (heights, hostId) => heights?.get(hostId) ?? HOST_CARD.height;
+/* How large each host's card draws, by id. Most are HOST_CARD; a staged candidate carries its preview chart, and
+   says how large it is in its footprint - as large as the user resized it, if they did - which dagre already
+   reserved for it. */
+function cardSizesOf(nodes) {
+    const sizes = new Map();
+    for (const node of nodes) {
+        const footprint = node.data?.footprint;
+        sizes.set(node.id, {
+            width: footprint?.width ?? HOST_CARD.width,
+            height: footprint?.height ?? HOST_CARD.height,
+        });
+    }
+    return sizes;
+}
+
+const cardHeight = (sizes, hostId) => sizes?.get(hostId)?.height ?? HOST_CARD.height;
+const cardWidth = (sizes, hostId) => sizes?.get(hostId)?.width ?? HOST_CARD.width;
 
 const sizeOf = recordSizeOf;
 const onSide = (records) => records.filter((record) => anchorOf(record) === "side");
@@ -146,22 +159,26 @@ const linkTo = (record, source, sourceHandle) => ({
  * Each side's sub-nodes stack top to bottom in the order they were added, centred on the host card's
  * middle, and sit against the card - a narrower one on the left is pushed right to meet it.
  */
-function placeSideNodes(records, branch, heights) {
+function placeSideNodes(records, branch, cards) {
     const nodes = [];
     const edges = [];
 
     bySide(records, branch).forEach((sides, hostId) => {
         ["left", "right"].forEach((side) => {
             const stack = sides[side];
-            let y = cardHeight(heights, hostId) / 2 - stackHeight(stack) / 2;
+            let y = cardHeight(cards, hostId) / 2 - stackHeight(stack) / 2;
 
             stack.forEach((record) => {
                 const size = sizeOf(record);
+                let x = cardWidth(cards, hostId) + SIDE_GAP;
+                if (side === "left") {
+                    x = -SIDE_GAP - size.width;
+                }
                 nodes.push({
                     id: record.id,
                     type: "supportNode",
                     parentId: hostId,
-                    position: {x: side === "left" ? -SIDE_GAP - size.width : HOST_CARD.width + SIDE_GAP, y},
+                    position: {x, y},
                     // A sub-node goes where its host does; dragging it alone would only detach it visually
                     draggable: false,
                     selectable: false,
@@ -178,15 +195,15 @@ function placeSideNodes(records, branch, heights) {
 
 /* How far a host's group reaches above and below its card: a stack of side sub-nodes is centred on the card,
    so a tall one stands out past both its edges */
-function verticalReach(hostId, stacks, heights) {
+function verticalReach(hostId, stacks, cards) {
     const stack = stacks.get(hostId)?.height ?? 0;
-    const height = cardHeight(heights, hostId);
+    const height = cardHeight(cards, hostId);
     const over = Math.max(0, stack / 2 - height / 2);
     return {top: -over, bottom: height + over};
 }
 
 // Where an edge sub-node goes, in the graph's own coordinates, or null when its edge is not drawn
-function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, heights) {
+function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, cards) {
     const edge = incomingEdge(drawnEdges, record.hostId);
     const from = edge && positions.get(edge.source);
     const to = positions.get(record.hostId);
@@ -197,10 +214,12 @@ function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, hei
     /* Across, it sits by the drawn edge's middle. Down, it sits midway through the gap dagre left between the
        two groups - from the bottom of everything around the parent to the top of everything around the host -
        rather than between the bare cards, or a tall stack of side sub-nodes would reach up into it. */
+    const fromMiddle = from.x + cardWidth(cards, edge.source) / 2;
+    const toMiddle = to.x + cardWidth(cards, record.hostId) / 2;
     const middle = {
-        x: (from.x + to.x) / 2 + HOST_CARD.width / 2,
-        y: (from.y + verticalReach(edge.source, stacks, heights).bottom
-            + to.y + verticalReach(record.hostId, stacks, heights).top) / 2,
+        x: (fromMiddle + toMiddle) / 2,
+        y: (from.y + verticalReach(edge.source, stacks, cards).bottom
+            + to.y + verticalReach(record.hostId, stacks, cards).top) / 2,
     };
     const clear = labelWidthOf(edge) / 2 + EDGE_GAP;
     return {
@@ -220,10 +239,10 @@ function edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, hei
  * label's end on its side. The source is whatever the edge is drawn from: a parent folded into a run is the run.
  * There is no link; a short stub on the sub-node itself points back at the label.
  */
-function placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides, heights) {
+function placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides, cards) {
     const stacks = sideReserve(records, sides);
     return onEdge(records)
-        .map((record) => edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, heights))
+        .map((record) => edgeBox(record, positions, drawnEdges, labelWidthOf, sides, stacks, cards))
         .filter(Boolean)
         .map(({record, side, to, x, y}) => ({
             id: record.id,
@@ -250,11 +269,11 @@ const overlaps = (a, b) => a.x0 < b.x1 + GROUP_GAP && b.x0 < a.x1 + GROUP_GAP &&
 /* Each host's group as the graph would draw it from these positions: the box its boundary encloses, in the
    graph's own coordinates, and whether the box's left edge is its edge sub-node - which moves only half as far
    as its host does, since it sits halfway along the edge. */
-function groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights) {
-    const placed = [...placeSideNodes(records, sides, heights).nodes,
-        ...placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides, heights)];
+function groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, cards) {
+    const placed = [...placeSideNodes(records, sides, cards).nodes,
+        ...placeEdgeNodes(records, positions, drawnEdges, labelWidthOf, sides, cards)];
     const boxes = new Map();
-    groupBoundaries(placed, positions, heights).forEach((group) => {
+    groupBoundaries(placed, positions, cards).forEach((group) => {
         const {hostId, width, height} = group.data;
         const edgeNode = placed.find((node) => node.parentId === hostId && anchorOf(node.data.record) === "edge");
 
@@ -294,7 +313,7 @@ function groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights
 export function spreadSupportGroups(records, layoutNodes, drawnEdges, labelWidthOf, sides) {
     let nodes = layoutNodes;
     if (new Set(records.map((record) => record.hostId)).size < 2) return nodes;
-    const heights = heightsOf(layoutNodes);
+    const cards = cardSizesOf(layoutNodes);
 
     const childrenOf = new Map();
     drawnEdges.forEach((edge) => {
@@ -319,7 +338,7 @@ export function spreadSupportGroups(records, layoutNodes, drawnEdges, labelWidth
 
     for (let pass = 0; pass < MAX_SPREAD_PASSES; pass += 1) {
         const positions = new Map(nodes.map((node) => [node.id, node.position]));
-        const boxes = groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, heights);
+        const boxes = groupBoxes(records, positions, drawnEdges, labelWidthOf, sides, cards);
         boxes.sort((a, b) => a.x0 - b.x0);
 
         // The first crowded pair whose right-hand group hangs from the right-hand host, which is the one that can
@@ -367,12 +386,12 @@ export function spreadSupportGroups(records, layoutNodes, drawnEdges, labelWidth
  */
 export function placeSupportNodes(records, layoutNodes, layoutEdges, labelWidthOf, sides = new Map()) {
     const positions = new Map(layoutNodes.map((node) => [node.id, node.position]));
-    const heights = heightsOf(layoutNodes);
-    const side = placeSideNodes(records, sides, heights);
-    const nodes = [...side.nodes, ...placeEdgeNodes(records, positions, layoutEdges, labelWidthOf, sides, heights)];
+    const cards = cardSizesOf(layoutNodes);
+    const side = placeSideNodes(records, sides, cards);
+    const nodes = [...side.nodes, ...placeEdgeNodes(records, positions, layoutEdges, labelWidthOf, sides, cards)];
     return {
         // Each host's boundary first, so it is drawn beneath what it encloses
-        nodes: [...groupBoundaries(nodes, positions, heights), ...nodes],
+        nodes: [...groupBoundaries(nodes, positions, cards), ...nodes],
         edges: side.edges,
     };
 }
@@ -387,12 +406,14 @@ export function placeSupportNodes(records, layoutNodes, layoutEdges, labelWidthO
  * coordinates, beneath every node and edge, and carries its offset from the host so the graph view can keep it
  * on the host when the host is dragged (see PGraph's styledNodes).
  */
-function groupBoundaries(subNodes, positions, heights) {
+function groupBoundaries(subNodes, positions, cards) {
     const boxes = new Map();
     subNodes.forEach((node) => {
         const size = sizeOf(node.data.record);
         const hostId = node.parentId;
-        if (!boxes.has(hostId)) boxes.set(hostId, {x0: 0, y0: 0, x1: HOST_CARD.width, y1: cardHeight(heights, hostId)});
+        if (!boxes.has(hostId)) {
+            boxes.set(hostId, {x0: 0, y0: 0, x1: cardWidth(cards, hostId), y1: cardHeight(cards, hostId)});
+        }
         const box = boxes.get(hostId);
         box.x0 = Math.min(box.x0, node.position.x);
         box.y0 = Math.min(box.y0, node.position.y);
@@ -421,32 +442,3 @@ function groupBoundaries(subNodes, positions, heights) {
 
 // The edges the tree is made of: everything but the links out to sub-nodes
 export const treeEdgesOf = (edges) => edges.filter((edge) => !isSupportId(edge.target));
-
-/**
- * Where a sub-node dragged in from outside the graph can be dropped on a host: over the host's group when it has
- * one, else over a group of the default size it will have once the sub-node is placed - the card, and the new
- * sub-node beside it on the right, where a host's first side sub-node goes. In the graph's own coordinates.
- *
- * @param hostId  the node it may be dropped on
- * @param nodes   the graph's nodes as drawn, groups placed on their hosts
- * @param newSize the dropped kind's size
- * @returns {{position, width, height}} or null when the host is not drawn
- */
-export function dropZoneBox(hostId, nodes, newSize) {
-    const group = nodes.find((node) => node.id === supportGroupId(hostId));
-    if (group && !group.hidden) return {position: group.position, width: group.data.width, height: group.data.height};
-
-    const host = nodes.find((node) => node.id === hostId);
-    if (!host || host.hidden) return null;
-    const height = cardHeight(heightsOf([host]), hostId);
-    const middle = host.position.y + height / 2;
-    const x0 = host.position.x;
-    const x1 = host.position.x + HOST_CARD.width + SIDE_GAP + newSize.width;
-    const y0 = Math.min(host.position.y, middle - newSize.height / 2);
-    const y1 = Math.max(host.position.y + height, middle + newSize.height / 2);
-    return {
-        position: {x: x0 - GROUP_PADDING, y: y0 - GROUP_PADDING},
-        width: x1 - x0 + 2 * GROUP_PADDING,
-        height: y1 - y0 + 2 * GROUP_PADDING,
-    };
-}

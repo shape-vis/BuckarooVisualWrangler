@@ -8,6 +8,8 @@ import { useLoading } from "../store/LoadingContext.jsx";
 import { CANDIDATE_LOCKED, useRepair } from "../store/RepairContext.jsx";
 import { usePgraph } from "../store/PGraphContext.jsx";
 import { useCompare } from "../store/CompareContext.jsx";
+import { useAISuggestions } from "../store/AISuggestionsContext.jsx";
+import { aiAvailability } from "../store/aiAvailability.js";
 import { baseName, nodeName } from "../utils/comparison.js";
 import "../styles/Header.css"
 
@@ -50,14 +52,29 @@ export default function Header( { onReset = () => {} } ) {
 }
 
 export function BuckarooHeader( { onReset = () => {} } ) {
-    const { openViews, toggleView } = useContext(ViewContext);
+    const { openViews, toggleView, openView } = useContext(ViewContext);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const { busy, hasSelection, handleUndo, handleRedo, triggerRepairSelection, repairLocked } = useRepair();
+    const { tableName } = useTableName();
 
     /* The two nodes paired in the graph, if any. The pair is copied when the comparison opens, so it keeps
        comparing what was clicked even if the graph's selection moves on underneath it. */
-    const { comparisonPair } = usePgraph();
+    const { comparisonPair, openSupportWindow, currentIsCandidate, graphMode } = usePgraph();
     const { openCompare } = useCompare();
+
+    /* The AI's repairs for the current node, as its own AI button asks for them - and refused for the same
+       reasons. They are staged as candidates in the graph, so asking opens the graph if it is closed. */
+    const ai = useAISuggestions();
+    const aiState = aiAvailability({
+        configured: ai?.configured,
+        locked: currentIsCandidate,
+        analysing: graphMode === "analysis",
+        busy: ai?.busy,
+    });
+    const askAI = () => {
+        openView("graph");
+        ai?.requestSuggestions(tableName);
+    };
 
     const handleBack = async () => {
         await resetApp();
@@ -97,6 +114,24 @@ export function BuckarooHeader( { onReset = () => {} } ) {
                 </NavButton>
             </div>
             <div className="headerActions">
+                {/* Always here: opens the support-nodes window on the current node */}
+                <button
+                    className="header-action-btn"
+                    onClick={() => openSupportWindow(tableName)}
+                    title={`Add supporting nodes to ${nodeName(tableName)}`}
+                >
+                    <img src="/images/icons/support.svg" alt="" className="btn-svg-icon" />
+                    Add Support Nodes
+                </button>
+                <button
+                    className="header-action-btn"
+                    onClick={askAI}
+                    disabled={aiState.blocked}
+                    title={aiState.detail}
+                >
+                    <img src="/images/icons/sparkle.svg" alt="" className="btn-svg-icon" />
+                    AI Wrangle
+                </button>
                 <button
                     className="header-action-btn"
                     onClick={triggerRepairSelection}

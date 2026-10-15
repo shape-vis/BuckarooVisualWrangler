@@ -3,7 +3,6 @@ import { createContext, useState, useCallback } from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
 import PlotsPane from "../panels/PlotsPane.jsx";
-import RightDock from "../panels/RightDock.jsx";
 import { SelectionProvider } from "../store/SelectionContext.jsx";
 import { RowRangeProvider } from "../store/RowRangeContext.jsx";
 import { SettingsProvider } from "../store/SettingsContext.jsx";
@@ -16,8 +15,9 @@ import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
 import {AISuggestionsProvider} from "../store/AISuggestionsContext.jsx";
 import {CandidatesProvider} from "../store/CandidatesContext.jsx";
-import {DockProvider} from "../store/DockContext.jsx";
+import {PlotsWindowsProvider} from "../store/PlotsWindowsContext.jsx";
 import {CompareProvider} from "../store/CompareContext.jsx";
+import SupportNodesWindow from "../elements/SupportNodesWindow.jsx";
 import SplitDivider, {DEFAULT_SPLIT} from "../elements/SplitDivider.jsx";
 
 export const ViewContext = createContext();
@@ -108,8 +108,9 @@ export default function Buckaroo({ onReset }) {
     return (
         <ViewContext.Provider value={viewContext}>
             <SettingsProvider>
-            {/* Above PGraph and Repair: both ask the dock to show their tab */}
-            <DockProvider>
+            {/* The Plots view's windows - the attribute plots, compare and support nodes - as tabs. Above PGraph,
+                whose support-node buttons open the support-nodes window. */}
+            <PlotsWindowsProvider revealPlots={revealPlots}>
             <PGraphProvider>
             {/* Inside PGraphProvider: the server stages the AI's suggestions as candidates, which arrive with
                 the graph; this owns asking for them. Accepting is CandidatesProvider's, below. */}
@@ -121,8 +122,10 @@ export default function Buckaroo({ onReset }) {
             <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
             {/* Outside the keyed container below, so an open comparison survives a wrangle. It docks
                 into the Plots view, and opens that view to do so. */}
-            <CompareProvider revealPlots={revealPlots}>
+            <CompareProvider>
                 <BuckarooHeader onReset={onReset} />
+                {/* Outside the keyed container too, for the same reason */}
+                <SupportNodesWindow />
                 <div key={refreshKey} className="matrix-and-dropdown-container">
                     <AttributeSummaryPanel
                         selectedAttributes={selectedAttributes}
@@ -150,9 +153,6 @@ export default function Buckaroo({ onReset }) {
                             {openViews.length > 1 && <SplitDivider split={split} onSplit={setSplit} />}
 
                             {openViews.includes("graph") && <PGraph />}
-
-                            {/*Repair and node details, as tabs in one resizable dock*/}
-                            <RightDock />
                         </div>
                         <div className={`table-panel-wrapper ${openViews.includes("plots") ? "table-panel-wrapper--visible" : ""}`}>
                             <TablePanel
@@ -170,7 +170,7 @@ export default function Buckaroo({ onReset }) {
             </RowRangeProvider>
             </AISuggestionsProvider>
             </PGraphProvider>
-            </DockProvider>
+            </PlotsWindowsProvider>
             </SettingsProvider>
         </ViewContext.Provider>
     );

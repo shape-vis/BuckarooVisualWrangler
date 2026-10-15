@@ -166,12 +166,10 @@ const SINGLE_ROLES = ["b"];
  *  - onHide: called with a category when its bar is selected and Delete pressed
  *  - zoom: {key, range} - how far a drift plot is zoomed, and the driftZoomKey it was zoomed for
  *  - onZoom: called with the next {key, range}, or with an updater taking the last
- *  - compact: just the plot, without the zoom strip, the note or the legend - for a preview too small for them
  *
  * A result with single set is about one node, carried as both sides; only selection B's side is drawn.
  */
-export default function ComparisonPlot({data, view, measure, labelA, labelB, hidden = [], onHide, zoom, onZoom,
-                                           compact = false}) {
+export default function ComparisonPlot({data, view, measure, labelA, labelB, hidden = [], onHide, zoom, onZoom}) {
     const roles = data?.single ? SINGLE_ROLES : BOTH_ROLES;
     const hostWindow = useHostWindow();
     const canvasRef = useRef(null);
@@ -307,7 +305,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         <div ref={tooltipRef} className="compare-tooltip"/>
                         {tooSmall && <div className="compare-plot-small">Make this larger to see the plot</div>}
                     </div>
-                    {!compact && view === "flows" && flowsWorld && !stale && size.height >= MIN_CANVAS && (
+                    {view === "flows" && flowsWorld && !stale && size.height >= MIN_CANVAS && (
                         // Keyed like the ridgeline's strip, so a new pair starts unzoomed rather than where the last was
                         <SankeyMinimap
                             key={zoomKey}
@@ -318,7 +316,7 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                         />
                     )}
                 </div>
-                {!compact && view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && stripFits && (
+                {view === "ridgeline" && overview && !stale && size.width >= MIN_CANVAS && stripFits && (
                     // Keyed on the column and nodes, so a new pair starts with a fresh brush rather than the last box
                     <RidgelineBrush
                         key={zoomKey}
@@ -332,12 +330,12 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                     />
                 )}
             </div>
-            {!compact && data?.kind === "drift" && (
+            {data?.kind === "drift" && (
                 <div className="compare-note" aria-live="polite">
                     <CompareNote selected={selected} note={note} roles={roles} view={view}/>
                 </div>
             )}
-            {!compact && data && (
+            {data && (
                 <div className="compare-legend">
                     {legendItems(data.kind, view, measure, {a: labelA, b: labelB, base: labelBase}, roles).map((item) => (
                         <span key={item.label} className="compare-legend-item">

@@ -1,8 +1,9 @@
 // ComparePanel.jsx
 // Opened from the header's Compare button while two nodes are paired in the graph: a shift-clicked
 // selection A and the current node as selection B. Plot options down the left, the plot itself on the right.
-// Shown docked as the Plots view's Compare tab or popped out into a window of its own - CompareContext
-// decides where, and this never needs to know beyond which window it is in (useHostWindow).
+// One of the Plots view's windows (PlotsWindow): docked as its Compare tab or popped out into a window of its
+// own - useDockableWindow decides where, and this never needs to know beyond which window it is in
+// (useHostWindow).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePgraph } from "../store/PGraphContext.jsx";
@@ -16,6 +17,7 @@ import { useComparisonData } from "../visualizations/useComparisonData.js";
 import { formatDrift } from "../utils/drift.js";
 import ComparisonPlot from "../visualizations/ComparisonPlot.jsx";
 import { columnKindOf, withCategoryHidden } from "../graph_objects/supportNodes/compareView.js";
+import PlotsWindow from "./PlotsWindow.jsx";
 import "../styles/ComparePanel.css";
 
 // How the compare panel's ranked attributes are ordered: by the larger of the two nodes' drift, or by how far the
@@ -569,64 +571,64 @@ export default function ComparePanel({
     const rowsA = metricsA?.row_count;
     const rowsB = metricsB?.row_count;
 
-    return (
-        <div className="compare-panel" role="region" aria-labelledby="compare-title">
-            <header className="compare-header">
-                <div className="compare-heading">
-                    <h2 id="compare-title" className="compare-title">{single ? "Node plots" : "Compare nodes"}</h2>
-                    <div className="compare-subtitle">
-                        {!single && (
-                            <>
-                                <NodeSummary
-                                    role="a"
-                                    table={tableA}
-                                    data={dataA}
-                                    parentData={serverNodesById?.[dataA?.parent]?.data}
-                                    foldedCount={foldedCount(tableA)}
-                                />
-                                <span className="compare-subtitle-arrow" aria-hidden="true">→</span>
-                            </>
-                        )}
-                        <NodeSummary
-                            role="b"
-                            table={tableB}
-                            data={dataB}
-                            parentData={serverNodesById?.[dataB?.parent]?.data}
-                            foldedCount={foldedCount(tableB)}
-                        />
-                    </div>
-                </div>
-                <div className="compare-actions">
-                    {/* Once kept on its nodes it follows along by itself, so there is nothing more to save */}
-                    {savedTo && (
-                        <span className="compare-saved" title="Changes here carry over to the compare sub-nodes it is kept on">
-                            Kept on {savedTo.map(nodeName).join(", ")}
-                        </span>
-                    )}
-                    {!savedTo && onSave && (
-                        <button
-                            type="button"
-                            className="compare-action"
-                            onClick={() => onSave(currentSpec)}
-                            disabled={!x}
-                            title="Keep this comparison beside both nodes in the graph, as compare sub-nodes"
-                        >
-                            Save
-                        </button>
-                    )}
-                    {placement === "window" ? (
-                        <button type="button" className="compare-action" onClick={onDock} title="Put the comparison back in the Plots view">
-                            Dock
-                        </button>
-                    ) : (
-                        <button type="button" className="compare-action" onClick={onPopOut} title="Open the comparison in a window of its own">
-                            Pop out
-                        </button>
-                    )}
-                    <button type="button" className="compare-close" onClick={onClose} aria-label="Close comparison">×</button>
-                </div>
-            </header>
+    const subtitle = (
+        <>
+            {!single && (
+                <>
+                    <NodeSummary
+                        role="a"
+                        table={tableA}
+                        data={dataA}
+                        parentData={serverNodesById?.[dataA?.parent]?.data}
+                        foldedCount={foldedCount(tableA)}
+                    />
+                    <span className="compare-subtitle-arrow" aria-hidden="true">→</span>
+                </>
+            )}
+            <NodeSummary
+                role="b"
+                table={tableB}
+                data={dataB}
+                parentData={serverNodesById?.[dataB?.parent]?.data}
+                foldedCount={foldedCount(tableB)}
+            />
+        </>
+    );
 
+    // Once kept on its nodes it follows along by itself, so there is nothing more to save
+    let saveAction = null;
+    if (savedTo) {
+        saveAction = (
+            <span className="compare-saved" title="Changes here carry over to the compare sub-nodes it is kept on">
+                Kept on {savedTo.map(nodeName).join(", ")}
+            </span>
+        );
+    } else if (onSave) {
+        saveAction = (
+            <button
+                type="button"
+                className="plots-window-action"
+                onClick={() => onSave(currentSpec)}
+                disabled={!x}
+                title="Keep this comparison beside both nodes in the graph, as compare sub-nodes"
+            >
+                Save
+            </button>
+        );
+    }
+
+    return (
+        <PlotsWindow
+            className="compare-panel"
+            title={single ? "Node plots" : "Compare nodes"}
+            titleId="compare-title"
+            subtitle={subtitle}
+            actions={saveAction}
+            placement={placement}
+            onPopOut={onPopOut}
+            onDock={onDock}
+            onClose={onClose}
+        >
             <div className="compare-body">
                 <aside className="compare-options" aria-label="Plot options">
                     <section className="compare-section">
@@ -788,6 +790,6 @@ export default function ComparePanel({
                     {!x && <PlotStatus>Nothing to plot</PlotStatus>}
                 </section>
             </div>
-        </div>
+        </PlotsWindow>
     );
 }

@@ -1,67 +1,13 @@
 /* The compare panel, laid out as sketched: a narrow column of plot options on the left and the plot
-   filling the rest. It fills whatever holds it - the Plots view's Compare tab, or a popped-out window of
-   its own - and is never transformed, since a transformed ancestor would become the containing block for
-   the plot's own tooltip. */
-
-.compare-host {
-    width: 100%;
-    height: 100%;
-}
-
-/* A popped-out panel's window is a blank page with only the panel in it */
-.compare-popup-body {
-    margin: 0;
-    height: 100vh;
-    overflow: hidden;
-    background: #ffffff;
-}
+   filling the rest. Its frame - the header, and filling its tab or popped-out window - is the one every Plots
+   view window shares: see PlotsWindow.css. */
 
 .compare-panel {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    background: #ffffff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    color: var(--ink);
-    overflow: hidden;
     /* Narrow layouts follow the panel's own width, which docked is much less than the window's */
     container-type: inline-size;
 }
 
 /* ── Header ───────────────────────────────────────────────────────── */
-
-.compare-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e4e6eb;
-}
-
-.compare-title {
-    margin: 0;
-    font-size: 17px;
-    font-weight: 700;
-}
-
-.compare-heading {
-    min-width: 0;
-}
-
-/* The two nodes and the wrangle that produced each. Wraps rather than truncating, since a wrangle
-   over two long column names is exactly the detail worth reading in full. */
-.compare-subtitle {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px 12px;
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--ink-muted);
-}
 
 .compare-node-summary {
     display: inline-flex;
@@ -104,69 +50,12 @@
     border: 1px solid var(--selection-b);
 }
 
-/* Save, pop out or dock, and close */
-.compare-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    margin-left: 12px;
-}
-
-.compare-action {
-    padding: 6px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: #ffffff;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ink);
-    white-space: nowrap;
-    cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.compare-action:hover:not(:disabled) {
-    background: var(--surface-muted);
-    border-color: #bcc0c4;
-}
-
-.compare-action:disabled {
-    color: #8a8d91;
-    cursor: default;
-}
-
 /* Where a saved comparison is kept, in place of the Save button */
 .compare-saved {
     font-size: 12px;
     font-weight: 600;
     color: var(--fewer);
     white-space: nowrap;
-}
-
-.compare-action-error {
-    max-width: 220px;
-    font-size: 12px;
-    color: #c0392b;
-}
-
-.compare-close {
-    width: 34px;
-    height: 34px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    font-size: 24px;
-    line-height: 1;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.compare-close:hover {
-    background: #e4e6eb;
-    color: var(--ink);
 }
 
 /* ── Body ─────────────────────────────────────────────────────────── */
@@ -330,7 +219,6 @@
 .compare-segment:focus-visible,
 .compare-select:focus-visible,
 .compare-brush-reset:focus-visible,
-.compare-close:focus-visible,
 .compare-ranked-item:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
@@ -961,17 +849,45 @@
     stroke: var(--border);
 }
 
+/* The grips only show where a range's edges are - the strip or minimap under them takes every press, and works
+   out from where it lands whether it grabs an edge, the range, or somewhere new */
 .compare-brush-grip {
+    pointer-events: none;
+}
+
+.compare-brush-grip rect {
+    fill: #ffffff;
+    stroke: var(--drift);
+}
+
+.compare-brush-range {
+    pointer-events: none;
+}
+
+/* The ridgeline strip's press surface, its cursor saying what a press there would do */
+.compare-brush-overlay {
+    fill: transparent;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.compare-brush-overlay--left,
+.compare-brush-overlay--right,
+.compare-brush-overlay--dragging-left,
+.compare-brush-overlay--dragging-right {
     cursor: ew-resize;
 }
 
-.compare-brush-grip-hit {
-    fill: transparent;
+.compare-brush-overlay--move {
+    cursor: grab;
 }
 
-.compare-brush-grip rect:not(.compare-brush-grip-hit) {
-    fill: #ffffff;
-    stroke: var(--drift);
+.compare-brush-overlay--dragging-move {
+    cursor: grabbing;
+}
+
+.compare-brush > svg {
+    user-select: none;
 }
 
 .compare-brush-grip path {
@@ -1015,16 +931,7 @@
     right: auto;
 }
 
-.compare-brush-grip--rows {
-    cursor: ns-resize;
-}
-
-/* The minimap's own pieces. Its grips only show where the edges are - the svg takes every press, and works
-   out from where it lands whether it grabs an edge, the box, or somewhere to jump to. */
-.compare-minimap .compare-brush-grip {
-    pointer-events: none;
-}
-
+/* The minimap's own pieces */
 .compare-minimap svg {
     cursor: pointer;
     touch-action: none;

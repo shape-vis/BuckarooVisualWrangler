@@ -219,14 +219,16 @@ React + Vite in `ui/src`. The graph is drawn with React Flow (`@xyflow/react`) a
 - **`pages/`** - `Home` (upload) and `Buckaroo` (the workspace, with its view modes).
 - **`store/`** - React contexts: `TableNameContext` (the current table, the frontend's source of truth),
   `PGraphContext` (graph nodes, edges, layout, selections A/B), `CandidatesContext`, `AISuggestionsContext`,
-  `RepairContext`, `SelectionContext`, `CompareContext`, `DockContext`, `LoadingContext`, `SettingsContext`,
-  `RowRangeContext`; plus `visualizationCaches.jsx`, cleared whenever the backend changes table.
+  `RepairContext`, `SelectionContext`, `CompareContext`, `PlotsWindowsContext` (the Plots view's windows, with
+  `plotsWindows.js`), `LoadingContext`, `SettingsContext`, `RowRangeContext`; plus `visualizationCaches.jsx`,
+  cleared whenever the backend changes table.
 - **`visualizations/`** - the plots (`HistogramBarChart`, `HeatMap`, `ScatterPlot`), the graph (`PGraph`), the
   compare views (`ComparisonPlot`, ridgeline, Sankey) and the analysis plot.
 - **`graph_objects/`** - custom React Flow nodes, including candidate (prospective) nodes.
 - **`supportNodes/`** - supporting sub-nodes attached to a graph node (error plot and drift plot galleries, compare,
-  quality sparkline), registered in `registry.js`.
-- **`panels/`, `elements/`** - the side panels (repair, compare, quality, attribute summary, table) and shared UI.
+  sparkline), registered in `registry.js`. A hidden one shows as a badge on its node.
+- **`panels/`, `elements/`** - the Plots view and its windows (attribute plots, compare, support nodes - all on
+  `PlotsWindow`), the attribute summary and table panels, and shared UI.
 - **`utils/serverCalls.jsx`** - every call to the backend.
 
 ---

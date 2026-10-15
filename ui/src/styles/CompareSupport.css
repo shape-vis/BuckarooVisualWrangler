@@ -1,4 +1,5 @@
-/* The compare sub-node: a summary line with Open, and its comparison's plot beneath */
+/* The compare sub-node: a summary line, and beneath it its comparison - a picture while the sub-node is small,
+   the whole plot once it is large enough (see CompareSupport.jsx) */
 
 .compare-support-body {
   flex: 1;
@@ -24,9 +25,38 @@
   color: var(--support-ink);
 }
 
+/* The badge's picture of the comparison, as large as the sub-node lets it be */
+.compare-support-picture {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 6px;
+  background: #ffffff;
+}
 
+.compare-support-picture .support-glyph {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 160px;
+  max-height: 160px;
+  padding: 6px;
+  box-sizing: border-box;
+}
 
-/* The compare panel's plot box, tightened to fit a sub-node */
+.compare-support-hint {
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  font-size: 10px;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+/* The compare panel's plot box, filling the sub-node */
 .compare-support-plot.compare-plot {
   flex: 1;
   min-height: 0;
