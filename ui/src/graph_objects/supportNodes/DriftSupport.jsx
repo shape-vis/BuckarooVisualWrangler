@@ -2,7 +2,9 @@ import {useContext} from "react";
 import {usePgraph} from "../../store/PGraphContext.jsx";
 import {ViewContext} from "../../pages/Buckaroo.jsx";
 import DriftPlotCard from "./DriftPlotCard.jsx";
+import DriftMiniature from "./DriftMiniature.jsx";
 import {SupportPlotGallery} from "./SupportPlotGallery.jsx";
+import {fitsFullPlot} from "./compareView.js";
 import {hostColumns} from "./registry.js";
 
 /**
@@ -47,8 +49,19 @@ export function DriftGallery({hostId, onAdd, paged = false}) {
     );
 }
 
-export function DriftBody({record, host}) {
+/* The sub-node zooms semantically, as a compare sub-node does: too small for the whole plot, it shows the plot in
+   miniature - its real ridgeline or Sankey, small and bare, with its column's name over it - rather than a plot
+   squeezed past reading. The expand button in its header switches between the two (see SupportNode). */
+export function DriftBody({record, host, size}) {
     const {updateSupportNode} = usePgraph();
+
+    if (!fitsFullPlot(size)) {
+        return (
+            <div className="support-plot-body">
+                <DriftMiniature a={record.hostId} b={record.hostId} column={record.config.column} />
+            </div>
+        );
+    }
 
     const changeColumn = (column) => updateSupportNode(record.id, (current) => ({
         config: {...current.config, column},

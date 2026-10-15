@@ -241,9 +241,9 @@ function NoteCard( { id, data, isConnectable, hasParent } ){
         <>
             {hasParent && <Handle type="target" position={Position.Top} isConnectable={isConnectable}/>}
             <ComparisonBadge role={data.comparisonRole} />
-            <SupportBadges hostId={id} />
             <div>
                 <div className="node-tools">
+                    <SupportBadges hostId={id} />
                     <h3>{data.label}</h3>
                     <NodeTools nodeId={id} />
                 </div>

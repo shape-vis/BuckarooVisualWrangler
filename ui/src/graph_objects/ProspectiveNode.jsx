@@ -81,8 +81,8 @@ export function ProspectiveNode({ id, data, isConnectable }) {
             />
             <Handle type="target" position={Position.Top} isConnectable={isConnectable} />
             <ComparisonBadge role={data.comparisonRole} />
-            <SupportBadges hostId={id} />
             <div className="prospective-node nodrag">
+                <SupportBadges hostId={id} />
                 {/* The full label and reason, on hovering the text they are cut short in - not the chart or buttons */}
                 <div
                     className="prospective-node-text"

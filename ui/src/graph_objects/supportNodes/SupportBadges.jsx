@@ -5,12 +5,14 @@ import {getSupportType} from "./registry.js";
 import "../../styles/SupportNode.css";
 
 /**
- * A node's hidden supporting sub-nodes, as badges in a row across its top edge - the way a trading card carries
- * its small symbols. Every sub-node of the node that is not drawn has one, whatever hid it: its own minimise,
- * the node's eye, or one of the graph's toggles. Each badge is its kind's tiny picture of itself (the registry's
- * Badge); hovering one names it, and clicking it brings that one sub-node back, leaving the rest as they were.
+ * A node's hidden supporting sub-nodes, as badges in rows at the top of its card, above its name - the way a
+ * trading card carries its small symbols. Every sub-node of the node that is not drawn has one, whatever hid it:
+ * its own minimise, the node's eye, or one of the graph's toggles. Each badge is its kind's tiny picture of itself
+ * (the registry's Badge); hovering one names it, and clicking it brings that one sub-node back, leaving the rest
+ * as they were.
  *
- * It floats over the card's edge rather than taking room in it, so it costs the dagre layout nothing.
+ * The rows are inside the card, so the card grows to hold however many there are; the layout makes room for each
+ * row it adds - see supportLayout's badgeRoomOf, whose BADGES_PER_ROW the row's width in SupportNode.css matches.
  */
 export function SupportBadges({hostId}) {
     const {supportNodes, isSupportShown, restoreSupportNode, graphMode} = usePgraph();

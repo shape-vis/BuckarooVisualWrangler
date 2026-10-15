@@ -34,7 +34,6 @@
 /* The same pairing the graph draws: a dashed blue selection A and a solid Persian plum selection B */
 .compare-node-chip {
     padding: 1px 8px;
-    border-radius: 999px;
     font-weight: 600;
 }
 
@@ -80,7 +79,6 @@
     box-sizing: border-box;
     background: #ffffff;
     border: 1px solid var(--border);
-    border-radius: 10px;
 }
 
 .compare-section {
@@ -125,7 +123,6 @@
     flex-shrink: 0;
     min-width: 78px;
     padding: 2px 6px;
-    border-radius: 4px;
     font-size: 10px;
     font-weight: 700;
     text-align: center;
@@ -155,7 +152,6 @@
 .compare-segmented {
     display: flex;
     border: 1px solid var(--border);
-    border-radius: 8px;
     overflow: hidden;
 }
 
@@ -209,7 +205,6 @@
     width: 100%;
     padding: 6px 8px;
     border: 1px solid var(--border);
-    border-radius: 6px;
     background: #ffffff;
     font: inherit;
     font-size: 13px;
@@ -296,7 +291,6 @@
     width: 100%;
     padding: 5px 8px;
     border: 1px solid transparent;
-    border-radius: 6px;
     background: transparent;
     font: inherit;
     font-size: 12px;
@@ -342,7 +336,6 @@
     padding: 12px 14px;
     background: #ffffff;
     border: 1px solid var(--border);
-    border-radius: 10px;
 }
 
 .compare-plot-frame {
@@ -416,7 +409,6 @@
     max-width: 70%;
     padding: 6px 14px;
     border: 1px solid var(--border);
-    border-radius: 999px;
     background: #ffffff;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     font-size: 13px;
@@ -426,7 +418,6 @@
 
 .compare-plot-pill--error {
     border-color: #f5c2bd;
-    border-radius: 8px;
     background: #fdecea;
     color: #a3261c;
 }
@@ -501,7 +492,6 @@
     width: 100%;
     padding: 6px 8px;
     border: 1px solid var(--border);
-    border-radius: 6px;
     background: #ffffff;
     font: inherit;
     font-size: 13px;
@@ -523,7 +513,6 @@
     padding: 6px;
     background: #ffffff;
     border: 1px solid var(--border);
-    border-radius: 6px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
 }
 
@@ -532,7 +521,6 @@
     box-sizing: border-box;
     padding: 5px 8px;
     border: 1px solid var(--border);
-    border-radius: 6px;
     font: inherit;
     font-size: 12px;
 }
@@ -581,7 +569,6 @@
     align-items: center;
     gap: 6px;
     padding: 3px 4px;
-    border-radius: 4px;
     font-size: 12px;
     cursor: pointer;
 }
@@ -654,7 +641,6 @@
     max-width: 300px;
     padding: 6px 10px;
     border: 1px solid var(--border);
-    border-radius: 8px;
     background: #ffffff;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     font-size: 12px;
@@ -668,7 +654,6 @@
     width: 8px;
     height: 8px;
     margin-right: 5px;
-    border-radius: 2px;
 }
 
 /* ── Legend ───────────────────────────────────────────────────────── */
@@ -691,7 +676,6 @@
     flex-shrink: 0;
     width: 11px;
     height: 11px;
-    border-radius: 2px;
     box-sizing: border-box;
 }
 
@@ -706,7 +690,6 @@
 .compare-legend-mark--line {
     width: 16px;
     height: 2px;
-    border-radius: 1px;
 }
 
 /* ── Drift ────────────────────────────────────────────────────────── */
@@ -906,7 +889,6 @@
 .compare-brush-reset {
     padding: 2px 8px;
     border: 1px solid var(--border);
-    border-radius: 6px;
     background: #ffffff;
     font-family: inherit;
     color: var(--drift);
@@ -1010,4 +992,33 @@
         width: auto;
         max-height: 40%;
     }
+}
+
+/* ── In the graph ─────────────────────────────────────────────────── */
+
+/* The app is square-cornered, but the provenance graph keeps its own rounded look - so these pieces of the compare
+   window, drawn again in the graph's drift and compare sub-nodes, are rounded there */
+.pgraph-container .compare-plot-pill {
+    border-radius: 999px;
+}
+
+.pgraph-container .compare-plot-pill--error {
+    border-radius: 8px;
+}
+
+.pgraph-container .compare-tooltip {
+    border-radius: 8px;
+}
+
+.pgraph-container .compare-brush-reset {
+    border-radius: 6px;
+}
+
+.pgraph-container .compare-tooltip-swatch,
+.pgraph-container .compare-legend-mark {
+    border-radius: 2px;
+}
+
+.pgraph-container .compare-legend-mark--line {
+    border-radius: 1px;
 }

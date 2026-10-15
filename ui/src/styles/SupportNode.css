@@ -68,6 +68,28 @@
   opacity: 0.6;
 }
 
+/* Expand, beside minimise: switches a plot between its miniature and its detailed view */
+.support-node-zoom {
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0 4px;
+  border: 1px solid var(--support-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--support-ink);
+}
+
+/* Without an action ahead of it, it takes the header's spare room, so the buttons stay on the right */
+.support-node-zoom--first {
+  margin-left: auto;
+}
+
+.support-node-zoom:hover {
+  background: var(--support-tint-strong);
+}
+
 /* Minimise, beside remove: hides the sub-node and leaves its badge on the host */
 .support-node-minimize {
   flex-shrink: 0;
@@ -240,16 +262,17 @@
 }
 
 /* ── Badges ──────────────────────────────────────────────────────────────────
-   A node's hidden sub-nodes, in a row across its top edge, each a small rimmed chip holding its kind's picture.
-   Absolutely placed, so they cost the dagre layout nothing; to the right of the comparison badge, which takes
-   the edge's left end. */
+   A node's hidden sub-nodes, in rows at the top of its card above its name, each a small rimmed chip holding its
+   kind's picture. Inside the card, so it grows to hold them. Six to a row - as wide as six badges and the gaps
+   between them - which is BADGES_PER_ROW in supportLayout.js; the layout reserves a row's height (22px badge,
+   3px under it - BADGE_ROW_HEIGHT) for each. */
 .support-badges {
-  position: absolute;
-  top: -12px;
-  right: 6px;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 3px;
-  z-index: 5;
+  max-width: calc(6 * 22px + 5 * 3px);
+  margin: 0 auto 3px;
 }
 
 .support-badge {

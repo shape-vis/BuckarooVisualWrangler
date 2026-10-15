@@ -12,7 +12,6 @@
 
 #attribute-sorting {
     border: 1px solid var(--border);
-    border-radius: 8px;
     padding: 8px;
     width: 250px;
     background: #ffffff;
@@ -30,7 +29,6 @@
     cursor: pointer;
     color: var(--ink);
     padding: 3px 4px;
-    border-radius: 4px;
     transition: background-color 0.1s ease;
 }
 
@@ -43,7 +41,6 @@
     height: 14px;
     margin-right: 6px;
     border: 1px solid rgba(0, 0, 0, 0.15);
-    border-radius: 3px;
     flex-shrink: 0;
 }
 
@@ -52,7 +49,6 @@
     height: 10px;
     margin-right: 6px;
     border: 3px solid var(--accent);
-    border-radius: 3px;
     flex-shrink: 0;
 }
 
@@ -74,7 +70,6 @@
     padding: 6px;
     background-color: #ffffff;
     border: 1px solid var(--border);
-    border-radius: 8px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     font-size: 0.85rem;
     overflow-y: auto;
@@ -104,7 +99,6 @@
     margin-right: 8px;
     color: var(--ink);
     padding: 6px 4px;
-    border-radius: 6px;
     transition: background-color 0.1s ease;
 }
 
@@ -193,7 +187,6 @@
   width: 18px;
   height: 18px;
   display: inline-block;
-  border-radius: 3px;
 }
 
 /* GroupByButton: elevated dots text */
@@ -210,7 +203,6 @@
   flex-direction: row;
   gap: 2px;
   border: 1px solid var(--border);
-  border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   background: #ffffff;
   z-index: 1000;

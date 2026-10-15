@@ -16,12 +16,24 @@ import { normalizeSpec } from "../../utils/comparisonSpec.js";
 
 export const COMPARE_DEFAULTS = { other: null, spec: null, group: null };
 
-// The size a compare sub-node starts at: room for its picture of the comparison, which it shows until it is larger
+// The size a compare sub-node starts at: room for its comparison in miniature, which it shows until it is larger
 export const COMPARE_SIZE = { width: 260, height: 206 };
 
-/* The smallest a compare sub-node shows its whole plot at: room for the compare window's plot with its zoom strip,
-   hover note and legend - the drift plot's own sub-node size - without squeezing it. Smaller, it shows its picture. */
-export const FULL_COMPARE_SIZE = { width: 440, height: 480 };
+/* The two sizes a sub-node drawing the compare window's plot switches between with its expand button: its plot in
+   miniature, and in detail - room for the whole plot, FULL_PLOT_SIZE or more */
+export const MINIATURE_SIZE = { width: 240, height: 190 };
+export const DETAIL_SIZE = { width: 440, height: 500 };
+
+/* The smallest a sub-node drawing the compare window's plot - a compare or a drift-plot sub-node - shows the whole
+   plot at: room for it with its zoom strip, hover note and legend, without squeezing it. Smaller, it shows its
+   badge's picture of the plot instead. */
+export const FULL_PLOT_SIZE = { width: 440, height: 480 };
+
+/** Whether a sub-node drawn this size has room for the compare window's whole plot. */
+export function fitsFullPlot(size) {
+    if (!size) return false;
+    return size.width >= FULL_PLOT_SIZE.width && size.height >= FULL_PLOT_SIZE.height;
+}
 
 /**
  * The comparison the sub-node shows: what it last showed, or - for a record without one - this node against

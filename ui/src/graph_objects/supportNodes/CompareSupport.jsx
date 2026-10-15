@@ -5,16 +5,18 @@ import {driftZoomKey, settingsOf} from "../../utils/comparisonSpec.js";
 import {useComparisonData} from "../../visualizations/useComparisonData.js";
 import ComparisonPlot from "../../visualizations/ComparisonPlot.jsx";
 import {PlotStatus} from "../../elements/ComparePanel.jsx";
-import {FULL_COMPARE_SIZE, columnKindOf, compareSummary, specOfCompare, withCategoryHidden} from "./compareView.js";
+import {columnKindOf, compareSummary, fitsFullPlot, specOfCompare, withCategoryHidden} from "./compareView.js";
 import {CompareGlyph} from "./supportGlyphs.jsx";
+import {PlotPicture} from "./SupportPlotCard.jsx";
+import DriftMiniature from "./DriftMiniature.jsx";
 import {hostColumns} from "./registry.js";
 import "../../styles/ComparePanel.css";
 import "../../styles/CompareSupport.css";
 
 /**
  * The compare kind of supporting sub-node - see compareView.js. It zooms semantically: while it is small it
- * shows its badge's picture of the comparison, large, rather than a plot squeezed past reading; resized to
- * FULL_COMPARE_SIZE or more, it shows the whole plot the compare window was last left on, through the window's
+ * shows the comparison in miniature rather than a plot squeezed past reading; expanded or resized to
+ * FULL_PLOT_SIZE or more, it shows the whole plot the compare window was last left on, through the window's
  * own plot and data. The Open in its header shows it in the window, where changes carry back to it.
  */
 
@@ -64,20 +66,25 @@ function ComparePlotFull({spec}) {
     );
 }
 
-// Too small for the whole plot: its badge's picture of it, filling the room, with how to see more
-function ComparePicture({record}) {
-    return (
-        <div className="compare-support-picture">
-            <CompareGlyph record={record} />
-            <span className="compare-support-hint">Resize to see the plot</span>
-        </div>
-    );
-}
+/* The comparison in miniature, with its column over it: on drift, its real ridgeline or Sankey for both nodes;
+   otherwise its badge's picture of its plot kind */
+function CompareMiniature({record, spec}) {
+    const {serverNodesById} = usePgraph();
 
-// Whether the sub-node is drawn large enough for the whole plot to read without squeezing
-function fitsFullPlot(size) {
-    if (!size) return false;
-    return size.width >= FULL_COMPARE_SIZE.width && size.height >= FULL_COMPARE_SIZE.height;
+    if (spec.kind === "drift") {
+        const base = referenceBase(spec, serverNodesById);
+        return <DriftMiniature a={spec.a} b={spec.b} column={spec.x} keep={spec.kept} base={base} />;
+    }
+
+    let label = spec.x;
+    if (spec.kind === "heatmap" && spec.y) {
+        label = `${spec.x} × ${spec.y}`;
+    }
+    return (
+        <PlotPicture label={label}>
+            <CompareGlyph record={record} />
+        </PlotPicture>
+    );
 }
 
 export function CompareBody({record, host, size}) {
@@ -92,7 +99,7 @@ export function CompareBody({record, host, size}) {
             {fitsFullPlot(size) ? (
                 <ComparePlotFull key={settingsOf(spec)} spec={spec} />
             ) : (
-                <ComparePicture record={record} />
+                <CompareMiniature record={record} spec={spec} />
             )}
         </div>
     );

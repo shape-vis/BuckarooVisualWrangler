@@ -4,6 +4,7 @@ import {usePgraph} from "../../store/PGraphContext.jsx";
 import {anchorOf, getSupportType, recordSizeOf} from "./registry.js";
 import {useSupportActionContext} from "./supportActions.js";
 import {EDGE_GAP} from "./supportLayout.js";
+import {fitsFullPlot} from "./compareView.js";
 import "../../styles/SupportNode.css";
 
 // Smaller than this and nothing a resizable kind draws still reads
@@ -16,7 +17,9 @@ const MIN_RESIZED = {width: 180, height: 120};
  * button in the header: Repair on an error plot, Open on a plot the compare window can show - see
  * supportActions.js.
  *
- * Minimising hides it and leaves its badge on the host (SupportBadges), which brings it back.
+ * Minimising hides it and leaves its badge on the host (SupportBadges), which brings it back. A kind that shows its
+ * plot in miniature until it has room (the registry's zoom) gets a button beside it that expands it to the detailed
+ * plot and back.
  *
  * A side sub-node faces its host: one on the left links in on its right side, and the reverse. An edge
  * sub-node has no link to draw - React Flow cannot join a node to an edge - so it carries a short stub of
@@ -61,6 +64,18 @@ export function SupportNode({data, width, height}) {
         } finally {
             setRunning(false);
         }
+    };
+
+    // Expanding to the detailed plot and back: between the kind's two sizes, by which the sub-node is drawn at now
+    const zoom = type?.zoom;
+    const expanded = fitsFullPlot(size);
+    const toggleZoom = (event) => {
+        event.stopPropagation();
+        let next = zoom.detail;
+        if (expanded) {
+            next = zoom.miniature;
+        }
+        updateSupportNode(record.id, {size: next});
     };
 
     // Clicks inside a sub-node are its own; they must not select, navigate or end a branch behind it
@@ -120,9 +135,20 @@ export function SupportNode({data, width, height}) {
                             {running ? action.busyLabel : action.label}
                         </button>
                     )}
+                    {zoom && (
+                        <button
+                            type="button"
+                            className={`support-node-zoom ${showAction ? "" : "support-node-zoom--first"}`}
+                            title={expanded ? "Shrink to the miniature" : "Expand to the detailed plot"}
+                            aria-label={expanded ? "Shrink to the miniature" : "Expand to the detailed plot"}
+                            onClick={toggleZoom}
+                        >
+                            {expanded ? "⤡" : "⤢"}
+                        </button>
+                    )}
                     <button
                         type="button"
-                        className={`support-node-minimize ${showAction ? "" : "support-node-minimize--first"}`}
+                        className={`support-node-minimize ${showAction || zoom ? "" : "support-node-minimize--first"}`}
                         title="Minimise to a badge on its node"
                         aria-label="Minimise this sub-node"
                         onClick={(event) => { stop(event); minimizeSupportNode(record.id); }}

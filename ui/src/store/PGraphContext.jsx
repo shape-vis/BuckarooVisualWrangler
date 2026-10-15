@@ -15,7 +15,9 @@ import {setGraphToClickedNode, getPGraph, getBranchTrajectory} from "../utils/se
 import {orderCollapsibleRun, collapsedRunId, applyCollapse, isSupportId} from "../utils/graphTopology.js";
 import {SupportNode} from "../graph_objects/supportNodes/SupportNode.jsx";
 import {SupportGroup} from "../graph_objects/supportNodes/SupportGroup.jsx";
-import {EDGE_GAP, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf} from "../graph_objects/supportNodes/supportLayout.js";
+import {
+    EDGE_GAP, badgeRoomOf, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf,
+} from "../graph_objects/supportNodes/supportLayout.js";
 import {useSupportNodes} from "./supportNodes.js";
 import {setNodeLabels} from "../utils/comparison.js";
 import "../styles/Nodes.css";
@@ -118,11 +120,19 @@ function typeServerNode(node, candidateSizes) {
     }
 }
 
-/* The size dagre is told a node is: its card, or larger for a node that draws larger than a card - a repair
-   candidate with its preview chart says so in its footprint - widened by any room reserved for its sub-nodes. */
-function layoutSizeOf(node, room) {
+/* How tall a node is laid out as: its card, or taller for a node that draws taller than a card - a repair candidate
+   with its preview chart says so in its footprint - and taller again by the rows of badges it carries */
+function cardHeightOf(node) {
     const footprint = node.data?.footprint;
     const height = footprint?.height ?? nodeHeight;
+    return height + badgeRoomOf(node);
+}
+
+/* The size dagre is told a node is: its card, or larger for a node that draws larger than a card (cardHeightOf),
+   widened by any room reserved for its sub-nodes. */
+function layoutSizeOf(node, room) {
+    const footprint = node.data?.footprint;
+    const height = cardHeightOf(node);
     let width = nodeWidth;
     if (footprint?.width) {
         width = Math.max(nodeWidth, footprint.width + CARD_MARGIN);
@@ -213,7 +223,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB',
         const laidOut = dagreGraph.node(node.id);
         // The card sits after any room reserved on its left
         const leftRoom = reserve.get(node.id)?.left ?? 0;
-        const height = node.data?.footprint?.height ?? nodeHeight;
+        const height = cardHeightOf(node);
         return {
             ...node,
             targetPosition: isHorizontal ? 'left' : 'top',
@@ -237,13 +247,18 @@ const getLayoutedElements = (nodes, edges, direction = 'TB',
    that is only shows once the tree is laid out. So with any to place, the bare tree is laid out once to see
    where each host lands, and again with each one's room reserved on that side.
 
+   badgeCounts is how many hidden sub-nodes each node shows as badges, by id: its card grows a row for every few.
+
    Returns the tree's nodes and edges, and supportPlacement: the sub-nodes and their links, as
    placeSupportNodes gives them. */
-function layoutWithSupport(folded, supported, candidateSizes) {
+function layoutWithSupport(folded, supported, candidateSizes, badgeCounts) {
     /* Laying out writes onto the nodes it is handed, and applyCollapse hands back the server's own node
        objects when nothing is folded - so every layout gets copies. */
     function layoutTree(reserve, edgeRoom) {
-        const nodeCopies = folded.nodes.map((node) => ({...node, data: {...node.data}}));
+        const nodeCopies = folded.nodes.map((node) => {
+            const badgeCount = badgeCounts.get(node.id) ?? 0;
+            return {...node, data: {...node.data, badgeCount}};
+        });
         const edgeCopies = [...folded.edges];
         return getLayoutedElements(nodeCopies, edgeCopies, 'TB', {reserve, edgeRoom, candidateSizes});
     }
@@ -516,7 +531,14 @@ export function PGraphProvider({children}) {
         /* Only a host that is drawn gets its sub-nodes - one folded into a run keeps its records for when it is
            expanded - and hidden ones reserve no room either, so hiding them lets the tree close up. */
         const supported = supportNodes.filter((record) => visible.has(record.hostId) && isSupportShown(record));
-        const {treeNodes, treeEdges, supportPlacement} = layoutWithSupport(folded, supported, candidateSizes);
+        // Every hidden one shows as a badge on its host's card, which grows to fit them (SupportBadges)
+        const badgeCounts = new Map();
+        for (const record of supportNodes) {
+            if (isSupportShown(record)) continue;
+            const count = badgeCounts.get(record.hostId) ?? 0;
+            badgeCounts.set(record.hostId, count + 1);
+        }
+        const {treeNodes, treeEdges, supportPlacement} = layoutWithSupport(folded, supported, candidateSizes, badgeCounts);
 
         // The tree first, since React Flow needs every host ahead of the sub-nodes it parents
         const drawnNodes = [...treeNodes, ...supportPlacement.nodes];

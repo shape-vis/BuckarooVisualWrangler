@@ -22,6 +22,9 @@
  *                   complete. The window shows it and disables Add meanwhile
  *   resizable     - optional (record) => whether the user can drag its size. A resized record keeps its size
  *                   on the record (`size`), which the layout reads in place of the kind's
+ *   zoom          - optional {miniature, detail}: two sizes, for a kind that shows its plot in miniature while it
+ *                   is small and in detail once it has room (see compareView's fitsFullPlot). Its header gets a
+ *                   button that switches it between them
  *   ConfigForm    - optional ({value, onChange, hostId}) settings form the window shows before adding one
  *   Gallery       - optional ({hostId, onAdd, paged}) picker the window shows in place of ConfigForm and Add, for
  *                   a kind chosen from ready-made options; onAdd(config) adds one straight away, and returns its id.
@@ -42,7 +45,7 @@ import {WrangleDiffBody} from "./WrangleDiffSupport.jsx";
 import {wrangleDiffUnavailable} from "./wrangleDiffRules.js";
 import {ErrorPlotBody, ErrorPlotGallery} from "./ErrorPlotSupport.jsx";
 import {CompareBody} from "./CompareSupport.jsx";
-import {COMPARE_DEFAULTS, COMPARE_SIZE, compareSummary} from "./compareView.js";
+import {COMPARE_DEFAULTS, COMPARE_SIZE, DETAIL_SIZE, MINIATURE_SIZE, compareSummary} from "./compareView.js";
 import {SparklineBody, SparklineGallery} from "./SparklineSupport.jsx";
 import {DriftBody, DriftGallery} from "./DriftSupport.jsx";
 import {errorPlotRepairBlocked, openCompare, openDrift, startErrorPlotRepair} from "./supportActions.js";
@@ -94,7 +97,7 @@ export const SUPPORT_NODE_TYPES = {
     qualityMetrics: {
         id: "qualityMetrics",
         label: "Quality metrics",
-        description: "The node's error rate for each error type, and its rows and columns.",
+        description: "This shows the total error rate for each error type.",
         anchor: "side",
         side: "auto",
         size: {width: 160, height: 82},
@@ -105,7 +108,7 @@ export const SUPPORT_NODE_TYPES = {
     wrangleDiff: {
         id: "wrangleDiff",
         label: "Wrangle diff",
-        description: "Beside the edge into this node: what its wrangle changed, drawn over the parent's state.",
+        description: "This shows the wrangle that was performed to create this node.",
         anchor: "edge",
         size: {width: 210, height: 198},
         unavailable: wrangleDiffUnavailable,
@@ -117,7 +120,7 @@ export const SUPPORT_NODE_TYPES = {
     errorPlot: {
         id: "errorPlot",
         label: "Error plot",
-        description: "One of this node's error plots - a histogram or a heatmap of the selected attributes - kept beside it. Repair on it brushes and repairs right there.",
+        description: "One of this node's error plots - a histogram or a heatmap of the selected attributes.",
         anchor: "side",
         side: "auto",
         size: {width: 230, height: 250},
@@ -130,7 +133,7 @@ export const SUPPORT_NODE_TYPES = {
         action: {
             label: "Repair",
             busyLabel: "Opening…",
-            title: "Brush this plot to select rows and repair them - this node becomes the current one",
+            title: "Brush this plot to select rows and repair them.",
             run: startErrorPlotRepair,
             blockedReason: errorPlotRepairBlocked,
         },
@@ -138,12 +141,13 @@ export const SUPPORT_NODE_TYPES = {
     drift: {
         id: "drift",
         label: "Drift plot",
-        description: "This node's drift from root for one column: a ridgeline for a numeric column, a Sankey for a categorical one.",
+        description: "This node's drift from root for the selected column.",
         anchor: "side",
         side: "auto",
-        // Room for the compare window's whole drift plot - the plot, its zoom strip, the hover note and the legend
-        size: {width: 440, height: 500},
+        // It starts in miniature; expanded, it has room for the compare window's whole drift plot
+        size: MINIATURE_SIZE,
         resizable: () => true,
+        zoom: {miniature: MINIATURE_SIZE, detail: DETAIL_SIZE},
         defaultConfig: {column: ""},
         Gallery: DriftGallery,
         galleryPaged: true,
@@ -174,11 +178,12 @@ export const SUPPORT_NODE_TYPES = {
     compare: {
         id: "compare",
         label: "Compare",
-        description: "A comparison of two nodes, kept beside each by Save in the compare window.",
+        description: "A comparison of two nodes.",
         anchor: "side",
         side: "auto",
         size: COMPARE_SIZE,
         resizable: () => true,
+        zoom: {miniature: COMPARE_SIZE, detail: DETAIL_SIZE},
         // Only Save in the compare window makes these
         addable: false,
         defaultConfig: COMPARE_DEFAULTS,

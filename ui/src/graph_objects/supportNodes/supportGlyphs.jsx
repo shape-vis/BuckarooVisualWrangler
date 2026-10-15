@@ -1,11 +1,15 @@
 import {ERROR_DIMENSIONS, DRIFT_COLOR, errorColors} from "../../store/errorColors.js";
 import {ROLE_COLORS} from "../../utils/comparison.js";
+import {usePgraph} from "../../store/PGraphContext.jsx";
+import {FLOW_COLORS} from "../../visualizations/flowLayout.js";
+import {columnKindOf} from "./compareView.js";
 
 /**
  * Each kind of supporting sub-node drawn as a tiny picture of itself: what its badge shows on the host while it
  * is hidden (SupportBadges), and what a compare sub-node shows until it is large enough for its plot. Abstract
  * rather than real data - a histogram is a few bars, a heatmap a shaded grid - except a sparkline's, whose
- * values ride along in its record, so its badge has the real shape.
+ * values ride along in its record, so its badge has the real shape. A drift picture follows its column, as the
+ * drift plot does: a ridgeline's humps for a numeric column, a Sankey's flows for a categorical one.
  *
  * Every glyph draws in a 16 by 16 box and scales to whatever it is given. Each is a ({record}) component, as
  * the registry's Badge entries are.
@@ -87,7 +91,64 @@ export function ErrorPlotGlyph({record}) {
     return <HistogramGlyph/>;
 }
 
-export function DriftGlyph() {
+/* A Sankey ribbon in the glyph's box, from a band of the left column (from: [top, bottom]) across to a band of the
+   right (to), as the flows view draws its ribbons */
+function glyphRibbon(from, to) {
+    const left = 3;
+    const right = 13;
+    const middle = 8;
+    const topEdge = `M${left},${from[0]} C${middle},${from[0]} ${middle},${to[0]} ${right},${to[0]}`;
+    const bottomEdge = `L${right},${to[1]} C${middle},${to[1]} ${middle},${from[1]} ${left},${from[1]} Z`;
+    return `${topEdge} ${bottomEdge}`;
+}
+
+// Three categories down each side, and where the rows went between them: most stayed put, one band was recoded
+const SANKEY_LEFT = [[1.5, 6.5], [7.5, 11], [12, 14.5]];
+const SANKEY_RIGHT = [[1.5, 5], [6, 11.5], [12, 14.5]];
+const SANKEY_FLOWS = [
+    {from: [1.5, 5], to: [1.5, 5], kind: "stayed"},
+    {from: [5, 6.5], to: [10, 11.5], kind: "recoded"},
+    {from: [7.5, 11], to: [6, 9.5], kind: "stayed"},
+    {from: [12, 14.5], to: [12, 14.5], kind: "stayed"},
+];
+
+/* A small Sankey: the reference's categories as bars down the left, the node's down the right, and the ribbons
+   between them - grey where rows stayed in their category, the flows view's orange where they were recoded */
+function sankeyFlows(leftColor, rightColor) {
+    return (
+        <>
+            {SANKEY_FLOWS.map((flow) => (
+                <path
+                    key={`${flow.from[0]}-${flow.to[0]}`}
+                    d={glyphRibbon(flow.from, flow.to)}
+                    fill={FLOW_COLORS[flow.kind]}
+                    fillOpacity={0.85}
+                />
+            ))}
+            {SANKEY_LEFT.map(([top, bottom]) => (
+                <rect key={`left-${top}`} x={1} y={top} width={2} height={bottom - top} fill={leftColor}/>
+            ))}
+            {SANKEY_RIGHT.map(([top, bottom]) => (
+                <rect key={`right-${top}`} x={13} y={top} width={2} height={bottom - top} fill={rightColor}/>
+            ))}
+        </>
+    );
+}
+
+/* Whether a column's drift is numeric or categorical, as root decided it - read from the first of these nodes that
+   knows the column, or undefined when none does */
+function useColumnKind(column, nodeIds) {
+    const {serverNodesById} = usePgraph();
+    const distortions = nodeIds.map((id) => serverNodesById?.[id]?.data?.distortion);
+    return columnKindOf(column, distortions);
+}
+
+/** A drift plot's badge: a ridgeline's humps for a numeric column, a Sankey's flows for a categorical one. */
+export function DriftGlyph({record}) {
+    const columnKind = useColumnKind(record?.config?.column, [record?.hostId]);
+    if (columnKind === "categorical") {
+        return <Glyph>{sankeyFlows(GREY, DRIFT_COLOR)}</Glyph>;
+    }
     return <Glyph>{driftHumps()}</Glyph>;
 }
 
@@ -166,7 +227,9 @@ export function QualityMetricsGlyph() {
 
 /** A comparison's badge: a tiny plot of its kind in the two selections' colours. */
 export function CompareGlyph({record}) {
-    const kind = record?.config?.spec?.kind ?? "histogram";
+    const spec = record?.config?.spec;
+    const kind = spec?.kind ?? "histogram";
+    const columnKind = useColumnKind(spec?.x, [spec?.b, spec?.a]);
 
     if (kind === "heatmap") {
         return (
@@ -175,6 +238,9 @@ export function CompareGlyph({record}) {
                 <path d="M1,15 L15,1 L15,15 Z" fill={ROLE_COLORS.b} fillOpacity={0.35}/>
             </Glyph>
         );
+    }
+    if (kind === "drift" && columnKind === "categorical") {
+        return <Glyph>{sankeyFlows(ROLE_COLORS.a, ROLE_COLORS.b)}</Glyph>;
     }
     if (kind === "drift") {
         return <Glyph>{driftHumps(ROLE_COLORS.a, ROLE_COLORS.b)}</Glyph>;

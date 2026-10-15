@@ -36,7 +36,6 @@
     align-items: center;
     gap: 10px;
     margin-left: 16px;
-    padding-bottom: 6px;
 }
 
 /* ── Action buttons in header (undo / redo / repair) ─────────── */
@@ -46,7 +45,6 @@
     align-items: center;
     gap: 8px;
     padding: 8px 20px;
-    border-radius: 8px;
     background: #ffffff;
     border: 1.5px solid #dadce0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -124,7 +122,6 @@
     padding: 3px 12px;
     background: #fff;
     border: 1.5px solid #a8b4c8;
-    border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
     color: #333;
@@ -144,6 +141,14 @@
 #header .navButton {
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+/* The view toggles and the action buttons are one height, both centred in the bar, so they line up top and
+   bottom whatever their icons and padding */
+#header .navButton,
+#header .header-action-btn {
+    height: 36px;
+    box-sizing: border-box;
 }
 
 /* On a laptop-width screen the header's buttons would not all fit beside the Compare button at full

@@ -16,7 +16,7 @@ function MagnifierIcon({ x, y, onClick }) {
             className="plot-cell-icon"
             onClick={e => { e.stopPropagation(); onClick(); }}
         >
-            <rect x={x - 1} y={y - 1} width={16} height={16} rx={3} fill="white" fillOpacity={0.85} />
+            <rect x={x - 1} y={y - 1} width={16} height={16} fill="white" fillOpacity={0.85} />
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="#444" strokeWidth={1.5} />
             <line
                 x1={cx + r * 0.65} y1={cy + r * 0.65}

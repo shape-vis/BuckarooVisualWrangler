@@ -37,6 +37,19 @@ export function SupportPlotCard({title, pickers, actions = null, children}) {
     );
 }
 
+/**
+ * A sub-node showing its plot in miniature rather than in detail: the miniature, as large as the room allows, with
+ * what it plots - label, a column's name - over its corner. Expanding the sub-node shows the plot in detail.
+ */
+export function PlotPicture({label = null, children}) {
+    return (
+        <div className="support-plot-picture">
+            {children}
+            {label && <span className="support-plot-picture-label" title={label}>{label}</span>}
+        </div>
+    );
+}
+
 export function ColumnPicker({label, value, choices, onChange}) {
     return (
         <label className="support-plot-picker">

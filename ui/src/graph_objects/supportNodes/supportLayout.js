@@ -40,16 +40,35 @@ function supportGroupId(hostId) {
    only changes the length of a link. */
 const HOST_CARD = {width: 170, height: 80};
 
+/* A node's hidden sub-nodes show as badges in rows at the top of its card (SupportBadges), this many to a row - as
+   many as fit across the narrowest card. Each row is a badge's height and the gap under it. The badge row's own
+   width in SupportNode.css is set from the same numbers, so it wraps where these say. */
+export const BADGES_PER_ROW = 6;
+export const BADGE_ROW_HEIGHT = 25;
+
+/**
+ * How much taller a node's card draws for its badges - nothing without any. The layout reads the count from the
+ * node's data (badgeCount), set before the graph is laid out. A candidate the user resized is drawn at the size
+ * they chose, badges and all, so it needs no more.
+ */
+export function badgeRoomOf(node) {
+    const count = node.data?.badgeCount ?? 0;
+    if (count === 0 || node.height) return 0;
+    const rows = Math.ceil(count / BADGES_PER_ROW);
+    return rows * BADGE_ROW_HEIGHT;
+}
+
 /* How large each host's card draws, by id. Most are HOST_CARD; a staged candidate carries its preview chart, and
    says how large it is in its footprint - as large as the user resized it, if they did - which dagre already
-   reserved for it. */
+   reserved for it. Either is taller by the rows of badges it carries. */
 function cardSizesOf(nodes) {
     const sizes = new Map();
     for (const node of nodes) {
         const footprint = node.data?.footprint;
+        const height = footprint?.height ?? HOST_CARD.height;
         sizes.set(node.id, {
             width: footprint?.width ?? HOST_CARD.width,
-            height: footprint?.height ?? HOST_CARD.height,
+            height: height + badgeRoomOf(node),
         });
     }
     return sizes;

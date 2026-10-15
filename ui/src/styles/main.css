@@ -72,7 +72,6 @@ h3 {
     align-items: center;
     height: calc(30vh - 85px);
     border: 1px solid var(--border);
-    border-radius: 8px;
     overflow-y: auto;
     overflow-x: scroll;
     margin-left: 0%;
@@ -89,7 +88,6 @@ h3 {
 .error-scent {
     width: 15px;
     height: 15px;
-    border-radius: 3px;
     position: relative;
     font-size: 10px;
     font-weight: bold;

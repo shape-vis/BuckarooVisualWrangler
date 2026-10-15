@@ -79,7 +79,6 @@
 .support-window-count {
   min-width: 18px;
   padding: 1px 7px;
-  border-radius: 999px;
   background: var(--support-accent);
   font-size: 11px;
   letter-spacing: 0;
@@ -138,7 +137,6 @@
   text-align: left;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
   background: #ffffff;
   font-family: inherit;
   font-size: 13px;
@@ -235,7 +233,6 @@
   cursor: pointer;
   padding: 6px 14px;
   border: 1px solid var(--accent);
-  border-radius: 6px;
   background: var(--accent);
   color: #ffffff;
   font-family: inherit;
@@ -321,7 +318,6 @@
   cursor: pointer;
   padding: 2px 8px;
   border: 1px solid var(--border);
-  border-radius: 4px;
   background: #ffffff;
   font-family: inherit;
   font-size: 12px;

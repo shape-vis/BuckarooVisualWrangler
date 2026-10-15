@@ -3,7 +3,6 @@
   width: 400px;
   height: 180px;
   border: 2px dashed var(--border);
-  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
