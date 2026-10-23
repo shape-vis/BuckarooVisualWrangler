@@ -3,7 +3,7 @@ Candidates: wrangles staged as provisional pgraph nodes before they are accepted
 app/server_utils/candidates.py.
 
 A candidate is a full node of the graph - a child of its parent, with its edge, scored for the Pareto front,
-reachable by undo and redo, navigable - with its own table, errors, profile, rankings, metrics and drift. The
+reachable by undo and redo, navigable - with its own table, errors, profile, metrics and drift. The
 one thing it cannot be is wrangled from. Accepting it renames nothing: it keeps its table and only gets its
 label. These run against a real graph, through the same routes the app calls.
 
@@ -16,6 +16,7 @@ from sqlalchemy import text as sa_text
 
 import app
 from app import engine, db_operations
+from app.db_utils.execute_sql import node_table_names
 from app import app as flask_app
 
 ROOT = "n0a_cands"
@@ -70,7 +71,7 @@ def test_a_1d_selection_stages_a_delete_and_an_impute(root, client):
         assert table in _graph().node_map[ROOT].children
         assert node.metrics is not None and node.distortion is not None
         # Everything an accepted node has, so it can be navigated to
-        for companion in (table, f"errors_{table}", f"dp_{table}", f"rankings_{table}"):
+        for companion in node_table_names(table):
             assert db_operations.table_exists(companion), companion
 
     # Staging takes no label and does not move the session

@@ -48,7 +48,7 @@ def build_tool_declarations(columns: list[str]) -> list[dict[str, Any]]:
     """
     Build the tool list for one node.
 
-    :param columns: that node's real column names, already filtered of the structural columns (STRUCTURAL_COLUMNS in app/db_utils/detector_sql.py)
+    :param columns: that node's real column names, already filtered of the structural columns (STRUCTURAL_COLUMNS in app/db_utils/column_types.py)
     """
     cols = list(columns)
 

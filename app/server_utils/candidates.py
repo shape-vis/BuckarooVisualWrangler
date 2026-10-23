@@ -6,7 +6,7 @@ selected, or a repair the AI suggested. Both are staged the same way, and differ
 
 This is the write-audit-publish pattern data pipelines use. Write: the wrangle is run on a copy of its parent
 and the copy is registered in the graph as a provisional node, with everything an accepted node has - its
-errors, profile, rankings, metrics and drift - so it can be navigated to, compared, and given supporting
+errors, profile, metrics and drift - so it can be navigated to, compared, and given supporting
 sub-nodes. Audit: the user does whatever analysis they like on it. Publish: accepting it clears the flag.
 
 A candidate's table name - c{n}_<base> - is its identity, set once here and never changed. Accepting it does not
@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 import app
 from app.db_utils import query
+from app.db_utils.execute_sql import errors_table_name
 from app.pgraph.node import GraphNode
 from app.server_utils.service_helpers import WRANGLE_LOCK, build_node, parse_node_id, safe_pg_name, session_graph
 from app.server_utils.workers import NODE_POOL
@@ -202,7 +203,7 @@ def _register(graph, parent, builds):
         staged = []
         for build in builds:
             spec = build.spec
-            node = GraphNode(parent, spec.op, build.table, f"errors_{build.table}", list(spec.cols))
+            node = GraphNode(parent, spec.op, build.table, errors_table_name(build.table), list(spec.cols))
             node.candidate = {"source": spec.source, "cols": list(spec.cols), **spec.meta}
             node.set_metrics(build.metrics)
             node.set_distortion(build.distortion)

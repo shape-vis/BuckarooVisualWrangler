@@ -1,106 +1,69 @@
-import json
+"""
+Profiles one table's columns inside PostgreSQL, and reads the profile back - October 22, 2026.
 
-from app.db_utils.execute_sql import fetch_sql
-from app.db_utils.column_types import ColumnTypes
+--- DataProfile ---
+Summary statistics about every column of a table, built by one multi-step CTE query and stored with CREATE TABLE AS
+as the table's dp_ table, one row per column:
 
-# Columns information_schema lists that are not data: the index columns pandas leaves behind when it writes a table
-INDEX_COLUMNS = ("index", "level_0")
+    numeric      mean, median, min and max of the column's numbers
+    categorical  how many categories it holds, its most common one (its mode) and each category's count
+    every        how many of its cells each error type flags
 
-# The values of a mostly-numeric text column that the numeric statistics are taken over
-NUMBER_PATTERN = r"'^-?\d+(\.\d+)?$'"
+Which statistics a column gets is its kind, by ColumnTypes.column_kind. A value is a number by
+ColumnTypes.number_expression, the rule the plots and drift read values by, and a missing cell - by the Missing
+detector's own rule - is the null category, never a mode: the mode is the value an impute of the column fills with.
+"""
+
+from app.db_utils.column_types import (CATEGORICAL_KIND, NULL_LABEL, PANDAS_INDEX_COLUMNS, ColumnTypes,
+                                       category_expression)
+from app.db_utils.execute_sql import (errors_table_name, execute_sql, fetch_sql, profile_table_name, quote_identifier,
+                                      quote_literal)
 
 # The columns of a dp_ table: the column a row describes, then every statistic stored for it
 STORED_PROFILE_COLUMNS = ("column_name", "mean", "median", "min", "max", "n_categories", "mode",
                           "error_counts", "category_counts")
 
-
-def to_scalar(val):
-    """
-    A statistic as a plain value: the first element of a one-row result, and a numpy scalar as its Python
-    equivalent, so it can be stored and sent as JSON.
-    """
-    if val is None:
-        return None
-    if isinstance(val, (list, tuple)) and len(val) > 0:
-        return to_scalar(val[0])
-    if hasattr(val, 'item'):
-        return val.item()
-    return val
-
-
+# Wraps up the data profile of one table into one class.
 class DataProfile:
-    """
-    Summary statistics about one table's columns, each computed by a SQL query of its own: the mean, median, min
-    and max of a numeric column; the number of categories, the mode and the category counts of a categorical one;
-    and every column's error counts.
-
-    Statistics are stored per column in the table's dp_ table (see build_data_profile_table), and
-    calculate_column_attribute reads them from there before computing them afresh.
-    """
-    def __init__(self, table_name, engine):
+    def __init__(self, table_name: str, engine):
         """
-        :param table_name: name of the table to profile
-        :param engine: SQLAlchemy engine
+        :arg: table_name: name of the table to profile.
+        :arg: engine: SQLAlchemy engine.
         """
         self.table_name = table_name
-        self.data_profile_table_name = "dp_" + table_name
-        self.error_table_name = "errors_" + table_name
+        self.data_profile_table_name = profile_table_name(table_name)
+        self.error_table_name = errors_table_name(table_name)
         self.col_types = ColumnTypes.for_table(table_name, engine)
         self.engine = engine
 
-        self.name_to_func = {
-            'mean': self._calculate_mean,
-            'median': self._calculate_median,
-            'min': self._calculate_min,
-            'max': self._calculate_max,
-            'n_categories': self._calculate_num_categories,
-            'mode': self._calculate_mode,
-            'error_counts': self._calculate_error_count_dict,
-            'category_counts': self._calculate_category_count_dict,
-        }
 
-        self.attribute_type_assignment = {
-            'numeric': ['mean', 'median', 'min', 'max', 'error_counts'],
-            'categorical': ['n_categories', 'mode', 'error_counts', 'category_counts'],
-        }
-
-        # The two dicts above have to agree: an attribute missing from attribute_type_assignment
-        # would be skipped for every column, and one missing from name_to_func has no way to be
-        # calculated. Catch either mistake here instead of silently producing an empty column
-        assigned_attributes = set()
-        for attributes in self.attribute_type_assignment.values():
-            assigned_attributes.update(attributes)
-
-        calculable_attributes = set(self.name_to_func)
-        if calculable_attributes != assigned_attributes:
-            mismatched = sorted(calculable_attributes ^ assigned_attributes)
-            raise ValueError(
-                f"name_to_func and attribute_type_assignment disagree for table {self.table_name}: {mismatched}"
-            )
-
-    def get_col_names(self):
+    def get_col_names(self) -> list:
         """
-        :return: the table's data column names, in table order
+        The columns the profile covers: the table's columns in table order, less any index column to_sql left behind.
+        :return: the column names.
         """
-        query = ('SELECT column_name FROM information_schema.columns WHERE table_name = :table_name '
-                 'ORDER BY ordinal_position')
-        rows = fetch_sql(query, False, self.engine, params={"table_name": self.table_name})
 
         col_names = []
-        for row in rows:
-            if row[0] not in INDEX_COLUMNS:
-                col_names.append(row[0])
+        for col_name in self.col_types.column_names:
+            if col_name not in PANDAS_INDEX_COLUMNS:
+                col_names.append(col_name)
         return col_names
 
-    def read_stored_profile(self, skipped_columns=()):
+
+    def read_stored_profile(self, skipped_columns=()) -> list:
         """
         Every stored statistic of every column, as the dp_ table holds them.
-        :param skipped_columns: columns to leave out, e.g. the row identifiers
-        :return: one dict per column, keyed by STORED_PROFILE_COLUMNS, in column name order
+        :arg: skipped_columns: columns to leave out, e.g. the row identifiers.
+        :return: one dict per column, keyed by STORED_PROFILE_COLUMNS, in column name order. error_counts and
+                 category_counts are {key: count} dicts; category_counts is None for a numeric column.
         """
+
+        profile_table = quote_identifier(self.data_profile_table_name)
+        column_list = ", ".join(STORED_PROFILE_COLUMNS)
+
         query = f'''
-            SELECT {", ".join(STORED_PROFILE_COLUMNS)}
-            FROM "{self.data_profile_table_name}"
+            SELECT {column_list}
+            FROM {profile_table}
             WHERE NOT (column_name = ANY(:skipped_columns))
             ORDER BY column_name
         '''
@@ -111,215 +74,190 @@ class DataProfile:
             profile_rows.append(dict(zip(STORED_PROFILE_COLUMNS, row)))
         return profile_rows
 
-    def look_up_stat_from_profile(self, attribute_name, column_name):
-        """
-        Look up a summary statistic for a specific column from the data profile table.
-        :param attribute_name: Name of the attribute (e.g., 'mean', 'median', 'min', 'max', etc.)
-        :param column_name: Name of the column for which the statistic is being looked up.
-        :return: The value of the statistic if found, otherwise None.
-        """
-        try:
-            query = f'SELECT "{attribute_name}" FROM "{self.data_profile_table_name}" WHERE "column_name" = :column_name'
-            return fetch_sql(query, True, self.engine, {"column_name": column_name})
-        except Exception as e:
-            print(f"Error querying attribute from data profile table: {e}")
-            return None
 
-    def numbers_only(self, column_name):
+    def generate_profile_table(self):
         """
-        The WHERE clause that keeps only a mixed column's numeric values, so the numeric statistics can be taken over
-        a column holding a stray string; empty for a column that is numeric throughout.
-        :param column_name: Name of the column.
+        Creates the entire SQL query for the table's data profile, and executes it to the Postgres database, replacing
+        the table's dp_ table with its result.
         """
-        if not self.col_types.is_mixed_col(column_name):
-            return ""
-        return f' WHERE "{column_name}" ~ {NUMBER_PATTERN}'
 
-    def calculate_summary_stat_using_sql(self, stat_query, column_name):
-        """
-        :param stat_query: The SQL aggregate function to use (e.g., 'AVG', 'MIN', 'MAX', etc.)
-        :param column_name: Name of the column for which the statistic is being calculated.
-        :return: The value of the statistic.
-        """
-        # Cast to numeric, so a numeric column stored as text because of a single stray string still aggregates
-        query = f'SELECT {stat_query}("{column_name}"::numeric) FROM "{self.table_name}"'
-        query += self.numbers_only(column_name)
-        return fetch_sql(query, True, self.engine)
+        # This function is made up of several sequential steps / segments to achieve the final query string
+        # Keep them in order to join all together at the end.
+        profile_steps = [self.gather_column_cells(),
+                         self.measure_numeric_columns(),
+                         self.count_column_categories(),
+                         self.measure_categorical_columns(),
+                         self.count_column_errors(),
+                         self.list_profiled_columns(),
+                         self.construct_profile_rows()]
 
-    def is_valid_attribute_for_column(self, attribute_name, column_name):
-        """
-        Check that an attribute applies to the type of the column, so that e.g. min / max are never
-        calculated for a categorical column such as one full of country names.
-        :param attribute_name: Name of the attribute (e.g., 'mean', 'median', 'min', 'max')
-        :param column_name: Name of the column the attribute would be calculated for.
-        :return: True if the attribute applies to this column's type.
-        """
-        if self.col_types.is_categorical_col(column_name) or self.col_types.is_categorical_mixed_col(column_name):
-            column_type = 'categorical'
-        else:
-            column_type = 'numeric'
+        profile_query = "".join(profile_steps)
+        execute_sql(self.replace_profile_table(profile_query), self.engine)
 
-        return attribute_name in self.attribute_type_assignment[column_type]
 
-    def calculate_column_attribute(self, attribute_name, column_name, look_up_stat=True):
+    def gather_column_cells(self) -> str:
         """
-        :param attribute_name: Name of the attribute (e.g., 'mean', 'median', 'min', 'max')
-        :param column_name: Name of the column for which the statistic is being looked up.
-        :param look_up_stat: If True, first attempt to look up the statistic from the data profile table. If False, calculate it directly.
-        :return: The value of the statistic if found or calculated, otherwise None.
+        Reads every profiled column's cells, one branch per column: a numeric column's cells as numbers, a categorical
+        column's as categories, with every missing cell the null category.
+        :return: the query for the cells.
         """
-        # An attribute that doesn't apply to the column's type has no meaningful value, so don't
-        # look it up or calculate it
-        if not self.is_valid_attribute_for_column(attribute_name, column_name):
-            return None
 
-        if look_up_stat:
-            look_up_value = self.look_up_stat_from_profile(attribute_name, column_name)
-            if look_up_value is not None:
-                return to_scalar(look_up_value)
+        table = quote_identifier(self.table_name)
 
-        calculate_attribute_func = self.name_to_func[attribute_name]
-        return to_scalar(calculate_attribute_func(column_name))
+        branches = []
+        for col_name in self.get_col_names():
+            cell = "d." + quote_identifier(col_name)
+            column_name = quote_literal(col_name)
 
-    def _calculate_mean(self, column_name):
-        """
-        :param column_name: Name of the column for which the mean is being calculated
-        :return: The mean, or None when it cannot be calculated
-        """
-        try:
-            return self.calculate_summary_stat_using_sql('AVG', column_name)
-        except Exception as e:
-            print(f"Error fetching the mean for table {self.table_name} at column {column_name}: {e}")
-            return None
+            if self.col_types.column_kind(col_name) == CATEGORICAL_KIND:
+                number = "NULL::float8"
+                category = category_expression(cell)
+            else:
+                number = self.col_types.number_expression(cell, col_name)
+                category = "NULL::text"
 
-    def _calculate_median(self, column_name):
-        """
-        :param column_name: Name of the column for which the median is being calculated
-        :return: The median, or None when it cannot be calculated
-        """
-        try:
-            query = (f'SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY "{column_name}"::numeric) '
-                     f'FROM "{self.table_name}"')
-            query += self.numbers_only(column_name)
-            return fetch_sql(query, True, self.engine)
-        except Exception as e:
-            print(f"Error fetching the median for table {self.table_name} at column {column_name}: {e}")
-            return None
+            branches.append(f'''SELECT {column_name}::text AS column_name, {number} AS number, {category} AS category
+                FROM {table} d''')
 
-    def _calculate_max(self, column_name):
-        """
-        :param column_name: Name of the column for which the max is being calculated
-        :return: The maximum, or None when it cannot be calculated
-        """
-        try:
-            return self.calculate_summary_stat_using_sql('MAX', column_name)
-        except Exception as e:
-            print(f"Error fetching the maximum for table {self.table_name} at column {column_name}: {e}")
-            return None
+        all_branches = "\n                UNION ALL\n                ".join(branches)
 
-    def _calculate_min(self, column_name):
-        """
-        :param column_name: Name of the column for which the minimum is being calculated
-        :return: The minimum, or None when it cannot be calculated
-        """
-        try:
-            return self.calculate_summary_stat_using_sql('MIN', column_name)
-        except Exception as e:
-            print(f"Error fetching the minimum for table {self.table_name} at column {column_name}: {e}")
-            return None
+        return f'''
+            WITH column_cells AS (
+                {all_branches}
+            )'''
 
-    def _calculate_num_categories(self, column_name):
-        """
-        :param column_name: Name of the column for which the number of categories is being calculated
-        :return: The number of distinct values, or None when it cannot be calculated
-        """
-        try:
-            query = f'SELECT COUNT(DISTINCT "{column_name}") FROM "{self.table_name}"'
-            return fetch_sql(query, True, self.engine)
-        except Exception as e:
-            print(f"Error fetching the n_categories for table {self.table_name} at column {column_name}: {e}")
-            return None
 
-    def _calculate_mode(self, column_name):
+    def measure_numeric_columns(self) -> str:
         """
-        :param column_name: Name of the column for which the mode is being calculated
-        :return: The most common value, or None when it cannot be calculated
+        Measures each numeric column's numbers: their mean, median, min and max.
+        :return: the query for the numeric statistics.
         """
-        try:
-            query = f"""
-            SELECT "{column_name}" FROM "{self.table_name}"
-            WHERE "{column_name}" IS NOT NULL
-            GROUP BY "{column_name}"
-            ORDER BY COUNT(*) DESC
-            LIMIT 1;
-            """
-            return fetch_sql(query, True, self.engine)
-        except Exception as e:
-            print(f"Error fetching the mode for table {self.table_name} at column {column_name}: {e}")
-            return None
 
-    def _calculate_error_count_dict(self, column_name):
-        """
-        :param column_name: Name of the column for which the error count is being calculated
-        :return: The error counts by error type, as a JSON string ({"missing": 10, "mismatch": 5, ...}), or None
-                 when they cannot be counted
-        """
-        try:
-            query = f"""
-                    SELECT error_type, COUNT(*)
-                    FROM "{self.error_table_name}"
-                    WHERE column_id = :column_name
-                    GROUP BY error_type
-                  """
-            rows = fetch_sql(query, False, self.engine, params={'column_name': column_name})
-            return json.dumps(dict(rows))
-        except Exception as e:
-            print(f"Error fetching the error counts for table {self.table_name} at column {column_name}: {e}")
-            return None
-
-    def calculate_error_distribution(self):
-        """
-        The share of the table's rows each column's error types flag, for the attribute summary panel's badges.
-        :return: {column_name: {error_type: fraction of rows}}, listing only error types that flag at least one row
-        """
-        query = f"""
+        return ''',
+            numeric_statistics AS (
                 SELECT
-                    e.column_id,
-                    e.error_type,
-                    COUNT(*)::float8 / NULLIF((SELECT COUNT(*) FROM "{self.table_name}"), 0) AS fraction
-                FROM "{self.error_table_name}" e
-                GROUP BY e.column_id, e.error_type
-                """
-        rows = fetch_sql(query, False, self.engine)
+                    column_name,
+                    AVG(number) AS mean,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY number) AS median,
+                    MIN(number) AS min,
+                    MAX(number) AS max
+                FROM column_cells
+                WHERE number IS NOT NULL
+                GROUP BY column_name
+            )'''
 
-        distribution = {}
-        for column_name, error_type, fraction in rows:
-            # An empty table has no rows to take a share of
-            if fraction is None:
-                continue
-            if column_name not in distribution:
-                distribution[column_name] = {}
-            distribution[column_name][error_type] = fraction
-        return distribution
 
-    def _calculate_category_count_dict(self, column_name):
+    def count_column_categories(self) -> str:
         """
-        :param column_name: Name of the column whose categories are being counted
-        :return: How many rows hold each value, as a JSON string ({"Male": 342, "Female": 26, ...}) so it can be
-                 stored in the data profile table, or None when they cannot be counted
+        Counts how many rows hold each category of each categorical column.
+        :return: the query for the category counts.
         """
-        try:
-            query = f"""
-                    SELECT "{column_name}", COUNT(*)
-                    FROM "{self.table_name}"
-                    GROUP BY "{column_name}"
-                  """
-            rows = fetch_sql(query, False, self.engine)
 
-            category_counts = {}
-            for category, count in rows:
-                category_counts[category] = count
-            return json.dumps(category_counts)
-        except Exception as e:
-            print(f"Error fetching the category counts for table {self.table_name} at column {column_name}: {e}")
-            return None
+        return ''',
+            category_counts AS (
+                SELECT column_name, category, COUNT(*) AS occurrences
+                FROM column_cells
+                WHERE category IS NOT NULL
+                GROUP BY column_name, category
+            )'''
+
+
+    def measure_categorical_columns(self) -> str:
+        """
+        Measures each categorical column's categories: how many it holds and which is most common, missing cells left
+        out of both, and every category's count, missing cells included. A tie for the mode goes to the category first
+        by name, as an impute's fill value does (app/db_utils/query.py).
+        :return: the query for the categorical statistics.
+        """
+
+        null_label = quote_literal(NULL_LABEL)
+
+        return f''',
+            categorical_statistics AS (
+                SELECT
+                    column_name,
+                    COUNT(*) FILTER (WHERE category <> {null_label}) AS n_categories,
+                    (array_agg(category ORDER BY occurrences DESC, category)
+                        FILTER (WHERE category <> {null_label}))[1] AS mode,
+                    jsonb_object_agg(category, occurrences) AS category_counts
+                FROM category_counts
+                GROUP BY column_name
+            )'''
+
+
+    def count_column_errors(self) -> str:
+        """
+        Counts how many of each column's cells each error type flags.
+        :return: the query for the error counts.
+        """
+
+        errors_table = quote_identifier(self.error_table_name)
+
+        return f''',
+            error_counts AS (
+                SELECT column_id AS column_name, jsonb_object_agg(error_type, flagged) AS error_counts
+                FROM (
+                    SELECT column_id, error_type, COUNT(*) AS flagged
+                    FROM {errors_table}
+                    GROUP BY column_id, error_type
+                ) AS flags
+                GROUP BY column_id
+            )'''
+
+
+    def list_profiled_columns(self) -> str:
+        """
+        Lists the profiled columns, so a column with no numbers, no categories and no flags still gets its row.
+        :return: the query for the column list.
+        """
+
+        column_rows = []
+        for col_name in self.get_col_names():
+            column_rows.append(f"({quote_literal(col_name)}::text)")
+        column_list = ", ".join(column_rows)
+
+        return f''',
+            profiled_columns AS (
+                SELECT column_name
+                FROM (VALUES {column_list}) AS columns(column_name)
+            )'''
+
+
+    def construct_profile_rows(self) -> str:
+        """
+        Build the final rows of the profile: one per column, every statistic that does not fit its kind null, and its
+        error counts an empty object when nothing is flagged.
+        :return: the final SELECT of the profile rows.
+        """
+
+        return '''
+            SELECT
+                p.column_name,
+                n.mean,
+                n.median,
+                n.min,
+                n.max,
+                c.n_categories,
+                c.mode,
+                COALESCE(e.error_counts, '{}'::jsonb) AS error_counts,
+                c.category_counts
+            FROM profiled_columns p
+            LEFT JOIN numeric_statistics n USING (column_name)
+            LEFT JOIN categorical_statistics c USING (column_name)
+            LEFT JOIN error_counts e USING (column_name)'''
+
+
+    def replace_profile_table(self, profile_query: str) -> str:
+        """
+        Replaces the dp_ table with the profile query's result.
+        :arg: profile_query: the full profile query.
+        :return: the statements that replace the table.
+        """
+
+        profile_table = quote_identifier(self.data_profile_table_name)
+
+        return f'''
+            DROP TABLE IF EXISTS {profile_table};
+            CREATE TABLE {profile_table} AS
+            {profile_query};
+        '''

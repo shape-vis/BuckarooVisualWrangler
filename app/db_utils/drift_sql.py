@@ -6,8 +6,9 @@ Gathers the numbers app/pgraph/distortion.py's drift metric is computed from, fo
 root, or one of the node's ancestors. Every row stays in the database; what comes back is a handful of numbers per
 column, each column measured by a query of its own so a table's columns can be measured all at once:
 
-    numeric      the Wasserstein-1 distance between the two states' values, and the reference's quartiles and sample
-                 standard deviation, which scale it
+    numeric      the Wasserstein-1 distance between the two states' values, and - by a query of its own, since the
+                 reference is measured once and shared by every node measured from it - the reference's quartiles
+                 and sample standard deviation, which scale it
     categorical  the total variation distance between the two states' category shares
 
 and, for the drill-down views, the edit facts (rows removed, cells changed), quantiles, category shares, category
@@ -21,18 +22,13 @@ A value is a number by ColumnTypes.number_expression, the rule the plots read va
 missing cell - by the Missing detector's own rule - is a category of its own, labelled null.
 """
 
-from app.db_utils.column_types import ColumnTypes
-from app.db_utils.compare_sql import NULL_LABEL
-from app.db_utils.detector_sql import missing_cell_predicate
+from app.db_utils.column_types import CATEGORICAL_KIND, NUMERIC_KIND, REMOVED_LABEL, ColumnTypes, category_expression
 from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal
 
 
-NUMERIC = "numeric"
-CATEGORICAL = "categorical"
-
-# What a row deleted before the later state is called as a flow's target. A missing cell is called NULL_LABEL, as the
-# compare plots call it.
-REMOVED_LABEL = "(removed)"
+# A column's kind decides its statistic - see ColumnTypes.column_kind
+NUMERIC = NUMERIC_KIND
+CATEGORICAL = CATEGORICAL_KIND
 
 # np.isclose's tolerances, which decide whether two numbers in a cell are the same value
 RELATIVE_TOLERANCE = 1e-05
@@ -96,11 +92,11 @@ class DriftSQL:
 
     def generate_numeric_drift(self, column: str) -> dict:
         """
-        Creates the entire SQL query for one numeric column's drift inputs and executes it to the Postgres database:
-        the Wasserstein-1 distance between the two states' numbers, and the reference's quartiles and sample standard
-        deviation, which scale it.
+        Creates the entire SQL query for one numeric column's drift input and executes it to the Postgres database:
+        the Wasserstein-1 distance between the two states' numbers. The reference's spread, which scales it, is
+        generate_reference_spread's.
         :arg: column: a numeric column both tables hold.
-        :return: {"column", "n_reference", "n_node", "wasserstein", "q1", "q3", "std"}
+        :return: {"column", "n_reference", "n_node", "wasserstein"}
         """
 
         # This function is made up of several sequential steps / segments to achieve the final query string
@@ -109,7 +105,6 @@ class DriftSQL:
                                self.count_values(),
                                self.accumulate_distributions(),
                                self.measure_wasserstein(),
-                               self.measure_reference_spread(column),
                                self.construct_numeric_drift_json(column)]
 
         numeric_drift_query = "".join(numeric_drift_steps)
@@ -190,30 +185,9 @@ class DriftSQL:
             )'''
 
 
-    def measure_reference_spread(self, column: str) -> str:
-        """
-        Measures the reference's spread in the column - its quartiles, and its sample standard deviation for a column
-        whose middle half is a single value - which the distance is measured in.
-        :arg: column: the column.
-        :return: the query for the spread.
-        """
-
-        reference_numbers = self.side_numbers(self.reference_table, self.reference_types, column)
-
-        return f''',
-            reference_spread AS (
-                SELECT
-                    percentile_cont(0.25) WITHIN GROUP (ORDER BY number) AS q1,
-                    percentile_cont(0.75) WITHIN GROUP (ORDER BY number) AS q3,
-                    STDDEV_SAMP(number) AS std
-                FROM {reference_numbers} AS reference_side
-                WHERE number IS NOT NULL
-            )'''
-
-
     def construct_numeric_drift_json(self, column: str) -> str:
         """
-        Build the final JSON object for one numeric column's drift inputs.
+        Build the final JSON object for one numeric column's drift input.
         :arg: column: the column.
         :return: the query for the final JSON object.
         """
@@ -225,12 +199,58 @@ class DriftSQL:
                 'column', {column_name}::text,
                 'n_reference', COALESCE(c.n_reference, 0),
                 'n_node', COALESCE(c.n_node, 0),
-                'wasserstein', w.distance,
-                'q1', s.q1,
-                'q3', s.q3,
-                'std', s.std
+                'wasserstein', w.distance
             )
-            FROM value_counts c, wasserstein w, reference_spread s'''
+            FROM value_counts c, wasserstein w'''
+
+
+    def generate_reference_spread(self, column: str) -> dict:
+        """
+        Creates the entire SQL query for the reference's spread in one numeric column and executes it to the Postgres
+        database: its quartiles, and its sample standard deviation for a column whose middle half is a single value -
+        what the column's drift is measured in. The reference never changes, so the caller measures it once and shares
+        it between every node measured from it.
+        :arg: column: a numeric column the reference holds.
+        :return: {"q1", "q3", "std"}
+        """
+
+        # This function is made up of several sequential steps / segments to achieve the final query string
+        # Keep them in order to join all together at the end.
+        reference_spread_steps = [self.measure_reference_spread(column),
+                                  self.construct_reference_spread_json()]
+
+        reference_spread_query = "".join(reference_spread_steps)
+        return fetch_sql(reference_spread_query, True, self.engine)
+
+
+    def measure_reference_spread(self, column: str) -> str:
+        """
+        Measures the reference's spread in the column.
+        :arg: column: the column.
+        :return: the query for the spread.
+        """
+
+        reference_numbers = self.side_numbers(self.reference_table, self.reference_types, column)
+        spread = self.spread_columns()
+
+        return f'''
+            WITH reference_spread AS (
+                SELECT
+                    {spread}
+                FROM {reference_numbers} AS reference_side
+                WHERE number IS NOT NULL
+            )'''
+
+
+    def construct_reference_spread_json(self) -> str:
+        """
+        Build the final JSON object for the reference's spread.
+        :return: the query for the final JSON object.
+        """
+
+        return '''
+            SELECT json_build_object('q1', q1, 'q3', q3, 'std', std)
+            FROM reference_spread'''
 
 
     def generate_categorical_drift(self, column: str) -> dict:
@@ -550,6 +570,7 @@ class DriftSQL:
         for quantile in grid:
             grid_values.append(repr(float(quantile)))
         grid_array = ", ".join(grid_values)
+        spread = self.spread_columns()
 
         return f''',
             column_measurements AS (
@@ -557,9 +578,7 @@ class DriftSQL:
                     side,
                     COUNT(*) AS n,
                     percentile_cont(ARRAY[{grid_array}]::float8[]) WITHIN GROUP (ORDER BY number) AS quantiles,
-                    percentile_cont(0.25) WITHIN GROUP (ORDER BY number) AS q1,
-                    percentile_cont(0.75) WITHIN GROUP (ORDER BY number) AS q3,
-                    STDDEV_SAMP(number) AS std
+                    {spread}
                 FROM column_numbers
                 GROUP BY side
             )'''
@@ -666,14 +685,15 @@ class DriftSQL:
 
     def gather_matched_categories(self, column: str) -> str:
         """
-        Pairs each of the reference's rows with its row in the node. A row's category is its value, or null when it has
-        none - the label the compare plots give it.
+        Pairs each of the reference's rows with its row in the node. A row's category is labelled as category shares
+        label it, so every missing cell - by the Missing detector's rule - is null on both sides.
         :arg: column: the column.
         :return: the query for the matched categories.
         """
 
         value = quote_identifier(column)
-        null_label = quote_literal(NULL_LABEL)
+        source_label = category_expression("r." + value)
+        node_label = category_expression("n." + value)
         removed_label = quote_literal(REMOVED_LABEL)
         reference = quote_identifier(self.reference_table)
         node = quote_identifier(self.node_table)
@@ -681,10 +701,10 @@ class DriftSQL:
         return f'''
             WITH matched_categories AS (
                 SELECT
-                    COALESCE(r.{value}::text, {null_label}) AS source,
+                    {source_label} AS source,
                     CASE
                         WHEN n."ID" IS NULL THEN {removed_label}
-                        ELSE COALESCE(n.{value}::text, {null_label})
+                        ELSE {node_label}
                     END AS target
                 FROM {reference} r
                 LEFT JOIN {node} n ON n."ID" = r."ID"
@@ -778,6 +798,18 @@ class DriftSQL:
     # -------------------------------------------------------------------------
 
 
+    def spread_columns(self) -> str:
+        """
+        The spread a numeric drift is scaled by, over a relation's number column: its quartiles and its sample standard
+        deviation.
+        :return: the select-list entries q1, q3 and std.
+        """
+
+        return '''percentile_cont(0.25) WITHIN GROUP (ORDER BY number) AS q1,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY number) AS q3,
+                    STDDEV_SAMP(number) AS std'''
+
+
     def side_numbers(self, table_name: str, col_types, column: str) -> str:
         """
         One table's values of a column as numbers, null where a value is not one.
@@ -806,13 +838,11 @@ class DriftSQL:
         :return: a subquery with one column, label.
         """
 
-        value = quote_identifier(column)
-        is_missing = missing_cell_predicate(value)
-        null_label = quote_literal(NULL_LABEL)
+        label = category_expression(quote_identifier(column))
         table = quote_identifier(table_name)
 
         return f'''(
-                    SELECT CASE WHEN {is_missing} THEN {null_label} ELSE {value}::text END AS label
+                    SELECT {label} AS label
                     FROM {table}
                 )'''
 

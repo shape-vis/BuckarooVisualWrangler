@@ -12,9 +12,9 @@ import pandas as pd
 
 import app
 from app.db_utils.detector_sql import DetectorSQL
+from app.db_utils.execute_sql import COMPANION_PREFIXES, errors_table_name
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
-from app.server_utils.workers import run_queries
 from app.db_utils.data_profile import DataProfile
 from app.pgraph.metrics import compute_node_metrics
 
@@ -24,9 +24,20 @@ from app.pgraph.metrics import compute_node_metrics
 NODE_PREFIX_PATTERN = re.compile(r'^n(\d[a-z])_(.+)$')
 CANDIDATE_PREFIX_PATTERN = re.compile(r'^(c\d+)_(.+)$')
 
-# Postgres caps identifiers at 63 characters, and the longest name derived from a node's table is
-# "<name>_filtering" - 10 more - so a node's table name is kept to this length. See safe_pg_name.
-MAX_TABLE_NAME_LENGTH = 63 - len("_filtering")
+# Postgres caps identifiers at 63 characters
+POSTGRES_IDENTIFIER_LIMIT = 63
+
+
+def _longest_companion_prefix():
+    """How many characters the longest companion table name adds to its node's table name - see COMPANION_PREFIXES."""
+    longest = 0
+    for prefix in COMPANION_PREFIXES:
+        longest = max(longest, len(prefix))
+    return longest
+
+
+# A node's table name is kept to this length, so every companion table named from it fits too. See safe_pg_name.
+MAX_TABLE_NAME_LENGTH = POSTGRES_IDENTIFIER_LIMIT - _longest_companion_prefix()
 
 # Serializes the moments candidates (app/server_utils/candidates.py) touch the graph: claiming their table names,
 # joining the graph, being accepted or declined. Those are not safe to run concurrently - a candidate's table name
@@ -48,6 +59,33 @@ def session_graph():
     return app.pgraph_for_session
 
 
+def is_node(table_name):
+    """:return: whether the table is a node of the session's graph - False before anything has been uploaded"""
+    graph = session_graph()
+    return graph is not None and table_name in graph.node_map
+
+
+def require_node(table_name):
+    """
+    Refuse a table that is not a node of the session's graph, before anything reads it. A request names tables by
+    hand, and only the graph's own may be read.
+    :raises ValueError: when there is no graph yet, or the table is not one of its nodes
+    """
+    if session_graph() is None:
+        raise ValueError("no graph in this session")
+    if not is_node(table_name):
+        raise ValueError(f"{table_name} is not a node in this graph")
+
+
+def bounded_int(args, name, default, low, high):
+    """
+    An integer request parameter, clamped so a request cannot ask for an absurd amount of work.
+    :param args: the request's parameters, e.g. request.args
+    """
+    value = int(args.get(name, default))
+    return max(low, min(high, value))
+
+
 def get_current_pgraph():
     """
     :return: the session's graph as a JSON string, written through each object's __json__
@@ -56,17 +94,6 @@ def get_current_pgraph():
 
 def clicked_node_access_helper(node_table_name):
     return app.pgraph_for_session.set_clicked_node_as_current(node_table_name)
-
-def _validate_identifier(name: str) -> str:
-    """
-    Ensures a table or column name contains only safe characters before it
-    is interpolated into a SQL string.  Raises ValueError if the name does
-    not match the expected pattern so callers get an explicit, early error
-    rather than a silent SQL injection.
-    """
-    if not re.fullmatch(r'[a-zA-Z0-9_]+', name):
-        raise ValueError(f"Unsafe SQL identifier rejected: {name!r}")
-    return name
 
 def get_pgraph_redo():
     """:return: the table redo moves to, or None when there is nothing to redo - or no graph yet"""
@@ -84,13 +111,8 @@ def get_pgraph_undo():
 
 def safe_pg_name(base: str, suffix: str) -> str:
     """
-    Build a table name guaranteed to keep both itself and all derived
-    sibling tables within PostgreSQL's 63-char identifier limit.
-
-    Derived siblings and their affixes:
-      errors_<name>     prefix  7 chars  -> name <= 56
-      rankings_<name>   prefix  9 chars  -> name <= 54
-      <name>_filtering  suffix 10 chars  -> name <= 53  (most restrictive)
+    Build a table name guaranteed to keep both itself and every companion table named from it - errors_<name>,
+    dp_<name>; see COMPANION_PREFIXES in app/db_utils/execute_sql.py - within PostgreSQL's 63-char identifier limit.
 
     If base+suffix already fits, use it as-is. Otherwise truncate the base
     and append an 8-char MD5 hash so the name stays unique.
@@ -121,38 +143,6 @@ def generate_table_name(csv_name):
     return safe_pg_name(clean_name, "_" + random_string)
 
 
-def create_data_profile_df(data_profile, col_names=None):
-    """
-    :param data_profile: the data profile object
-    :param col_names: the column names of interest in the table
-    :return: a dataframe of the data profile for the table
-    """
-    # Every attribute the data profile knows how to calculate goes in, so a new one only has to be
-    # registered in DataProfile
-    default_attributes = list(data_profile.name_to_func)
-
-    # If col_names is not provided (no specific columns to create a dp for), use all column names from the data profile
-    if col_names is None:
-        col_names = data_profile.get_col_names()
-
-    def profile_column(col):
-        row_dict = {'column_name': col}
-        for attribute in default_attributes:
-
-            # Attributes that don't match the column type come back as None, so every column still
-            # gets a value for every attribute in the data profile
-            row_dict[attribute] = data_profile.calculate_column_attribute(attribute, col, False)
-        return row_dict
-
-    # Each column's attributes are their own SQL queries, independent of every other column's, so the columns are
-    # profiled at the same time
-    col_list = run_queries(profile_column, col_names)
-
-    df = pd.DataFrame(col_list)
-
-    return df
-
-
 def build_data_profile_table(table_name):
     """
     Build a table's data profile from scratch, covering every column, as its dp_ table.
@@ -160,18 +150,18 @@ def build_data_profile_table(table_name):
     """
     from app import engine
 
-    data_profile = DataProfile(table_name, engine)
-    create_data_profile_df(data_profile).to_sql(f"dp_{table_name}", engine, if_exists='replace', index=False)
+    DataProfile(table_name, engine).generate_profile_table()
 
 
 def build_node(table_name, root_table):
     """
-    Build everything a node's table is read through, from the table itself: its errors, data profile and rankings
-    tables, and its quality metrics and drift from root. The root is built this way at upload, and so is every
-    candidate - so a node's measurements never depend on how it was made.
+    Build everything a node's table is read through, from the table itself: its errors and data profile tables, and
+    its quality metrics and drift from root. The root is built this way at upload, and so is every candidate - so a
+    node's measurements never depend on how it was made.
 
-    Each step is SQL, and the profile and the drift measure their columns at the same time on the query pool. The
-    metrics read the data profile, so they come after it.
+    Each step is SQL, and the drift measures its columns at the same time on the query pool. The metrics read the data
+    profile, which counts the errors, so each comes after the one before. The table's rows are counted once, for both
+    the metrics and the drift.
 
     :param table_name: the node's table, already holding its data
     :param root_table: the session's root table - the table itself, for the root
@@ -181,10 +171,10 @@ def build_node(table_name, root_table):
     from app.pgraph.distortion import compute_node_distortion
 
     DetectorSQL(engine, table_name).generate_errors_table()
-    app.db_operations.update_rankings(table_name)
     build_data_profile_table(table_name)
-    metrics = compute_node_metrics(table_name)
-    distortion = compute_node_distortion(table_name, root_table)
+    row_count = app.db_operations.get_row_count(table_name)
+    metrics = compute_node_metrics(table_name, row_count)
+    distortion = compute_node_distortion(table_name, root_table, row_count)
     return metrics, distortion
 
 
@@ -258,7 +248,7 @@ def init_pgraph_for_session(root_table, metrics=None, distortion=None):
 
     app.pgraph_for_session = PGraph()
 
-    root_node = GraphNode("root", "root", root_table, f"errors_{root_table}")
+    root_node = GraphNode("root", "root", root_table, errors_table_name(root_table))
     root_node.set_metrics(metrics)
     root_node.set_distortion(distortion)
     app.pgraph_for_session.add_root_node(root_node)

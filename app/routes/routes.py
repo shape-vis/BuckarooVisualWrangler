@@ -10,7 +10,7 @@ from flask import request, send_file
 import app as app_package
 from app import app
 from app import db_operations, engine
-from app.db_utils.execute_sql import copy_insert
+from app.db_utils.execute_sql import copy_insert, errors_table_name
 from app.server_utils.service_helpers import (
     WRANGLE_LOCK,
     build_node,
@@ -27,8 +27,8 @@ from app.pgraph.pgraph import node_id_for_count
 def load_file(csv_file, filename):
     """
     Load an uploaded or provided csv as the session's root: read it into a pandas DataFrame, give each row an
-    "ID", write it to the database under a unique table name, build the root's errors, data profile, rankings,
-    metrics and drift there - the same build every node gets - and start the session's graph from it.
+    "ID", write it to the database under a unique table name, build the root's errors, data profile, metrics and
+    drift there - the same build every node gets - and start the session's graph from it.
 
     :param csv_file: the local csv to use
     :param filename: the name of the csv_file
@@ -41,12 +41,13 @@ def load_file(csv_file, filename):
     table_name_with_node_id = f"{node_id_for_count(0)}_{table_name}"
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
-    error_table_name = f"errors_{table_name_with_node_id}"
+    error_table_name = errors_table_name(table_name_with_node_id)
 
     try:
-        # The rows go in through COPY, one stream, rather than one INSERT per row
+        # The rows go in through COPY, one stream, rather than one INSERT per row. "ID" names each row, so pandas'
+        # own index is left out rather than stored as a column of its own
         table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map,
-                                   method=copy_insert)
+                                   method=copy_insert, index=False)
 
         # The root is detected, profiled, ranked and measured from the stored table, exactly as every node is
         root_metrics, root_distortion = build_node(table_name_with_node_id, table_name_with_node_id)
@@ -100,6 +101,20 @@ def get_tablename():
         return {"success": False, "error": "No table loaded"}, 400
     return {"success": True, "table_name": name}
 
+def _move_to(table, missing_error):
+    """
+    Make a node the session's current table, once it is sure the table is still there.
+    :param table: the node to move to
+    :param missing_error: what to say when its table is gone
+    :return: the response
+    """
+    if not db_operations.table_exists(table):
+        return {"success": False, "error": missing_error}, 404
+
+    db_operations.load_table(table)
+    return {"success": True, "table_name": table}
+
+
 @app.post("/api/undo")
 def undo_wrangle():
     """
@@ -112,12 +127,7 @@ def undo_wrangle():
         if prev is None:
             return {"success": False, "error": "Already at the root table, cannot undo further"}, 400
 
-        if not db_operations.table_exists(prev):
-            return {"success": False, "error": f"Table '{prev}' does not exist"}, 404
-
-        db_operations.load_table(prev)
-
-    return {"success": True, "table_name": prev}
+        return _move_to(prev, f"Table '{prev}' does not exist")
 
 
 @app.post("/api/redo")
@@ -133,15 +143,10 @@ def redo_wrangle():
         if next_node is None:
             return {"success": False, "error": "There is no further redo to execute"}, 404
 
-        if not db_operations.table_exists(next_node):
-            return {"success": False, "error": "Table does not exist"}, 404
-
         if next_node == db_operations.main_table_name:
             return {"success": False, "error": "You have reached the most up to date table"}
 
-        db_operations.load_table(next_node)
-
-    return {"success": True, "table_name": next_node}
+        return _move_to(next_node, "Table does not exist")
 
 
 @app.post("/api/reset")

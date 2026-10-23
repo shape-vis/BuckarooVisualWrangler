@@ -45,6 +45,7 @@
   min-width: 0;
   padding: 2px 4px;
   border: 1px solid var(--border);
+  border-radius: 4px;
   font-size: 11px;
 }
 
@@ -81,6 +82,7 @@
 .support-plot-action {
   padding: 3px 10px;
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: #ffffff;
   font-family: inherit;
   font-size: 11px;
@@ -109,6 +111,7 @@
   align-self: stretch;
   min-height: 0;
   padding: 6px 8px;
+  border-radius: 6px;
 }
 
 /* A sub-node showing its plot in miniature: the miniature as large as the room allows, its column's name over the
@@ -122,6 +125,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 6px;
   background: #ffffff;
 }
 
@@ -150,6 +154,7 @@
   left: 4px;
   max-width: calc(100% - 8px);
   padding: 1px 6px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.85);
   font-size: 11px;
   font-weight: 700;
@@ -181,6 +186,7 @@
   height: 270px;
   padding: 8px;
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: #ffffff;
   box-sizing: border-box;
 }
@@ -215,6 +221,7 @@
   cursor: pointer;
   padding: 4px 10px;
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: #ffffff;
   font-family: inherit;
   font-size: 12px;
@@ -277,24 +284,6 @@
 }
 
 /* ── In the graph ───────────────────────────────────────────────────────── */
-
-/* The app is square-cornered, but the provenance graph keeps its own rounded look - so a card's buttons, pickers
-   and drift plot, square in the support-nodes window, are rounded in the sub-node; its picture only lives there */
-.pgraph-container .support-plot-picture {
-  border-radius: 6px;
-}
-
-.pgraph-container .support-plot-picker select {
-  border-radius: 4px;
-}
-
-.pgraph-container .support-plot-action {
-  border-radius: 6px;
-}
-
-.pgraph-container .support-drift-plot.compare-plot {
-  border-radius: 6px;
-}
 
 .support-plot-body {
   flex: 1;

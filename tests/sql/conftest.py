@@ -16,7 +16,7 @@ from app.server_utils.service_helpers import build_data_profile_table, init_pgra
 
 
 def drop_node_tables(tables):
-    """Drop each node table with all its companions - errors_, dp_, rankings_ and _filtering."""
+    """Drop each node table with all its companion tables - see node_table_names."""
     for table in tables:
         db_operations.drop_node_tables(table)
 

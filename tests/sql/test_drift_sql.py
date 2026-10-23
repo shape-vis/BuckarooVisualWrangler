@@ -17,9 +17,9 @@ from app import engine
 from app.db_utils.column_types import ColumnTypes
 from app.db_utils.drift_sql import DriftSQL
 from app.db_utils.execute_sql import copy_insert
-from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, RowIdentityError, TAIL_GRID,
+from app.pgraph.distortion import (CATEGORICAL, NULL_LABEL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, RowIdentityError, TAIL_GRID,
                                    categorical_column_detail, category_flows, check_row_identity, column_distortion,
-                                   compute_node_distortion, drift_detail, edit_facts, measure_columns,
+                                   compute_node_distortion, drift_detail, edit_facts, measure_column, measure_columns,
                                    measure_edit_facts, node_density, node_distortion, numeric_column_detail,
                                    root_density_params, root_distortion)
 from app.pgraph.node import GraphNode
@@ -71,11 +71,7 @@ def measure(store):
         store(ROOT, _with_ids(root_values))
         store(NODE, _with_ids(node_values))
         drift = DriftSQL(engine, ROOT, NODE, {"v": kind})
-        if kind == NUMERIC:
-            measured = drift.generate_numeric_drift("v")
-        else:
-            measured = drift.generate_categorical_drift("v")
-        return column_distortion(measured, kind)
+        return column_distortion(measure_column(drift, "v", kind), kind)
 
     return run
 
@@ -307,7 +303,7 @@ def test_mean_shift_on_a_fine_grid_matches_the_number(store):
     fine = tuple(np.linspace(0.001, 0.999, 999))
 
     detail = numeric_column_detail(drift.generate_numeric_detail("v", fine), grid=fine)
-    value = column_distortion(drift.generate_numeric_drift("v"), NUMERIC)["value"]
+    value = column_distortion(measure_column(drift, "v", NUMERIC), NUMERIC)["value"]
 
     assert np.mean(np.abs(detail["shift"])) == pytest.approx(value, abs=0.1 * value)
 
@@ -360,6 +356,19 @@ def test_deleted_rows_go_to_the_removed_sink(store):
     assert flows["targets"][-1] == REMOVED_LABEL
     assert flows["removal_rates"] == {"a": 0.0, "b": 1.0}
     assert flows["churn"] == pytest.approx(1 / 3)
+
+
+@pytest.mark.sql
+def test_flows_name_missing_cells_as_tvd_does(store):
+    # Every spelling of missing is the null category, on both sides of the Sankey as in TVD, so a node identical to
+    # root moves no row
+    values = ["a", None, "null", "undefined"]
+    drift, flows = _flows(store, pd.DataFrame({"ID": [1, 2, 3, 4], "g": values}),
+                          pd.DataFrame({"ID": [1, 2, 3, 4], "g": values}))
+
+    assert column_distortion(drift.generate_categorical_drift("g"), CATEGORICAL)["value"] == 0.0
+    assert flows["churn"] == 0.0
+    assert {"source": NULL_LABEL, "target": NULL_LABEL, "rows": 3} in flows["flows"]
 
 
 @pytest.mark.sql

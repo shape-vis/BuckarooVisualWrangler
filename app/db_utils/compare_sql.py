@@ -8,34 +8,28 @@ on one side is not bar n on the other. Everything here bins both tables on one s
 makes a bin-by-bin difference meaningful.
 
 An axis is numeric when at least half the values on it, both tables together, are numbers. Its numbers are binned
-linearly across the range of both tables, and everything else - nulls, text in a numeric column - becomes a
+linearly across the range of both tables, and everything else - missing cells, text in a numeric column - becomes a
 categorical label beside the bins, the split DBOperations' histograms make. On a categorical axis every value is a
-label. An axis keeps at most MAX_LABELS labels: the most common, plus null whenever it occurs, since a missing-value
-repair is often what a comparison is about. The rest fold into OTHER_LABEL.
+label. A missing cell, by the Missing detector's rule, is labelled NULL_LABEL, as drift and the data profile label it.
+An axis keeps at most MAX_LABELS labels: the most common, plus null whenever it occurs, since a missing-value repair
+is often what a comparison is about. The rest fold into OTHER_LABEL.
 
 Each row carries its error flags from the start - found by its integer row id - and each table is then reduced to its
 distinct values, or value pairs for a heatmap, with how many rows hold each and how many of those rows each error type
-flags. Every step after that works on those few values instead of the rows. Nothing ever sorts or joins the long tail
-of labels by their text, which for a column of long free text would cost far more than the rest of the plot: the
-labels are grouped by hashing, ranked with a hash of the text breaking ties, and only the few kept are sorted by name.
-The queries build the panel's JSON themselves, as DBOperations' do.
+flags. Every step after that works on those few values instead of the rows. The labels are grouped by hashing, and
+ranked by how many rows carry them with ties broken by name in byte order - the rule the Sankey folds its categories
+by (distortion.category_flows), so the two views keep the same ones. The queries build the panel's JSON themselves, as
+DBOperations' do.
 """
 
-from app.db_utils.column_types import ColumnTypes
+from app.db_utils.column_types import (MAX_LABELS, NULL_LABEL, OTHER_LABEL, ColumnTypes, category_expression,
+                                       missing_cell_predicate)
 from app.db_utils.detector_sql import ERROR_TYPES
-from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal
+from app.db_utils.execute_sql import errors_table_name, fetch_sql, quote_identifier, quote_literal
 
 
 # The plots CompareSQL draws
 PLOT_KINDS = ("histogram", "heatmap")
-
-# What a null is called on a categorical axis - the label DBOperations' histograms give it
-NULL_LABEL = "null"
-
-# A categorical axis keeps this many labels, the last a catch-all for the long tail. Two states are read bar against
-# bar, and past a couple of dozen bands neither side is legible.
-MAX_LABELS = 20
-OTHER_LABEL = "(other)"
 
 # The two sides of a comparison: selection A and selection B
 SIDES = ("a", "b")
@@ -142,8 +136,8 @@ class CompareSQL:
 
     def side_rows(self, side: str, axes: list) -> str:
         """
-        One table's rows, each axis's value read three ways: whether it is present, its number when it is one, and the
-        label it would carry on a categorical axis. A value's label names it exactly - two values with the same label
+        One table's rows, each axis's value read three ways: whether it is present - not missing, by the Missing
+        detector's rule - its number when it is one, and the label it would carry on a categorical axis. A value's label names it exactly - two values with the same label
         always land in the same bin - so the label is what the steps below group values by.
 
         Each row also carries the error types flagged on the compared columns, each type once however many of the
@@ -155,17 +149,18 @@ class CompareSQL:
 
         col_types = self.col_types[side]
         table = quote_identifier(self.tables[side])
-        errors = quote_identifier("errors_" + self.tables[side])
-        null_label = quote_literal(NULL_LABEL)
+        errors = quote_identifier(errors_table_name(self.tables[side]))
 
         selected = ['d."ID" AS row_id', "row_flags.error_types"]
         column_names = []
         for axis, column in axes:
             value = "d." + quote_identifier(column)
             number = col_types.number_expression(value, column)
-            selected.append(f"{value} IS NOT NULL AS {axis}_present")
+            is_missing = missing_cell_predicate(value)
+            label = category_expression(value)
+            selected.append(f"NOT {is_missing} AS {axis}_present")
             selected.append(f"{number} AS {axis}_number")
-            selected.append(f"COALESCE({value}::text, {null_label}) AS {axis}_label")
+            selected.append(f"{label} AS {axis}_label")
             column_names.append(quote_literal(column))
 
         selected_list = ",\n                        ".join(selected)
@@ -270,9 +265,9 @@ class CompareSQL:
     def rank_axis_labels(self, axis: str) -> str:
         """
         Ranks the labels an axis carries - every value on a categorical axis, the values that are not numbers on a
-        numeric one - by how many rows carry them, both tables together. Ties are broken by a 64-bit hash of the
-        label, then by the label itself should two hashes ever collide: an order that is the same on every request and
-        stays cheap when the labels are long free text, which sorting them by name would not.
+        numeric one - by how many rows carry them, both tables together. Ties are broken by name in byte order
+        (COLLATE "C"), as distortion.category_flows breaks them, so the compare axes and the Sankey keep the same
+        categories; byte order also keeps the comparison cheap when the labels are long free text.
         :arg: axis: the axis name, "x" or "y".
         :return: the query for the ranked labels.
         """
@@ -282,7 +277,7 @@ class CompareSQL:
                 SELECT
                     v.{axis}_label AS label,
                     ROW_NUMBER() OVER (
-                        ORDER BY SUM(v.items) DESC, hashtextextended(v.{axis}_label, 0), v.{axis}_label COLLATE "C"
+                        ORDER BY SUM(v.items) DESC, v.{axis}_label COLLATE "C"
                     ) AS popularity
                 FROM compared_values v
                 CROSS JOIN {axis}_axis a

@@ -19,7 +19,7 @@ function MinimizeIcon({ x, y, onClick }) {
             className="plot-minimize-icon"
             onClick={e => { e.stopPropagation(); onClick(); }}
         >
-            <rect x={x - 1} y={y - 1} width={s + 2} height={s + 2} fill="white" fillOpacity={0.85} />
+            <rect x={x - 1} y={y - 1} width={s + 2} height={s + 2} rx={3} fill="white" fillOpacity={0.85} />
             {/* top-left corner arrows pointing inward */}
             <polyline
                 points={`${x + m},${y + m + arm} ${x + m},${y + m} ${x + m + arm},${y + m}`}

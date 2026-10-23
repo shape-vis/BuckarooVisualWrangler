@@ -18,7 +18,10 @@ from app.db_utils.bootstrap import create_database_if_not_exists
 #This is so that that whatever we print in the server comes out blue in the terminal
 _original_print = builtins.print
 def _blue_print(*args, **kwargs):
-    _original_print('\033[94m' + ' '.join(str(a) for a in args) + '\033[0m', **kwargs)
+    words = []
+    for arg in args:
+        words.append(str(arg))
+    _original_print('\033[94m' + ' '.join(words) + '\033[0m', **kwargs)
 builtins.print = _blue_print
 
 

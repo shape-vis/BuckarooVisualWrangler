@@ -20,12 +20,9 @@ from typing import Any
 
 import app
 from app.db_utils import query
+from app.db_utils.detector_sql import ERROR_TYPES
 from app.server_utils import candidates
-from app.server_utils.service_helpers import WRANGLE_LOCK, session_graph
-
-# The four flags the detectors produce. Matches DIMENSIONS in app/pgraph/metrics.py and
-# ERROR_DIMENSIONS in ui/src/store/errorColors.js.
-ERROR_TYPES = ("missing", "mismatch", "anomaly", "incomplete")
+from app.server_utils.service_helpers import WRANGLE_LOCK, is_node
 
 # Deleting is destructive and cannot be undone at the table level, so a suggestion that would
 # take out more than this share of the table is refused rather than offered.
@@ -103,8 +100,7 @@ class Suggestion:
 
 def known_node(node_table: str) -> bool:
     """A table is addressable only if the graph knows it and it really exists."""
-    graph = session_graph()
-    if graph is None or node_table not in graph.node_map:
+    if not is_node(node_table):
         return False
     return bool(app.db_operations.table_exists(node_table))
 

@@ -29,8 +29,8 @@ from functools import partial
 
 import numpy as np
 
-from app.db_utils.compare_sql import MAX_LABELS, NULL_LABEL, OTHER_LABEL
-from app.db_utils.drift_sql import CATEGORICAL, NUMERIC, REMOVED_LABEL, DriftSQL
+from app.db_utils.column_types import MAX_LABELS, NULL_LABEL, OTHER_LABEL, REMOVED_LABEL
+from app.db_utils.drift_sql import CATEGORICAL, NUMERIC, DriftSQL
 from app.pgraph.metrics import SKIPPED_COLUMNS
 from app.server_utils.workers import run_all
 
@@ -52,9 +52,6 @@ OTHER_LISTED = 200
 # The most bands a Sankey will draw when the panel names the categories itself
 MAX_KEPT = 100
 
-# Both Pareto axes are rounded to this many places, so float noise cannot make equal nodes dominate
-PARETO_PRECISION = 6
-
 # The ridgeline's smoothing, as gaussian_kde's factor on root, and how many points each curve has. The
 # points are dense because the compare panel zooms into a slice of the grid in the browser, and a zoomed
 # window still needs enough of them to draw a smooth curve.
@@ -71,28 +68,18 @@ class RowIdentityError(ValueError):
 
 # ── Column kinds ─────────────────────────────────────────────────────────────
 
-def column_kind(col_types, column):
+def column_kinds(col_types):
     """
-    Whether a column's drift is measured as numeric or categorical. This is DataProfile's rule
-    (is_valid_attribute_for_column), so drift and the attribute summary always agree about a column: text
-    columns, pure or mostly text, are categorical, and everything else is numeric.
+    Whether each data column's drift is measured as numeric or categorical, by ColumnTypes.column_kind - the rule the
+    data profile and the attribute summary read a column by, so all of them agree about it.
 
     :param col_types: root's ColumnTypes - kinds are decided on root and held for every node, so a column
                       cannot switch statistics part way down a branch
-    :param column: the column
-    :return: NUMERIC or CATEGORICAL
+    :return: {column: NUMERIC or CATEGORICAL}, the structural columns left out
     """
-    if col_types.is_categorical_col(column) or col_types.is_categorical_mixed_col(column):
-        return CATEGORICAL
-    return NUMERIC
-
-
-def column_kinds(col_types, columns):
-    """{column: kind} for every data column, the structural ones left out."""
     kinds = {}
-    for column in columns:
-        if column not in SKIPPED_COLUMNS:
-            kinds[column] = column_kind(col_types, column)
+    for column in col_types.data_column_names():
+        kinds[column] = col_types.column_kind(column)
     return kinds
 
 
@@ -143,8 +130,7 @@ def column_distortion(measured, kind):
     """
     How far one column has drifted from root.
 
-    :param measured: the column's drift inputs, as DriftSQL.generate_numeric_drift or generate_categorical_drift
-                     gives them
+    :param measured: the column's drift inputs, as measure_column gives them
     :param kind: NUMERIC or CATEGORICAL, decided on root
     :return: {"value", "stat", "kind", "n_root", "n_node", "degenerate", "reason", "low_confidence"}
     """
@@ -180,14 +166,11 @@ def measure_columns(drift):
     """
     plan = drift.column_plan()
 
-    tasks = [partial(drift.generate_present_cells, "reference"), partial(drift.generate_present_cells, "node")]
+    tasks = [partial(_reference_present_cells, drift), partial(drift.generate_present_cells, "node")]
     for entry in plan:
         if entry["kind"] is None or not entry["in_node"]:
             continue
-        if entry["kind"] == NUMERIC:
-            tasks.append(partial(drift.generate_numeric_drift, entry["column"]))
-        else:
-            tasks.append(partial(drift.generate_categorical_drift, entry["column"]))
+        tasks.append(partial(measure_column, drift, entry["column"], entry["kind"]))
 
     # Results come back in the order of the tasks: the two present-cell counts, then a column per plan entry
     results = run_all(tasks)
@@ -208,6 +191,22 @@ def measure_columns(drift):
         measured.update(measurements.get(column, {}))
         column_drift.append(measured)
     return column_drift
+
+
+def measure_column(drift, column, kind):
+    """
+    One shared column's drift inputs, by a query of its own: a numeric column's distance, with the reference's spread that scales it, or a
+    categorical column's TVD.
+
+    :param drift: a DriftSQL between the reference and the node
+    :param kind: NUMERIC or CATEGORICAL, decided on root
+    :return: what column_distortion reads
+    """
+    if kind == NUMERIC:
+        measured = drift.generate_numeric_drift(column)
+        measured.update(_reference_spread(drift, column))
+        return measured
+    return drift.generate_categorical_drift(column)
 
 
 def measure_edit_facts(drift, columns):
@@ -530,7 +529,8 @@ def category_flows(pairs, limit=MAX_LABELS, keep=None):
             moved_rows += pair["rows"]
     churn = moved_rows / total_rows if total_rows else 0.0
 
-    # The categories most common first, ties broken by name
+    # The categories most common first, ties broken by name in code-point order - the byte order CompareSQL ranks a
+    # categorical axis' labels in, so the Sankey and the compare plots keep the same categories
     def most_common_first(label):
         return -source_rows[label], label
 
@@ -631,72 +631,6 @@ def acted_on_column(path_nodes, column):
         if column in child.wrangle_summary()["columns"]:
             return True
     return False
-
-
-# ── Across nodes ─────────────────────────────────────────────────────────────
-
-def distortion_trajectory(ordered):
-    """
-    The node number along a branch. Every value is measured against root, and each step's delta is the
-    difference of two of them - not a fresh parent-to-child measurement, which is a different number and
-    would hide drift that builds up over many small steps (doc 01 §1.4).
-
-    :param ordered: each node's distortion (or None), root-most first
-    :return: {"values", "deltas"}
-    """
-    values = []
-    for distortion in ordered:
-        if distortion:
-            values.append(distortion.get("overall"))
-        else:
-            values.append(None)
-
-    deltas = []
-    for index in range(1, len(values)):
-        previous = values[index - 1]
-        current = values[index]
-        if previous is None or current is None:
-            deltas.append(None)
-        else:
-            deltas.append(current - previous)
-
-    return {"values": values, "deltas": deltas}
-
-
-def pareto_frontier(scores):
-    """
-    Which nodes are beaten outright. Lower is better on both axes, and node Y is dominated by X when X is
-    no worse on both and strictly better on one. A dominated node is never the right choice, whatever the
-    analyst values, so it can be ruled out without asking. The rest form the frontier, which this declines
-    to rank - analysts who value keeping every row and analysts who value clean flags sit at opposite ends.
-
-    Both axes are rounded first, or float noise makes equal nodes dominate each other. When several nodes
-    dominate Y, the one named is the lowest id, so the explanation does not change between renders.
-
-    :param scores: [{"id", "error", "distortion"}]
-    :return: (frontier ids, {dominated id: dominating id}), in id order
-    """
-    ranked_scores = []
-    for score in scores:
-        rounded_error = round(score["error"], PARETO_PRECISION)
-        rounded_drift = round(score["distortion"], PARETO_PRECISION)
-        ranked_scores.append((score["id"], rounded_error, rounded_drift))
-    ranked_scores.sort()
-
-    dominated = {}
-    for y_id, y_error, y_drift in ranked_scores:
-        for x_id, x_error, x_drift in ranked_scores:
-            no_worse = x_error <= y_error and x_drift <= y_drift
-            strictly_better = x_error < y_error or x_drift < y_drift
-            if no_worse and strictly_better:
-                dominated[y_id] = x_id
-                break
-
-    frontier = []
-    for node_id, _, _ in ranked_scores:
-        if node_id not in dominated:
-            frontier.append(node_id)
-    return frontier, dominated
 
 
 # ── Annotations ──────────────────────────────────────────────────────────────
@@ -863,9 +797,11 @@ def annotation(column, result, facts, detail=None, acted_on=False, flows=None):
 # never changes; a new upload brings a new root.
 _root_kinds = {"table": None, "kinds": None}
 
-# Ridgeline curves: each reference's fit per (reference table, column), and each node's curve per (reference table,
-# node table, column)
-_density_cache = {}
+# What is measured of a reference once and shared by every node measured from it: its spread per numeric column and
+# its present cells, both keyed by the reference's table and oid; and the ridgeline curves - each reference's fit per
+# (reference table, column), and each node's curve per (reference table, node table, column). Node tables never change
+# once made, so nothing here goes stale within a session.
+_reference_cache = {}
 
 # Node builds run on several threads at once, so the caches above are only changed under this
 _cache_lock = threading.Lock()
@@ -887,15 +823,15 @@ def root_kinds(root_table, reload=False):
     from app.db_utils.column_types import ColumnTypes
 
     col_types = ColumnTypes.for_table(root_table, engine)
-    kinds = column_kinds(col_types, col_types.column_names)
+    kinds = column_kinds(col_types)
 
     with _cache_lock:
         _root_kinds.update(table=root_table, kinds=kinds)
-        _density_cache.clear()
+        _reference_cache.clear()
     return kinds
 
 
-def compute_node_distortion(table_name, root_table):
+def compute_node_distortion(table_name, root_table, row_count=None):
     """
     Measure a node's drift from root, with the facts about what its wrangles did. It needs no graph node, so a node
     can be measured before it joins the graph. Its columns are measured at the same time on the query pool, so this
@@ -903,6 +839,7 @@ def compute_node_distortion(table_name, root_table):
 
     :param table_name: the node's table
     :param root_table: root's table
+    :param row_count: the node table's rows, when the caller has counted them already - only root's are needed
     :return: the distortion, facts included
     """
     from app import engine, db_operations
@@ -912,8 +849,9 @@ def compute_node_distortion(table_name, root_table):
     kinds = root_kinds(root_table, reload=is_root)
 
     if is_root:
-        row_count = db_operations.get_row_count(root_table)
-        present_cells = DriftSQL(engine, root_table, root_table, kinds).generate_present_cells("reference")
+        if row_count is None:
+            row_count = db_operations.get_row_count(root_table)
+        present_cells = _reference_present_cells(DriftSQL(engine, root_table, root_table, kinds))
         distortion = root_distortion(kinds, present_cells, row_count)
 
         no_cells_changed = {}
@@ -940,12 +878,12 @@ def _node_distortion_of(pgraph, node_table):
 
 def _cached(key, compute):
     """
-    The density cache's entry under key, computed and stored on a miss. None is a value the cache keeps - a
+    The reference cache's entry under key, computed and stored on a miss. None is a value the cache keeps - a
     reference that cannot be smoothed stays that way - so a miss is told apart by a sentinel.
     """
     missing = object()
     with _cache_lock:
-        value = _density_cache.get(key, missing)
+        value = _reference_cache.get(key, missing)
     if value is not missing:
         return value
 
@@ -953,8 +891,28 @@ def _cached(key, compute):
     # only do the work twice
     value = compute()
     with _cache_lock:
-        _density_cache[key] = value
+        _reference_cache[key] = value
     return value
+
+
+def _reference_spread(drift, column):
+    """The reference's spread in a numeric column, measured once per reference - see DriftSQL.generate_reference_spread."""
+    key = ("spread", drift.reference_table, drift.reference_types.table_oid, column)
+
+    def measure_spread():
+        return drift.generate_reference_spread(column)
+
+    return _cached(key, measure_spread)
+
+
+def _reference_present_cells(drift):
+    """The reference's non-null cells per column, counted once per reference and set of root's columns."""
+    key = ("present", drift.reference_table, drift.reference_types.table_oid, tuple(drift.kinds))
+
+    def count_present_cells():
+        return drift.generate_present_cells("reference")
+
+    return _cached(key, count_present_cells)
 
 
 def _density(drift, base_table, node_table, column):
@@ -998,10 +956,8 @@ def _measure_from_base(drift, node_table, base_table, column, kind):
         # Measured against itself: exactly zero, as root is against root
         present = drift.generate_present_cells("reference").get(column, 0)
         result = _result(kind, 0.0, present, present)
-    elif kind == NUMERIC:
-        result = column_distortion(drift.generate_numeric_drift(column), kind)
     else:
-        result = column_distortion(drift.generate_categorical_drift(column), kind)
+        result = column_distortion(measure_column(drift, column, kind), kind)
 
     return result, edit_facts(measured_facts)
 

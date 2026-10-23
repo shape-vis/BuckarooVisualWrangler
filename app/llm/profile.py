@@ -10,10 +10,12 @@ many tokens, and a small model reads a column-per-line layout at least as well.
 """
 from typing import Any
 
-from app import db_operations, engine
+from app import engine
+from app.db_utils.column_types import NUMERIC_KIND
 from app.db_utils.data_profile import DataProfile
 from app.pgraph.metrics import DIMENSIONS, SKIPPED_COLUMNS, parse_json_counts
 from app.llm.tools import MAX_ENUM_COLUMNS
+from app.server_utils.service_helpers import session_graph
 
 # A column with more distinct values than this is almost certainly free text that the profiler
 # has typed as categorical. Listing its categories would flood the prompt, so only the count goes.
@@ -126,16 +128,11 @@ def _categorical_description(row: dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
-def _stats_cell(row: dict[str, Any]) -> tuple[str, str]:
-    """Returns (kind, description). A column is numeric exactly when it has a mean."""
-    if row.get("mean") is not None:
-        return "numeric", _numeric_description(row)
-    return "categorical", _categorical_description(row)
-
-
-def read_profile_rows(node_table: str) -> list[dict[str, Any]]:
-    """One dict per real column of dp_<node_table>, structural columns dropped."""
-    return DataProfile(node_table, engine).read_stored_profile(SKIPPED_COLUMNS)
+def _stats_cell(kind: str, row: dict[str, Any]) -> str:
+    """The column's statistics, as its kind - by ColumnTypes.column_kind - describes it."""
+    if kind == NUMERIC_KIND:
+        return _numeric_description(row)
+    return _categorical_description(row)
 
 
 def _keep_most_flagged(described: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
@@ -185,14 +182,16 @@ def build_profile_block(node_table: str) -> tuple[str, list[str]]:
     The two are kept in step on purpose: the tool enums are built from the same list, so the
     model can never name a column it was not shown.
     """
-    rows = read_profile_rows(node_table)
-    row_count = int(db_operations.get_row_count(node_table))
+    data_profile = DataProfile(node_table, engine)
+    # A node's table never changes once built, so its row count is the one its metrics were measured over
+    row_count = session_graph().node_map[node_table].metrics.row_count
 
     described = []
-    for row in rows:
+    for row in data_profile.read_stored_profile(SKIPPED_COLUMNS):
         counts = parse_json_counts(row.get("error_counts"))
         flags, total = _flags_cell(counts)
-        kind, stats = _stats_cell(row)
+        kind = data_profile.col_types.column_kind(row["column_name"])
+        stats = _stats_cell(kind, row)
         described.append({
             "name": str(row["column_name"]),
             "kind": kind,

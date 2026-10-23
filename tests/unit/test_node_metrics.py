@@ -1,18 +1,17 @@
-import json
 import unittest
 
 import app
-from app.pgraph.metrics import NodeMetrics, quality_trajectory
+from app.pgraph.metrics import NodeMetrics
 from app.pgraph.node import GraphNode, format_wrangle_label
-from app.pgraph.pgraph import PGraph, node_id_for_count
+from app.pgraph.pgraph import PGraph, node_id_for_count, quality_trajectory
 from app.server_utils.service_helpers import parse_node_id
 
 
 class StubDataProfile:
     """
     Stands in for DataProfile so the metric arithmetic can be tested without a database. Mirrors the
-    real contract: get_col_names returns every column including ID, and 'error_counts' comes back as
-    a JSON string on both the looked-up and the freshly-computed path.
+    real contract: get_col_names returns every column including ID, and read_stored_profile leaves out
+    the skipped columns and gives each column's error counts as the dp_ table's jsonb comes back - a dict.
     """
 
     def __init__(self, error_counts_by_column):
@@ -21,10 +20,12 @@ class StubDataProfile:
     def get_col_names(self):
         return list(self.error_counts_by_column)
 
-    def calculate_column_attribute(self, attribute_name, column_name, look_up_stat=True):
-        assert attribute_name == 'error_counts'
-        counts = self.error_counts_by_column[column_name]
-        return None if counts is None else json.dumps(counts)
+    def read_stored_profile(self, skipped_columns=()):
+        rows = []
+        for column_name, counts in self.error_counts_by_column.items():
+            if column_name not in skipped_columns:
+                rows.append({'column_name': column_name, 'error_counts': counts})
+        return rows
 
 
 class NodeMetricsTests(unittest.TestCase):

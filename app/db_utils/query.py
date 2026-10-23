@@ -4,28 +4,16 @@
 from typing import List, Tuple
 from sqlalchemy import text
 from app import engine
-from app.db_utils.detector_sql import missing_cell_predicate
-from app.db_utils.execute_sql import quote_identifier
+from app.db_utils.column_types import ColumnTypes, missing_cell_predicate
+from app.db_utils.execute_sql import errors_table_name, quote_identifier
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper Functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-_NUMERIC_TYPES = {
-    "smallint", "integer", "bigint",
-    "decimal", "numeric", "real", "double precision"
-}
-
-def _is_numeric(conn, col: str, table_name: str) -> bool:
-    """Check if a column is numeric."""
-    sql = """
-        SELECT data_type
-        FROM information_schema.columns
-        WHERE table_name = :table_name
-          AND column_name = :col
-    """
-    dtype = conn.execute(text(sql), {"table_name": table_name, "col": col}).scalar_one()
-    return dtype in _NUMERIC_TYPES
+def _is_numeric(col: str, table_name: str) -> bool:
+    """Check if a column is numeric, by the table's ColumnTypes."""
+    return ColumnTypes.for_table(table_name, engine).is_numeric_col(col)
 
 
 def _ids_in(ids_param: str) -> str:
@@ -44,14 +32,10 @@ def _ids_in(ids_param: str) -> str:
     return f'"ID" IN (SELECT unnest(CAST(:{ids_param} AS bigint[])))'
 
 
-def _get_errors_table(table: str) -> str:
-    """Get errors table name for given table."""
-    return f"errors_{table}"
-
-
 def _get_row_count(conn, table: str) -> int:
     """Get total row count from table."""
-    return conn.execute(text(f'SELECT COUNT(*) FROM "{table}"')).scalar_one()
+    quoted_table = quote_identifier(table)
+    return conn.execute(text(f'SELECT COUNT(*) FROM {quoted_table}')).scalar_one()
 
 
 def _missing_pred(col: str) -> str:
@@ -64,7 +48,8 @@ def _missing_pred(col: str) -> str:
 
 def _compute_imputation_value(conn, table: str, col: str, is_numeric: bool):
     """
-    Compute imputation value: mean for numeric, mode for categorical.
+    Compute imputation value: mean for numeric, mode for categorical - the mode the data profile stores, missing cells
+    left out and a tie going to the first by name.
 
     Parameters
     ----------
@@ -82,18 +67,23 @@ def _compute_imputation_value(conn, table: str, col: str, is_numeric: bool):
     Any
         Mean value for numeric columns, mode (most frequent) for categorical
     """
+    quoted_table = quote_identifier(table)
+    quoted_col = quote_identifier(col)
+    is_missing = _missing_pred(col)
+
     if is_numeric:
         return conn.execute(
-            text(f'SELECT AVG("{col}"::numeric) FROM "{table}" WHERE NOT {_missing_pred(col)}')
+            text(f'SELECT AVG({quoted_col}::numeric) FROM {quoted_table} WHERE NOT {is_missing}')
         ).scalar()
     else:
         return conn.execute(
             text(f'''
-                SELECT "{col}"
-                FROM "{table}"
-                WHERE NOT {_missing_pred(col)}
-                GROUP BY "{col}"
-                ORDER BY COUNT(*) DESC
+                SELECT {quoted_col}
+                FROM {quoted_table}
+                WHERE NOT {is_missing}
+                GROUP BY {quoted_col}
+                -- A tie goes to the first by name, as the data profile's mode does
+                ORDER BY COUNT(*) DESC, {quoted_col}::text
                 LIMIT 1
             ''')
         ).scalar()
@@ -110,8 +100,8 @@ def imputation_value(table: str, col: str):
         Mean value for numeric columns, mode (most frequent) for categorical, or None when the column has no
         clean values to compute one from
     """
+    is_numeric = _is_numeric(col, table)
     with engine.connect() as conn:
-        is_numeric = _is_numeric(conn, col, table)
         return _compute_imputation_value(conn, table, col, is_numeric)
 
 
@@ -129,12 +119,14 @@ def flagged_row_ids(table: str, columns: List[str], error_type: str) -> List[int
     error_type : str
         The error type the flags must carry
     """
+    quoted_errors = quote_identifier(errors_table_name(table))
+    quoted_table = quote_identifier(table)
     with engine.connect() as conn:
         rows = conn.execute(
             text(f'''
                 SELECT DISTINCT e.row_id
-                FROM "{_get_errors_table(table)}" e
-                JOIN "{table}" t ON t."ID" = e.row_id
+                FROM {quoted_errors} e
+                JOIN {quoted_table} t ON t."ID" = e.row_id
                 WHERE e.column_id = ANY(:columns) AND e.error_type = :error_type
                 ORDER BY e.row_id
             '''),
@@ -171,16 +163,20 @@ def remove_rows_by_ids(table: str, ids: List[int]) -> int:
     if not ids:
         return 0
 
+    quoted_table = quote_identifier(table)
     with engine.begin() as conn:
         conn.execute(
             text(f"""
-                DELETE FROM "{table}"
+                DELETE FROM {quoted_table}
                 WHERE {_ids_in("ids")}
             """),
             {"ids": ids}
         )
         n_rows = _get_row_count(conn, table)
 
+    # Which text columns hold numbers, and how many, is counted over the rows - so any types built before the delete
+    # are stale
+    ColumnTypes.forget(table)
     return n_rows
 
 
@@ -207,17 +203,22 @@ def impute_by_ids(table: str, col: str, ids: List[int]) -> Tuple[int, int]:
     if not ids:
         return 0, 0
 
+    is_numeric = _is_numeric(col, table)
+    quoted_table = quote_identifier(table)
+    quoted_col = quote_identifier(col)
     with engine.begin() as conn:
-        is_numeric = _is_numeric(conn, col, table)
         fill_val = _compute_imputation_value(conn, table, col, is_numeric)
 
         result = conn.execute(
             text(f'''
-                        UPDATE "{table}"
-                        SET "{col}" = :fill_val
+                        UPDATE {quoted_table}
+                        SET {quoted_col} = :fill_val
                         WHERE {_ids_in("ids")}
                     '''),
             {"fill_val": fill_val, "ids": ids}
         )
+        cells_imputed = result.rowcount
 
-        return len(ids), result.rowcount
+    # The types were built from the values before the fill, which can change how a text column is classified
+    ColumnTypes.forget(table)
+    return len(ids), cells_imputed

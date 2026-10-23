@@ -2,15 +2,20 @@
 
 from flask import request
 from app import app, db_operations, engine
-from app.pgraph.metrics import quality_trajectory
 from app.db_utils.compare_sql import PLOT_KINDS, CompareSQL
-from app.pgraph.distortion import distortion_trajectory, drift_detail
+from app.pgraph.distortion import drift_detail
+from app.pgraph.pgraph import distortion_trajectory, quality_trajectory
 from app.server_utils.service_helpers import (
     WRANGLE_LOCK,
+    bounded_int,
     clicked_node_access_helper,
     get_current_pgraph,
+    require_node,
     session_graph,
 )
+
+# The most bins a compared axis is split into
+MAX_BINS = 50
 
 
 def _graph_or_error():
@@ -100,12 +105,6 @@ def branch_trajectory():
         return {"success": False, "error": str(e)}, 400
 
 
-def _bounded_int(name, default, low, high):
-    """An integer query parameter, clamped so a request cannot ask for an absurd amount of work."""
-    value = int(request.args.get(name, default))
-    return max(low, min(high, value))
-
-
 @app.get("/api/pgraph/compare")
 def compare_nodes():
     """
@@ -117,7 +116,7 @@ def compare_nodes():
     Read-only: neither node becomes the session's current table.
     """
     try:
-        pgraph, error = _graph_or_error()
+        _, error = _graph_or_error()
         if error:
             return error
 
@@ -127,8 +126,7 @@ def compare_nodes():
         for name, value in (("a", table_a), ("b", table_b)):
             if not value:
                 return {"success": False, "error": f"missing {name}"}, 400
-            if value not in pgraph.node_map:
-                return {"success": False, "error": f"{value} is not a node in this graph"}, 400
+            require_node(value)
 
         kind = request.args.get("kind", "histogram")
         if kind not in PLOT_KINDS:
@@ -143,7 +141,7 @@ def compare_nodes():
         if kind != "histogram" and not y_column:
             return {"success": False, "error": f"a {kind} needs a y column"}, 400
 
-        bin_count = _bounded_int("bins", 10, 1, 50)
+        bin_count = bounded_int(request.args, "bins", 10, 1, MAX_BINS)
 
         compare = CompareSQL(engine, table_a, table_b)
         if kind == "histogram":
@@ -164,19 +162,6 @@ def compare_nodes():
         return {"success": False, "error": str(e)}, 400
 
 
-def _requested_node(pgraph):
-    """
-    The node a request names, refusing anything that is not a node in this session's graph.
-    :return: (node, None), or (None, an error response)
-    """
-    node = request.args.get("node")
-    if not node:
-        return None, ({"success": False, "error": "missing node"}, 400)
-    if node not in pgraph.node_map:
-        return None, ({"success": False, "error": f"{node} is not a node in this graph"}, 400)
-    return node, None
-
-
 @app.get("/api/pgraph/drift_detail")
 def drift_detail_view():
     """
@@ -192,9 +177,10 @@ def drift_detail_view():
         if error:
             return error
 
-        node, error = _requested_node(pgraph)
-        if error:
-            return error
+        node = request.args.get("node")
+        if not node:
+            return {"success": False, "error": "missing node"}, 400
+        require_node(node)
 
         column = request.args.get("column")
         if not column:
@@ -203,8 +189,7 @@ def drift_detail_view():
         # Only an ancestor's rows are sure to hold the node's, which every number in the detail leans on
         base = request.args.get("base") or None
         if base is not None:
-            if base not in pgraph.node_map:
-                return {"success": False, "error": f"{base} is not a node in this graph"}, 400
+            require_node(base)
             if pgraph.path_between(base, node) is None:
                 return {"success": False, "error": f"{base} is not an ancestor of {node}"}, 400
 

@@ -1,10 +1,11 @@
 """
 Unit tests for safe_pg_name in app/server_utils/service_helpers.py: a node's table name is kept short enough that
-every table derived from it - errors_<name>, rankings_<name>, dp_<name> and, the longest, <name>_filtering - stays
-within PostgreSQL's 63-character identifier limit.
+every companion table named from it - see COMPANION_PREFIXES in app/db_utils/execute_sql.py - stays within
+PostgreSQL's 63-character identifier limit.
 """
 import hashlib
 
+from app.db_utils.execute_sql import node_table_names
 from app.server_utils.service_helpers import MAX_TABLE_NAME_LENGTH, safe_pg_name
 
 # The suffixes the app builds names with: an upload's random suffix, a candidate's bare name, and the staging copy
@@ -56,11 +57,11 @@ def test_one_character_over_the_limit_is_hashed():
 
 # ─── Every derived table fits ────────────────────────────────────────────────
 
-def test_the_filtering_table_fits_for_any_name():
+def test_every_companion_table_fits_for_any_name():
     for base in ["sales", "z" * 100]:
         for suffix in SUFFIXES:
-            filtering_name = f"{safe_pg_name(base, suffix)}_filtering"
-            assert len(filtering_name) <= POSTGRES_IDENTIFIER_LIMIT, filtering_name
+            for name in node_table_names(safe_pg_name(base, suffix)):
+                assert len(name) <= POSTGRES_IDENTIFIER_LIMIT, name
 
 
 # ─── Determinism ─────────────────────────────────────────────────────────────

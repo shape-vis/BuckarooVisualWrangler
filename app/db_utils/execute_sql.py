@@ -1,7 +1,7 @@
 """
 Thin wrapper around SQLAlchemy for executing and fetching results from a PostgreSQL database.
-Also the small helpers the query builders in db_utils share: quoting names into SQL, and bulk-loading a DataFrame
-through COPY.
+Also the small helpers the query builders in db_utils share: naming a node's companion tables, quoting names into SQL,
+and bulk-loading a DataFrame through COPY.
 """
 
 import csv
@@ -41,7 +41,31 @@ def fetch_sql(query: str, scalar: bool, engine, params=None):
         return None
 
 
-def _sql_identifier(name: str) -> str:
+# The tables every node's table has beside it, each named by a prefix on the node's table name
+ERRORS_PREFIX = "errors_"
+PROFILE_PREFIX = "dp_"
+COMPANION_PREFIXES = (ERRORS_PREFIX, PROFILE_PREFIX)
+
+
+def errors_table_name(table_name: str) -> str:
+    """The table holding a node table's error flags, one row per flagged cell: (row_id, column_id, error_type)."""
+    return ERRORS_PREFIX + table_name
+
+
+def profile_table_name(table_name: str) -> str:
+    """The table holding a node table's data profile, one row per column."""
+    return PROFILE_PREFIX + table_name
+
+
+def node_table_names(table_name: str) -> list:
+    """A node's table followed by every companion table - the set dropped together."""
+    names = [table_name]
+    for prefix in COMPANION_PREFIXES:
+        names.append(prefix + table_name)
+    return names
+
+
+def sql_identifier(name: str) -> str:
     """A table or column name double-quoted as Postgres reads it, with any quote inside it doubled."""
     return '"' + name.replace('"', '""') + '"'
 
@@ -54,7 +78,7 @@ def quote_identifier(name: str) -> str:
     :return: the name, quoted.
     """
 
-    return _sql_identifier(name).replace(":", "\\:")
+    return sql_identifier(name).replace(":", "\\:")
 
 
 def quote_literal(value: str) -> str:
@@ -107,13 +131,13 @@ def copy_insert(table, conn, keys, data_iter):
     buffer.seek(0)
 
     # COPY goes straight to the driver rather than through text(), so names are quoted without its escapes
-    target = _sql_identifier(table.name)
+    target = sql_identifier(table.name)
     if table.schema:
-        target = _sql_identifier(table.schema) + "." + target
+        target = sql_identifier(table.schema) + "." + target
 
     quoted_columns = []
     for key in keys:
-        quoted_columns.append(_sql_identifier(key))
+        quoted_columns.append(sql_identifier(key))
     column_list = ", ".join(quoted_columns)
 
     copy_statement = f"COPY {target} ({column_list}) FROM STDIN WITH (FORMAT csv, NULL '{_COPY_NULL}')"

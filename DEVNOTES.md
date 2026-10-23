@@ -13,7 +13,7 @@ code, so what you add fits the architecture. Each module's own docstring goes in
 4. [Error detection](#4-error-detection)
 5. [Candidates: repairs and AI suggestions](#5-candidates-repairs-and-ai-suggestions)
 6. [Provenance graph and navigation](#6-provenance-graph-and-navigation)
-7. [DBOperations, ColumnTypes and FilteringSQL](#7-dboperations-columntypes-and-filteringsql)
+7. [DBOperations, ColumnTypes and DataProfile](#7-dboperations-columntypes-and-dataprofile)
 8. [Metrics, drift and comparing nodes](#8-metrics-drift-and-comparing-nodes)
 9. [Threads](#9-threads)
 10. [Endpoints](#10-endpoints)
@@ -47,16 +47,15 @@ Every node's data table has companions, all named from it:
 |-------|----------|-------|
 | `<table>` | upload, or a candidate's clone + wrangle | the data, with an integer `"ID"` column naming each row for good |
 | `errors_<table>` | `DetectorSQL` | one row per flagged cell: `(row_id, column_id, error_type)`, `row_id` being the row's `"ID"` |
-| `dp_<table>` | `build_data_profile_table` | the data profile: per column, its statistics and error / category counts |
-| `rankings_<table>` | `DBOperations.update_rankings` | columns ranked by error flags - the summary panel's default columns |
-| `<table>_filtering` | `FilteringSQL` | the `"ID"`s satisfying the active filters, while any are active |
+| `dp_<table>` | `DataProfile` | the data profile: per column, its statistics and its error / category counts |
 
 **Names.** The root is `n0a_<file>_<random>`. Every node since is staged as a candidate first and keeps the
 candidate's name, `c<n>_<base>`, for good; its label (`n2c`) is assigned when it is accepted, and the name never
-changes. `safe_pg_name` (`service_helpers.py`) hash-truncates names so the longest companion, `<name>_filtering`,
-stays within Postgres' 63-character limit.
+changes. A companion's name comes only from `errors_table_name` / `profile_table_name` in `execute_sql.py`, whose
+`COMPANION_PREFIXES` list every companion. `safe_pg_name` (`service_helpers.py`) hash-truncates names so the longest
+companion stays within Postgres' 63-character limit.
 
-`DBOperations.drop_node_tables(table)` drops a table with all its companions.
+`DBOperations.drop_node_tables(table)` drops a table with all its companions (`node_table_names`).
 
 ---
 
@@ -67,9 +66,9 @@ from its stored table. Upload builds the root this way, and every candidate is b
 measurements never depend on how it was made:
 
 1. `DetectorSQL(...).generate_errors_table()` - the errors table
-2. `update_rankings` - the rankings table
-3. `build_data_profile_table` - the data profile, its columns profiled concurrently on `QUERY_POOL`
-4. `compute_node_metrics` - error rates, read from the data profile (`app/pgraph/metrics.py`)
+2. `build_data_profile_table` - the data profile, every column in one query, its error counts included
+3. the table's rows, counted once for the two steps below
+4. `compute_node_metrics` - error rates, read from the data profile in one read (`app/pgraph/metrics.py`)
 5. `compute_node_distortion` - drift from root, its columns measured concurrently (`app/pgraph/distortion.py`)
 
 Upload (`load_file` in `app/routes/routes.py`) reads the CSV, adds `"ID"` (`set_id_column`), picks each column's
@@ -91,7 +90,8 @@ and writes the errors table with `CREATE TABLE AS`. The four error types:
 | `incomplete` | text columns with at most 10 numeric values: values occurring fewer than 3 times |
 
 A text column is judged by its distinct values, so each is parsed once however often it occurs. The structural
-columns `ID`, `index` and `level_0` are never flagged.
+columns - `STRUCTURAL_COLUMNS` in `column_types.py`: `ID`, `Unnamed: 0`, and the `index` / `level_0` columns pandas can
+leave behind - are never flagged, and metrics, drift and the AI's profile skip them too.
 
 ---
 
@@ -145,42 +145,55 @@ next_table, pareto}`.
 
 ---
 
-## 7. DBOperations, ColumnTypes and FilteringSQL
+## 7. DBOperations, ColumnTypes and DataProfile
 
 **`DBOperations`** (`app/db_utils/db_functions_sql.py`) is instantiated once in `app/__init__.py` as
 `db_operations`. `main_table_name` is the backend's single source of truth for the current table; `load_table(t)`
 points it at a node (its errors and profile tables default to `errors_t` / `dp_t`). It builds the plots:
 `generate_one_d_histogram_with_errors`, `generate_two_d_histogram_with_errors`, `generate_scatterplot_with_errors`,
 plus bin/row lookups for selections, `generate_top_error_rows`, and table lifecycle helpers (`clone_table`,
-`drop_node_tables`, `update_rankings`, `get_row_count`, `table_exists`). Plot routes for a node other than the
-current one make a `DBOperations` of their own, so the session's state is untouched.
+`drop_node_tables`, `get_row_count`, `table_exists`). Every plotted column is checked against the table's own columns
+before any name goes into a query. A numeric column's numbers are binned across their range - one bin a unit wide for
+a column holding a single number - and a null or NaN in it becomes a label beside the bins; a text column is binned by
+label. Plot routes for a node other than the current one make a `DBOperations` of their own, so the session's state
+is untouched.
 
-**`ColumnTypes`** (`app/db_utils/column_types.py`) classifies a table's columns: `numeric_cols` (a numeric SQL type),
-`pure_categorical` (text with no numeric-looking values), and `mixed_cols` (text holding some numbers), split into
-`numeric_mixed_cols` / `categorical_mixed_cols` by majority. Get it through `ColumnTypes.for_table(table, engine)`,
-which caches by table and oid; `ColumnTypes.forget(table)` drops a cached entry.
+**`ColumnTypes`** (`app/db_utils/column_types.py`) classifies a table's columns, in one scan of its text columns:
+`numeric_cols` (a numeric SQL type), `pure_categorical` (text with no numeric-looking values), and `mixed_cols` (text
+holding some numbers), split into `numeric_mixed_cols` / `categorical_mixed_cols` by majority. `column_kind` is the
+one rule for whether a column is summarized, profiled and measured as numeric or categorical. Get it through
+`ColumnTypes.for_table(table, engine)`, which caches by table and oid; `ColumnTypes.forget(table)` drops a cached
+entry, and a wrangle that changes rows forgets its table's.
 
-**`FilteringSQL`** (`app/db_utils/filtering_sql.py`) keeps `<table>_filtering`, the `"ID"`s matching every active
-filter; while it exists the plot queries join against it.
+The same module holds the rules every query builder reads a value by, so the views always agree:
+`number_expression` (a value as a number), `missing_cell_predicate` (whether a cell is missing - the Missing
+detector's rule) and `category_expression` (a cell as a category, missing cells as `NULL_LABEL`), plus the labels
+the plots share (`NULL_LABEL`, `OTHER_LABEL`, `MAX_LABELS`, `REMOVED_LABEL`).
 
-**`DataProfile`** (`app/db_utils/data_profile.py`) computes per-column statistics with one query each and reads them
-back from `dp_<table>`.
+**`DataProfile`** (`app/db_utils/data_profile.py`) builds `dp_<table>` in one query: per column, by its kind, the mean,
+median, min and max of a numeric column, or the category count, mode and category counts of a categorical one, and
+every column's error counts. The mode leaves missing cells out and breaks ties by name - the value an impute fills
+with. Metrics, the attribute summary and the AI's profile each read it back once (`read_stored_profile`).
 
 ---
 
 ## 8. Metrics, drift and comparing nodes
 
-- **Metrics** (`app/pgraph/metrics.py`): per-column and node-level error rates per type, from the data profile.
-  `quality_trajectory` gives the series along a branch (`GET /api/pgraph/branch_trajectory`).
+- **Metrics** (`app/pgraph/metrics.py`): per-column and node-level error rates per type, from the data profile. The
+  attribute summary's error badges and default columns are read off a node's cached metrics.
 - **Drift** (`app/pgraph/distortion.py`, SQL in `drift_sql.py`): how far each column has moved from root - W1/IQR
   for numeric columns, total variation distance for categorical ones - plus the facts about what the wrangles did
   (rows removed, cells changed). Column kinds are decided on root and held for every node. `drift_detail` serves the
   ridgeline and Sankey views and a plain-language annotation (`GET /api/pgraph/drift_detail`).
-- **Pareto**: leaves carrying both an error total and a drift are ranked, and nodes beaten on both are marked
-  dominated (`PGraph.pareto`, `pareto_frontier`).
+- **Across nodes** (`app/pgraph/pgraph.py`): `quality_trajectory` and `distortion_trajectory` give the series along a
+  branch (`GET /api/pgraph/branch_trajectory`), both through `branch_deltas`. For **Pareto**, leaves carrying both an
+  error total and a drift are ranked, and nodes beaten on both are marked dominated (`PGraph.pareto`,
+  `pareto_frontier`). Drift measures root once - its spread per numeric column and its present cells are cached for
+  every node measured from it.
 - **Compare** (`app/db_utils/compare_sql.py`, `GET /api/pgraph/compare`): bins two nodes' tables on shared axes so
   their histograms and heatmaps line up. A mostly-numeric axis is binned across both states' range; anything else
-  becomes labels, at most 20 with the tail folded into `(other)`. Read-only, and only for tables in the graph.
+  becomes labels, at most 20 with the tail folded into `(other)` - the most common kept, ties broken by name, as the
+  Sankey folds its categories. Read-only, and only for tables in the graph.
 
 ---
 
@@ -241,19 +254,18 @@ app/
 ├── db_utils/                    # all SQL
 │   ├── bootstrap.py             # creates the database at startup if it is missing
 │   ├── db_functions_sql.py      # DBOperations: plots, table lifecycle
-│   ├── column_types.py          # ColumnTypes
-│   ├── data_profile.py          # DataProfile
+│   ├── column_types.py          # ColumnTypes, and the number / missing / category rules and shared labels
+│   ├── data_profile.py          # DataProfile: the dp_ table
 │   ├── detector_sql.py          # DetectorSQL: error detection
 │   ├── compare_sql.py           # CompareSQL: two nodes on shared axes
 │   ├── drift_sql.py             # DriftSQL: drift statistics
-│   ├── filtering_sql.py         # FilteringSQL
 │   ├── query.py                 # wrangles by ID, flagged-row lookup, imputation value
-│   └── execute_sql.py           # fetch_sql / execute_sql, quoting, COPY insert
+│   └── execute_sql.py           # fetch_sql / execute_sql, companion table names, quoting, COPY insert
 ├── pgraph/
-│   ├── pgraph.py                # PGraph
+│   ├── pgraph.py                # PGraph, branch trajectories, Pareto
 │   ├── node.py                  # GraphNode, wrangle labels
 │   ├── metrics.py               # NodeMetrics
-│   └── distortion.py            # drift arithmetic, annotations, Pareto
+│   └── distortion.py            # drift arithmetic, annotations
 ├── llm/                         # prompt, tool declarations, Gemini client - no SQL, no writes
 ├── routes/                      # one file per endpoint group, auto-imported
 └── server_utils/
@@ -270,7 +282,7 @@ app/
 ## 13. Tests
 
 - `tests/unit` - pure logic, no database.
-- `tests/sql` - against the local Postgres (`@pytest.mark.sql`): detection, compare, drift, data profile,
-  candidates, AI routes, and a golden survey test of drift and Pareto.
+- `tests/sql` - against the local Postgres (`@pytest.mark.sql`): upload, the main view's plots, detection, compare,
+  drift, data profile, candidates, AI routes, and a golden survey test of drift and Pareto.
 
 Run both with `.venv/bin/pytest tests/unit tests/sql`.

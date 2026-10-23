@@ -13,37 +13,12 @@ the values found wanting are joined back to the rows that hold them. And every n
 single scan of the table.
 """
 
-from app.db_utils.column_types import ColumnTypes, NUMERIC_TEXT_REGEX
-from app.db_utils.execute_sql import execute_sql, quote_identifier, quote_literal
+from app.db_utils.column_types import ColumnTypes, missing_cell_predicate, text_number_expression
+from app.db_utils.execute_sql import errors_table_name, execute_sql, quote_identifier, quote_literal
 
-
-# Columns that are never data, so never flagged: the row identifier "ID"; "Unnamed: 0", the column pandas names a
-# CSV's unnamed index column; and the index columns to_sql can leave behind. The pandas detectors skipped exactly "ID"
-# and "Unnamed: 0" - an upload's original id column, renamed "Original_ID" when it can't serve as "ID", is data like
-# any other. Metrics, drift and the AI's profile skip this same list (see app/pgraph/metrics.py).
-STRUCTURAL_COLUMNS = ("ID", "Unnamed: 0", "index", "level_0")
-
-# The text a cell can hold and still count as missing
-MISSING_TOKENS = ("null", "undefined")
-
-# The error types the detectors raise - every error_type an errors_ table holds
-ERROR_TYPES = ("missing", "anomaly", "mismatch", "incomplete")
-
-
-def missing_cell_predicate(column_sql: str) -> str:
-    """
-    The rule for a missing cell: null, or exactly one of MISSING_TOKENS. Drift labels a categorical column's missing
-    cells by this same rule (DriftSQL), so the two panels always agree about which cells are missing.
-    :arg: column_sql: the column as it is referenced in the query, already quoted, e.g. d."Age".
-    :return: a boolean SQL expression.
-    """
-
-    quoted_tokens = []
-    for token in MISSING_TOKENS:
-        quoted_tokens.append(quote_literal(token))
-    token_list = ", ".join(quoted_tokens)
-
-    return f"({column_sql} IS NULL OR {column_sql}::text IN ({token_list}))"
+# The error types the detectors raise - every error_type an errors_ table holds. Metrics, the AI's tools and the front
+# end's ERROR_DIMENSIONS (ui/src/store/errorColors.js) all list them, in this order.
+ERROR_TYPES = ("missing", "mismatch", "anomaly", "incomplete")
 
 
 # Wraps up error detection for one table into one class.
@@ -68,18 +43,15 @@ class DetectorSQL:
         """
         self.engine = engine
         self.table_name = table_name
-        self.error_table_name = f"errors_{table_name}"
+        self.error_table_name = errors_table_name(table_name)
         self.col_types = ColumnTypes.for_table(table_name, engine)
 
         # The data columns, in table order, and which of them are numeric or text. A column of any other type -
-        # a date, say - can only be missing.
-        self.data_cols = []
+        # a date, say - can only be missing. The structural columns are never data, so never flagged.
+        self.data_cols = self.col_types.data_column_names()
         self.numeric_cols = []
         self.text_cols = []
-        for col in self.col_types.column_names:
-            if col in STRUCTURAL_COLUMNS:
-                continue
-            self.data_cols.append(col)
+        for col in self.data_cols:
             if self.col_types.is_numeric_col(col):
                 self.numeric_cols.append(col)
             elif self.col_types.is_text_col(col):
@@ -147,13 +119,15 @@ class DetectorSQL:
         :return: the query for the parsed values.
         """
 
+        number = text_number_expression("value")
+
         return f''',
             parsed_text_values AS (
                 SELECT
                     column_id,
                     value,
                     occurrences,
-                    CASE WHEN value ~ {NUMERIC_TEXT_REGEX} THEN value::float8 END AS number,
+                    {number} AS number,
                     CASE
                         WHEN btrim(value, {self.MISMATCH_TRIMMED}) ~ {self.MISMATCH_NUMBER_REGEX} THEN 'numeric'
                         ELSE 'text'

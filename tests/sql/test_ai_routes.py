@@ -186,7 +186,8 @@ def test_endpoints_survive_a_session_with_no_graph_yet(monkeypatch):
     monkeypatch.setattr(app, "pgraph_for_session", None)
 
     from app.server_utils import ai_wrangle
-    assert ai_wrangle.session_graph() is None
+    from app.server_utils.service_helpers import session_graph
+    assert session_graph() is None
     assert ai_wrangle.known_node("anything") is False
 
     client = flask_app.test_client()

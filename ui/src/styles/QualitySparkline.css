@@ -26,6 +26,7 @@
 .quality-swatch {
     width: 0.75em;
     height: 0.75em;
+    border-radius: 0.17em;
     flex-shrink: 0;
     display: inline-block;
 }
@@ -39,9 +40,4 @@
    DRIFT_COLOR in errorColors.js. */
 .quality-swatch--drift {
     background-color: var(--drift);
-}
-
-/* The app is square-cornered, but the provenance graph keeps its own rounded look, sparkline sub-nodes included */
-.pgraph-container .quality-swatch {
-    border-radius: 0.17em;
 }

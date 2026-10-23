@@ -3,13 +3,20 @@ the class for the pgraph which creates the DAG structure - March 31, 2026 - Nico
 
 uses a dictionary to have parent <--> child interaction
 to traverse up and down, it access' the child's parent node
+
+It also holds what is read across nodes rather than off one: a branch's trajectory and the Pareto frontier. Each node's
+own measurements - its error metrics (metrics.py) and its drift from root (distortion.py) - are made when it is built
+and cached on it, and everything here is plain arithmetic over those, so it is testable without a database.
 """
+from app.pgraph.metrics import DIMENSIONS
 from app.pgraph.node import GraphNode
-from app.pgraph.distortion import pareto_frontier
 
 # Node ids are n{digit}{letter} - n0a, n0b ... n0z, n1a ... n9z. Always exactly three characters, so
 # the prefix on a table name has a fixed width and 260 nodes fit before ids run out.
 NODE_ID_CAPACITY = 260
+
+# Both Pareto axes are rounded to this many places, so float noise cannot make equal nodes dominate
+PARETO_PRECISION = 6
 
 
 def node_id_for_count(count):
@@ -20,6 +27,128 @@ def node_id_for_count(count):
     if count >= NODE_ID_CAPACITY:
         raise ValueError(f"pgraph supports {NODE_ID_CAPACITY} nodes, got {count}")
     return f"n{count // 26}{chr(ord('a') + count % 26)}"
+
+
+# ── Across nodes ─────────────────────────────────────────────────────────────
+
+def branch_deltas(values):
+    """
+    Each step's change along a branch: the difference of two values both measured on their own node, not a fresh
+    measurement between parent and child. A step with a value missing on either side has no change.
+
+    :param values: one value per node, root-most first; None where a node has none
+    :return: the deltas, one fewer than the values
+    """
+    deltas = []
+    for index in range(1, len(values)):
+        previous = values[index - 1]
+        current = values[index]
+        if previous is None or current is None:
+            deltas.append(None)
+        else:
+            deltas.append(current - previous)
+    return deltas
+
+
+def quality_trajectory(ordered_metrics):
+    """
+    Compute the downstream quality trajectory along one branch.
+
+        delta_i        = q(n_i+1) - q(n_i)
+        contribution_i = delta_i / sum_j |delta_j|
+
+    q is an *error* rate, so higher is worse: a positive delta means errors increased. That is why a
+    positive contribution indicates degradation and a negative one indicates improvement.
+
+    When every delta along the branch is zero there is nothing to attribute, so the branch is reported
+    as unchanged rather than dividing by zero.
+
+    :param ordered_metrics: NodeMetrics in path order, root-most first
+    :return: {dimension: {"values", "deltas", "contributions", "no_change"}}
+    """
+    trajectory = {}
+
+    for dimension in DIMENSIONS:
+        values = []
+        for metrics in ordered_metrics:
+            values.append(metrics.dimension(dimension))
+        deltas = branch_deltas(values)
+
+        total_absolute_change = 0
+        for delta in deltas:
+            total_absolute_change += abs(delta)
+        no_change = total_absolute_change == 0
+
+        contributions = []
+        for delta in deltas:
+            if no_change:
+                contributions.append(0.0)
+            else:
+                contributions.append(delta / total_absolute_change)
+
+        trajectory[dimension] = {
+            "values": values,
+            "deltas": deltas,
+            "contributions": contributions,
+            "no_change": no_change,
+        }
+
+    return trajectory
+
+
+def distortion_trajectory(ordered):
+    """
+    The drift number along a branch. Every value is measured against root, and each step's delta is the
+    difference of two of them - not a fresh parent-to-child measurement, which is a different number and
+    would hide drift that builds up over many small steps (doc 01 §1.4).
+
+    :param ordered: each node's distortion (or None), root-most first
+    :return: {"values", "deltas"}
+    """
+    values = []
+    for distortion in ordered:
+        if distortion:
+            values.append(distortion.get("overall"))
+        else:
+            values.append(None)
+
+    return {"values": values, "deltas": branch_deltas(values)}
+
+
+def pareto_frontier(scores):
+    """
+    Which nodes are beaten outright. Lower is better on both axes, and node Y is dominated by X when X is
+    no worse on both and strictly better on one. A dominated node is never the right choice, whatever the
+    analyst values, so it can be ruled out without asking. The rest form the frontier, which this declines
+    to rank - analysts who value keeping every row and analysts who value clean flags sit at opposite ends.
+
+    Both axes are rounded first, or float noise makes equal nodes dominate each other. When several nodes
+    dominate Y, the one named is the lowest id, so the explanation does not change between renders.
+
+    :param scores: [{"id", "error", "distortion"}]
+    :return: (frontier ids, {dominated id: dominating id}), in id order
+    """
+    ranked_scores = []
+    for score in scores:
+        rounded_error = round(score["error"], PARETO_PRECISION)
+        rounded_drift = round(score["distortion"], PARETO_PRECISION)
+        ranked_scores.append((score["id"], rounded_error, rounded_drift))
+    ranked_scores.sort()
+
+    dominated = {}
+    for y_id, y_error, y_drift in ranked_scores:
+        for x_id, x_error, x_drift in ranked_scores:
+            no_worse = x_error <= y_error and x_drift <= y_drift
+            strictly_better = x_error < y_error or x_drift < y_drift
+            if no_worse and strictly_better:
+                dominated[y_id] = x_id
+                break
+
+    frontier = []
+    for node_id, _, _ in ranked_scores:
+        if node_id not in dominated:
+            frontier.append(node_id)
+    return frontier, dominated
 
 
 def is_scored_leaf(node: GraphNode):
@@ -65,7 +194,7 @@ class PGraph:
 
     def pareto(self):
         """
-        Which leaf nodes are beaten outright on error and drift together - see distortion.pareto_frontier.
+        Which leaf nodes are beaten outright on error and drift together - see pareto_frontier.
 
         Only leaves are candidates: an interior node is a step on the way somewhere, not where a branch
         ended up, so it is never ranked. A leaf is scored once it carries both numbers.
@@ -82,8 +211,12 @@ class PGraph:
                 "distortion": node.distortion["overall"],
             })
 
+        scored = []
+        for score in scores:
+            scored.append(score["id"])
+
         frontier, dominated = pareto_frontier(scores)
-        return {"scored": [score["id"] for score in scores], "frontier": frontier, "dominated": dominated}
+        return {"scored": scored, "frontier": frontier, "dominated": dominated}
 
     def serialize_nodes(self):
         list_of_nodes = []

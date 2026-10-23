@@ -4,6 +4,7 @@
   color: var(--ink-muted);
   background-color: var(--surface-muted);
   border: 1px solid var(--border);
+  border-radius: 4px;
   cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   font-size: 7px;
@@ -38,6 +39,7 @@
   color: var(--ink);
   background-color: var(--surface-muted);
   border: 1px solid var(--border);
+  border-radius: 6px;
   cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   font-size: 13px;
@@ -74,18 +76,21 @@
   text-align: center;
 }
 
-/* first tab */
+/* first tab: round left corners */
 .navButtonContainer .navButton:first-child {
+  border-radius: 10px 0 0 10px;
   border-right: none;
 }
 
-/* last tab */
+/* last tab: round right corners */
 .navButtonContainer .navButton:last-child {
+  border-radius: 0 10px 10px 0;
   border-left: none;
 }
 
 /* middle tabs if more than two */
 .navButtonContainer .navButton:not(:first-child):not(:last-child) {
+  border-radius: 0;
   border-left: none;
   border-right: none;
 }
@@ -142,6 +147,7 @@
   cursor: pointer;
   padding: 6px 10px;
   margin-left: 6px;
+  border-radius: 6px;
   background: transparent;
   border: 1px solid transparent;
   font-size: 26px;

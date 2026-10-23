@@ -8,8 +8,8 @@ import unittest
 import numpy as np
 
 from app.pgraph.distortion import (CATEGORICAL, NUMERIC, OTHER_LABEL, REMOVED_LABEL, annotation, category_flows,
-                                   column_distortion, distortion_trajectory, node_density, pareto_frontier,
-                                   root_density_params, summarize)
+                                   column_distortion, node_density, root_density_params, summarize)
+from app.pgraph.pgraph import distortion_trajectory, pareto_frontier
 
 
 def masses(values):
