@@ -1,5 +1,5 @@
-#Buckaroo Project - June 1, 2025
-#This file handles all endpoints from the front-end
+#Buckaroo Project - June 1, 2025 - Nicolas Baret
+
 
 import os
 import traceback
