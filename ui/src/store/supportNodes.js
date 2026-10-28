@@ -1,6 +1,11 @@
-import {useCallback, useMemo, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {supportId} from "../utils/graphTopology.js";
 import {randomKey} from "../utils/randomKey.js";
+import {
+    addSupportNodeOnServer,
+    removeSupportNodeOnServer,
+    updateSupportNodeOnServer,
+} from "../utils/serverCalls.jsx";
 import {anchorOf, getSupportType} from "../graph_objects/supportNodes/registry.js";
 import {usePlotsWindows} from "./plotsWindows.js";
 
@@ -10,6 +15,10 @@ export const SUPPORT_WINDOW_ID = "support";
 /* The size an error plot grows to while it is being wrangled on - room for the matrix's own plot, its axes and
    the footer with Repair */
 export const WRANGLE_SIZE = {width: 460, height: 500};
+
+/* How long a sub-node's changes wait before they are sent to the server. A resize, or a comparison its sub-nodes
+   follow, changes a record many times in a row, and only where it ends up needs keeping. */
+const SEND_DELAY_MS = 400;
 
 /* The side a new sub-node of this kind goes on: the one its kind fixes, if it fixes one. Otherwise "auto", and
    the layout puts it on the side its host's branch leans to, worked out each time the graph is drawn
@@ -80,10 +89,15 @@ function viewRevealing(view, records, ids) {
  * Called by PGraphProvider, whose graph-drawing effect is the only thing that writes what React Flow
  * draws, and spread into its context - so it is state of the graph view without growing the provider.
  *
- * Each sub-node is a plain JSON record, {id, hostId, kind, side, config, createdAt}, and every change
- * goes through the functions below. Nothing is saved yet: the records last as long as the page. Saving
- * them belongs here - load the records into this state when the graph loads, and write them on change -
- * and needs no change to how they are drawn.
+ * Each sub-node is a plain JSON record, {id, hostId, kind, side, config, size}, and every change goes
+ * through the functions below. Each change lands here at once and is then sent to the server, which keeps
+ * the records on their host nodes - see app/pgraph/support_nodes.py. Each graph the server sends is read
+ * back in by syncSupportNodes, which brings in the records this page has not seen: all of them when the
+ * page loads, and the copies a new candidate inherits from its parent.
+ *
+ * An inherited record is marked inherited until the user changes it or the candidate is accepted, and
+ * arrives minimised, so a candidate doesn't come buried in its parent's plots. Accepting it settles them -
+ * see settleInherited.
  *
  * A record outlives its host disappearing from view - folded into a run, or undone - and is simply not
  * drawn meanwhile, so expanding or redoing brings it back.
@@ -106,6 +120,46 @@ export function useSupportNodes() {
     /* The error plot being wrangled on, if any: {id, sizeBefore}. It is drawn large, with the matrix's own plot to
        brush and Repair beside it; sizeBefore is what it goes back to after. */
     const [wrangling, setWrangling] = useState(null);
+
+    /* The records as last drawn, for the sends below, which run after a change has landed and want the record
+       as it ended up */
+    const recordsRef = useRef([]);
+    useEffect(() => {
+        recordsRef.current = supportNodes;
+    }, [supportNodes]);
+
+    // Each record's change still waiting to be sent: {id: timer}
+    const pendingSends = useRef(new Map());
+
+    /* Records removed here that the server may not have heard about yet, so a graph sent in the meantime doesn't
+       bring them back */
+    const removedIds = useRef(new Set());
+
+    const cancelSend = useCallback((id) => {
+        const timer = pendingSends.current.get(id);
+        if (timer === undefined) return;
+        clearTimeout(timer);
+        pendingSends.current.delete(id);
+    }, []);
+
+    // Sends a record's settings to the server once it has stopped changing for a moment
+    const scheduleSend = useCallback((id) => {
+        cancelSend(id);
+        const timer = setTimeout(() => {
+            pendingSends.current.delete(id);
+            const record = recordsRef.current.find((each) => each.id === id);
+            if (!record) return;
+
+            const changes = {
+                side: record.side,
+                config: record.config,
+                size: record.size ?? null,
+                inherited: record.inherited ?? false,
+            };
+            updateSupportNodeOnServer(record.hostId, id, changes);
+        }, SEND_DELAY_MS);
+        pendingSends.current.set(id, timer);
+    }, [cancelSend]);
 
     // How many there are of each anchor, for the graph-wide toggles
     const supportCountByAnchor = useMemo(() => {
@@ -172,7 +226,6 @@ export function useSupportNodes() {
             kind,
             side: initialSide(supportType),
             config,
-            createdAt: new Date().toISOString(),
         };
 
         // A new one shows even where its kind or its host's are hidden, or it would seem to vanish
@@ -180,37 +233,117 @@ export function useSupportNodes() {
             const records = [...current.records, record];
             return {records, view: viewRevealing(current.view, records, [id])};
         });
+        addSupportNodeOnServer(record);
         return id;
     }, []);
 
-    // patch is merged into the record, or is a function of the record that returns what to merge
-    const updateSupportNode = useCallback((id, patch) => {
+    /* patch is merged into the record, or is a function of the record that returns what to merge. A change makes an
+       inherited record the user's own, unless options.keepInherited says it is one the page made by itself - an
+       inherited sparkline measuring its branch, say. */
+    const updateSupportNode = useCallback((id, patch, options = {}) => {
+        const keepInherited = options.keepInherited ?? false;
         setState((current) => {
             const records = current.records.map((record) => {
                 if (record.id !== id) return record;
 
                 let changes = patch;
                 if (typeof patch === "function") changes = patch(record);
-                return {...record, ...changes};
+                if (!changes || Object.keys(changes).length === 0) return record;
+
+                const updated = {...record, ...changes};
+                if (!keepInherited) updated.inherited = false;
+                return updated;
             });
             return {...current, records};
         });
-    }, []);
+        scheduleSend(id);
+    }, [scheduleSend]);
 
     const removeSupportNode = useCallback((id) => {
+        const record = recordsRef.current.find((each) => each.id === id);
         setState((current) => {
-            const records = current.records.filter((record) => record.id !== id);
+            const records = current.records.filter((each) => each.id !== id);
             return {...current, records};
         });
         setWrangling((current) => (current?.id === id ? null : current));
-    }, []);
 
-    // Every sub-node of these hosts - for a candidate that is declined, whose node is gone with it
+        cancelSend(id);
+        removedIds.current.add(id);
+        if (record) removeSupportNodeOnServer(record.hostId, id);
+    }, [cancelSend]);
+
+    // Every sub-node of these hosts - for a candidate that is declined, whose node is gone with it on the server too
     const removeSupportNodesOf = useCallback((hostIds) => {
         const gone = new Set(hostIds);
+        for (const record of recordsRef.current) {
+            if (gone.has(record.hostId)) cancelSend(record.id);
+        }
         setState((current) => {
             const records = current.records.filter((record) => !gone.has(record.hostId));
             return {...current, records};
+        });
+    }, [cancelSend]);
+
+    /**
+     * Reads in the records of a graph the server sent: those this page has not seen yet are added - every one when
+     * the page loads, and the copies a new candidate inherited - and those whose host has gone are dropped. A
+     * record already here is left as it is, since this page's copy is the newer: its changes may still be on their
+     * way. One the server marks startMinimized arrives as a badge.
+     *
+     * @param serverNodes the graph's nodes, as the server serializes them
+     */
+    const syncSupportNodes = useCallback((serverNodes) => {
+        const hostIds = new Set();
+        const serverRecords = [];
+        for (const node of serverNodes ?? []) {
+            hostIds.add(node.id);
+            for (const record of node.data?.support_nodes ?? []) {
+                serverRecords.push(record);
+            }
+        }
+
+        setState((current) => {
+            const knownIds = new Set();
+            for (const record of current.records) knownIds.add(record.id);
+
+            const kept = current.records.filter((record) => hostIds.has(record.hostId));
+            const arrived = serverRecords.filter((record) => {
+                return !knownIds.has(record.id) && !removedIds.current.has(record.id);
+            });
+            const nothingChanged = arrived.length === 0 && kept.length === current.records.length;
+            if (nothingChanged) return current;
+
+            const minimized = new Set(current.view.minimized);
+            for (const record of arrived) {
+                if (record.startMinimized) minimized.add(record.id);
+            }
+            return {records: [...kept, ...arrived], view: {...current.view, minimized}};
+        });
+    }, []);
+
+    /**
+     * What accepting a candidate does, here, with the sub-nodes it inherited - the server has done the same to its
+     * copy. "show" opens them, "hide" leaves them as badges, "drop" takes away those the user didn't change.
+     * Afterwards none of the host's records is counted as inherited.
+     */
+    const settleInherited = useCallback((hostId, choice) => {
+        setState((current) => {
+            const inheritedIds = [];
+            const records = [];
+            for (const record of current.records) {
+                const isInherited = record.hostId === hostId && record.inherited;
+                if (!isInherited) {
+                    records.push(record);
+                    continue;
+                }
+                inheritedIds.push(record.id);
+                if (choice === "drop") continue;
+                records.push({...record, inherited: false, startMinimized: choice === "hide"});
+            }
+
+            let view = current.view;
+            if (choice === "show") view = viewRevealing(current.view, records, inheritedIds);
+            return {records, view};
         });
     }, []);
 
@@ -236,6 +369,7 @@ export function useSupportNodes() {
 
     return {
         supportNodes, addSupportNode, updateSupportNode, removeSupportNode, removeSupportNodesOf,
+        syncSupportNodes, settleInherited,
         supportWindowHost, openSupportWindow, closeSupportWindow,
         toggleSupportHidden,
         minimizeSupportNode, restoreSupportNode,

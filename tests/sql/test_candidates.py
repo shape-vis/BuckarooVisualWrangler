@@ -10,6 +10,8 @@ label. These run against a real graph, through the same routes the app calls.
 Replaces the old preview tests: the rows a repair removes or fills are checked here, on the candidates that
 now hold them.
 """
+import json
+
 import pytest
 import pandas as pd
 from sqlalchemy import text as sa_text
@@ -148,6 +150,106 @@ def test_accepting_publishes_it_and_leaves_its_siblings(root, client):
     assert db_operations.main_table_name == table
     # The sibling is still staged under the same parent
     assert _graph().node_map[staged["delete"]["table"]].provisional
+
+
+# ─── Supporting sub-nodes ────────────────────────────────────────────────────
+
+def _hang(client, host, kind, config, key):
+    record = {"id": f"support:{host}:{key}", "hostId": host, "kind": kind, "side": "auto", "config": config}
+    resp = client.post("/api/pgraph/support_nodes", json={"host": host, "record": record})
+    assert resp.status_code == 200, resp.get_json()
+    return record
+
+
+def _records_of(client, table):
+    graph = json.loads(client.get("/api/routes/update_pgraph").get_data(as_text=True))
+    for node in graph["nodes"]:
+        if node["id"] == table:
+            return node["data"]["support_nodes"]
+    raise AssertionError(f"{table} is not in the graph")
+
+
+@pytest.mark.sql
+def test_sub_nodes_are_kept_changed_and_removed_on_their_host(root, client):
+    root(NUMERIC)
+    record = _hang(client, ROOT, "drift", {"column": "x"}, "a")
+    assert _records_of(client, ROOT) == [record]
+
+    resp = client.patch("/api/pgraph/support_nodes",
+                        json={"host": ROOT, "id": record["id"], "changes": {"config": {"column": "y"}}})
+    assert resp.status_code == 200, resp.get_json()
+    assert _records_of(client, ROOT)[0]["config"] == {"column": "y"}
+
+    resp = client.delete("/api/pgraph/support_nodes", json={"host": ROOT, "id": record["id"]})
+    assert resp.status_code == 200, resp.get_json()
+    assert _records_of(client, ROOT) == []
+
+
+@pytest.mark.sql
+def test_a_sub_node_must_be_on_a_node_and_of_a_known_kind(root, client):
+    root(NUMERIC)
+    record = {"id": "support:nowhere:a", "hostId": "nowhere", "kind": "drift", "config": {}}
+    resp = client.post("/api/pgraph/support_nodes", json={"host": "nowhere", "record": record})
+    assert resp.status_code == 400
+
+    record = {"id": f"support:{ROOT}:a", "hostId": ROOT, "kind": "pie", "config": {}}
+    resp = client.post("/api/pgraph/support_nodes", json={"host": ROOT, "record": record})
+    assert resp.status_code == 400
+
+    record = _hang(client, ROOT, "drift", {"column": "x"}, "a")
+    resp = client.patch("/api/pgraph/support_nodes",
+                        json={"host": ROOT, "id": record["id"], "changes": {"hostId": "elsewhere"}})
+    assert resp.status_code == 400
+
+
+@pytest.mark.sql
+def test_candidates_inherit_their_parents_sub_nodes_minimised(root, client):
+    root(NUMERIC)
+    _hang(client, ROOT, "errorPlot", {"plot": "histogram", "columns": ["x"]}, "a")
+    _hang(client, ROOT, "wrangleDiff", {}, "b")
+    staged = _stage(client, [2, 5], ["x"])
+
+    for candidate in staged.values():
+        records = _records_of(client, candidate["table"])
+        assert len(records) == 1
+        assert records[0]["kind"] == "errorPlot"
+        assert records[0]["hostId"] == candidate["table"]
+        assert records[0]["inherited"] and records[0]["startMinimized"]
+
+
+@pytest.mark.sql
+@pytest.mark.parametrize("choice, kept, minimised", [("show", 2, False), ("hide", 2, True), ("drop", 1, None),
+                                                     (None, 2, True)])
+def test_accepting_does_as_asked_with_what_was_inherited(root, client, choice, kept, minimised):
+    root(NUMERIC)
+    _hang(client, ROOT, "drift", {"column": "x"}, "a")
+    table = _stage(client, [2, 5], ["x"])["delete"]["table"]
+    own = _hang(client, table, "qualityMetrics", {}, "mine")
+
+    body = {"table": table}
+    if choice:
+        body["inherit"] = choice
+    resp = client.post("/api/candidates/accept", json=body)
+    assert resp.status_code == 200, resp.get_json()
+
+    records = _records_of(client, table)
+    assert len(records) == kept
+    for record in records:
+        assert record["inherited"] is False
+        if record["id"] != own["id"]:
+            assert record["startMinimized"] is minimised
+    assert own["id"] in {record["id"] for record in records}
+
+
+@pytest.mark.sql
+def test_accepting_refuses_an_unknown_inherit_choice(root, client):
+    root(NUMERIC)
+    table = _stage(client, [2], ["x"])["delete"]["table"]
+
+    resp = client.post("/api/candidates/accept", json={"table": table, "inherit": "keep"})
+
+    assert resp.status_code == 400
+    assert _graph().node_map[table].provisional
 
 
 @pytest.mark.sql

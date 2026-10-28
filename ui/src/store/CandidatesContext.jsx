@@ -16,10 +16,13 @@ const CandidatesContext = createContext(null);
  * clear the selection, tell the page to re-fetch - so a candidate that is accepted lands exactly like one. It
  * keeps its table name, so the sub-nodes added to it while it was staged stay with it. Declining drops the
  * node and its sub-nodes; if the session was on it, the server moves it to the parent.
+ *
+ * A candidate is staged with copies of its parent's sub-nodes, as badges. Accepting it says what becomes of
+ * them: "show" opens them, "hide" leaves them as badges, "drop" takes them away.
  */
 export function CandidatesProvider({ onWrangleExecuted, children }) {
     const { addLoader, removeLoader } = useLoading();
-    const { refreshGraph, candidates, removeSupportNodesOf } = usePgraph();
+    const { refreshGraph, candidates, removeSupportNodesOf, settleInherited } = usePgraph();
     const moveToTable = useMoveToTable(onWrangleExecuted);
 
     const [busy, setBusy] = useState(false);
@@ -44,21 +47,23 @@ export function CandidatesProvider({ onWrangleExecuted, children }) {
         return result;
     }, [addLoader, removeLoader]);
 
-    const acceptCandidate = useCallback((table) => {
+    const acceptCandidate = useCallback((table, inherit = "hide") => {
         async function accept() {
-            const result = await acceptOnServer(table);
+            const result = await acceptOnServer(table, inherit);
             if (!result?.success) {
                 setError(result?.error || "Could not accept that candidate.");
                 return result;
             }
 
+            // The server has done the same to its copy of them
+            settleInherited(table, inherit);
             await refreshGraph();
             moveToTable(result.table);
             return result;
         }
 
         return runBusy(table, accept);
-    }, [runBusy, refreshGraph, moveToTable]);
+    }, [runBusy, refreshGraph, moveToTable, settleInherited]);
 
     const declineCandidates = useCallback(async (tables) => {
         if (tables.length === 0) return null;

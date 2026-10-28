@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {usePgraph} from "../../store/PGraphContext.jsx";
 import {useHostWindow} from "../../store/HostWindowContext.jsx";
 import {ERROR_DIMENSIONS} from "../../store/errorColors.js";
@@ -20,6 +20,9 @@ import "../../styles/SparklineSupport.css";
  * Its config is {dimension, branch: {source, target, destination} | null, nodes, values, deltas}: a snapshot of
  * the branch's trajectory. A node's numbers never change once it exists, so the snapshot stays true. Which of
  * its nodes the graph has folded away is read live, so the rings follow folding.
+ *
+ * One inherited from a parent arrives with the parent's branch carried on down to its new host, but not yet
+ * measured - its nodes empty - and measures it the first time it is drawn.
  */
 
 const SPARKLINE_DIMENSIONS = [...ERROR_DIMENSIONS, "drift"];
@@ -37,16 +40,45 @@ function pickLabel(picking, hasSource) {
 }
 
 /** What the sparkline says where its chart goes, when it has no chart to draw. */
-function emptyMessage(picking, hasSource) {
+function emptyMessage(picking, hasSource, measuring) {
     if (picking) return "Click a highlighted edge above this node in the graph";
+    if (measuring === "failed") return "Could not measure this branch - pick its source again";
+    if (measuring) return "Measuring the branch…";
     if (hasSource) return "Not measured on every node of this branch";
     return "No source yet";
+}
+
+/* Measures a branch the sparkline has but hasn't measured - one it inherited - once. It stays inherited, since
+   measuring is the page's doing, not a change the user made.
+   Returns false when there is nothing to measure, true while measuring, and "failed" when the server refused. */
+function useMeasureUnmeasuredBranch(record) {
+    const {measureSparkline} = usePgraph();
+    const branch = record.config.branch;
+    const unmeasured = Boolean(branch) && (record.config.nodes ?? []).length === 0;
+    const askedFor = useRef(null);
+    const [failedFor, setFailedFor] = useState(null);
+
+    useEffect(() => {
+        if (!unmeasured) return;
+        if (askedFor.current === record.id) return;
+        askedFor.current = record.id;
+
+        (async () => {
+            const result = await measureSparkline(record, branch.source, branch.target, {keepInherited: true});
+            if (!result?.success) setFailedFor(record.id);
+        })();
+    }, [unmeasured, record, branch, measureSparkline]);
+
+    if (!unmeasured) return false;
+    if (failedFor === record.id) return "failed";
+    return true;
 }
 
 export function SparklineBody({record}) {
     const {collapsedRuns, sparklinePick, startSparklinePick} = usePgraph();
     const foldedNodeIds = useMemo(() => collapsedNodeIds(collapsedRuns), [collapsedRuns]);
     const {dimension, nodes = [], values = [], deltas = []} = record.config;
+    const measuring = useMeasureUnmeasuredBranch(record);
 
     const hasSource = nodes.length > 1;
     const measured = values.length > 0 && values.every((value) => value != null);
@@ -76,7 +108,7 @@ export function SparklineBody({record}) {
                     />
                 </div>
             ) : (
-                <div className="sparkline-support-empty">{emptyMessage(picking, hasSource)}</div>
+                <div className="sparkline-support-empty">{emptyMessage(picking, hasSource, measuring)}</div>
             )}
             <div className="sparkline-support-footer">
                 {hasSource && (

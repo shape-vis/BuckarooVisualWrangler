@@ -139,6 +139,19 @@
   justify-content: center;
 }
 
+/* Once Accept is pressed on a candidate that inherited sub-nodes: what becomes of them, one choice per row */
+.prospective-node-buttons--inherit {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.prospective-node-inherit-note {
+  font-size: 10px;
+  color: var(--candidate-ink);
+  text-align: center;
+}
+
 .prospective-node-btn {
   cursor: pointer;
   border: 1px solid #c4b5fd;

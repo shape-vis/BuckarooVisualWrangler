@@ -5,6 +5,7 @@ from app import app, db_operations, engine
 from app.db_utils.compare_sql import PLOT_KINDS, CompareSQL
 from app.pgraph.distortion import drift_detail
 from app.pgraph.pgraph import distortion_trajectory, quality_trajectory
+from app.pgraph.support_nodes import SUPPORT_KINDS, SUPPORT_PREFIX
 from app.server_utils.service_helpers import (
     WRANGLE_LOCK,
     bounded_int,
@@ -198,3 +199,103 @@ def drift_detail_view():
         return {"success": True, **drift_detail(pgraph, node, column, keep, base)}
     except Exception as e:
         return {"success": False, "error": str(e)}, 400
+
+
+# ── Supporting sub-nodes ─────────────────────────────────────────────────────
+# The front end changes its own copy at once and sends each change here, so the records outlive the page and a new
+# child can start with its parent's - see app/pgraph/support_nodes.py.
+
+# What a change to a record may not touch: which node it is, where it hangs, and what kind of thing it is
+FIXED_SUPPORT_FIELDS = ("id", "hostId", "kind")
+
+
+def _support_body():
+    """
+    :return: (the graph, the request body, None), or (None, None, an error response) - when there is no graph yet,
+             or the body names no host that is a node of it
+    """
+    pgraph, error = _graph_or_error()
+    if error:
+        return None, None, error
+
+    body = request.get_json(force=True, silent=True) or {}
+    host = body.get("host")
+    if not isinstance(host, str) or host not in pgraph.node_map:
+        return None, None, ({"success": False, "error": "host must be a node of the graph"}, 400)
+    return pgraph, body, None
+
+
+def _record_error(record, host):
+    """:return: what is wrong with a record sent to be kept on host, or None when nothing is"""
+    if not isinstance(record, dict):
+        return "record is required"
+    record_id = record.get("id")
+    if not isinstance(record_id, str) or not record_id.startswith(SUPPORT_PREFIX):
+        return "record needs a support id"
+    if record.get("hostId") != host:
+        return "record's hostId must be its host"
+    if record.get("kind") not in SUPPORT_KINDS:
+        return f"unknown support kind {record.get('kind')!r}"
+    return None
+
+
+@app.post("/api/pgraph/support_nodes")
+def add_support_node():
+    """
+    Keep a supporting sub-node on its host node.
+
+    Body: {"host": <node>, "record": {id, hostId, kind, side, config, size}}
+    """
+    pgraph, body, error = _support_body()
+    if error:
+        return error
+
+    record = body.get("record")
+    problem = _record_error(record, body["host"])
+    if problem:
+        return {"success": False, "error": problem}, 400
+
+    with WRANGLE_LOCK:
+        pgraph.add_support_node(body["host"], record)
+    return {"success": True}
+
+
+@app.patch("/api/pgraph/support_nodes")
+def update_support_node():
+    """
+    Merge changes into one of a node's supporting sub-nodes.
+
+    Body: {"host": <node>, "id": <support id>, "changes": {...}}
+    """
+    pgraph, body, error = _support_body()
+    if error:
+        return error
+
+    changes = body.get("changes")
+    if not isinstance(changes, dict):
+        return {"success": False, "error": "changes is required"}, 400
+    for field in FIXED_SUPPORT_FIELDS:
+        if field in changes:
+            return {"success": False, "error": f"{field} cannot be changed"}, 400
+
+    with WRANGLE_LOCK:
+        found = pgraph.update_support_node(body["host"], body.get("id"), changes)
+    if not found:
+        return {"success": False, "error": "no such support node"}, 404
+    return {"success": True}
+
+
+@app.delete("/api/pgraph/support_nodes")
+def remove_support_node():
+    """
+    Take a supporting sub-node off its host node. One that is already gone is not an error.
+
+    Body: {"host": <node>, "id": <support id>}
+    """
+    pgraph, body, error = _support_body()
+    if error:
+        return error
+
+    with WRANGLE_LOCK:
+        pgraph.remove_support_node(body["host"], body.get("id"))
+    return {"success": True}

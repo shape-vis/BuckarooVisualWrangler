@@ -427,7 +427,7 @@ export function PGraphProvider({children}) {
     /* The supporting sub-nodes hung beside nodes, and the window that adds them. Their records live here
        for the same reason: the effect below draws them. */
     const support = useSupportNodes();
-    const {supportNodes, isSupportShown, updateSupportNode, wranglingSupportId, endWrangling} = support;
+    const {supportNodes, isSupportShown, updateSupportNode, wranglingSupportId, endWrangling, syncSupportNodes} = support;
 
     /* The size of every candidate the user has resized, by id - a way of looking at it, like folding, so it is
        kept here rather than on the server's node. The layout reserves it, so its neighbours make room. */
@@ -589,32 +589,44 @@ export function PGraphProvider({children}) {
     const pickableEdgeKeys = useMemo(() => new Set(pickableEdges.map(edgeKeyOf)), [pickableEdges]);
     const isPickableEdge = useCallback((edge) => pickableEdgeKeys.has(edgeKeyOf(edge)), [pickableEdgeKeys]);
 
-    /* Keeps the branch from this edge down to the host on the sparkline being picked for. The branch is the
-       server's, read from the metrics each node already carries. */
-    const pickSparklineSource = useCallback(async (edge) => {
-        if (!sparklinePick || !sparklinePickRecord) return;
-        const {recordId, hostId} = sparklinePick;
-        const {source, target} = realEnds(edge, nodes);
+    /**
+     * Measures a sparkline's branch - from the edge source -> target down to its host - and keeps the series on it.
+     * The branch is the server's, read from the metrics each node already carries. Used when the user picks a
+     * source, and when a sparkline inherited from a parent is drawn for the first time, its branch carried on down
+     * to the child but not yet measured.
+     *
+     * @param options passed on to updateSupportNode - an inherited sparkline measuring itself keeps it inherited
+     * @return the server's reply, so a pick can show why it failed
+     */
+    const measureSparkline = useCallback(async (record, source, target, options) => {
+        const result = await getBranchTrajectory(source, target, record.hostId);
+        if (!result?.success) return result;
 
-        const result = await getBranchTrajectory(source, target, hostId);
-        if (!result?.success) {
-            setSparklinePickError(result?.error || "Could not measure that branch.");
-            return;
-        }
-
-        const dimension = sparklinePickRecord.config?.dimension;
-        const series = seriesOf(result, dimension);
-        updateSupportNode(recordId, (record) => ({
+        const series = seriesOf(result, record.config?.dimension);
+        updateSupportNode(record.id, (current) => ({
             config: {
-                ...record.config,
-                branch: {source, target, destination: hostId},
+                ...current.config,
+                branch: {source, target, destination: current.hostId},
                 nodes: result.nodes,
                 values: series?.values ?? [],
                 deltas: series?.deltas ?? [],
             },
-        }));
+        }), options);
+        return result;
+    }, [updateSupportNode]);
+
+    // Keeps the branch from this edge down to the host on the sparkline being picked for
+    const pickSparklineSource = useCallback(async (edge) => {
+        if (!sparklinePick || !sparklinePickRecord) return;
+        const {source, target} = realEnds(edge, nodes);
+
+        const result = await measureSparkline(sparklinePickRecord, source, target);
+        if (!result?.success) {
+            setSparklinePickError(result?.error || "Could not measure that branch.");
+            return;
+        }
         cancelSparklinePick();
-    }, [sparklinePick, sparklinePickRecord, nodes, updateSupportNode, cancelSparklinePick]);
+    }, [sparklinePick, sparklinePickRecord, nodes, measureSparkline, cancelSparklinePick]);
 
     /* An error plot is only wrangled on while its node is the current one - a selection and a repair are always of
        the current node - so landing anywhere else puts it back. */
@@ -629,7 +641,9 @@ export function PGraphProvider({children}) {
     const receiveGraph = useCallback((result) => {
         setNodeLabels(new Map(result.nodes.map((node) => [node.id, node.data?.label ?? node.id])));
         setServerGraph({nodes: result.nodes, edges: result.edges, pareto: result.pareto});
-    }, []);
+        // The sub-nodes kept on the nodes, and those a new candidate inherited from its parent
+        syncSupportNodes(result.nodes);
+    }, [syncSupportNodes]);
 
     // Pull the graph from the server and re-layout it. Every path that mutates the graph - executing a
     // wrangle, undo, redo - has to call this, or the rendered graph drifts from the real one.
@@ -731,6 +745,7 @@ export function PGraphProvider({children}) {
             // supportNodes, add/update/removeSupportNode, supportWindowHost, open/closeSupportWindow, ...
             ...support,
             sparklinePick, sparklinePickError, startSparklinePick, cancelSparklinePick, isPickableEdge,
+            measureSparkline,
             pickableEdgeCount: pickableEdges.length,
             clearAllSelections, hasAnySelection,
             collapsedRuns, collapseNodes, expandRun, expandAllRuns,

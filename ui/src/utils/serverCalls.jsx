@@ -41,14 +41,19 @@ function getJson(path, params, onFailure) {
     return requestJson(url, { method: "GET" }, onFailure);
 }
 
-/* POST, with body sent as JSON when there is one. Undo, redo and reset send nothing at all. */
-function postJson(url, body, onFailure) {
-    const options = { method: "POST" };
+/* Any method that sends a body, sent as JSON when there is one */
+function sendJson(method, url, body, onFailure) {
+    const options = { method };
     if (body !== undefined) {
         options.headers = { "Content-Type": "application/json" };
         options.body = JSON.stringify(body);
     }
     return requestJson(url, options, onFailure);
+}
+
+/* POST, with body sent as JSON when there is one. Undo, redo and reset send nothing at all. */
+function postJson(url, body, onFailure) {
+    return sendJson("POST", url, body, onFailure);
 }
 
 
@@ -203,6 +208,24 @@ export function getBranchTrajectory(source, target, destination) {
 }
 
 /**
+ * /api/pgraph/support_nodes
+ * Keeps the supporting sub-nodes on their host node on the server, so they outlive the page and a new child can
+ * start with its parent's - see app/pgraph/support_nodes.py. Each sends one change: a record to add, changes to
+ * merge into one, or one to take away. Returns { success } or { success: false, error }.
+ */
+export function addSupportNodeOnServer(record) {
+    return postJson("/api/pgraph/support_nodes", { host: record.hostId, record }, failureResult);
+}
+
+export function updateSupportNodeOnServer(host, id, changes) {
+    return sendJson("PATCH", "/api/pgraph/support_nodes", { host, id, changes }, failureResult);
+}
+
+export function removeSupportNodeOnServer(host, id) {
+    return sendJson("DELETE", "/api/pgraph/support_nodes", { host, id }, failureResult);
+}
+
+/**
  * GET /api/pgraph/compare
  * Plot data for two nodes' tables, binned on axes they share so a bin means the same range on both
  * sides. kind is "histogram" | "heatmap"; y is only sent for a heatmap. The bin count is the server's
@@ -274,10 +297,12 @@ export function requestAiSuggestions(nodeTable, signal) {
  * Accept a staged candidate - a repair or an AI suggestion - into the graph for good, moving the session onto
  * it. Nothing is renamed: it keeps its table and gets its label.
  *
+ * inherit is what becomes of the sub-nodes it inherited from its parent: "show", "hide" or "drop".
+ *
  * Returns { success, table, label, parent } or { success: false, error }.
  */
-export function acceptCandidate(table) {
-    return postJson("/api/candidates/accept", { table }, failureResult);
+export function acceptCandidate(table, inherit = "hide") {
+    return postJson("/api/candidates/accept", { table, inherit }, failureResult);
 }
 
 /**

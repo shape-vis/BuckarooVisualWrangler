@@ -12,6 +12,7 @@ import traceback
 from flask import request
 
 from app import app
+from app.pgraph.support_nodes import INHERIT_CHOICES
 from app.server_utils import candidates
 
 
@@ -20,15 +21,19 @@ def accept_candidate():
     """
     Accept a candidate into the graph for good, and move the session onto it. Its siblings stay staged.
 
-    Body: {"table": "c7_adult_x7f2q"}
+    Body: {"table": "c7_adult_x7f2q", "inherit": "show" | "hide" | "drop"}
+    inherit is what becomes of the sub-nodes it inherited from its parent; left out, they stay hidden.
     :return: {"success", "table", "label", "parent"}
     """
     body = request.get_json(force=True, silent=True) or {}
     table = body.get("table")
     if not isinstance(table, str) or not table:
         return {"success": False, "error": "table is required"}, 400
+    inherit = body.get("inherit", "hide")
+    if inherit not in INHERIT_CHOICES:
+        return {"success": False, "error": f"inherit must be one of {', '.join(INHERIT_CHOICES)}"}, 400
     try:
-        return candidates.accept(table)
+        return candidates.accept(table, inherit)
     except candidates.CandidateError as exc:
         return {"success": False, "error": str(exc)}, 409
     except Exception as exc:

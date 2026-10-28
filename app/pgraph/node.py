@@ -95,6 +95,11 @@ class GraphNode:
         # row_count, error_type, cols, chart_type}. None for a node that was never a candidate.
         self.candidate = None
 
+        # The supporting sub-nodes hung beside this node, as plain JSON records - the recipe for each plot, never the
+        # plot itself, which the front end fetches when it draws one. A new child starts with copies of its parent's -
+        # see app/pgraph/support_nodes.py
+        self.support_nodes = []
+
     def __json__(self):
         return {
             "parent_table": self.parent_table,
@@ -108,6 +113,7 @@ class GraphNode:
             "provisional": self.provisional,
             "label": self.label,
             "candidate": self.candidate,
+            "support_nodes": self.support_nodes,
         }
 
     def set_metrics(self, metrics):

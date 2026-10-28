@@ -29,6 +29,7 @@ import app
 from app.db_utils import query
 from app.db_utils.execute_sql import errors_table_name
 from app.pgraph.node import GraphNode
+from app.pgraph.support_nodes import apply_inherit_choice
 from app.server_utils.service_helpers import WRANGLE_LOCK, build_node, parse_node_id, safe_pg_name, session_graph
 from app.server_utils.workers import NODE_POOL
 
@@ -264,10 +265,13 @@ def stage_each(parent, specs):
     return staged, failures
 
 
-def accept(table):
+def accept(table, inherit="hide"):
     """
     Publish a candidate into the graph for good, and move the session onto it. Nothing is renamed: it keeps its
     table, its sub-nodes keep pointing at it, and its siblings stay staged under the same, unchanged parent.
+
+    :param inherit: what becomes of the sub-nodes it inherited from its parent - "show" opens them, "hide" leaves them
+                    as badges, "drop" takes them away; see app/pgraph/support_nodes.py
     :return: {"success", "table", "label", "parent"}
     """
     with WRANGLE_LOCK:
@@ -275,6 +279,7 @@ def accept(table):
         if not graph.is_provisional(table):
             raise CandidateError(f"{table} is not a candidate.")
         node = graph.publish(table)
+        node.support_nodes = apply_inherit_choice(node.support_nodes, inherit)
         # It may branch off a node other than the current one, so the cursor is set from the tree
         graph.set_clicked_node_as_current(table)
         app.db_operations.load_table(table)

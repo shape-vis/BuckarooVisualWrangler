@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Handle, NodeResizer, Position } from "@xyflow/react";
 import { useCandidates } from "../store/CandidatesContext.jsx";
 import { usePgraph } from "../store/PGraphContext.jsx";
@@ -13,6 +14,90 @@ import "../styles/ProspectiveNode.css";
 
 // Smaller than this and its preview chart no longer reads; it starts larger
 const MIN_SIZE = { width: 170, height: 300 };
+
+// What accepting can do with the sub-nodes a candidate inherited from its parent - see CandidatesContext
+const INHERIT_CHOICES = [
+    { inherit: "show", label: "Accept & show them", title: "Accept, and open the support nodes it inherited" },
+    { inherit: "hide", label: "Accept & keep hidden", title: "Accept, and leave the inherited support nodes as badges" },
+    { inherit: "drop", label: "Accept without them", title: "Accept, and remove the support nodes it inherited" },
+];
+
+/* The Accept button, or - once it is pressed on a candidate that inherited sub-nodes from its parent - the choice
+   of what becomes of them. One that inherited none is accepted in one click. */
+function AcceptControls({ id, stop }) {
+    const { acceptCandidate, declineCandidate, busy, busyId } = useCandidates();
+    const { supportNodes } = usePgraph();
+    const [choosing, setChoosing] = useState(false);
+
+    const isBusy = busyId === id;
+    const inheritedCount = supportNodes.filter((record) => record.hostId === id && record.inherited).length;
+
+    const pressAccept = (event) => {
+        stop(event);
+        if (inheritedCount > 0) {
+            setChoosing(true);
+            return;
+        }
+        acceptCandidate(id);
+    };
+
+    const choose = (event, inherit) => {
+        stop(event);
+        setChoosing(false);
+        acceptCandidate(id, inherit);
+    };
+
+    if (choosing && inheritedCount > 0) {
+        const noun = inheritedCount === 1 ? "support node" : "support nodes";
+        return (
+            <div className="prospective-node-buttons prospective-node-buttons--inherit">
+                <div className="prospective-node-inherit-note">{inheritedCount} inherited {noun}</div>
+                {INHERIT_CHOICES.map((choice) => (
+                    <button
+                        key={choice.inherit}
+                        className="prospective-node-btn prospective-node-btn--accept"
+                        onClick={(e) => choose(e, choice.inherit)}
+                        onDoubleClick={stop}
+                        disabled={busy}
+                        title={choice.title}
+                    >
+                        {choice.label}
+                    </button>
+                ))}
+                <button
+                    className="prospective-node-btn"
+                    onClick={(e) => { stop(e); setChoosing(false); }}
+                    onDoubleClick={stop}
+                >
+                    Back
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="prospective-node-buttons">
+            <button
+                className="prospective-node-btn prospective-node-btn--accept"
+                onClick={pressAccept}
+                onDoubleClick={stop}
+                disabled={busy}
+                title="Accept this wrangle and cement it into the graph"
+            >
+                {isBusy ? "Working…" : "Accept"}
+            </button>
+            <button
+                className="prospective-node-btn"
+                onClick={(e) => { stop(e); declineCandidate(id); }}
+                onDoubleClick={stop}
+                disabled={busy}
+                title="Decline this candidate"
+            >
+                Decline
+            </button>
+        </div>
+    );
+}
 
 /**
  * A candidate: a wrangle staged as a provisional node of the graph - a way of repairing the user's selection,
@@ -32,10 +117,8 @@ const MIN_SIZE = { width: 170, height: 300 };
 export function ProspectiveNode({ id, data, isConnectable }) {
     const candidate = data.candidate ?? {};
     const source = CANDIDATE_SOURCES[candidate.source] ?? CANDIDATE_SOURCES.repair;
-    const { acceptCandidate, declineCandidate, busy, busyId } = useCandidates();
     const { setCandidateSize } = usePgraph();
 
-    const isBusy = busyId === id;
     const rowCount = candidate.row_count ?? 0;
     const rows = rowCount === 1 ? `1 ${source.rowNoun} row` : `${rowCount.toLocaleString()} ${source.rowNoun} rows`;
 
@@ -122,26 +205,7 @@ export function ProspectiveNode({ id, data, isConnectable }) {
                     />
                 </div>
 
-                <div className="prospective-node-buttons">
-                    <button
-                        className="prospective-node-btn prospective-node-btn--accept"
-                        onClick={(e) => { stop(e); acceptCandidate(id); }}
-                        onDoubleClick={stop}
-                        disabled={busy}
-                        title="Accept this wrangle and cement it into the graph"
-                    >
-                        {isBusy ? "Working…" : "Accept"}
-                    </button>
-                    <button
-                        className="prospective-node-btn"
-                        onClick={(e) => { stop(e); declineCandidate(id); }}
-                        onDoubleClick={stop}
-                        disabled={busy}
-                        title="Decline this candidate"
-                    >
-                        Decline
-                    </button>
-                </div>
+                <AcceptControls id={id} stop={stop} />
 
                 {/* The tools every node carries: branch quality, supporting nodes - its AI button stays off */}
                 <div className="node-tools prospective-node-tools">

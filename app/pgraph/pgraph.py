@@ -10,6 +10,7 @@ and cached on it, and everything here is plain arithmetic over those, so it is t
 """
 from app.pgraph.metrics import DIMENSIONS
 from app.pgraph.node import GraphNode
+from app.pgraph.support_nodes import inherited_support_nodes
 
 # Node ids are n{digit}{letter} - n0a, n0b ... n0z, n1a ... n9z. Always exactly three characters, so
 # the prefix on a table name has a fixed width and 260 nodes fit before ids run out.
@@ -240,7 +241,9 @@ class PGraph:
                         "distortion": node.distortion,
                         # What produced the node, so it can be described without its incoming edge -
                         # which a collapsed run hides, and which the root never had
-                        "wrangle": node.wrangle_summary()
+                        "wrangle": node.wrangle_summary(),
+                        # The supporting sub-nodes hung beside it - see app/pgraph/support_nodes.py
+                        "support_nodes": node.support_nodes,
                     }
                 }
             )
@@ -347,7 +350,10 @@ class PGraph:
         node.provisional = True
         self.node_map[node.table_name] = node
         if node.parent_table in self.node_map:
-            self.node_map[node.parent_table].add_child(node.table_name)
+            parent = self.node_map[node.parent_table]
+            parent.add_child(node.table_name)
+            # It starts with its parent's sub-nodes, minimised until accepting it says otherwise
+            node.support_nodes = inherited_support_nodes(parent.support_nodes, parent.table_name, node.table_name)
 
     def is_provisional(self, table_name):
         node = self.node_map.get(table_name)
@@ -428,3 +434,50 @@ class PGraph:
         self.prev_node_table_name = current_node.parent_table
         self.current_node_table_name = node_table_name
         return self.current_node_table_name
+
+    # ── Supporting sub-nodes ─────────────────────────────────────────────────
+    # Kept on their host node - see app/pgraph/support_nodes.py. A record goes with its host when a candidate is
+    # declined, since the node it lives on is gone.
+
+    def _support_record_index(self, host, support_id):
+        """:return: where the record sits in its host's list, or None when the host has no such record"""
+        records = self.node_map[host].support_nodes
+        for index, record in enumerate(records):
+            if record.get("id") == support_id:
+                return index
+        return None
+
+    def add_support_node(self, host, record):
+        """Hang a sub-node beside a node. A record already there under the same id is replaced."""
+        index = self._support_record_index(host, record["id"])
+        records = self.node_map[host].support_nodes
+        if index is None:
+            records.append(record)
+        else:
+            records[index] = record
+
+    def update_support_node(self, host, support_id, changes):
+        """
+        Merge changes into one of a node's sub-nodes. A record the user changed is their own from then on, so it is
+        no longer counted as inherited - unless the changes say otherwise, as a change the front end makes by itself
+        does (measuring an inherited sparkline's branch, say).
+        :return: whether the record was there to change
+        """
+        index = self._support_record_index(host, support_id)
+        if index is None:
+            return False
+        records = self.node_map[host].support_nodes
+        updated = dict(records[index])
+        updated.update(changes)
+        if "inherited" not in changes:
+            updated["inherited"] = False
+        records[index] = updated
+        return True
+
+    def remove_support_node(self, host, support_id):
+        """:return: whether the record was there to remove"""
+        index = self._support_record_index(host, support_id)
+        if index is None:
+            return False
+        del self.node_map[host].support_nodes[index]
+        return True
