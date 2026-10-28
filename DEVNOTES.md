@@ -139,7 +139,9 @@ There are two ways candidates get made:
 
 Once candidates exist, the user can accept or decline them:
 
-- `POST /api/candidates/accept` accepts a candidate. It gets a label and becomes the current node.
+- `POST /api/candidates/accept` accepts a candidate. It gets a label and becomes the current node. Its optional
+  `inherit` field says what happens to the support nodes the candidate inherited from its parent: `"show"`,
+  `"hide"` (the default) or `"drop"`. See [Support nodes](#support-nodes).
 - `POST /api/candidates/discard` removes candidates and deletes their tables.
 - `POST /api/reset` removes every candidate.
 
@@ -192,12 +194,62 @@ through a move. Tables for old nodes are never deleted, which is why switching b
 - `label`: the name the user sees, like `n2c`. A candidate has no label until it's accepted.
 - `candidate`: where a candidate came from, such as whether it was a repair or an AI suggestion, the reason for it,
   how many rows it affects, and so on
+- `support_nodes`: the support nodes attached to this node, as plain JSON records. See
+  [Support nodes](#support-nodes) below.
 
 **Table name vs. label.** A node's table name is its ID, and it never changes. The label is just a display name.
 When a candidate is accepted, `PGraph.publish` sets `provisional` to `False` and gives the node the next label.
 Nothing in the database is renamed: an accepted candidate keeps its `c<n>_<base>` table, and so do its `errors_`
 and `dp_` tables. This is on purpose. Sub-nodes, compare windows, and undo and redo all point at a node by its
 table name, so renaming the table would break them.
+
+### Support nodes
+
+A support node is a small plot or panel the user attaches to a graph node to help read it. The kinds are an error
+plot, a drift plot, the quality metrics, a sparkline, a comparison with another node, and the wrangle diff. Each one
+is stored on its host's `GraphNode.support_nodes` as a record like this:
+
+```
+{id, hostId, kind, side, config, size, inherited, startMinimized}
+```
+
+A record only holds the settings that describe the support node, such as which plot it is and which columns it
+uses. It never holds plot data. The frontend fetches a support node's data when it draws it, using the record's
+`hostId` as the node to read from. Because records are small, copying them is cheap, and that's what makes
+inheritance work.
+
+**Inheritance.** When a candidate is staged, `PGraph.add_candidate` gives it a copy of each of its parent's support
+nodes. The copies come from `inherited_support_nodes` in `app/pgraph/support_nodes.py`, and each copy is attached
+to the candidate:
+
+- **Error plot, drift plot, quality metrics:** the same settings, on the candidate. Their settings don't name a node,
+  so they show the candidate's own data.
+- **Compare:** the candidate takes the parent's place in the comparison (A or B), against the same comparator. The
+  copy isn't in the parent's group, so the two don't keep each other's settings in sync. Zoom and the chosen
+  categories start fresh, because they belonged to the parent's pair.
+- **Sparkline:** the same starting edge, but the branch now ends at the candidate. Its values are cleared, and the
+  frontend measures the branch again the first time the sparkline is drawn.
+- **Wrangle diff:** not copied. It describes the one edge into its host, and the candidate has a different edge.
+
+Every copy is marked `inherited` and `startMinimized`, so a new candidate shows its inherited support nodes as
+badges instead of opening them all at once. When the user changes a copy, it stops being `inherited` and counts as
+the user's own.
+
+**Accepting.** `apply_inherit_choice` runs when a candidate is accepted, and does what the `inherit` field asks:
+
+- `"show"` opens the inherited support nodes.
+- `"hide"` leaves them as badges.
+- `"drop"` removes the copies that are still marked `inherited`. Copies the user changed, and support nodes the user
+  added to the candidate themselves, stay.
+
+Either way, nothing is marked `inherited` afterwards.
+
+**Keeping the records up to date.** The frontend changes its own copy of a record first, then sends the change to
+`POST`, `PATCH` or `DELETE /api/pgraph/support_nodes`. The `PATCH` requests are delayed slightly, so that a resize
+sends one request when it finishes instead of one per movement. Every graph the server sends includes each node's
+`support_nodes`, and the frontend reads in any records it hasn't seen before. That covers every record when the
+page loads, and the copies a new candidate inherited. Which support nodes are hidden or minimised is stored only in
+the frontend, because it's about how the user is looking at them, not about the support nodes themselves.
 
 `provisional` and `label` are only stored in memory, on the `GraphNode`. The database doesn't record them. Looking
 at the tables, you can't tell whether `c1_<base>` was accepted or is still waiting, because both look the same. You
@@ -430,9 +482,9 @@ there. You don't need to add an import anywhere.
 | `routes.py` | `POST /api/upload`, `GET /api/preloaded`, `GET /api/tablename`, `POST /api/undo`, `POST /api/redo`, `POST /api/reset` |
 | `plot_routes.py` | `GET /api/plots/1-d-histogram`, `2-d-histogram`, `scatterplot`, `top-error-rows`, `summaries`; `POST rows-in-bin`, `bins-for-rows`, `update-backend-attributes`; `GET preview-histogram`, `preview-scatterplot` (these two work on any node's table) |
 | `wrangler_routes_sql.py` | `POST /api/wrangle/create-previews` (creates repair candidates) |
-| `candidate_routes.py` | `POST /api/candidates/accept`, `POST /api/candidates/discard` |
+| `candidate_routes.py` | `POST /api/candidates/accept` (with an optional `inherit`), `POST /api/candidates/discard` |
 | `ai_routes.py` | `GET /api/ai/status`, `POST /api/ai/suggest` |
-| `pgraph_routes.py` | `GET /api/routes/update_pgraph`, `POST /api/setGraphToClickedNode`, `GET /api/pgraph/branch_trajectory`, `GET /api/pgraph/compare`, `GET /api/pgraph/drift_detail` |
+| `pgraph_routes.py` | `GET /api/routes/update_pgraph`, `POST /api/setGraphToClickedNode`, `GET /api/pgraph/branch_trajectory`, `GET /api/pgraph/compare`, `GET /api/pgraph/drift_detail`, `POST`/`PATCH`/`DELETE /api/pgraph/support_nodes` |
 
 Endpoints that work on the current table get its name from `db_operations.main_table_name`. They don't accept a
 table name from the client. Endpoints that do accept a table name will only work with tables that belong to a node
@@ -457,7 +509,8 @@ The frontend is built with React and Vite, and lives in `ui/src`. The graph is d
 - **`graph_objects/`**: custom node types for React Flow, including the ones used for candidates (prospective nodes).
 - **`supportNodes/`**: small extra nodes that attach to a graph node: the error plot gallery, the drift plot
   gallery, compare and the sparkline. Each one is registered in `registry.js`. If one is hidden, a badge appears on
-  its node instead.
+  its node instead. The records are stored on the server, and a new candidate inherits its parent's (see
+  [Support nodes](#support-nodes)).
 - **`panels/` and `elements/`**: the Plots view and its windows (attribute plots, compare and support nodes, all
   built on `PlotsWindow`), the attribute summary panel, the table panel, and UI pieces shared across the app.
 - **`utils/serverCalls.jsx`**: every request to the backend goes through this file.
@@ -496,9 +549,12 @@ This is where the user accepts or declines a candidate. It doesn't matter whethe
 or from the AI. Both kinds are handled the same way here, just like on the server.
 
 - `candidates`: the candidates currently in the graph. They come from `PGraphContext`.
-- `acceptCandidate(table)`: calls `POST /api/candidates/accept`, refreshes the graph, then moves to the accepted
-  node with `useMoveToTable`. To the rest of the app, an accepted candidate looks exactly like a wrangle that just
-  ran.
+- `acceptCandidate(table, inherit)`: calls `POST /api/candidates/accept`, applies the same `inherit` choice to the
+  support nodes on the page (`settleInherited`), refreshes the graph, then moves to the accepted node with
+  `useMoveToTable`. To the rest of the app, an accepted candidate looks exactly like a wrangle that just ran. If the
+  candidate inherited support nodes, its Accept button first opens a choice: "Accept & show support nodes",
+  "Accept & hide support nodes" or "Accept without support nodes". Otherwise it accepts straight away with
+  `"hide"`.
 - `declineCandidate(table)` and `declineAll(parent)`: call `POST /api/candidates/discard`, remove any support nodes
   attached to those candidates, and refresh the graph. If the user was on a declined candidate, the server moves
   them to its parent, and this follows along.
@@ -643,6 +699,7 @@ app/
 ├── pgraph/                      # the provenance graph, kept in memory
 │   ├── pgraph.py                # PGraph: nodes, labels, candidates, undo/redo, branch trajectories, Pareto
 │   ├── node.py                  # GraphNode: one node's details, and how its wrangle is named
+│   ├── support_nodes.py         # support node records: what a new child inherits, and what accepting does with them
 │   ├── metrics.py               # NodeMetrics: error rates per column and for the whole node
 │   └── distortion.py            # drift from root: the calculations, run on QUERY_POOL, and their descriptions
 ├── llm/                         # the model's side of AI suggestions. No SQL, and it never changes data
@@ -653,7 +710,7 @@ app/
 ├── routes/                      # one file per group of endpoints, imported automatically (see section 10)
 │   ├── routes.py                # upload, sample datasets, undo, redo, reset, and serving the page
 │   ├── plot_routes.py           # the attribute plots, the repair previews, rows in a bin, attribute summaries
-│   ├── pgraph_routes.py         # the graph, moving to a node, branch trajectories, compare, drift detail
+│   ├── pgraph_routes.py         # the graph, moving to a node, branch trajectories, compare, drift detail, support nodes
 │   ├── wrangler_routes_sql.py   # create-previews: stages every repair of a selection as a candidate
 │   ├── candidate_routes.py      # accepting and declining candidates
 │   └── ai_routes.py             # AI status, and staging AI suggestions as candidates
@@ -698,7 +755,7 @@ ui/
     │   ├── HostWindowContext.jsx  # which browser window a piece of the page is in (for the popped-out compare panel)
     │   ├── useMoveToTable.js    # how the app lands on a new table: set it, clear the selection, fetch the views again
     │   ├── plotsWindows.js      # the Plots view's windows: docking, popping out, showing one
-    │   ├── supportNodes.js      # useSupportNodes: the support nodes' state, their sizes, and which side a new one goes on
+    │   ├── supportNodes.js      # useSupportNodes: the support nodes' state, sending changes to the server and reading its records back in
     │   ├── aiAvailability.js    # when an AI button is disabled, and what its tooltip says
     │   ├── errorColors.js       # the error types and their colors
     │   └── visualizationCaches.jsx  # the plot caches, cleared whenever the table changes
@@ -723,7 +780,7 @@ ui/
     │   └── PreviewCard.jsx      # the small plot on a candidate node
     ├── graph_objects/           # the custom React Flow nodes and edges
     │   ├── NodeTypes.jsx        # the graph's node: label, metrics, buttons, and its role in a comparison
-    │   ├── ProspectiveNode.jsx  # a candidate node: its preview, why it was suggested, Accept and Decline
+    │   ├── ProspectiveNode.jsx  # a candidate node: its preview, why it was suggested, Accept (with the inherit choice) and Decline
     │   ├── NodeMetrics.jsx      # a node's error rates and size, as the magnifier and the metrics support node show them
     │   ├── AnalysisEdge.jsx     # analysis mode's straight edges, cut off at each node's box
     │   └── supportNodes/        # support nodes: the small extras attached to a graph node
@@ -796,6 +853,7 @@ tests/
 │   └── test_distortion_survey.py
 └── unit/                        # no database needed
     ├── test_distortion.py, test_node_metrics.py, test_safe_pg_name.py, test_ai_tools.py
+    ├── test_support_nodes.py    # what a child inherits, and what each accept choice keeps
     └── test_approx_cardinality.py, test_benchmark_validation.py, test_reproducibility.py   # for the folders below
 ```
 
@@ -819,7 +877,8 @@ provided_datasets/               # the sample CSVs offered on the home page, plu
 
 - `tests/unit` tests pure logic and doesn't need a database.
 - `tests/sql` runs against your local Postgres, and its tests are marked `@pytest.mark.sql`. It covers uploading,
-  the main view's plots, error detection, compare, drift, the data profile, candidates and the AI routes. There's
+  the main view's plots, error detection, compare, drift, the data profile, candidates (including the support
+  nodes they inherit and the accept choices) and the AI routes. There's
   also a golden survey test that checks drift and Pareto results against known values.
 
 To run both, use `.venv/bin/pytest tests/unit tests/sql`.

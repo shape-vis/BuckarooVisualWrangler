@@ -17,9 +17,9 @@ const MIN_SIZE = { width: 170, height: 300 };
 
 // What accepting can do with the sub-nodes a candidate inherited from its parent - see CandidatesContext
 const INHERIT_CHOICES = [
-    { inherit: "show", label: "Accept & show them", title: "Accept, and open the support nodes it inherited" },
-    { inherit: "hide", label: "Accept & keep hidden", title: "Accept, and leave the inherited support nodes as badges" },
-    { inherit: "drop", label: "Accept without them", title: "Accept, and remove the support nodes it inherited" },
+    { inherit: "show", label: "Accept & show support nodes", title: "Accept, and open the support nodes it inherited" },
+    { inherit: "hide", label: "Accept & hide support nodes", title: "Accept, and leave the inherited support nodes as badges" },
+    { inherit: "drop", label: "Accept without support nodes", title: "Accept, and remove the support nodes it inherited" },
 ];
 
 /* The Accept button, or - once it is pressed on a candidate that inherited sub-nodes from its parent - the choice
