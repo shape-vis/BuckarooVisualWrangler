@@ -31,22 +31,22 @@
 /* Error cell colors */
 #table td[data-error="mismatch"] {
   color: black;
-  background-color: hotpink;
+  background-color: var(--error-mismatch);
 }
 
 #table td[data-error="missing"] {
   color: white;
-  background-color: saddlebrown;
+  background-color: var(--error-missing);
 }
 
 #table td[data-error="anomaly"] {
   color: white;
-  background-color: red;
+  background-color: var(--error-anomaly);
 }
 
 #table td[data-error="incomplete"] {
   color: white;
-  background-color: gray;
+  background-color: var(--error-incomplete);
 }
 
 .table-error-message {

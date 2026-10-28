@@ -14,25 +14,25 @@
 .settings-label {
     font-size: 14px;
     font-weight: 500;
-    color: #1c1e21;
+    color: var(--ink);
     white-space: nowrap;
 }
 
 .settings-input {
     width: 120px;
     padding: 7px 10px;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 13px;
     text-align: right;
     background: #ffffff;
-    color: #1c1e21;
+    color: var(--ink);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .settings-input:focus {
     outline: none;
-    border-color: #1877F2;
+    border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
 }
 
@@ -54,7 +54,7 @@
 }
 
 .settings-btn--apply {
-    background-color: #1877F2;
+    background-color: var(--accent);
     color: white;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
@@ -65,28 +65,28 @@
 }
 
 .settings-btn--cancel {
-    background-color: #f0f2f5;
-    color: #1c1e21;
-    border: 1px solid #dddfe2;
+    background-color: var(--surface-muted);
+    color: var(--ink);
+    border: 1px solid var(--border);
 }
 
 .settings-btn--cancel:hover {
-    background-color: #e4e6ea;
+    background-color: var(--surface-hover);
 }
 
 .settings-toggle {
     display: flex;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
-    background: #f0f2f5;
+    background: var(--surface-muted);
 }
 
 .settings-toggle-btn {
     padding: 6px 16px;
     border: none;
     background-color: transparent;
-    color: #65676b;
+    color: var(--ink-muted);
     font-size: 13px;
     cursor: pointer;
     font-weight: 500;
@@ -94,15 +94,15 @@
 }
 
 .settings-toggle-btn + .settings-toggle-btn {
-    border-left: 1px solid #dddfe2;
+    border-left: 1px solid var(--border);
 }
 
 .settings-toggle-btn--active {
-    background-color: #1877F2;
+    background-color: var(--accent);
     color: white;
 }
 
 .settings-toggle-btn:hover:not(.settings-toggle-btn--active) {
-    background-color: #e4e6ea;
-    color: #1c1e21;
+    background-color: var(--surface-hover);
+    color: var(--ink);
 }

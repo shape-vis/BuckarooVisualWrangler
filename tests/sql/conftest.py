@@ -1,108 +1,77 @@
 """
-Minimal pytest fixtures for SQL testing.
+Shared fixtures for the SQL tests, which run against the app's own database through its engine.
+
+Most of these tests build a real node graph: a root table with its errors and profile, the session graph holding it,
+and whatever candidates and nodes the test stages from it. make_root builds the root and session_graph tears it all
+down again, so a test leaves no tables behind.
 """
+import pandas as pd
 import pytest
-import json
-from pathlib import Path
-from sqlalchemy import create_engine, text, exc
+
+import app
+from app import db_operations, engine
+from app import app as flask_app
+from app.db_utils.detector_sql import DetectorSQL
+from app.server_utils.service_helpers import build_data_profile_table, init_pgraph_for_session
 
 
-def _get_db_url(config, db_name=None):
-    """Build database URL from config"""
-    db = db_name or config["db_name"]
-    return f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{db}"
+def drop_node_tables(tables):
+    """Drop each node table with all its companion tables - see node_table_names."""
+    for table in tables:
+        db_operations.drop_node_tables(table)
 
 
-@pytest.fixture(scope="session")
-def test_db_config():
-    """Load test database configuration"""
-    config_path = Path(__file__).parent / "database_test.json"
-    with open(config_path) as f:
-        return json.load(f)
-
-
-@pytest.fixture(scope="session")
-def _admin_engine(test_db_config):
-    """Admin engine for database management (internal fixture)"""
-    engine = create_engine(
-        _get_db_url(test_db_config, "postgres"),
-        isolation_level="AUTOCOMMIT"
-    )
-    yield engine
-    engine.dispose()
-
-
-@pytest.fixture(scope="session")
-def test_database(_admin_engine, test_db_config):
-    """Create and drop test database"""
-    db_name = test_db_config["db_name"]
-
-    # Create database if needed
-    with _admin_engine.connect() as conn:
-        result = conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"),
-            {"name": db_name}
-        )
-        if not result.scalar():
-            # Can't use parameters for CREATE DATABASE
-            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-
-    yield db_name
-
-    # Cleanup: terminate connections and drop database
-    with _admin_engine.connect() as conn:
-        try:
-            conn.execute(text("""
-                SELECT pg_terminate_backend(pid)
-                FROM pg_stat_activity
-                WHERE datname = :name AND pid <> pg_backend_pid()
-            """), {"name": db_name})
-            conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
-        except exc.SQLAlchemyError as e:
-            # Log but don't fail - cleanup is best-effort
-            print(f"Warning: Failed to cleanup test database: {e}")
-
-
-@pytest.fixture(scope="session")
-def test_engine(test_database, test_db_config):
-    """SQLAlchemy engine for test database"""
-    engine = create_engine(_get_db_url(test_db_config))
-    yield engine
-    engine.dispose()
+def store_flags(table, flags):
+    """
+    Replace a table's errors with exactly these flags, so a test asserts about its own layout rather than about
+    whatever the detectors happened to find.
+    :param flags: (row_id, column_id, error_type) tuples
+    """
+    frame = pd.DataFrame(flags, columns=["row_id", "column_id", "error_type"])
+    # DetectorSQL writes row_id as bigint even when it finds nothing; an empty frame built by hand would land as text
+    frame = frame.astype({"row_id": "int64"})
+    frame.to_sql(f"errors_{table}", engine, if_exists="replace", index=False)
 
 
 @pytest.fixture
-def db_connection(test_engine):
+def session_graph():
     """
-    Connection with NO automatic rollback.
-
-    Use when you need to test:
-    - Commit/rollback logic
-    - Database triggers
-    - Cross-transaction behavior
-
-    Note: Changes persist, so clean up manually or use unique table names.
+    Leaves the process-wide session graph as it found it: when the test is done, every node in the graph - the root,
+    candidates, accepted nodes - has its tables dropped, and the graph is cleared.
+    :return: a list of further tables to drop, for any a test makes outside the graph
     """
-    conn = test_engine.connect()
-    yield conn
-    conn.close()
+    extra_tables = []
+    yield extra_tables
+
+    tables = list(extra_tables)
+    graph = app.pgraph_for_session
+    if graph is not None:
+        tables.extend(graph.node_map.keys())
+    app.pgraph_for_session = None
+    drop_node_tables(tables)
 
 
 @pytest.fixture
-def db_transaction(test_engine):
+def make_root(session_graph):
     """
-    Connection with automatic rollback for isolated unit tests.
-
-    Use this fixture (recommended default) when you want:
-    - Fast, isolated tests
-    - Automatic cleanup
-    - No test interference
-
-    Changes are never committed - everything rolls back after the test.
-    Perfect for testing business logic without worrying about cleanup.
+    Builds a real root node the way an upload does - its table, errors, data profile and the session graph holding
+    it - and makes it the current table.
+    :return: a function of (table, data, flags=None); flags, when given, replace what the detectors found
     """
-    conn = test_engine.connect()
-    trans = conn.begin()
-    yield conn
-    trans.rollback()
-    conn.close()
+    def build(table, data, flags=None):
+        session_graph.append(table)
+        pd.DataFrame(data).to_sql(table, engine, if_exists="replace", index=False)
+        DetectorSQL(engine, table).generate_errors_table()
+        if flags is not None:
+            store_flags(table, flags)
+        build_data_profile_table(table)
+        init_pgraph_for_session(table)
+        db_operations.load_table(table)
+
+    return build
+
+
+@pytest.fixture
+def client():
+    """A test client for the Flask app."""
+    return flask_app.test_client()

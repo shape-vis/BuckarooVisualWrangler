@@ -1,0 +1,304 @@
+/* ── Supporting sub-nodes ────────────────────────────────────────────────────
+   Hung beside a node, to its left or right. This is the frame every kind shares; what a kind draws inside
+   is its own. Each kind's size is set in supportNodes/registry.js, which the layout stacks them by. */
+/* Sized by the kind's registry size; the frame fills it, and an edge sub-node's stub hangs off its left */
+.support-node-shell {
+  position: relative;
+}
+
+.support-node-stub {
+  position: absolute;
+  top: 50%;
+  border-top: 1.5px dashed var(--support-accent);
+  pointer-events: none;
+}
+
+.support-node {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 3px 6px;
+  background: var(--support-tint);
+  border: 1.5px solid var(--support-accent);
+  border-radius: 6px;
+  font-size: 10px;
+  text-align: left;
+  cursor: default;
+  overflow: hidden;
+}
+
+.support-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.support-node-title {
+  font-weight: 700;
+  color: var(--support-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Open, beside the remove button: takes a sub-node's plot to the Plots view */
+.support-node-open {
+  margin-left: auto;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 1px 6px;
+  border: 1px solid var(--support-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--support-ink);
+}
+
+.support-node-open:hover:not(:disabled) {
+  background: var(--support-tint-strong);
+}
+
+.support-node-open:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Expand, beside minimise: switches a plot between its miniature and its detailed view */
+.support-node-zoom {
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0 4px;
+  border: 1px solid var(--support-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--support-ink);
+}
+
+/* Without an action ahead of it, it takes the header's spare room, so the buttons stay on the right */
+.support-node-zoom--first {
+  margin-left: auto;
+}
+
+.support-node-zoom:hover {
+  background: var(--support-tint-strong);
+}
+
+/* Minimise, beside remove: hides the sub-node and leaves its badge on the host */
+.support-node-minimize {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+/* Without an action ahead of it, it takes the header's spare room, so it and remove stay on the right */
+.support-node-minimize--first {
+  margin-left: auto;
+}
+
+.support-node-minimize:hover {
+  color: var(--ink);
+}
+
+.support-node-remove {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+.support-node-remove:hover {
+  color: var(--ink);
+}
+
+/* The wrangle-diff kind: the wrangle named, then its chart filling what is left of the frame */
+.wrangle-diff {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.wrangle-diff-title {
+  color: #4b5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The quality-metrics kind: the magnifier's rows and footer, under the sub-node's title */
+.support-node-metrics {
+  margin-top: 3px;
+}
+
+/* The link to a sub-node is the mark; its ends need no dots */
+.react-flow__handle.support-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A resizable sub-node's grips, shown only while the pointer is over it so a graph of them stays quiet */
+.support-node-shell .support-resize-handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid var(--support-accent);
+  background: #ffffff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.support-node-shell .support-resize-line {
+  border-color: var(--support-accent);
+  opacity: 0;
+}
+
+.support-node-shell:hover .support-resize-handle,
+.support-node-shell:hover .support-resize-line {
+  opacity: 1;
+}
+
+/* ── A node's group boundary ─────────────────────────────────────────────────
+   Around a node and its supporting sub-nodes, in the sub-nodes' turquoise, lightly shaded so the group reads as
+   one patch of the graph. It sits beneath the cards and edges, and takes no pointer events: React Flow sets
+   those inline on every node while the graph has click handlers, so this has to outrank them. */
+.react-flow__node-supportGroup {
+  pointer-events: none !important;
+}
+
+.support-group {
+  box-sizing: border-box;
+  border: 1.5px dashed var(--support-accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--support-accent) 8%, transparent);
+}
+
+/* A button inside a sub-node's body - a sparkline's Pick source, an error plot's Repair selection and Done */
+.support-node-inline-action {
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 1px 7px;
+  border: 1px solid var(--support-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--support-ink);
+}
+
+.support-node-inline-action:hover:not(:disabled) {
+  background: var(--support-tint-strong);
+}
+
+.support-node-inline-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.support-node-inline-action--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.support-node-inline-action--primary:hover:not(:disabled) {
+  background: #166fe0;
+}
+
+/* ── An error plot being wrangled on ─────────────────────────────────────────
+   The matrix's own plot, filling the sub-node, with the selection and Repair under it */
+.support-wrangle {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.support-wrangle-plot {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.support-wrangle-plot > svg {
+  display: block;
+  overflow: visible;
+}
+
+.support-wrangle-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.support-wrangle-selection {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────────
+   A node's hidden sub-nodes, in rows at the top of its card above its name, each a small rimmed chip holding its
+   kind's picture. Inside the card, so it grows to hold them. Six to a row - as wide as six badges and the gaps
+   between them - which is BADGES_PER_ROW in supportLayout.js; the layout reserves a row's height (22px badge,
+   3px under it - BADGE_ROW_HEIGHT) for each. */
+.support-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  max-width: calc(6 * 22px + 5 * 3px);
+  margin: 0 auto 3px;
+}
+
+.support-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 1.5px solid var(--support-accent);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px #ffffff, 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.support-badge:hover {
+  background: var(--support-tint);
+  transform: translateY(-1px) scale(1.12);
+}
+
+/* A kind's tiny picture of itself, in a badge or anywhere else it is shown */
+.support-glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

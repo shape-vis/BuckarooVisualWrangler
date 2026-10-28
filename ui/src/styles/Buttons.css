@@ -1,9 +1,9 @@
 
 .rotatedButton {
   padding: 5px;
-  color: #65676b;
-  background-color: #f0f2f5;
-  border: 1px solid #dddfe2;
+  color: var(--ink-muted);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -17,13 +17,13 @@
 }
 
 .rotatedButton:hover {
-  background-color: #e4e6ea;
+  background-color: var(--surface-hover);
 }
 
 .rotatedButton--selected {
-  background-color: #e7f0fd;
-  color: #1877F2;
-  border-color: #1877F2;
+  background-color: var(--accent-tint);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .rotatedButtonText {
@@ -36,9 +36,9 @@
 
 .standardButton {
   padding: 5px 10px;
-  color: #1c1e21;
-  background-color: #f0f2f5;
-  border: 1px solid #dddfe2;
+  color: var(--ink);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -50,13 +50,13 @@
 }
 
 .standardButton:hover {
-  background-color: #e4e6ea;
+  background-color: var(--surface-hover);
 }
 
 .standardButton--selected {
-  background-color: #e7f0fd;
-  color: #1877F2;
-  border-color: #1877F2;
+  background-color: var(--accent-tint);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .standardButtonText {
@@ -101,10 +101,11 @@
 
 .navButton--selected {
   background-color: #ffffff;
-  border-color: #e0e0e0;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   z-index: 1;
   position: relative;
+  /* !important: the tab-shape rules above drop a side's border with selectors as specific as (0,4,0), and the
+     selected tab has to show all four */
   border: 1.5px solid #e0e0e0 !important;
 }
 
@@ -132,7 +133,7 @@
 .navButtonButtonText {
   font-size: 14px;
   font-weight: 600;
-  color: #1c1e21;
+  color: var(--ink);
 }
 
 .navButtonContainer {
@@ -142,7 +143,7 @@
   margin-left: auto;
 }
 
-.iconButton {
+.iconButton- {
   cursor: pointer;
   padding: 6px 10px;
   margin-left: 6px;
@@ -156,7 +157,7 @@
   align-self: center;
 }
 
-.iconButton:hover {
+.iconButton-:hover {
   background-color: #dce3ef;
   border-color: #a8b4c8;
 }
@@ -180,4 +181,58 @@
   width: 8px;
   height: 34px;
   font-size: 9px;
+}
+
+.iconButton-node-sub-button-inspect,
+.iconButton-node-sub-button-ai,
+.iconButton-node-sub-button-support,
+.iconButton-node-sub-button-support-visibility{
+  cursor: pointer;
+  /* Centers the SVG icon in the button box */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 4px;
+  /*margin-left: 6px;*/
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 12px;
+  line-height: 1;
+  color: #3a4560;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  align-self: center;
+}
+
+.iconButton-node-sub-button-inspect:hover:not(:disabled),
+.iconButton-node-sub-button-ai:hover:not(:disabled),
+.iconButton-node-sub-button-support:hover:not(:disabled),
+.iconButton-node-sub-button-support-visibility:hover:not(:disabled){
+  background-color: #e0e0e0;
+  border-color: #a8b4c8;
+}
+
+/* A disabled node button has to read as deliberately off rather than broken. The AI button
+   spends most of its life disabled - while suggestions are already on the graph - so this
+   carries real weight. */
+.iconButton-node-sub-button-inspect:disabled,
+.iconButton-node-sub-button-ai:disabled,
+.iconButton-node-sub-button-support:disabled,
+.iconButton-node-sub-button-support-visibility:disabled{
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* Node buttons carry SVG icons, matching the header's view buttons. The filter flattens the artwork
+   to the same grey as the other icon buttons, and to the accent blue while a button is active - the
+   same technique .navButtonSvgIcon uses. */
+.nodeButtonSvgIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  filter: brightness(0) saturate(100%) invert(24%) sepia(9%) saturate(1200%) hue-rotate(187deg) brightness(94%) contrast(88%);
+}
+
+.nodeButtonSvgIcon--active {
+  filter: brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1600%) hue-rotate(206deg) brightness(96%) contrast(92%);
 }

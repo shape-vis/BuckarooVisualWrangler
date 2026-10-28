@@ -1,93 +1,98 @@
-import { createContext, useContext, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useState, useCallback } from "react";
 import { undoWrangle, redoWrangle, createPreviews } from "../utils/serverCalls.jsx";
-import { useTableName } from "./TableNameContext.jsx";
 import { useLoading } from "./LoadingContext.jsx";
 import { SelectionContext } from "./SelectionContext.jsx";
+import { usePgraph } from "./PGraphContext.jsx";
+import { useMoveToTable } from "./useMoveToTable.js";
+import { ViewContext } from "../pages/Buckaroo.jsx";
 
 const RepairContext = createContext(null);
 
+// Why nothing can be repaired from the current node while it is a staged candidate
+export const CANDIDATE_LOCKED = "Accept this candidate before wrangling from it";
+
+/**
+ * Repairing a selection: undo and redo, and asking for the ways the rows selected in the plots could be
+ * repaired.
+ *
+ * Asking stages each repair as a candidate on the server - a provisional node under the current node, its
+ * wrangle already run on a copy of the table - and pulls the graph, where they appear as prospective nodes. They
+ * are accepted and declined there, through CandidatesContext, the same as the AI's suggestions.
+ *
+ * Nothing can be repaired from a candidate until it is accepted, so asking is refused while one is current.
+ */
 export function RepairProvider({ onWrangleExecuted, children }) {
-    const { setTableName } = useTableName();
     const { addLoader, removeLoader } = useLoading();
-    const { highlightedRowIds, highlightedCols, selectionSource, clearHighlight } =
-        useContext(SelectionContext);
+    const { highlightedRowIds, highlightedCols, selectionSource } = useContext(SelectionContext);
+    // Undo and redo move the current node, so the rendered graph has to be re-pulled too
+    const { refreshGraph, currentIsCandidate } = usePgraph();
+    const moveToTable = useMoveToTable(onWrangleExecuted);
+
+    // The candidates are drawn in the graph, so asking for them opens the graph if it is closed
+    const { openView } = useContext(ViewContext);
 
     const [busy, setBusy] = useState(false);
-    const [repairPanelOpenTrigger, setRepairPanelOpenTrigger] = useState(0);
-    const [repairPanelCloseTrigger, setRepairPanelCloseTrigger] = useState(0);
+    const [repairError, setRepairError] = useState(null);
 
-    const closeRepairPanel = useCallback(() => {
-        setRepairPanelCloseTrigger(c => c + 1);
-    }, []);
+    const dismissRepairError = useCallback(() => setRepairError(null), []);
 
-    // Ref-based callback so the header can trigger RepairPanel's local handler
-    const repairHandlerRef = useRef(null);
+    /* Undo and redo alike: ask the server to step through the history, re-pull the graph, and land on the node
+       it stepped to. serverCall is undoWrangle or redoWrangle. */
+    const stepHistory = useCallback(async (serverCall) => {
+        setBusy(true);
+        addLoader();
+        const result = await serverCall();
+        await refreshGraph();
+        setBusy(false);
+        removeLoader();
 
-    const registerRepairHandler = useCallback((fn) => {
-        repairHandlerRef.current = fn;
-    }, []);
+        if (result?.success) {
+            moveToTable(result.table_name);
+        }
+        return result;
+    }, [addLoader, removeLoader, refreshGraph, moveToTable]);
 
+    const handleUndo = useCallback(() => stepHistory(undoWrangle), [stepHistory]);
+    const handleRedo = useCallback(() => stepHistory(redoWrangle), [stepHistory]);
+
+    const hasSelection = Boolean(highlightedRowIds && highlightedRowIds.length > 0);
+
+    /* Stage every repair of the current selection as a candidate under the current node, alongside any
+       candidates already staged anywhere - they stay until each is accepted or declined. */
+    const requestRepairs = useCallback(async () => {
+        if (!hasSelection || currentIsCandidate) return;
+        setRepairError(null);
+        setBusy(true);
+        addLoader();
+
+        const result = await createPreviews(highlightedRowIds, highlightedCols || [], selectionSource);
+        if (result?.success) {
+            await refreshGraph();
+        } else {
+            setRepairError(result?.error || "Preview generation failed.");
+        }
+
+        setBusy(false);
+        removeLoader();
+    }, [hasSelection, highlightedRowIds, highlightedCols, selectionSource, currentIsCandidate, refreshGraph,
+        addLoader, removeLoader]);
+
+    /* The header's Repair button, and an error-plot sub-node's Repair selection: stage the repairs into the
+       graph, where the candidates are chosen. */
     const triggerRepairSelection = useCallback(() => {
-        setRepairPanelOpenTrigger(c => c + 1);
-        repairHandlerRef.current?.();
-    }, []);
-
-    const handleUndo = useCallback(async () => {
-        setBusy(true);
-        addLoader();
-        const result = await undoWrangle();
-        setBusy(false);
-        removeLoader();
-        if (result?.success) {
-            setTableName(result.table_name);
-            clearHighlight();
-            closeRepairPanel();
-            onWrangleExecuted?.();
-        }
-        return result;
-    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
-
-    const handleRedo = useCallback(async () => {
-        setBusy(true);
-        addLoader();
-        const result = await redoWrangle();
-        setBusy(false);
-        removeLoader();
-        if (result?.success) {
-            setTableName(result.table_name);
-            clearHighlight();
-            closeRepairPanel();
-            onWrangleExecuted?.();
-        }
-        return result;
-    }, [addLoader, removeLoader, setTableName, clearHighlight, closeRepairPanel, onWrangleExecuted]);
-
-    // Returns the raw server result so RepairPanel can set local preview state
-    const requestPreviews = useCallback(async () => {
-        if (!highlightedRowIds || highlightedRowIds.length === 0) return null;
-        setBusy(true);
-        addLoader();
-        const cols = highlightedCols || [];
-        const result = await createPreviews(highlightedRowIds, cols);
-        setBusy(false);
-        removeLoader();
-        return { result, cols, selectionSource };
-    }, [highlightedRowIds, highlightedCols, selectionSource, addLoader, removeLoader]);
-
-    const hasSelection = !!(highlightedRowIds && highlightedRowIds.length > 0);
+        openView("graph");
+        requestRepairs();
+    }, [openView, requestRepairs]);
 
     return (
         <RepairContext.Provider value={{
-            busy, setBusy,
+            busy,
             handleUndo, handleRedo,
-            requestPreviews,
             triggerRepairSelection,
-            registerRepairHandler,
-            repairPanelOpenTrigger,
-            repairPanelCloseTrigger,
-            closeRepairPanel,
+            // Repairing is off while the current node is a candidate, and says why
+            repairLocked: currentIsCandidate,
+            repairError, dismissRepairError,
             hasSelection,
-            onWrangleExecuted,
         }}>
             {children}
         </RepairContext.Provider>

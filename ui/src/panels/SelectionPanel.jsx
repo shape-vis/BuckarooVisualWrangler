@@ -1,11 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
-import * as d3 from "d3";
-import HeatMap from "../visualizations/HeatMap.jsx";
-import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
-import ScatterPlot from "../visualizations/ScatterPlot.jsx";
+import { useEffect, useRef, useState } from "react";
+import FocusedPlot, { CellPlot } from "../visualizations/FocusedPlot.jsx";
 import "../styles/SelectionPanel.css";
 import { updateBackendAttributes } from "../utils/serverCalls.jsx";
-import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
+import { errorColors } from "../store/errorColors.js";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { heatMapCache, histogramCache, scatterPlotCache } from "../store/visualizationCaches.jsx";
 
@@ -30,35 +27,9 @@ function MagnifierIcon({ x, y, onClick }) {
     );
 }
 
-// ── Icon: minimize (compress arrows) ─────────────────────────────────────────
-function MinimizeIcon({ x, y, onClick }) {
-    const s = 16;
-    const m = 3;
-    const arm = 5;
-    return (
-        <g
-            className="plot-minimize-icon"
-            onClick={e => { e.stopPropagation(); onClick(); }}
-        >
-            <rect x={x - 1} y={y - 1} width={s + 2} height={s + 2} rx={3} fill="white" fillOpacity={0.85} />
-            {/* top-left corner arrows pointing inward */}
-            <polyline
-                points={`${x + m},${y + m + arm} ${x + m},${y + m} ${x + m + arm},${y + m}`}
-                fill="none" stroke="#444" strokeWidth={1.5} strokeLinejoin="round"
-            />
-            {/* bottom-right corner arrows pointing inward */}
-            <polyline
-                points={`${x + s - m},${y + s - m - arm} ${x + s - m},${y + s - m} ${x + s - m - arm},${y + s - m}`}
-                fill="none" stroke="#444" strokeWidth={1.5} strokeLinejoin="round"
-            />
-        </g>
-    );
-}
-
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
+function SelectionPanel({ selectedAttributes, w, h, errorColors, plotFocus, onPlotFocused }) {
     const { tableName: table_name } = useTableName();
-    const matrixPlotAreaRef = useRef(null);
     const [plotSize, setPlotSize] = useState(180);
     const [focusedCell, setFocusedCell] = useState(null); // { i, j } or null
 
@@ -137,8 +108,8 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
             }
         }
 
-        // // Keep frontend cache consistent with backend.
-        // // Remove cached nonactive viewport keys when deselected.
+        // Keep frontend cache consistent with backend.
+        // Remove cached nonactive viewport keys when deselected.
         clearFrontendPlotCaches(removed, columns);
 
         // send nonactive views to backend.
@@ -152,6 +123,28 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
     useEffect(() => {
         setFocusedCell(null);
     }, [table_name, selectedAttributes]);
+
+    /* Zoom to a plot asked for from elsewhere - a sub-node's "Open ↗" button - once its columns are in
+       the matrix. After the reset above, so a request that arrives with new columns is not cleared by them.
+       Applying it hands it back (onPlotFocused) so it is gone rather than remembered as done: applying it twice
+       is harmless, which matters because StrictMode runs a new matrix's effects twice - reset, zoom, reset,
+       zoom - and a request skipped the second time would be left reset. A heatmap sits below the diagonal,
+       with x as its column; if the two are selected the other way round, it is the same pair drawn transposed. */
+    useEffect(() => {
+        if (!plotFocus) return;
+        const [x, y] = plotFocus.columns;
+        const xIndex = columns.indexOf(x);
+        const yIndex = y === undefined ? xIndex : columns.indexOf(y);
+        if (xIndex < 0 || yIndex < 0) return;
+        if (y === undefined) {
+            setFocusedCell({ i: xIndex, j: xIndex });
+        } else {
+            setFocusedCell({ i: Math.max(xIndex, yIndex), j: Math.min(xIndex, yIndex) });
+        }
+        onPlotFocused?.(plotFocus.key);
+        // columns is selectedAttributes, under the name the rest of the panel uses
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [plotFocus, table_name, selectedAttributes]);
 
     useEffect(() => {
         const n = columns.length;
@@ -168,89 +161,18 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
     // ── Focused (expanded) view ───────────────────────────────────────────────
     if (focusedCell !== null) {
         const { i, j } = focusedCell;
-        const xCol = columns[j];
-        const yCol = columns[i];
-        const cellID = `cell-${xCol}-${yCol}`;
-
-        // Leave room for axis labels.
-        // focusedXPos needs to accommodate D3 left-axis tick labels (up to ~80px for 10-char strings).
-        // Bottom needs ~50px for D3 bottom-axis tick labels rendered below plot area.
-        const focusedXPos = 90;
-        const focusedYPos = 70;
-        const focusedSize = Math.min(
-            w - focusedXPos - 40,
-            h - focusedYPos - 100
-        );
-        const clampedSize = Math.max(80, focusedSize);
-
-        let plot;
-        if (i === j) {
-            plot = (
-                <HistogramBarChart
-                    cellID={cellID}
-                    pos={{ x: focusedXPos, y: focusedYPos }}
-                    size={{ w: clampedSize, h: clampedSize }}
-                    attrX={xCol}
-                    errorColors={errorColors}
-                />
-            );
-        } else if (i < j) {
-            plot = (
-                <ScatterPlot
-                    cellID={cellID}
-                    xPos={focusedXPos}
-                    yPos={focusedYPos}
-                    size={clampedSize}
-                    attrX={xCol}
-                    attrY={yCol}
-                    errorColors={errorColors}
-                />
-            );
-        } else {
-            plot = (
-                <HeatMap
-                    cellID={cellID}
-                    xPos={focusedXPos}
-                    yPos={focusedYPos}
-                    size={clampedSize}
-                    attrX={xCol}
-                    attrY={yCol}
-                    errorColors={errorColors}
-                />
-            );
-        }
 
         return (
-            <g ref={matrixPlotAreaRef} id="matrix-plot-area">
-                {/* X axis label */}
-                <text
-                    x={focusedXPos + clampedSize / 2}
-                    y={focusedYPos - 28}
-                    textAnchor="middle"
-                    fontSize={14}
-                    fontWeight="500"
-                >
-                    {xCol}
-                </text>
-                {/* Y axis label (only for 2-D plots) */}
-                {i !== j && (
-                    <text
-                        x={focusedXPos - 65}
-                        y={focusedYPos + clampedSize / 2}
-                        textAnchor="middle"
-                        fontSize={13}
-                        fontWeight="500"
-                        transform={`rotate(-90, ${focusedXPos - 65}, ${focusedYPos + clampedSize / 2})`}
-                    >
-                        {yCol}
-                    </text>
-                )}
-                {plot}
-                {/* Minimize icon — top-right corner of the focused plot */}
-                <MinimizeIcon
-                    x={focusedXPos + clampedSize - 18}
-                    y={focusedYPos + 2}
-                    onClick={() => setFocusedCell(null)}
+            <g id="matrix-plot-area">
+                <FocusedPlot
+                    i={i}
+                    j={j}
+                    xCol={columns[j]}
+                    yCol={columns[i]}
+                    w={w}
+                    h={h}
+                    errorColors={errorColors}
+                    onMinimize={() => setFocusedCell(null)}
                 />
             </g>
         );
@@ -259,7 +181,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
     // ── Normal matrix view ────────────────────────────────────────────────────
     // TODO: Only update views in which attributes actually change.
     return (
-        <g ref={matrixPlotAreaRef} id="matrix-plot-area">
+        <g id="matrix-plot-area">
             {/* Column (x) labels */}
             <g>
                 {columns.map((col, i) => (
@@ -288,8 +210,8 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
             {/* Plot cells */}
             {columns.map((xCol, j) =>
                 columns.map((yCol, i) => {
-
-                    // CHANGE #1: cell identity based on columns
+                    // Named by its columns rather than its position, so a cell keeps its chart
+                    // when other attributes are added or removed around it
                     const cellID = `cell-${xCol}-${yCol}`;
 
                     const xPos = view.leftMargin + (j + 1) * view.xPadding + j * plotSize;
@@ -297,53 +219,19 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
                     const iconX = xPos + plotSize - 16;
                     const iconY = yPos;
 
-                    let plot;
-
-                    if (i === j) {
-                        plot = (
-                            <HistogramBarChart
-                                cellID={cellID}
-                                pos={{ x: xPos, y: yPos }}
-                                size={{ w: plotSize, h: plotSize }}
-
-                                attrX={xCol}
-                                errorColors={errorColors}
-                            />
-                        );
-                    } else if (i < j) {
-                        plot = (
-                            <ScatterPlot
-                                cellID={cellID}
-                                xPos={xPos}
-                                yPos={yPos}
-                                size={plotSize}
-
-                                attrX={xCol}
-                                attrY={yCol}
-                                errorColors={errorColors}
-                            />
-                        );
-                    } else {
-                        plot = (
-                            <HeatMap
-                                cellID={cellID}
-                                xPos={xPos}
-                                yPos={yPos}
-                                size={plotSize}
-
-                                attrX={xCol}
-                                attrY={yCol}
-                                errorColors={errorColors}
-                            />
-                        );
-                    }
-
                     return (
-                        <g
-                            key={cellID} // CHANGE #2: stable key
-                            className="plot-cell-wrapper"
-                        >
-                            {plot}
+                        <g key={cellID} className="plot-cell-wrapper">
+                            <CellPlot
+                                i={i}
+                                j={j}
+                                cellID={cellID}
+                                xPos={xPos}
+                                yPos={yPos}
+                                size={plotSize}
+                                xCol={xCol}
+                                yCol={yCol}
+                                errorColors={errorColors}
+                            />
                             <MagnifierIcon
                                 x={iconX}
                                 y={iconY}
@@ -360,28 +248,21 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors }) {
 
 
 /**
- * MatrixView React component - converted from matrixview.js
- *
- * Props:
- * - model
- * - givenData (object with columnNames() )
- * - visualizations: mapping (e.g. window.visualizations) with modules that expose .module.draw(svgModel, view, canvas, ...args)
- * - width, height (optional) - if not provided component will size SVG to parent bounding box
+ * The plot matrix of the selected attributes, drawn in an SVG that fills its parent and is re-measured
+ * whenever that parent resizes.
  */
-export default function MatrixView({ selectedAttributes }) {
+export default function MatrixView({ selectedAttributes, plotFocus, onPlotFocused }) {
     const svgRef = useRef(null);
     const { tableName: table_name } = useTableName();
 
-    const [w, setW] = React.useState(800);
-    const [h, setH] = React.useState(600);
-
-    const errorTypes = ERROR_TYPES;
+    const [w, setW] = useState(800);
+    const [h, setH] = useState(600);
 
     useEffect(() => {
-        const svg = d3.select(svgRef.current);
+        const svg = svgRef.current;
 
         const resizeObserver = new ResizeObserver(() => {
-            const bbox = svg.node().getBoundingClientRect();
+            const bbox = svg.getBoundingClientRect();
             setW(bbox.width || 800);
             setH(bbox.height || 600);
         });
@@ -395,7 +276,14 @@ export default function MatrixView({ selectedAttributes }) {
 
     return (
         <svg ref={svgRef} id="main-svg" width={"100%"} height={"100%"} overflow="visible">
-            <SelectionPanel selectedAttributes={selectedAttributes} w={w} h={h} errorColors={errorColors} />
+            <SelectionPanel
+                selectedAttributes={selectedAttributes}
+                w={w}
+                h={h}
+                errorColors={errorColors}
+                plotFocus={plotFocus}
+                onPlotFocused={onPlotFocused}
+            />
         </svg>
     );
 }

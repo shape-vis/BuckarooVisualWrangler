@@ -42,12 +42,14 @@ export function NavButton({ children, isSelected, onClick, className = "", icon 
   );
 }
 
-export function IconButton({ children, onClick, title, className = "" }) {
+export function IconButton({ children, onClick, title, ariaLabel, className = "", disabled = false }) {
   return (
       <button
-          className={`iconButton ${className}`}
+          className={`iconButton-${className}`}
           onClick={onClick}
           title={title}
+          aria-label={ariaLabel}
+          disabled={disabled}
       >
         {children}
       </button>

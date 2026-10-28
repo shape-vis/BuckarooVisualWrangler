@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 
 import { queryAttributeSummaries } from "../utils/serverCalls.jsx";
 import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
@@ -11,6 +11,27 @@ import { useLoading } from "../store/LoadingContext.jsx";
 import "../styles/AttributeSummaryPanel.css";
 import FilterModal from "../elements/FilterModal.jsx";
 
+
+// Kept pure on purpose: it runs during render (inside useMemo), and setting
+// state from there makes React loop on re-renders.
+function sortAttributes(attributes, columnErrors, currentSortBy) {
+  return [...attributes].sort((a, b) => {
+    const errorsA = columnErrors[a] || {};
+    const errorsB = columnErrors[b] || {};
+
+    const primaryA = currentSortBy === "total" ? 0 : (errorsA[currentSortBy] || 0);
+    const primaryB = currentSortBy === "total" ? 0 : (errorsB[currentSortBy] || 0);
+
+    const totalA = Object.values(errorsA).reduce((s, v) => s + v, 0);
+    const totalB = Object.values(errorsB).reduce((s, v) => s + v, 0);
+
+    if (currentSortBy === "total") return totalB - totalA;
+    if (currentSortBy === "none") return totalA - totalB;
+
+    if (primaryB !== primaryA) return primaryB - primaryA;
+    return totalB - totalA;
+  });
+}
 
 
 function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAttributes, handleToggleSelect, showFilter }) {
@@ -56,23 +77,42 @@ function GroupByButton({ attr, groupByAttribute, handleToggleGroupBy, selectedAt
   );
 }
 
-function AttributeRow({ attr, setGroupByAttribute, groupByAttribute, selectedAttributes, setSelectedAttributes, summaryData, handleToggleSelect, showFilter }) {
+function AttributeRow({
+  attr,
+  setGroupByAttribute,
+  groupByAttribute,
+  selectedAttributes,
+  summaryData,
+  handleToggleSelect,
+  showFilter,
+}) {
   const columnErrors = summaryData?.columnErrors?.[attr] || {};
   const attrDist = summaryData?.attributeDistributions?.[attr] || {};
 
   const errorEntries = Object.entries(columnErrors);
+
+  // Each error badge takes room from the name, so the name is cut shorter.
+  const nameLength = Math.max(5, 18 - errorEntries.length * 3);
+  const shortName = truncateText(attr.toLowerCase(), nameLength);
 
   function handleToggleGroupBy(attr) {
     setGroupByAttribute(prev => prev === attr ? null : attr);
   }
 
   return (
-    <li className="attribute-row" key={attr}>
-      <GroupByButton attr={attr} groupByAttribute={groupByAttribute} handleToggleGroupBy={handleToggleGroupBy} selectedAttributes={selectedAttributes} handleToggleSelect={handleToggleSelect} showFilter={showFilter} />
+    <li className="attribute-row">
+      <GroupByButton
+        attr={attr}
+        groupByAttribute={groupByAttribute}
+        handleToggleGroupBy={handleToggleGroupBy}
+        selectedAttributes={selectedAttributes}
+        handleToggleSelect={handleToggleSelect}
+        showFilter={showFilter}
+      />
 
       <div className="attribute-row-details">
         <div className="attribute-row-header">
-          <span title={attr} className="attribute-row-name">{truncateText(attr.toLowerCase(), Math.max(5, 18 - errorEntries.length * 3))}</span>
+          <span title={attr} className="attribute-row-name">{shortName}</span>
 
           {errorEntries.length > 0
               ? errorEntries.map(([type, pct]) => (
@@ -150,34 +190,9 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
 
   // Run on mount or when table changes
   useEffect(() => {
-      console.log("[AttrSummary MOUNT/table_name effect] table_name =", table_name);
     fetchSummaryData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table_name]);
-
-  
-  // sortAttributes is now a pure function — no setSortedAttributes call inside.
-  //  Calling setState during render (even indirectly via useMemo) caused the
-  //  "Cannot update Buckaroo while rendering AttributeSummaryView" error and
-  //  triggered an infinite re-render loop that crashed the app.
-  function sortAttributes(attributes = [], columnErrors = {}, currentSortBy = sortBy) {
-    return [...attributes].sort((a, b) => {
-      const errorsA = columnErrors[a] || {};
-      const errorsB = columnErrors[b] || {};
-
-      const primaryA = currentSortBy === "total" ? 0 : (errorsA[currentSortBy] || 0);
-      const primaryB = currentSortBy === "total" ? 0 : (errorsB[currentSortBy] || 0);
-
-      const totalA = Object.values(errorsA).reduce((s, v) => s + v, 0);
-      const totalB = Object.values(errorsB).reduce((s, v) => s + v, 0);
-
-      if (currentSortBy === "total") return totalB - totalA;
-      if (currentSortBy === "none") return totalA - totalB;
-
-      if (primaryB !== primaryA) return primaryB - primaryA;
-      return totalB - totalA;
-    });
-  }
 
   // Derived sorted attributes when summaryData or sortBy changes
   const sortedAttributes = useMemo(() => {
@@ -235,13 +250,31 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
         </div>
       </div>
 
-      <FilterModal visible={filterVisible} attribute={filterAttribute} onClose={() => setFilterVisible(false)} onApply={() => setFilterVisible(false)} errorColors={errorColors} />
+      <FilterModal
+        visible={filterVisible}
+        attribute={filterAttribute}
+        onClose={() => setFilterVisible(false)}
+        onApply={() => setFilterVisible(false)}
+        errorColors={errorColors}
+      />
 
       <div className="attribute-list">
         <ul className="attribute-summary-list">
           {loading && <li>Loading attribute summaries…</li>}
           {!loading && summaryData && sortedAttributes.map(attr => (
-            <AttributeRow key={attr} attr={attr} handleToggleSelect={handleToggleSelect} selectedAttributes={selectedAttributes} setSelectedAttributes={setSelectedAttributes} summaryData={summaryData} groupByAttribute={groupByAttribute} setGroupByAttribute={setGroupByAttribute} showFilter={() => { setFilterAttribute(attr); setFilterVisible(true); }} />
+            <AttributeRow
+              key={attr}
+              attr={attr}
+              handleToggleSelect={handleToggleSelect}
+              selectedAttributes={selectedAttributes}
+              summaryData={summaryData}
+              groupByAttribute={groupByAttribute}
+              setGroupByAttribute={setGroupByAttribute}
+              showFilter={() => {
+                setFilterAttribute(attr);
+                setFilterVisible(true);
+              }}
+            />
           ))}
         </ul>
       </div>

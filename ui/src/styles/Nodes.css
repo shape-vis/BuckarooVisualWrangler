@@ -1,13 +1,216 @@
-
-.react-flow__node-selectedNode{
-    background-color: #64ea96;
-}
-.react-flow__node-selectedNode {
-  background-color: #64ea96;
-  border: 1px solid #1a192b;
+/* Nodes are deep plum at rest, titled in white. Which node is current and which is the comparison's selection A
+   are states, so they are modifier classes set from the node data rather than inline styles written by an
+   effect - and they keep their own light fills, so they take dark titles back. */
+.react-flow__node-noteNode,
+.react-flow__node-rootNoteNode {
+  background-color: #4a1942;
+  border: 1px solid #2c0e27;
+  color: #ffffff;
   border-radius: 3px;
-  padding: 10px;
+  padding: 5px;
   font-size: 12px;
   text-align: center;
   min-width: 150px;
+}
+
+/* The current node, and when a pair is set up, the two nodes being compared. Both get a ring so they read
+   as a pair against everything else in the graph: blue for selection A, and for the current node
+   (selection B) plum's classic companion, gold. A solid gold fill is the strongest card in the graph - unlike
+   the deep plum of every node at rest, and well above the pale teal of supporting sub-nodes and their
+   groups - and it does not lean on colour alone: a heavier border in B's Persian plum, which ties it to
+   B's badge and plots, a gold halo and a slight lift. Deep plum titles keep it in the family. */
+.react-flow__node.pgraph-node--current {
+  background-color: #efbf04;
+  border: 3px solid var(--selection-b);
+  color: #2c0e27;
+  font-weight: 600;
+  box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
+}
+
+.react-flow__node.pgraph-node--selection-a {
+  background-color: var(--accent-tint);
+  border: 2px dashed var(--accent);
+  box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.25);
+}
+
+/* The title takes the card's text colour - the app's h3 rule would otherwise make it dark on the plum */
+.react-flow__node-noteNode h3,
+.react-flow__node-rootNoteNode h3 {
+  color: inherit;
+}
+
+.react-flow__node.pgraph-node--selection-a {
+  color: var(--ink);
+}
+
+/* A folded run. Dashed and tinted so it reads as several nodes standing in for themselves rather than
+   as a wrangling step of its own. */
+.react-flow__node-collapsedNode {
+  background-color: var(--surface-muted);
+  border: 2px dashed #8c939d;
+  border-radius: 6px;
+  padding: 5px;
+  font-size: 12px;
+  text-align: center;
+  min-width: 150px;
+}
+
+.collapsed-node-range {
+  font-size: 10px;
+  color: var(--ink-muted);
+  margin-bottom: 2px;
+}
+
+.iconButton-node-sub-button-expand {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.iconButton-node-sub-button-expand:hover {
+  background-color: #e0e0e0;
+  border-color: #a8b4c8;
+}
+
+/* The magnifier's readout. Absolutely positioned so revealing it never changes the node's footprint,
+   which dagre has already laid the graph out from - it hangs in the gap below the node instead. */
+.node-metrics {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  padding: 5px 6px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+  text-align: left;
+  cursor: default;
+}
+
+.node-metrics-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+
+.node-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.node-metrics-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.node-metrics-swatch[data-error-type="missing"]    { background-color: var(--error-missing); }
+.node-metrics-swatch[data-error-type="mismatch"]   { background-color: var(--error-mismatch); }
+.node-metrics-swatch[data-error-type="anomaly"]    { background-color: var(--error-anomaly); }
+.node-metrics-swatch[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
+
+.node-metrics-value {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.node-metrics-footer {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid var(--surface-muted);
+  font-size: 9px;
+  color: var(--ink-muted);
+}
+
+.node-metrics-empty {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+/* A leaf another leaf beats on both error and drift - never the right choice, whatever the analyst
+   values. Faded and struck through in place rather than hidden, and combined with the current / selection A
+   marks rather than replacing them. Hovering it names what beats it. */
+.react-flow__node.pgraph-node--dominated {
+  opacity: 0.5;
+}
+
+.react-flow__node.pgraph-node--dominated h3 {
+  text-decoration: line-through;
+}
+
+/* A staged candidate on the plot's full view: a card like the rest, dashed violet like its tree card */
+.react-flow__node.pgraph-node--provisional:not(.pgraph-node--current) {
+  border: 2px dashed var(--candidate);
+  background-color: var(--candidate-tint);
+  color: var(--candidate-ink);
+}
+
+/* Floats above the node, so it adds no height to the dagre layout */
+.node-comparison-badge {
+  position: absolute;
+  top: -15px;
+  left: 0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.node-comparison-badge--current     { background-color: var(--selection-b); }
+.node-comparison-badge--selection-a { background-color: var(--accent); }
+/* React Flow's own ring on a selected or focused card, in the app's green */
+.react-flow__node-noteNode.selectable.selected,
+.react-flow__node-noteNode.selectable:focus,
+.react-flow__node-noteNode.selectable:focus-visible,
+.react-flow__node-rootNoteNode.selectable.selected,
+.react-flow__node-rootNoteNode.selectable:focus,
+.react-flow__node-rootNoteNode.selectable:focus-visible {
+  box-shadow: 0 0 0 3px #20a449;
+}
+
+/* Clicking the current node also selects it in React Flow, whose ring above would replace the gold halo. As
+   specific as that ring and after it, so the current node keeps its own look selected or focused. */
+.react-flow__node.pgraph-node--current.selectable.selected,
+.react-flow__node.pgraph-node--current.selectable:focus,
+.react-flow__node.pgraph-node--current.selectable:focus-visible {
+  box-shadow: 0 0 0 4px rgba(239, 191, 4, 0.45), 0 6px 16px rgba(74, 25, 66, 0.35);
+}
+
+/* A node's buttons, always showing */
+.note-node-icon-container{
+    background-color: rgb(255 255 255);
+    display: flex;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+/* Wraps each node button so its tooltip still works while the button is disabled; lays out as the button */
+.node-button-tip {
+    display: inline-flex;
+}
+
+.node-tools{
+    padding-bottom: 2px;
 }

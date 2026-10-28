@@ -1,22 +1,18 @@
-.header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 10;
-}
-
+/* The header bar. It stays fixed at the top, 48px tall - the layout below it is offset by that height */
 #header {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 56px;
+    height: 48px;
     z-index: 10;
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    background: #f8f9fa;
-    border-bottom: 1.5px solid #dadce0;
+    background: #ffffff;
+    color: var(--ink);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     padding: 0 16px;
     box-sizing: border-box;
 }
@@ -28,21 +24,10 @@
     white-space: nowrap;
     flex-shrink: 0;
     line-height: 1;
-}
-
-#header h1 {
     cursor: pointer;
 }
 
 #header h1 img {
-    vertical-align: middle;
-}
-
-.header h1 {
-    cursor: pointer;
-}
-
-.header h1 img {
     vertical-align: middle;
 }
 
@@ -51,7 +36,6 @@
     align-items: center;
     gap: 10px;
     margin-left: 16px;
-    padding-bottom: 6px;
 }
 
 /* ── Action buttons in header (undo / redo / repair) ─────────── */
@@ -98,6 +82,37 @@
     filter: brightness(0) saturate(100%) invert(35%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%);
 }
 
+/* ── Compare button ──────────────────────────────────────────────── */
+
+/* Appears only while two nodes are paired in the graph. It takes over the auto margin that normally
+   pushes the view tabs right, so it sits immediately left of "Both" rather than stranded mid-bar. */
+.header-compare-btn {
+    margin-left: auto;
+    margin-right: 12px;
+    color: var(--accent);
+    background: var(--accent-tint);
+    border-color: var(--accent);
+    animation: header-compare-in 0.18s ease-out;
+}
+
+.header-compare-btn:hover:not(:disabled) {
+    background-color: #d6e6fd;
+    border-color: #1466d2;
+}
+
+.header-compare-btn .btn-svg-icon {
+    filter: brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1600%) hue-rotate(206deg) brightness(96%) contrast(92%);
+}
+
+.header-compare-btn + .navButtonContainer {
+    margin-left: 0;
+}
+
+@keyframes header-compare-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 /* ── Table status label ──────────────────────────────────────────── */
 
 .table-status {
@@ -114,6 +129,52 @@
     color: #333;
     white-space: nowrap;
     align-self: center;
+    /* When the Compare button and the view toggles need the room, the name shortens rather than they wrap */
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.table-status-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The view toggles keep their labels on one line; a crowded header gives way at the table name instead */
+#header .navButton {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* The view toggles and the action buttons are one height, both centred in the bar, so they line up top and
+   bottom whatever their icons and padding */
+#header .navButton,
+#header .header-action-btn {
+    height: 36px;
+    box-sizing: border-box;
+}
+
+/* On a laptop-width screen the header's buttons would not all fit beside the Compare button at full
+   padding, so they tighten up and leave the table name some room */
+@media (max-width: 1500px) {
+    #header .navButton {
+        padding: 6px 14px;
+    }
+
+    #header .header-action-btn {
+        padding: 8px 12px;
+    }
+}
+
+@media (max-width: 1350px) {
+    #header .navButton {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+
+    #header .header-action-btn {
+        padding: 8px 9px;
+        gap: 6px;
+    }
 }
 
 .table-status-dot {

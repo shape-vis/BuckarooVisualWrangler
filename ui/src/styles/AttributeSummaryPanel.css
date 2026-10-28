@@ -11,7 +11,7 @@
 }
 
 #attribute-sorting {
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 8px;
     width: 250px;
@@ -28,14 +28,14 @@
     overflow-wrap: break-word;
     white-space: normal;
     cursor: pointer;
-    color: #1c1e21;
+    color: var(--ink);
     padding: 3px 4px;
     border-radius: 4px;
     transition: background-color 0.1s ease;
 }
 
 .attribute-sorting-item:hover {
-    background-color: #f0f2f5;
+    background-color: var(--surface-muted);
 }
 
 .attribute-sorting-item-color {
@@ -51,7 +51,7 @@
     width: 10px;
     height: 10px;
     margin-right: 6px;
-    border: 3px solid #1877F2;
+    border: 3px solid var(--accent);
     border-radius: 3px;
     flex-shrink: 0;
 }
@@ -59,10 +59,10 @@
 .attribute-sorting-title {
     font-weight: 600;
     font-size: 12px;
-    color: #65676b;
+    color: var(--ink-muted);
     margin-bottom: 4px;
     text-align: center;
-    border-bottom: 1px solid #dddfe2;
+    border-bottom: 1px solid var(--border);
     padding-bottom: 4px;
     width: 100%;
     text-transform: uppercase;
@@ -73,7 +73,7 @@
     margin-top: 6px;
     padding: 6px;
     background-color: #ffffff;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     font-size: 0.85rem;
@@ -85,7 +85,7 @@
     margin-top: 0;
     font-size: 1rem;
     font-weight: 600;
-    color: #1c1e21;
+    color: var(--ink);
 }
 
 .attribute-list ul {
@@ -102,19 +102,19 @@
     font-size: 14px;
     font-weight: 500;
     margin-right: 8px;
-    color: #1c1e21;
+    color: var(--ink);
     padding: 6px 4px;
     border-radius: 6px;
     transition: background-color 0.1s ease;
 }
 
 .attribute-list li:hover {
-    background-color: #f0f2f5;
+    background-color: var(--surface-muted);
 }
 
 .column-stats {
     font-size: 11px;
-    color: #65676b;
+    color: var(--ink-muted);
     margin-left: 4px;
     line-height: 1.4em;
     flex-direction: column;
@@ -133,26 +133,26 @@
 }
 
 /* Error color backgrounds via data attribute */
-.error-scent[data-error-type="missing"] { background-color: saddlebrown; }
-.error-scent[data-error-type="mismatch"] { background-color: hotpink; }
-.error-scent[data-error-type="anomaly"] { background-color: red; }
-.error-scent[data-error-type="incomplete"] { background-color: gray; }
+.error-scent[data-error-type="missing"] { background-color: var(--error-missing); }
+.error-scent[data-error-type="mismatch"] { background-color: var(--error-mismatch); }
+.error-scent[data-error-type="anomaly"] { background-color: var(--error-anomaly); }
+.error-scent[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
 .error-scent[data-error-type="none"],
-.error-scent--ok { background-color: steelblue; }
+.error-scent--ok { background-color: var(--error-none); }
 
 /* Sorting color swatch backgrounds via data attribute */
 .attribute-sorting-item-color[data-error-type="total"],
 .attribute-sorting-item-color-selected[data-error-type="total"] { background-color: transparent; }
 .attribute-sorting-item-color[data-error-type="missing"],
-.attribute-sorting-item-color-selected[data-error-type="missing"] { background-color: saddlebrown; }
+.attribute-sorting-item-color-selected[data-error-type="missing"] { background-color: var(--error-missing); }
 .attribute-sorting-item-color[data-error-type="mismatch"],
-.attribute-sorting-item-color-selected[data-error-type="mismatch"] { background-color: hotpink; }
+.attribute-sorting-item-color-selected[data-error-type="mismatch"] { background-color: var(--error-mismatch); }
 .attribute-sorting-item-color[data-error-type="anomaly"],
-.attribute-sorting-item-color-selected[data-error-type="anomaly"] { background-color: red; }
+.attribute-sorting-item-color-selected[data-error-type="anomaly"] { background-color: var(--error-anomaly); }
 .attribute-sorting-item-color[data-error-type="incomplete"],
-.attribute-sorting-item-color-selected[data-error-type="incomplete"] { background-color: gray; }
+.attribute-sorting-item-color-selected[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
 .attribute-sorting-item-color[data-error-type="none"],
-.attribute-sorting-item-color-selected[data-error-type="none"] { background-color: steelblue; }
+.attribute-sorting-item-color-selected[data-error-type="none"] { background-color: var(--error-none); }
 
 /* AttributeRow layout */
 .attribute-row {
@@ -209,7 +209,7 @@
   display: flex;
   flex-direction: row;
   gap: 2px;
-  border: 1px solid #dddfe2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   background: #ffffff;

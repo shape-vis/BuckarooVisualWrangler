@@ -1,462 +1,884 @@
 # Developer Notes
 
-At this point in the project, it would be nice to have a breakdown of things. 
-This document explains all the different structures that power Buckaroo Visual Wrangler. Read this before adding new files/code to be sure it fits within the architecture or adds to it congruently.
+This doc walks through how Buckaroo Visual Wrangler is put together. If you're new to the codebase, read it before
+you add any files or code, so that what you build fits in with what's already here. Think of it as a map: it tells
+you where things are and how they connect. Each module's docstring goes into more detail.
 
 ---
 
 ## Table of Contents
 
-1. [Detectors](#1-detectors)
-2. [Previews](#2-previews)
-3. [Wrangles](#3-wrangles)
-4. [DBOperations](#4-dboperations)
-5. [ColumnTypes](#5-columntypes)
-6. [FilteringSQL](#6-filteringsql)
-7. [Table Name State Management](#7-table-name-state-management)
-8. [Provenance Graph & Undo/Redo](#8-provenance-graph--undoredo)
-9. [Rankings Table](#9-rankings-table)
-10. [Frontend Contexts & View Modes](#10-frontend-contexts--view-modes)
-11. [Backend Package Layout](#11-backend-package-layout)
-12. [Key Files](#12-key-files)
-13. [Known Gaps](#13-things-to-be-aware-of)
----
-
-## 1. Detectors
-
-Detectors are pure-Python modules that scan a pandas DataFrame for data quality problems. They run once on upload and again after every wrangle operation.
-
-**Four detectors** live in `detectors/` as of March 17,2026 :
-
-| Detector | File | What it catches |
-|----------|------|-----------------|
-| Missing Value | `missing_value.py` | NULLs, empty strings, literal `"null"` / `"undefined"` |
-| Data Type Mismatch | `datatype_mismatch.py` | Cells whose type differs from the column's majority type |
-| Anomaly | `anomaly.py` | Numeric values with Z-score > 2σ (requires ≥10 numeric values in the column) |
-| Incomplete | `incomplete.py` | Rare categorical values appearing fewer than 3 times |
-
-Each detector returns a dict of the form `{ column_name: { row_id: "error_type" } }`.
-
-**Orchestration** (`app/server_utils/service_helpers.py` → `run_detectors()`):
-1. Runs all four detectors on the DataFrame
-2. Merges their outputs and melts into a flat table
-3. Writes the result to Postgres as `errors_<tablename>` with columns: `row_id`, `column_id`, `error_type`
-
-Error types are the strings: `"missing"`, `"mismatch"`, `"anomaly"`, `"incomplete"`.
-
-Every table in the database has a companion `errors_<table>` — this is the data that feeds the error color overlays on every histogram and scatterplot.
+1. [Ground rules](#1-ground-rules)
+2. [Tables and their companions](#2-tables-and-their-companions)
+3. [Building a node](#3-building-a-node)
+4. [Error detection](#4-error-detection)
+5. [Candidates: repairs and AI suggestions](#5-candidates-repairs-and-ai-suggestions)
+6. [Provenance graph and navigation](#6-provenance-graph-and-navigation)
+7. [DBOperations, ColumnTypes and DataProfile](#7-dboperations-columntypes-and-dataprofile)
+8. [Metrics, drift and comparing nodes](#8-metrics-drift-and-comparing-nodes)
+9. [Threads](#9-threads)
+10. [Endpoints](#10-endpoints)
+11. [Frontend](#11-frontend)
+12. [Codebase layout](#12-codebase-layout)
+13. [Tests](#13-tests)
 
 ---
 
-## 2. Previews
+## 1. Ground rules
 
-Previews are temporary Postgres tables that let users see the result of a wrangling operation before committing it. No changes to the main table happen until the user explicitly executes.
+- **All SQL goes in `app/db_utils/`.** Every class that builds queries follows the same pattern as `DBOperations`
+  (in `db_functions_sql.py`):
+  - Each public `generate_*` method keeps its steps in a list named `*_steps = [...]`.
+  - Each step returns one piece of a `WITH` query (a CTE). The first piece starts with `WITH ...`, and every piece
+    after that looks like `, name AS (...)`.
+  - The pieces are glued together with `"".join(steps)` and run with `fetch_sql` or `execute_sql`.
 
-**Created by:** `POST /api/wrangle/create-previews` → `server_utils/service_helpers.create_previews_1d()` or `create_previews_2d()`
-
-For a 1D selection (single column), two preview tables are created:
-- `<table>_preview_delete` — result if selected rows were deleted
-- `<table>_preview_impute` — result if selected rows were imputed
-
-For a 2D selection (two columns), four preview tables are created:
-- `<table>_preview_delete`
-- `<table>_preview_impute_x`
-- `<table>_preview_impute_y`
-
-Each preview table gets its own companion `errors_<preview>` — detectors are re-run on the preview data immediately after the operation so the error overlay in the preview histogram reflects the new state.
-
-**Imputation logic** (`app/db_utils/query.py` → `impute_by_ids()`):
-- Numeric columns: filled with the column mean (the column that is being imputed, so this applies to both the x and y axis in 2D charts)
-- Categorical columns: filled with the column mode (same thing as numeric if it's 2D)
-- Only rows that are selected by ID get imputed
-
-**Table name length:** PostgreSQL caps identifiers at 63 characters. `_safe_pg_name()` in `app/server_utils/service_helpers.py` hash-truncates table names when needed so the *most* restrictive sibling — `<name>_filtering` (10-char suffix → max base length 53) — still fits. The same helper is reused for the original upload name, every preview, and every promoted node, so all derived siblings (`errors_<name>`, `rankings_<name>`, `<name>_filtering`) stay within the limit.
-
-**Rendering:** Preview histograms are fetched via `GET /api/plots/preview-histogram` which calls `DBOperations.generate_one_d_histogram_with_errors()` on the preview table. `PreviewCard.jsx` renders these alongside a button to execute the wrangle.
+  Any data sent to the client is shaped into JSON inside Postgres, using `json_build_object` and `json_agg`. Python
+  only does arithmetic on the totals and other aggregates that Postgres sends back.
+- **The AI never writes SQL.** The model only gets to choose an operation, a column and an error type, and each of
+  those comes from a fixed list of options. The server then works out which rows to change from the error flags and
+  runs SQL that's already written and parameterized (`app/server_utils/ai_wrangle.py`).
+- **Readable code beats clever code.** Avoid dense one-liners, nested comprehensions and chained ternaries. Write
+  the loop out, and give in-between values their own names. Comments should explain *why* the code does something,
+  in plain English.
+- **Column and table names** that get put into SQL must be quoted with `quote_identifier` or `quote_literal` from
+  `execute_sql.py`. Before that, check that the column name is actually one of the table's columns (`ColumnTypes`).
 
 ---
 
-## 3. Wrangles
+## 2. Tables and their companions
 
-A wrangle is a committed data modification — it turns a chosen preview into the new main table.
+Every node in the graph has its own data table, and each data table has companion tables that go with it. The
+companions are named after the data table:
 
-All wrangle endpoints use `db_operations.main_table_name` as the source of truth for the current table — they do **not** accept a table name from the frontend.
+| Table | Created by | What's in it |
+|-------|------------|--------------|
+| `<table>` | an upload, or by copying a table and applying a candidate's wrangle to it | the data itself, plus an integer `"ID"` column. A row's ID never changes. |
+| `errors_<table>` | `DetectorSQL` | one row for each flagged cell: `(row_id, column_id, error_type)`. `row_id` is the row's `"ID"`. |
+| `dp_<table>` | `DataProfile` | the data profile: for each column, its statistics, its error counts and its category counts |
 
-**Three endpoints** in `app/routes/wrangler_routes_sql.py`:
+**How tables are named.** The first table (the root) is named `n0a_<file>_<random>`. Every node after the root
+starts out as a candidate, and its table is named `c<n>_<base>`. That name stays the same forever, even after the
+candidate is accepted. Accepting it only gives the node a label, like `n2c`.
 
-### `POST /api/wrangle/create-previews`
-Creates the preview tables described above. No changes to the main table. Body: `{ row_ids, cols }`.
+Companion table names should only ever come from `errors_table_name` and `profile_table_name` in `execute_sql.py`.
+That file's `COMPANION_PREFIXES` lists every kind of companion table. Postgres doesn't allow names longer than 63
+characters, so `safe_pg_name` (in `service_helpers.py`) shortens long names using a hash, which keeps even the
+longest companion name under the limit.
 
-### `POST /api/wrangle/execute`
-Creates a new node in the provenance graph with the wrangled table. Body: `{ preview_table }`. Implementation lives in `service_helpers.execute_wrangle_preview()`:
-1. All *other* preview tables (and their `errors_` companions) are dropped via `db_operations.drop_preview_tables()`
-2. `n_wrangle()` allocates the next node ID from `PGraph.get_new_node_id()` and inserts a `GraphNode` with `parent_table = current main table` — this happens **before** any rename so the pgraph is the canonical source of the new name
-3. The chosen preview is renamed to that new node name (e.g. `n1_...`, `n2_...`) via `db_operations.rename_preview_to_new()`
-4. `db_operations.load_table()` is called — this rebuilds `ColumnTypes` and `FilteringSQL` for the new table state
-5. `db_operations.update_rankings()` regenerates `rankings_<new_table>` from the freshly written errors table
-6. Returns `{ success: true, table: "<new_table_name>" }` — the frontend uses this to update the global table name context
-
-### `POST /api/wrangle/delete-column`
-Drops a column in-place:
-1. `ALTER TABLE DROP COLUMN` (via `app/db_utils/query.py` → `delete_column()`)
-2. `update_errors_table()` — re-runs all detectors and rewrites `errors_<table>`
-3. Returns the updated column list to the frontend
-
-**Two endpoints** in `app/routes/plot_routes.py`:
-These two endpoints fetch the wrangled tables that create-previews put in the DB. They create a temporary `DBOperations` instance for the preview table so the global `db_operations` is unaffected.
-
-### `GET /api/plots/preview-histogram`
-1. Gets the preview table name from the `tablename` query param
-2. Makes a temp DBOperations object loaded with that preview table
-3. Uses the helpers to generate the JSON structure required from the view to render a histogram (supports `type=1d` and `type=2d` for heatmaps)
-4. Returns that JSON
-
-### `GET /api/plots/preview-scatterplot`
-1. Gets the preview table name from the `tablename` query param
-2. Makes a temp DBOperations object loaded with that preview table
-3. Uses the helpers to generate the JSON structure required from the view to render a scatterplot
-4. Returns that JSON
-
-Both are called by `PreviewCard.jsx` which chooses between them based on the `chartType` prop.
-
-**Additional endpoints** in `app/routes/routes.py`:
-
-### `POST /api/undo`
-Calls `PGraph.undo_pgraph()` — walks one step toward the root in the provenance graph using each node's `parent_table` pointer (no more decrementing the node ID in the string). Verifies the target table still exists in Postgres, then calls `db_operations.load_table()`. Returns `{ success: true, table_name }`.
-
-### `POST /api/redo`
-Calls `PGraph.redo_pgraph()` — walks one step forward, choosing the most recently added child of the current node when a branch exists. Same existence check and load. Returns `{ success: true, table_name }`.
-
-### `GET /api/tablename`
-Returns the current `db_operations.main_table_name` — useful for the frontend to verify what the backend thinks the active table is.
-
-**Pgraph endpoints** in `app/routes/pgraph_routes.py`:
-
-### `GET /api/routes/update_pgraph`
-Returns the serialized pgraph JSON: `{ nodes, edges, current_table, prev_table, next_table }`. The shape is tailored to React Flow / `dagre` layout — nodes have `{ id, data: { label } }` and edges have `{ id, source, target, label, animated }`. The frontend `PGraphContext` consumes this directly.
-
-### `POST /api/setGraphToClickedNode`
-Used when the user double-clicks a node in the visual graph. Body: `{ nodeId }`. Calls `PGraph.set_clicked_node_as_current(nodeId)` which:
-1. Looks up the node, sets `prev_node_table_name = node.parent_table`
-2. Sets `next_node_table_name` to the most recently added child if any (so subsequent redo from that point follows the latest branch)
-3. Sets `current_node_table_name = nodeId`
-
-The endpoint then calls `db_operations.load_table(nodeId)` so the backend is now operating on that table. The frontend updates `TableNameContext` and clears all visualization caches.
-
-**Filter endpoints** in `app/routes/filter_routes.py`:
-- `POST /api/filter/add` — converts a frontend selection (`viewType`, `cols`, `data`, `scaleX`, `scaleY`) into one OR-joined SQL predicate per click and forwards to `FilteringSQL.add_filters()`. One click = one filter index.
-- `POST /api/filter/clear` — clears one or more filter indices, or all of them if the indices list is empty.
-
-**SQL primitives** all live in `app/db_utils/query.py`:
-- `remove_rows_by_ids(table, ids)` — `DELETE WHERE "ID" = ANY(:ids)`
-- `impute_by_ids(table, column, ids)` — `UPDATE ... SET col = :fill_val WHERE "ID" = ANY(:ids)`
-- `delete_column(table, column)` — `ALTER TABLE DROP COLUMN`
+To delete a table along with all of its companions, use `DBOperations.drop_node_tables(table)`. It finds them with
+`node_table_names`.
 
 ---
 
-## 4. DBOperations
+## 3. Building a node
 
-`DBOperations` is an object defined in `app/db_utils/db_functions_sql.py` and instantiated once in `app/__init__.py`:
+`build_node(table, root_table)` in `app/server_utils/service_helpers.py` takes a table that's already in the
+database and builds everything else a node needs. The root is built this way when a file is uploaded, and every
+candidate is built exactly the same way. Because of that, a node's numbers never depend on how the node was made.
 
-```python
-db_operations = DBOperations(engine)
-```
+Here's what it does, in order:
 
-It is imported directly into the route modules (`routes.py`, `plot_routes.py`, `wrangler_routes_sql.py`, `pgraph_routes.py`, `filter_routes.py`) and into `app/server_utils/service_helpers.py`.
+1. Runs `DetectorSQL(...).generate_errors_table()` to create the errors table.
+2. Runs `build_data_profile_table` to create the data profile. This covers every column, including its error
+   counts, in a single query. The error counts are a dictionary of the error types broken down by what column has what error types. This is a different structure than the errors table itself which has columns: {row_id, column_id, error_type}.
+3. Counts the table's rows. This happens once, and the count is reused by the next two steps.
+4. Runs `compute_node_metrics` to get the error rates. It reads the data profile once to do this
+   (`app/pgraph/metrics.py`).
+5. Runs `compute_node_distortion` to measure how far the data has drifted from the root. Each column is measured at
+   the same time as the others (`app/pgraph/distortion.py`).
 
-Route modules under `app/routes/` are auto-imported in `app/__init__.py` via `pkgutil.iter_modules(...)` — adding a new file in `app/routes/` is enough to register its endpoints, no manual import line needed.
-
-**State it holds** (all `None` until `load_table()` is called):
-
-| Attribute | Type | Purpose |
-|-----------|------|---------|
-| `engine` | SQLAlchemy engine | Persistent DB connection |
-| `main_table_name` | str | Currently loaded data table — **the single source of truth across all endpoints** |
-| `error_table_name` | str | Companion `errors_<table>` |
-| `col_types` | `ColumnTypes` | Column classification |
-| `filtering_table` | `FilteringSQL` | Active row filters |
-| `active_hists` | dict | Cached bin↔row mappings for currently displayed histograms/heatmaps (keyed by column name or column tuple) |
-
-**Lifecycle:**
-- `load_table(table, errors_table)` — called on upload, after every wrangle execute, on undo/redo, and on graph node double-click; instantiates fresh `ColumnTypes` and `FilteringSQL` for the new table
-- `reset()` — called when user navigates home; sets all attributes back to `None`
-- `update_rankings(table)` — reads `errors_<table>`, recomputes per-attribute error counts, writes `rankings_<table>`. Called after every wrangle execute.
-- `drop_preview_tables(...)` / `rename_preview_to_new(...)` — preview promotion helpers used by `execute_wrangle_preview()`.
-
-**Visualization methods** — these are where all histogram and scatterplot SQL is built:
-- `generate_one_d_histogram_with_errors(column, bin_count)` — CTE-based query: bins all rows, annotates each bin with error counts per type, returns JSON
-- `generate_two_d_histogram_with_errors(col_x, col_y, x_bins, y_bins)` — same for 2D heatmap
-- `generate_scatterplot_with_errors(col_x, col_y, error_sample_size, total_sample_size)` — sampled scatterplot with error type per point
-
-All three join against `errors_<table>` and, when active, the `<table>_filtering` table (see FilteringSQL below).
-
-**Row ID helpers** — used by the frontend to map a clicked bin back to the affected rows before creating previews:
-- `get_row_ids_in_1d_bin(column, bin_value, bin_count)`
-- `get_row_ids_in_2d_bin(col_x, col_y, x_bin, y_bin, ...)`
-- `get_1d_bins_containing_rows(column, row_ids, bin_count)` — inverse: given row IDs, which bins do they fall into?
-- `get_2d_bins_containing_rows(col_x, col_y, row_ids, ...)` — same for 2D
+When a file is uploaded, `load_file` in `app/routes/routes.py`:
+1. reads the CSV,
+2. adds the `"ID"` column (`set_id_column`),
+3. picks a SQL type for each column by looking at its values (`get_sqlalchemy_dtype_map`),
+4. writes the data to Postgres with `COPY` (`copy_insert`),
+5. runs `build_node` on it,
+6. and starts the session's graph with this table as the root (`init_pgraph_for_session`).
 
 ---
 
-## 5. ColumnTypes
+## 4. Error detection
 
-`ColumnTypes` is defined in `app/db_utils/db_functions_sql.py` (line 22) and instantiated inside `DBOperations.load_table()`. It classifies every column into one of three sets:
+`DetectorSQL` (`app/db_utils/detector_sql.py`) checks every cell of a table for errors. All the checking happens
+inside Postgres, in one query with several steps, and the results are saved as the errors table with
+`CREATE TABLE AS`. There are four kinds of error:
 
-| Set | Attribute | Contents |
-|-----|-----------|----------|
-| Numeric | `numeric_cols` | Columns with a PostgreSQL numeric type (`integer`, `bigint`, `numeric`, `real`, `double precision`, `smallint`) |
-| Pure categorical | `pure_categorical` | Non-numeric columns whose values contain no numeric-looking strings |
-| Mixed | `categorical_mixed` | Non-numeric columns that contain some values matching `^\s*-?\d+(\.\d+)?\s*$` |
+| Type | A cell is flagged when... |
+|------|---------------------------|
+| `missing` | it's `NULL`, or it's text that says exactly `'null'` or `'undefined'` (see `missing_cell_predicate`) |
+| `anomaly` | its column has at least 10 numbers, the sample standard deviation is above 0, and the value is more than 2 standard deviations from the mean |
+| `mismatch` | it's in a text column and it's the less common kind of value. If most values in the column are numbers, the text values are flagged, and if most are text, the numbers are flagged. |
+| `incomplete` | it's in a text column that has 10 or fewer numbers, and its value shows up fewer than 3 times |
 
-**How classification works:**
-1. Queries `information_schema.columns` for the column's declared Postgres type — these types are originally detected and set in Postgres during the initial upload in `app/routes/routes.py`. The function `load_file()` calls `get_sqlalchemy_dtype_map()` (in `service_helpers.py`), the helper which inspects each column's actual values to pick `BigInteger` / `Float` / `Text`.
-2. For all non-numeric columns, runs a regex check against the actual values in the table
-3. Splits into `pure_categorical` vs. `categorical_mixed` based on whether any numeric-looking values exist
+For text columns, each distinct value is only checked once, no matter how many rows it appears in.
 
-**Where it's used:** everywhere inside `DBOperations` that builds SQL. The classification controls whether a column gets numeric `width_bucket` binning or categorical label-group binning in the CTE queries. Helper methods — `is_numeric_col()`, `is_categorical_col()`, `is_mixed_col()` — are called throughout.
-
----
-
-## 6. FilteringSQL
-
-`FilteringSQL` is defined in `app/db_utils/filtering_sql.py` and instantiated inside `DBOperations.load_table()`.
-
-It maintains a physical Postgres table — `<table>_filtering` — that holds only the row IDs satisfying all currently active filters. When filters are active, every visualization query in `DBOperations` adds a JOIN against this table, restricting histograms and scatterplots to the filtered subset without ever modifying the main data table.
-
-**Key state:**
-
-| Attribute | Purpose |
-|-----------|---------|
-| `applied_filters` | Dict of `{ index: sql_predicate_string }` |
-| `filtering_table_name` | `<table>_filtering` |
-| `table_exists` | Whether the filtering table currently exists in Postgres |
-
-**Methods:**
-- `add_filters(sql_filters: list)` — appends new SQL predicates; creates or trims the filtering table to rows matching all filters
-- `delete_filters(filter_indices: list)` — removes the specified predicates; recreates the filtering table if any filters remain, otherwise drops it and sets `table_exists = False`
-
-`DBOperations` checks `filtering_table.table_exists` in `_filter_join()` and conditionally adds the JOIN to every generated query.
+Some columns are just bookkeeping and never get flagged. Metrics, drift and the AI's profile ignore them too. They're
+listed in `STRUCTURAL_COLUMNS` in `column_types.py`: `ID`, `Unnamed: 0`, and the `index` and `level_0` columns that
+pandas sometimes adds.
 
 ---
 
-## 7. Table Name State Management
+## 5. Candidates: repairs and AI suggestions
 
-The table name (e.g. `n0_data_test_b1zjPwbZ7P`) is a critical piece of state. `db_operations.main_table_name` is the **single source of truth** on the backend. All backend endpoints that operate on the main table read from `db_operations.main_table_name` directly — they do not accept a table name from the frontend for main-table operations. (Preview endpoints are the exception: they accept a preview table name since previews are separate temporary tables.)
+A candidate is a change to the data (a wrangle) that has been worked out but that the user hasn't accepted yet.
+Each candidate is added to the graph as a **provisional node**. A provisional node is a real node in every way: it
+has a parent and an edge to that parent, it has its own metrics and drift, and you can navigate to it and compare it
+with other nodes. The one thing you can't do is apply a new wrangle to it until it's been accepted. This approach is
+known as write-audit-publish. The code is in `app/server_utils/candidates.py`.
 
-**Frontend:** A React context (`TableNameContext.jsx`) holds the table name globally. It is initialized from the upload response and updated after wrangle execute or undo/redo. All components consume it via `useTableName()` — there is no prop drilling.
+There are two ways candidates get made:
 
-**Flow:**
-1. Upload → backend generates `n0_<name>`, calls `db_operations.load_table()`, returns name to frontend
-2. Frontend stores in `TableNameContext` via `<TableNameProvider initialTableName={...}>`
-3. All components use `useTableName()` to get the current name (used for cache keys and `useEffect` dependencies)
-4. After wrangle execute → backend returns the new table name → frontend calls `setTableName(result.table)` → all components re-render and re-fetch
-5. Undo/redo → same pattern: backend switches `db_operations`, returns new name, frontend updates context
-6. User double clicks a table: backend switches `db_operations`, returns new name, frontend updates context
----
+- **Repairs.** `POST /api/wrangle/create-previews` creates a candidate for every possible way to repair what the
+  user has selected. If one column is selected, that's delete and impute. If two columns are selected, it's delete,
+  impute x and impute y. These candidates belong together, so `stage_all` either adds all of them or none of them.
+- **AI suggestions.** `POST /api/ai/suggest` writes up the node's profile as text (`app/llm/profile.py`) and asks
+  Gemini which tools it wants to call (`app/llm/gemini_client.py`, `app/llm/tools.py`). Each call Gemini makes is
+  validated, and its rows are found from the error flags (`ai_wrangle.prepare`). Then `stage_each` adds each
+  suggestion on its own, so one failing doesn't affect the others.
 
-## 8. Provenance Graph & Undo/Redo
+Once candidates exist, the user can accept or decline them:
 
-Every table name is prefixed with a node ID: `n0_`, `n1_`, `n2_`, etc. The original uploaded table is always `n0_`. Each wrangle operation creates a new node with an incremented ID. Users can double click on a node in the React Flow visualization to load that node's table from the database.
+- `POST /api/candidates/accept` accepts a candidate. It gets a label and becomes the current node. Its optional
+  `inherit` field says what happens to the support nodes the candidate inherited from its parent: `"show"`,
+  `"hide"` (the default) or `"drop"`. See [Support nodes](#support-nodes).
+- `POST /api/candidates/discard` removes candidates and deletes their tables.
+- `POST /api/reset` removes every candidate.
 
-The provenance graph is a real DAG held in memory (not just a node-ID convention). Undo, redo, and node-click navigation are all driven by the graph's internal pointers — the old "parse the n# out of the string" path is gone.
+Adding candidates to the graph takes three steps:
 
-### PGraph (`app/pgraph/pgraph.py`)
+1. **Claim** the table names. This happens while holding `WRANGLE_LOCK`, but only for a few milliseconds.
+2. **Build** each candidate on `NODE_POOL`, without holding the lock. Building means copying the parent's table
+   (`clone_table`), applying the wrangle from `query.py`, and running `build_node`.
+3. **Register** the new nodes in the graph, holding the lock again.
 
-State:
-- `node_map` — dict `{ table_name: GraphNode }`
-- `node_count` — used to mint the next node ID via `get_new_node_id()` → `f"n{node_count}"`
-- `wrangle_map` — `{ node_count: wrangle_op_string }` for post-hoc metadata
-- `root_node` — table name of the original `n0_` upload
-- `current_node_table_name`, `prev_node_table_name`, `next_node_table_name` — three pointers that drive navigation
+If the session's graph changed while the candidates were being built (because the user reset or uploaded a new
+file), the new tables are deleted instead of registered.
 
-Mutators:
-- `add_root_node(node)` — called once from `init_pgraph_for_session()` on upload. Sets `current = root`.
-- `add_node(node)` — called by `n_wrangle()` after each wrangle execute. Appends `new_node_table_name` to its parent's `children` list, advances `current → new`, and sets `prev → previous current`.
-- `undo_pgraph()` — `next ← current; current ← prev; prev ← current.parent_table`. Returns the new current table name (or `None` at the root).
-- `redo_pgraph()` — `prev ← current; current ← next; next ← last child of new current` (or `None` if it's a leaf).
-- `set_clicked_node_as_current(table_name)` — used by `POST /api/setGraphToClickedNode`. Jumps the three pointers so subsequent undo/redo make sense from anywhere in the graph: `prev = node.parent_table`, `next = last child if any`, `current = node`.
-
-Serialization for the frontend (`__json__`):
-```
-{
-  "nodes": [{ "id": <table_name>, "data": { "label": <table_name> } }, ...],
-  "edges": [{ "id": "e<src><dst>", "source": <src>, "target": <dst>,
-              "type": "edgeType", "animated": "true",
-              "label": <child.wrangle_op> }, ...],
-  "current_table": ..., "prev_table": ..., "next_table": ...
-}
-```
-This shape is deliberately tailored to React Flow + `dagre` layout — see `ui/src/store/PGraphContext.jsx`.
-
-### GraphNode (`app/pgraph/node.py`)
-
-- `parent_table`, `wrangle_op`, `table_name`, `error_table_name`, `children: list[str]`
-- Quality metrics on the node: `anomaly_metric`, `missing_metric`, `incomplete_metric`, `mismatch_metric` (set via `update_metrics`; not yet wired into the visualization)
-- `add_child(child_table_name)` — called by `PGraph.add_node()` to keep the parent's child list in sync
-
-### Session state (`app/__init__.py`)
-
-- `wrangle_occurred` — boolean, kept for legacy callers
-- `app.pgraph_for_session` — the `PGraph` instance. Initialized to `None`; populated by `init_pgraph_for_session(root_table)` at the end of upload, which also creates and inserts the root `GraphNode` with `parent_table = "root"` and `wrangle_op = "root"`.
-
-### Wrangle → node creation flow (`server_utils/service_helpers.py`)
-
-1. `execute_wrangle_preview()` calls `n_wrangle(parent_table, child_table, wrangle_executed)`
-2. `n_wrangle` calls `make_new_table_name(child_table)` which builds `f"{pgraph.get_new_node_id()}{child_table[2:]}"` — i.e. swap the existing `n#_` prefix on the (already-trimmed) preview table for the next node ID
-3. A fresh `GraphNode(parent_table, wrangle_op, new_table_name, errors_<new>)` is added to the pgraph **before** any DB rename, so the pgraph is the canonical source of the new name
-4. The DB rename + reload + rankings update happen using that name
-
-The `wrangle_op` string is extracted from the chosen preview's suffix via `extract_preview_action()` (e.g. `"impute_y"` from `..._preview_impute_y`) and ends up as the edge label in the graph.
-
-### Frontend graph (`ui/src/visualizations/PGraph.jsx` + `ui/src/store/PGraphContext.jsx`)
-
-- Built on `@xyflow/react` (React Flow) with `@dagrejs/dagre` for auto-layout
-- `PGraphProvider` owns `nodes`, `edges`, `onConnect`, `onLayout`, and `onNodeDoubleClick`
-- `onNodeDoubleClick(event, node)` calls `setGraphToClickedNode(node.id)` (which hits `POST /api/setGraphToClickedNode`), updates `tableName` in `TableNameContext`, clears all viz caches (`clearScatterPlotCache/HeatMap/Histogram`), and bumps `ViewContext.refreshKey` to remount panels
-- `PGraph.jsx` highlights the active node green (`#64ea96`) and others white, and renders a `MiniMap` + `Controls` + `Background`
-- Custom node component lives in `ui/src/graph_objects/NodeTypes.jsx` (`SelectedNode`)
-
-### Undo/Redo navigation
-
-- `POST /api/undo` → `get_pgraph_undo()` → `PGraph.undo_pgraph()` → if a previous table is returned and exists in Postgres, `db_operations.load_table()` reloads it
-- `POST /api/redo` → `get_pgraph_redo()` → mirror of the above
-- The old wrangled tables are **never** deleted — they remain in Postgres, so navigation between any two nodes is instant
+The wrangles themselves are `remove_rows_by_ids` and `impute_by_ids` in `app/db_utils/query.py`. Impute fills cells
+with the column's mean. If the column is categorical, it uses the most common value instead. Either way, the value is
+calculated only from the cells that aren't missing.
 
 ---
 
-## 9. Rankings Table
+## 6. Provenance graph and navigation
 
-For every loaded data table there is a companion `rankings_<table>` with columns `attribute, total_errors, rank` — attributes ordered by total error count.
+The graph lives in memory, in `app.pgraph_for_session`. It's a `PGraph` object, or `None` if nothing has been
+uploaded yet. Use `service_helpers.session_graph()` to get it.
 
-- Built on upload in `app/routes/routes.py` → `load_file()` via `calculate_attribute_rankings()` (in `service_helpers.py`)
-- Refreshed after every wrangle execute by `DBOperations.update_rankings(new_table_name)`
-- Consumed by `app/server_utils/data_attribute_summary_integration.py` → `get_default_attributes_from_rankings()` to pick the top-3 attributes that appear pre-selected in the Attribute Summary panel
+**`PGraph`** (`app/pgraph/pgraph.py`) keeps track of:
+- `node_map`: a dictionary from each table name to its `GraphNode`. `root_table_name` holds the root's table name.
+- `node_count`: how many nodes have been accepted into the graph. It's used to give out labels in order
+  (`node_id_for_count` turns it into n0a ... n0z, then n1a ... n9z).
+- `candidate_count`: used to give out candidate prefixes in order (`c0`, `c1`, ...). A prefix is never used twice.
+- `current_node_table_name`, `prev_node_table_name` and `next_node_table_name`: these point to the current node and
+  to where undo and redo will go.
 
-It is the third sibling family next to `errors_` and `<name>_filtering`, which is why `_safe_pg_name()` budgets identifier length around all three.
+Moving around the graph:
+- `undo_pgraph` moves up to the current node's parent. It does nothing at the root.
+- `redo_pgraph` moves back down to the node you most recently undid out of. If there isn't one, it moves to the
+  current node's newest child.
+- `set_clicked_node_as_current` jumps straight to whatever node the user clicked.
 
----
+Any route that moves these pointers holds `WRANGLE_LOCK` while it does, so a candidate can't be deleted halfway
+through a move. Tables for old nodes are never deleted, which is why switching between nodes is instant.
 
-## 10. Frontend Contexts & View Modes
+**`GraphNode`** (`app/pgraph/node.py`) stores one node's details:
+- `parent_table`
+- `wrangle_op`: what was done to make this node (`root`, `delete`, `impute`, `impute_x` or `impute_y`)
+- `wrangle_cols`: which columns the wrangle was applied to
+- `children`
+- `metrics`: a `NodeMetrics` object
+- `distortion`
+- `provisional`: whether it's still a candidate
+- `label`: the name the user sees, like `n2c`. A candidate has no label until it's accepted.
+- `candidate`: where a candidate came from, such as whether it was a repair or an AI suggestion, the reason for it,
+  how many rows it affects, and so on
+- `support_nodes`: the support nodes attached to this node, as plain JSON records. See
+  [Support nodes](#support-nodes) below.
 
-The upload flow lives in `ui/src/App.jsx`. Once the user uploads, `App` wraps `Buckaroo` in `TableNameProvider` and `LoadingProvider`. `Buckaroo.jsx` then layers the rest of the providers (order matters because `RepairProvider` consumes `SelectionContext` and `LoadingContext`):
+**Table name vs. label.** A node's table name is its ID, and it never changes. The label is just a display name.
+When a candidate is accepted, `PGraph.publish` sets `provisional` to `False` and gives the node the next label.
+Nothing in the database is renamed: an accepted candidate keeps its `c<n>_<base>` table, and so do its `errors_`
+and `dp_` tables. This is on purpose. Sub-nodes, compare windows, and undo and redo all point at a node by its
+table name, so renaming the table would break them.
+
+### Support nodes
+
+A support node is a small plot or panel the user attaches to a graph node to help read it. The kinds are an error
+plot, a drift plot, the quality metrics, a sparkline, a comparison with another node, and the wrangle diff. Each one
+is stored on its host's `GraphNode.support_nodes` as a record like this:
 
 ```
-<ViewContext.Provider> (refreshKey, activeView)
-  <SettingsProvider>
-    <PGraphProvider>
-      <RowRangeProvider>
-        <SelectionProvider>
-          <RepairProvider onWrangleExecuted={...}>
-            <BuckarooHeader /> + main panels
+{id, hostId, kind, side, config, size, inherited, startMinimized}
 ```
 
-| Context | File | Purpose |
-|---------|------|---------|
-| `TableNameContext` | `ui/src/store/TableNameContext.jsx` | Global `tableName` + `setTableName`. Single source of truth on the frontend; cache keys and `useEffect` dependencies use it. |
-| `LoadingContext` | `ui/src/store/LoadingContext.jsx` | Ref-counted `addLoader` / `removeLoader` so multiple in-flight calls share one spinner. `isLoading` drives the green/yellow dot in `TableStatus`. |
-| `SettingsContext` | `ui/src/store/SettingsContext.jsx` | App-level settings (currently `axisTextSize`, persisted to a CSS custom property). |
-| `PGraphContext` | `ui/src/store/PGraphContext.jsx` | Owns the React Flow nodes/edges + dagre layout + `onNodeDoubleClick`. See section 8. |
-| `RowRangeContext` | `ui/src/store/RowRangeContext.jsx` | Row ID range for the table panel viewport. |
-| `SelectionContext` | `ui/src/store/SelectionContext.jsx` | Shared row/column selection state — drives both the highlight overlays and the repair flow's input. |
-| `RepairContext` | `ui/src/store/RepairContext.jsx` | Centralizes wrangle actions (`handleUndo`, `handleRedo`, `triggerRepairSelection`) and the busy/has-selection flags consumed by the header buttons. Calls back `onWrangleExecuted` so the parent can clear viz caches and bump `refreshKey`. |
-| `ViewContext` | declared in `ui/src/pages/Buckaroo.jsx` | `activeView` ("both" / "graph" / "plots") and `refreshKey` (force-remount of the panel container). |
+A record only holds the settings that describe the support node, such as which plot it is and which columns it
+uses. It never holds plot data. The frontend fetches a support node's data when it draws it, using the record's
+`hostId` as the node to read from. Because records are small, copying them is cheap, and that's what makes
+inheritance work.
 
-**Three view modes** are toggled from the header (`ui/src/elements/Header.jsx` → `BuckarooHeader`):
-- `"plots"` — `MatrixView` + `RepairPanel`
-- `"both"` — `MatrixView` + `PGraph` + `RepairPanel`
-- `"graph"` — `PGraph` only
+**Inheritance.** When a candidate is staged, `PGraph.add_candidate` gives it a copy of each of its parent's support
+nodes. The copies come from `inherited_support_nodes` in `app/pgraph/support_nodes.py`, and each copy is attached
+to the candidate:
 
-The header also renders `TableStatus` (active-table label `n# - <basename>` plus a loading dot driven by `LoadingContext`) and the Repair / Undo / Redo / Settings / Home buttons. Repair, Undo, Redo all call into `RepairContext` rather than panel-local state, so the same buttons work regardless of which panel is open.
+- **Error plot, drift plot, quality metrics:** the same settings, on the candidate. Their settings don't name a node,
+  so they show the candidate's own data.
+- **Compare:** the candidate takes the parent's place in the comparison (A or B), against the same comparator. The
+  copy isn't in the parent's group, so the two don't keep each other's settings in sync. Zoom and the chosen
+  categories start fresh, because they belonged to the parent's pair.
+- **Sparkline:** the same starting edge, but the branch now ends at the candidate. Its values are cleared, and the
+  frontend measures the branch again the first time the sparkline is drawn.
+- **Wrangle diff:** not copied. It describes the one edge into its host, and the candidate has a different edge.
 
-**Visualization caches** live in `ui/src/store/visualizationCaches.jsx` — `clearScatterPlotCache`, `clearHeatMapCache`, `clearHistogramCache`. They are cleared after every wrangle execute, undo, redo, or graph node double-click so the frontend never serves stale plots after a backend table swap.
+Every copy is marked `inherited` and `startMinimized`, so a new candidate shows its inherited support nodes as
+badges instead of opening them all at once. When the user changes a copy, it stops being `inherited` and counts as
+the user's own.
+
+**Accepting.** `apply_inherit_choice` runs when a candidate is accepted, and does what the `inherit` field asks:
+
+- `"show"` opens the inherited support nodes.
+- `"hide"` leaves them as badges.
+- `"drop"` removes the copies that are still marked `inherited`. Copies the user changed, and support nodes the user
+  added to the candidate themselves, stay.
+
+Either way, nothing is marked `inherited` afterwards.
+
+**Keeping the records up to date.** The frontend changes its own copy of a record first, then sends the change to
+`POST`, `PATCH` or `DELETE /api/pgraph/support_nodes`. The `PATCH` requests are delayed slightly, so that a resize
+sends one request when it finishes instead of one per movement. Every graph the server sends includes each node's
+`support_nodes`, and the frontend reads in any records it hasn't seen before. That covers every record when the
+page loads, and the copies a new candidate inherited. Which support nodes are hidden or minimised is stored only in
+the frontend, because it's about how the user is looking at them, not about the support nodes themselves.
+
+`provisional` and `label` are only stored in memory, on the `GraphNode`. The database doesn't record them. Looking
+at the tables, you can't tell whether `c1_<base>` was accepted or is still waiting, because both look the same. You
+can only tell that it wasn't declined, because declining a candidate deletes its tables. To find out a node's
+status and label, check the graph (`GET /api/routes/update_pgraph`).
+
+**Example.** The user uploads `test_impute_debug.csv`, then creates two new nodes:
+
+1. The upload becomes the root. Its table is `n0a_test_impute_debug_YajJW` and its label is `n0a`. The root is the
+   only node whose table name and label match.
+2. The user selects some rows on the root and asks for repairs. This stages two candidates, one for delete and one
+   for impute. Their tables are `c0_test_impute_debug_YajJW` and `c1_test_impute_debug_YajJW`. Neither has a label
+   yet.
+3. The user accepts the impute candidate. `c1_test_impute_debug_YajJW` gets the label `n0b` and becomes the current
+   node. The delete candidate stays staged next to it.
+4. From `n0b`, the user asks for AI suggestions and accepts one. Its table is `c2_test_impute_debug_YajJW` and it
+   gets the label `n0c`.
+5. The user declines the delete candidate. `c0_test_impute_debug_YajJW` and its companion tables are deleted.
+
+At the end, the graph and the database line up like this:
+
+| Label (shown in the app) | Table (in the database) | Status |
+|---|---|---|
+| `n0a` | `n0a_test_impute_debug_YajJW` | root |
+| `n0b` | `c1_test_impute_debug_YajJW` | accepted |
+| `n0c` | `c2_test_impute_debug_YajJW` | accepted |
+
+The two numbers count different things, so they don't have to line up. Labels count accepted nodes (`node_count`).
+Candidate prefixes count every candidate ever staged, including declined ones (`candidate_count`). Every table
+keeps the root's base (`test_impute_debug_YajJW`), whichever node it was made from.
+
+The client fetches the graph from `GET /api/routes/update_pgraph`. The response looks like
+`{nodes, edges, current_table, prev_table, next_table, pareto}`.
 
 ---
 
-## 11. Backend Package Layout
+## 7. DBOperations, ColumnTypes and DataProfile
 
-The backend was reorganized into subpackages so adding new endpoints / SQL helpers / detectors doesn't pollute the top-level `app/`.
+### DBOperations
+
+`DBOperations` (`app/db_utils/db_functions_sql.py`) is created once, in `app/__init__.py`, and stored as
+`db_operations`. Its `main_table_name` is what the backend treats as the current table, and nothing else should be
+used for that. Calling `load_table(t)` switches it to a different node. Unless told otherwise, it then uses
+`errors_t` and `dp_t` as that node's errors and profile tables.
+
+It's responsible for:
+- building the plots: `generate_one_d_histogram_with_errors`, `generate_two_d_histogram_with_errors` and
+  `generate_scatterplot_with_errors`
+- looking up which bins and rows are in a selection
+- `generate_top_error_rows`
+- creating, deleting and checking tables: `clone_table`, `drop_node_tables`, `get_row_count` and `table_exists`
+
+Before any column name goes into a query, it's checked against the table's actual columns.
+
+How plots are binned:
+- A numeric column is split into bins across its range of values. If every value in the column is the same number,
+  you get a single bin that's one unit wide.
+- If a numeric column has nulls or NaNs, they're shown as a separate labeled bar next to the bins.
+- A text column gets one bin per label.
+
+When a plot is requested for a node that isn't the current one, the route creates a separate `DBOperations` for it.
+That way the session's current state doesn't change.
+
+### ColumnTypes
+
+`ColumnTypes` (`app/db_utils/column_types.py`) figures out what kind of data each column holds. It does this by
+scanning the table's text columns once. The groups are:
+- `numeric_cols`: columns stored as a number type in SQL
+- `pure_categorical`: text columns where nothing looks like a number
+- `mixed_cols`: text columns where some values are numbers. These are split again by whichever kind is in the
+  majority: `numeric_mixed_cols` (mostly numbers) and `categorical_mixed_cols` (mostly text).
+
+`column_kind` is the single place that decides whether a column is treated as numeric or categorical when it's
+summarized, profiled and measured.
+
+To get a table's column types, call `ColumnTypes.for_table(table, engine)`. The result is cached, keyed by the table
+and its oid. `ColumnTypes.forget(table)` clears a table's cached entry, and any wrangle that changes rows calls it.
+
+This module also defines the shared rules that every query uses to read a cell. Because everything uses the same
+rules, all the views show consistent results:
+- `number_expression`: how to read a value as a number
+- `missing_cell_predicate`: how to tell if a cell is missing. This is the same rule the `missing` error check uses.
+- `category_expression`: how to read a cell as a category. Missing cells come out as `NULL_LABEL`.
+
+It also defines the labels that all the plots share: `NULL_LABEL`, `OTHER_LABEL`, `MAX_LABELS` and `REMOVED_LABEL`.
+
+### DataProfile
+
+`DataProfile` (`app/db_utils/data_profile.py`) builds the `dp_<table>` table in one query. What it stores for a
+column depends on the column's kind:
+- for a numeric column: the mean, median, min and max
+- for a categorical column: how many categories there are, the most common one (the mode), and how many times each
+  category appears
+
+Every column also gets its error counts. When working out the mode, missing cells are ignored, and if there's a tie,
+the category whose name sorts first wins. This is the same value impute uses to fill cells.
+
+Metrics, the attribute summary and the AI's profile all read this table, each one reading it once
+(`read_stored_profile`).
+
+---
+
+## 8. Metrics, drift and comparing nodes
+
+- **Metrics** (`app/pgraph/metrics.py`): the error rate for each error type, both per column and for the node as a
+  whole, calculated from the data profile. The error badges in the attribute summary, and which columns it shows by
+  default, come from the node's cached metrics.
+- **Drift** (`app/pgraph/distortion.py`, with the SQL in `drift_sql.py`): how much each column has changed compared
+  to the root.
+  - Numeric columns are measured with W1/IQR: the Wasserstein-1 distance, divided by the root's interquartile range.
+  - Categorical columns are measured with total variation distance.
+  - Drift also records what the wrangles did, like how many rows were removed and how many cells were changed.
+  - Whether a column counts as numeric or categorical is decided once, on the root, and every other node uses that
+    same decision.
+  - `drift_detail` supplies the data for the ridgeline and Sankey views, along with a plain-English description of
+    the change (`GET /api/pgraph/drift_detail`).
+  - The root's measurements are only calculated once. For each numeric column, its spread is cached, along with how
+    many non-missing cells each column has. Every node compared to the root reuses those cached values.
+- **Comparing along a branch** (`app/pgraph/pgraph.py`): `quality_trajectory` and `distortion_trajectory` return the
+  error and drift values for each node along a branch (`GET /api/pgraph/branch_trajectory`). Both are built on
+  `branch_deltas`.
+- **Pareto** (`PGraph.pareto`, `pareto_frontier`): leaf nodes that have both an error total and a drift value get
+  ranked. If another node is better on both counts, a node is marked as dominated.
+- **Compare** (`app/db_utils/compare_sql.py`, `GET /api/pgraph/compare`): bins two nodes' tables using the same axes,
+  so their histograms and heatmaps line up with each other.
+  - If an axis is mostly numbers, it's binned across the combined range of both nodes.
+  - Otherwise, it's shown as labels. There are at most 20 labels, and everything past that is grouped into
+    `(other)`. The most common labels are the ones kept, and ties go to the label whose name sorts first. The Sankey
+    view groups its categories the same way.
+  - Compare never changes any data, and it only works on tables that are part of the graph.
+
+---
+
+## 9. Threads
+
+`app/server_utils/workers.py` sets up two thread pools:
+- `QUERY_POOL` (8 threads) runs independent queries.
+- `NODE_POOL` (4 threads) builds whole nodes.
+
+### Why threads help here: the GIL
+
+Python (CPython) has a **Global Interpreter Lock**, or GIL. Only the thread holding the GIL can run Python code, so
+even on a machine with many cores, only one thread at a time runs Python. Because of this, threads usually don't
+speed up work done in Python itself, like loops or building dictionaries.
+
+A thread can give up the GIL while it waits on something outside Python. psycopg2, the Postgres driver, does this
+every time it sends a query. While one thread waits for Postgres to answer, the other threads can run.
+
+That's why threads work well here. Almost all the work is SQL, and Postgres does it, not Python. Each database
+connection has its own Postgres process, and those processes run on different cores. Eight threads waiting on eight
+queries means eight Postgres processes doing the work at the same time, while the Python threads mostly sit idle.
+
+What still runs one thread at a time is any Python work done on the results. If a task does heavy work in Python or
+pandas, adding threads won't make it faster.
+
+### `QUERY_POOL`: independent queries
+
+A task on `QUERY_POOL` is one small piece of SQL work. An **independent** query is one that:
+
+- **doesn't need another task's result.** Every task in a batch can start at once, in any order.
+- **uses its own connection.** `fetch_sql` and `execute_sql` (in `execute_sql.py`) borrow a connection from the
+  engine for each call and give it back right after. Tasks never share a connection or a transaction, so each one
+  runs in its own Postgres process.
+- **only reads, or writes only what belongs to it.** Two tasks running at the same time must never change the same
+  table.
+- **doesn't submit more work or wait on anything.** It runs its query, returns the answer, and that's it.
+
+Right now the query pool is only used for drift (`app/pgraph/distortion.py`):
+
+- `measure_columns` measures each column's drift with its own query, and counts the present cells in the root and
+  the node with one query each. One query per column is what lets the columns be measured side by side, instead of
+  one big query that Postgres would run on a single core.
+- `measure_edit_facts` matches the rows of two states with one query, and counts changed cells in each column with
+  one query per column.
+
+To use the pool, call `run_all(tasks)` (or `run_queries(work, items)`). It submits every task, waits for all of them,
+and returns the results in the same order as the tasks. If any task fails, the others still finish, and then the
+first error is raised.
+
+### `NODE_POOL`: whole node builds
+
+A task on `NODE_POOL` builds one whole candidate node. `_build` in `app/server_utils/candidates.py`:
+
+1. copies the parent's table (`clone_table`),
+2. applies the wrangle to the copy (delete or impute),
+3. runs `build_node`: error detection, the data profile, the metrics, and then drift. Each of these steps needs the
+   one before it, so they run in order. Drift then hands its column queries to `QUERY_POOL`.
+
+When the user asks for repairs, there might be three candidates (delete, impute x, impute y). Each one is built on
+its own node thread at the same time, so the wait is about as long as the slowest build, not all three added
+together.
+
+The builds don't hold `WRANGLE_LOCK`. A candidate's table belongs only to that build until it's added to the graph,
+so nothing else can touch it. See the claim, build and register steps in section 5.
+
+### The deadlock rule
+
+**A query task must never submit more work to a pool or wait on one. And code running inside `NODE_POOL` must never
+wait on `NODE_POOL`.**
+
+A pool has a fixed number of threads. Suppose all 8 query threads each submitted another task and waited for it.
+Those new tasks would sit in the queue with no free thread to run them, and the 8 waiting threads would never
+finish. The server would hang. The same thing could happen to `NODE_POOL` if a node build waited on another node
+build.
+
+Waiting in one direction is safe: a node build (or a request's thread) can wait on `QUERY_POOL`. Query tasks never
+wait on anything, so each one always finishes and frees its thread, and whatever is waiting on it always gets its
+answer.
+
+```
+request thread ──waits on──▶ NODE_POOL ──waits on──▶ QUERY_POOL ──waits on──▶ nothing
+```
+
+### Connections
+
+The SQLAlchemy engine's connection pool (`pool_size=16, max_overflow=8`, in `app/__init__.py`) allows up to 24
+connections. That's enough for all 8 query threads and all 4 node threads to be busy at once, with room left for the
+requests the dev server is handling. A node thread only holds a connection while its own query runs. While it waits
+on `QUERY_POOL`, it isn't holding one.
+
+---
+
+## 10. Endpoints
+
+`app/__init__.py` imports every route module in `app/routes/` automatically. To add new routes, just create a file
+there. You don't need to add an import anywhere.
+
+| Module | Endpoints |
+|--------|-----------|
+| `routes.py` | `POST /api/upload`, `GET /api/preloaded`, `GET /api/tablename`, `POST /api/undo`, `POST /api/redo`, `POST /api/reset` |
+| `plot_routes.py` | `GET /api/plots/1-d-histogram`, `2-d-histogram`, `scatterplot`, `top-error-rows`, `summaries`; `POST rows-in-bin`, `bins-for-rows`, `update-backend-attributes`; `GET preview-histogram`, `preview-scatterplot` (these two work on any node's table) |
+| `wrangler_routes_sql.py` | `POST /api/wrangle/create-previews` (creates repair candidates) |
+| `candidate_routes.py` | `POST /api/candidates/accept` (with an optional `inherit`), `POST /api/candidates/discard` |
+| `ai_routes.py` | `GET /api/ai/status`, `POST /api/ai/suggest` |
+| `pgraph_routes.py` | `GET /api/routes/update_pgraph`, `POST /api/setGraphToClickedNode`, `GET /api/pgraph/branch_trajectory`, `GET /api/pgraph/compare`, `GET /api/pgraph/drift_detail`, `POST`/`PATCH`/`DELETE /api/pgraph/support_nodes` |
+
+Endpoints that work on the current table get its name from `db_operations.main_table_name`. They don't accept a
+table name from the client. Endpoints that do accept a table name will only work with tables that belong to a node
+in the session's graph.
+
+---
+
+## 11. Frontend
+
+The frontend is built with React and Vite, and lives in `ui/src`. The graph is drawn with React Flow
+(`@xyflow/react`) and dagre decides where each node goes. The plots are drawn with d3.
+
+- **`pages/`**: `Home`, where you upload a file, and `Buckaroo`, the main workspace with its different view modes.
+- **`store/`**: the shared state, kept in React contexts.
+  - `TableNameContext` holds the current table. The rest of the frontend should treat it as the source of truth.
+  - `PGraphContext` holds the graph's nodes, edges and layout, and the nodes picked as A and B.
+  - `PlotsWindowsContext` holds the windows open in the Plots view (it works together with `plotsWindows.js`).
+  - The other contexts are described in [The other contexts](#the-other-contexts) below.
+  - `visualizationCaches.jsx` is here too. Its caches are cleared every time the backend switches tables.
+- **`visualizations/`**: the plots (`HistogramBarChart`, `HeatMap`, `ScatterPlot`), the graph (`PGraph`), the views
+  for comparing nodes (`ComparisonPlot`, ridgeline and Sankey), and the analysis plot.
+- **`graph_objects/`**: custom node types for React Flow, including the ones used for candidates (prospective nodes).
+- **`supportNodes/`**: small extra nodes that attach to a graph node: the error plot gallery, the drift plot
+  gallery, compare and the sparkline. Each one is registered in `registry.js`. If one is hidden, a badge appears on
+  its node instead. The records are stored on the server, and a new candidate inherits its parent's (see
+  [Support nodes](#support-nodes)).
+- **`panels/` and `elements/`**: the Plots view and its windows (attribute plots, compare and support nodes, all
+  built on `PlotsWindow`), the attribute summary panel, the table panel, and UI pieces shared across the app.
+- **`utils/serverCalls.jsx`**: every request to the backend goes through this file.
+
+### The other contexts
+
+Each context lives in `ui/src/store/` and has a `use...` hook for reading it, like `useCandidates()`.
+
+**Where the providers sit.** `TableNameProvider` and `LoadingProvider` wrap the whole workspace in `App.jsx`. The
+rest are nested in `pages/Buckaroo.jsx` in this order, outside to inside:
+
+```
+SettingsProvider
+  PlotsWindowsProvider
+    PGraphProvider
+      AISuggestionsProvider
+        RowRangeProvider
+          SelectionProvider
+            CandidatesProvider
+              RepairProvider
+                CompareProvider
+```
+
+The order matters, because a context can only use the contexts outside it. For example, `RepairContext` reads the
+selection and the graph, so it has to be inside `SelectionProvider` and `PGraphProvider`. `CompareProvider` is
+outside the part of the page that gets rebuilt after a wrangle, so an open comparison stays open.
+
+**Moving to another table: `useMoveToTable`.** This isn't a context, but several contexts share it. It's how the
+app lands on a new table after any change: it sets the current table, clears the selection (because the selection
+was made on the old table's rows), and tells the page to fetch its views again. Undo, redo, and accepting or
+declining a candidate all go through it, so they all behave the same way.
+
+#### `CandidatesContext`: accepting and declining candidates
+
+This is where the user accepts or declines a candidate. It doesn't matter whether the candidate came from a repair
+or from the AI. Both kinds are handled the same way here, just like on the server.
+
+- `candidates`: the candidates currently in the graph. They come from `PGraphContext`.
+- `acceptCandidate(table, inherit)`: calls `POST /api/candidates/accept`, applies the same `inherit` choice to the
+  support nodes on the page (`settleInherited`), refreshes the graph, then moves to the accepted node with
+  `useMoveToTable`. To the rest of the app, an accepted candidate looks exactly like a wrangle that just ran. If the
+  candidate inherited support nodes, its Accept button first opens a choice: "Accept & show support nodes",
+  "Accept & hide support nodes" or "Accept without support nodes". Otherwise it accepts straight away with
+  `"hide"`.
+- `declineCandidate(table)` and `declineAll(parent)`: call `POST /api/candidates/discard`, remove any support nodes
+  attached to those candidates, and refresh the graph. If the user was on a declined candidate, the server moves
+  them to its parent, and this follows along.
+- `busy` and `busyId`: whether a request is running, and which candidate it's for. While `busy` is on, every
+  candidate's Accept and Decline buttons are disabled, and the one matching `busyId` shows "Working…". `busyId` is
+  `null` when several candidates are declined at once.
+- `error` and `dismissError`: the last failure's message.
+
+#### `AISuggestionsContext`: asking the AI for repairs
+
+This sends the request for AI suggestions. It doesn't accept or decline them; `CandidatesContext` does that.
+
+- `configured`: whether the server has an AI key set up. It's checked once, when the page loads
+  (`GET /api/ai/status`). When it's `false`, the AI buttons are disabled, and their tooltip says to add an API
+  key. `store/aiAvailability.js` decides when an AI button is disabled and what its tooltip says: AI not set up, the
+  node is a candidate, the graph is in analysis mode, or a request is already running.
+- `requestSuggestions(nodeTable)`: calls `POST /api/ai/suggest` for a node. The server stages each suggestion as a
+  candidate, so all this has to do afterwards is refresh the graph. The suggestions then show up as candidate nodes.
+- `busy` and `pendingNode`: whether a request is running, and which node it's for.
+- `error`, `notice` and `dismissMessages`: `notice` holds the model's reply when it finds nothing to repair.
+
+Only the newest request counts. If the user asks again before the first request comes back, the first one is
+cancelled (with an `AbortController`), so an old answer can never show up on the wrong node.
+
+#### `RepairContext`: repairing a selection, and undo and redo
+
+- `triggerRepairSelection()`: used by the header's Repair button and the error-plot support node's "Repair
+  selection". It opens the graph view and calls `POST /api/wrangle/create-previews` with the current selection.
+  The server stages one candidate for each way to repair it (delete, impute, and so on) under the current node.
+  Then it refreshes the graph so they show up.
+- `handleUndo()` and `handleRedo()`: call the server's undo or redo, refresh the graph, then move to the node the
+  server landed on.
+- `hasSelection`: whether any rows are selected. Repair can't be used without a selection.
+- `repairLocked`: `true` when the current node is still a candidate. Nothing can be wrangled from a candidate until
+  it's accepted, so Repair is turned off, and `CANDIDATE_LOCKED` holds the message that explains why.
+- `busy`, `repairError` and `dismissRepairError`.
+
+#### `SelectionContext`: the rows selected across the plots
+
+When the user brushes rows in one plot, they light up in every plot. This context holds that selection.
+
+- `highlightedRowIds`: the IDs of the selected rows, or `null` when nothing is selected.
+- `highlightedCols`: the columns the selection was made on: one column for a histogram, two for a heatmap or a
+  scatterplot. Repair uses these to decide which columns to impute.
+- `selectionSource`: which kind of plot the selection was made on (`"histogram"`, `"heatmap"` or
+  `"scatterplot"`).
+- `highlightRevision`: goes up by one every time the selection changes. A plot that's still looking up rows for an
+  older selection can compare numbers and throw away its out-of-date result.
+- `setHighlightedRowIds(ids, cols, source)` and `clearHighlight()`.
+
+The selection is cleared every time the app moves to another table, because row IDs from one table don't describe
+the same rows in another.
+
+#### `CompareContext`: the open comparison
+
+Only one comparison can be open at a time. It's shown in one of the Plots view's windows, either docked as a tab or
+popped out into its own browser window.
+
+- `openCompare(pair)`: compares the two nodes picked as A and B in the graph. If that same pair is already open, it
+  just brings it to the front.
+- `openCompareNode(record)`: opens a saved compare support node. Every support node from the same Save is linked
+  to the comparison, so changing the settings in the panel updates all of them.
+- `openDriftNode(record)`: opens a drift-plot support node as a one-node comparison (that node against the root,
+  on drift). If the user picks another column there, the support node remembers it.
+- `spec`: the settings of the open comparison, or `null` if none is open.
+- `closeCompare()`.
+
+Saving a comparison from the panel adds a compare support node to both of its nodes. The two are grouped, so
+opening either one later changes both.
+
+The panel can be popped out into a separate browser window. `HostWindowContext` (also in `store/`) tells code inside
+the panel which window it's in. Event listeners, timers and `ResizeObserver`s have to be taken from that window, or
+they stop working once the panel is popped out.
+
+#### `LoadingContext`: the loading dot
+
+This drives the status dot in the header: it shows "loading" while any request is running and "ready" otherwise.
+
+- `addLoader()` before a request, and `removeLoader()` after it.
+- `isLoading`: `true` while at least one request is still running.
+
+It keeps a count, not just `true` or `false`. So if two requests overlap, the dot stays on until both are done.
+Every `addLoader` needs a matching `removeLoader`, even when the request fails, or the dot never goes back to
+"ready".
+
+#### `SettingsContext`: display settings
+
+At the moment it only holds `axisTextSize`, the font size for plot axes (8px by default). It's changed in the
+Settings window (`elements/SettingsModal.jsx`). `setAxisTextSize` also sets the `--axis-text-size` CSS variable, so
+the plots pick up the new size without having to be redrawn.
+
+#### `RowRangeContext`: limiting plots to a range of row IDs
+
+- `useRange`: whether the user turned on a row range in Settings.
+- `minId` and `maxId`: the range (0 to 10,000 by default).
+- `setRowRange(useRange, minId, maxId)`: set from `elements/SettingsModal.jsx`.
+
+The plots read it through `useCachedPlotData` in `visualizations/errorPlots.js`. When `useRange` is on, a plot
+skips the cache and fetches again with the range. When it's off, the plot uses its cached data.
+
+**Known gap:** the plot endpoints don't read `min_id` or `max_id` yet. The frontend sends them, but the server
+always plots the whole table. So right now, turning the range on only turns off caching.
+
+---
+
+## 12. Codebase layout
+
+This is every folder in the repository and what each file is for. The backend is `app/`, the frontend is `ui/`,
+and the tests are in `tests/`. Everything else is either run once by hand, or used only by the tests.
+
+### Repository root
+
+```
+.
+├── start.py                     # runs the Flask app on 127.0.0.1:5001, without the auto-reloader
+├── run.sh                       # makes a venv, installs a fixed list of packages (it doesn't read requirements.txt), runs `flask run`
+├── .flaskenv                    # FLASK_APP=app, debug on, port 5001 - read by `flask run`
+├── .env.example                 # the database settings and GEMINI_API_KEY to copy into .env
+├── requirements.txt             # Python dependencies
+├── pytest.ini                   # test paths and the `sql` / `slow` markers
+├── README.md
+├── DEVNOTES.md                  # this file
+└── LICENSE
+```
+
+### `app/`: the Flask backend
 
 ```
 app/
-├── __init__.py                  # engine, db_operations, pgraph_for_session,
-│                                # auto-imports app/routes/* via pkgutil
-├── pgraph/
-│   ├── pgraph.py                # PGraph DAG
-│   └── node.py                  # GraphNode
-├── routes/                      # auto-imported; one file per endpoint group
-│   ├── routes.py                # upload, preloaded, tablename, undo, redo, reset
-│   ├── plot_routes.py           # histograms, scatterplot, preview-*, summaries
-│   ├── wrangler_routes_sql.py   # create-previews, execute, delete-column
-│   ├── filter_routes.py         # /api/filter/add, /api/filter/clear
-│   └── pgraph_routes.py         # /api/routes/update_pgraph, /api/setGraphToClickedNode
-├── db_utils/
-│   ├── db_functions_sql.py      # DBOperations + ColumnTypes
-│   ├── filtering_sql.py         # FilteringSQL
-│   ├── execute_sql.py           # fetch_sql / execute_sql wrappers
-│   └── query.py                 # remove_rows_by_ids, impute_by_ids, delete_column
-└── server_utils/
-    ├── service_helpers.py       # detector orchestration, preview creation,
-    │                            # wrangle execution, pgraph entry points,
-    │                            # _safe_pg_name, generate_table_name
-    ├── set_id_column.py         # adds the "ID" column on upload
-    └── data_attribute_summary_integration.py
-                                 # rankings + per-attribute distributions for the summary panel
+├── __init__.py                  # creates the Flask app, serves ui/dist, checks the database exists, sets up the engine,
+│                                #   db_operations and pgraph_for_session, then imports every file in routes/
+├── db_utils/                    # all of the SQL lives here
+│   ├── bootstrap.py             # creates the database on startup if it doesn't exist yet
+│   ├── db_functions_sql.py      # DBOperations: the plots, plus creating, copying and deleting tables
+│   ├── column_types.py          # ColumnTypes: the rules for reading a value as a number, a category or missing
+│   ├── data_profile.py          # DataProfile: builds and reads the dp_ table
+│   ├── detector_sql.py          # DetectorSQL: finds errors and writes the errors_ table
+│   ├── compare_sql.py           # CompareSQL: bins two nodes on the same axes for the compare views
+│   ├── drift_sql.py             # DriftSQL: the numbers drift is calculated from
+│   ├── query.py                 # wrangles by row ID (delete, impute), finding flagged rows, working out impute values
+│   └── execute_sql.py           # fetch_sql / execute_sql, companion table names, quoting, COPY insert
+├── pgraph/                      # the provenance graph, kept in memory
+│   ├── pgraph.py                # PGraph: nodes, labels, candidates, undo/redo, branch trajectories, Pareto
+│   ├── node.py                  # GraphNode: one node's details, and how its wrangle is named
+│   ├── support_nodes.py         # support node records: what a new child inherits, and what accepting does with them
+│   ├── metrics.py               # NodeMetrics: error rates per column and for the whole node
+│   └── distortion.py            # drift from root: the calculations, run on QUERY_POOL, and their descriptions
+├── llm/                         # the model's side of AI suggestions. No SQL, and it never changes data
+│   ├── profile.py               # turns a node's dp_ table into the text the model reads
+│   ├── prompts.py               # the system instruction and its worked examples
+│   ├── tools.py                 # the wrangle operations declared as tools - the limit on what the model can ask for
+│   └── gemini_client.py         # a small Gemini client using only the standard library
+├── routes/                      # one file per group of endpoints, imported automatically (see section 10)
+│   ├── routes.py                # upload, sample datasets, undo, redo, reset, and serving the page
+│   ├── plot_routes.py           # the attribute plots, the repair previews, rows in a bin, attribute summaries
+│   ├── pgraph_routes.py         # the graph, moving to a node, branch trajectories, compare, drift detail, support nodes
+│   ├── wrangler_routes_sql.py   # create-previews: stages every repair of a selection as a candidate
+│   ├── candidate_routes.py      # accepting and declining candidates
+│   └── ai_routes.py             # AI status, and staging AI suggestions as candidates
+├── server_utils/                # the logic the routes share
+│   ├── service_helpers.py       # build_node, table naming, getting the session's graph, WRANGLE_LOCK
+│   ├── candidates.py            # claiming, building, registering, accepting and declining candidates
+│   ├── ai_wrangle.py            # the database's side of AI suggestions: checks each one and finds its rows
+│   ├── workers.py               # QUERY_POOL, NODE_POOL, run_all
+│   ├── set_id_column.py         # adds the "ID" column when a file is uploaded
+│   └── data_attribute_summary_integration.py   # builds the data for the attribute summary panel
+├── ai_utils/
+│   └── ai_data_attributes.json  # saved column statistics for one dataset. Nothing reads it
+└── templates/
+    └── index.html               # empty. The page is served from ui/dist instead
 ```
 
-When adding a new endpoint, drop a new file in `app/routes/` — `app/__init__.py` discovers and imports it on startup, no registration line required.
+### `ui/`: the React frontend
+
+Section 11 explains how the frontend fits together. This is the full list of files.
+
+```
+ui/
+├── package.json, package-lock.json
+├── vite.config.js               # the Vite dev server, which forwards /api to Flask on port 5001. `npm run build` writes dist/
+├── eslint.config.js
+├── index.html                   # the page Vite builds from
+├── public/images/               # copied into the build as they are
+│   ├── favicon/                 # favicons, the web manifest, and the home page background
+│   └── icons/                   # button and nav icons: graph, plots, compare, repair, AI, support, eye, ...
+├── dist/                        # the built frontend that Flask serves. It's committed, so rebuild it after frontend changes
+├── .vite/                       # Vite's dependency cache. Generated, but committed
+└── src/
+    ├── main.jsx                 # mounts <App />
+    ├── App.jsx                  # shows Home until a file is uploaded, then the workspace. Remembers the upload for the tab
+    ├── pages/
+    │   ├── Home.jsx             # the upload box and the sample datasets (read from provided_datasets/)
+    │   └── Buckaroo.jsx         # the workspace: the providers, the open views and the split between them
+    ├── store/                   # shared state (section 11 covers each context)
+    │   ├── TableNameContext.jsx, PGraphContext.jsx, PlotsWindowsContext.jsx
+    │   ├── CandidatesContext.jsx, AISuggestionsContext.jsx, RepairContext.jsx, SelectionContext.jsx
+    │   ├── CompareContext.jsx, LoadingContext.jsx, SettingsContext.jsx, RowRangeContext.jsx
+    │   ├── HostWindowContext.jsx  # which browser window a piece of the page is in (for the popped-out compare panel)
+    │   ├── useMoveToTable.js    # how the app lands on a new table: set it, clear the selection, fetch the views again
+    │   ├── plotsWindows.js      # the Plots view's windows: docking, popping out, showing one
+    │   ├── supportNodes.js      # useSupportNodes: the support nodes' state, sending changes to the server and reading its records back in
+    │   ├── aiAvailability.js    # when an AI button is disabled, and what its tooltip says
+    │   ├── errorColors.js       # the error types and their colors
+    │   └── visualizationCaches.jsx  # the plot caches, cleared whenever the table changes
+    ├── elements/                # pieces of the page
+    │   ├── Header.jsx           # the top bar: table name, loading dot, Compare, view toggles, Repair, AI, undo/redo
+    │   ├── PlotsWindow.jsx      # the frame every Plots view window shares: title, actions, pop out, dock, close
+    │   ├── ComparePanel.jsx     # the compare window: options on the left, the plot on the right
+    │   ├── SupportNodesWindow.jsx  # the window for adding support nodes to a node, and managing its existing ones
+    │   ├── SettingsModal.jsx    # the Settings window: axis text size (the row range controls are hidden)
+    │   ├── FilterModal.jsx      # a modal with one attribute's histogram, opened from the attribute summary panel
+    │   ├── SpinnerModal.jsx     # the full-page spinner shown while a file uploads
+    │   ├── Modal.jsx            # the plain modal the others are built on
+    │   ├── UploadBox.jsx        # the file picker on the home page
+    │   ├── CollapsiblePanel.jsx # a side panel that folds away
+    │   ├── SplitDivider.jsx     # the drag handle between the graph and the Plots view
+    │   └── Buttons.jsx          # RotatedButton, StandardButton, NavButton, IconButton
+    ├── panels/                  # the larger areas of the workspace
+    │   ├── PlotsPane.jsx        # the Plots view: its windows as tabs, with the attribute plots always first
+    │   ├── SelectionPanel.jsx   # the attribute plot matrix (MatrixView), with a magnifier to zoom into one plot
+    │   ├── AttributeSummaryPanel.jsx  # the column list: error rates and summary statistics, and picking which to plot
+    │   ├── TablePanel.jsx       # the data table, with each cell colored by its error
+    │   └── PreviewCard.jsx      # the small plot on a candidate node
+    ├── graph_objects/           # the custom React Flow nodes and edges
+    │   ├── NodeTypes.jsx        # the graph's node: label, metrics, buttons, and its role in a comparison
+    │   ├── ProspectiveNode.jsx  # a candidate node: its preview, why it was suggested, Accept (with the inherit choice) and Decline
+    │   ├── NodeMetrics.jsx      # a node's error rates and size, as the magnifier and the metrics support node show them
+    │   ├── AnalysisEdge.jsx     # analysis mode's straight edges, cut off at each node's box
+    │   └── supportNodes/        # support nodes: the small extras attached to a graph node
+    │       ├── registry.js      # every kind of support node. Adding a kind means a new file and an entry here
+    │       ├── SupportNode.jsx  # the one React Flow node type behind every kind: name, minimise, remove, link to host
+    │       ├── SupportGroup.jsx # the outline drawn around a node and its support nodes
+    │       ├── SupportBadges.jsx  # badges on a node for its hidden support nodes
+    │       ├── supportLayout.js # where support nodes sit: beside their host, or beside the edge into it
+    │       ├── supportActions.js  # the button in a support node's header, for kinds that have one
+    │       ├── supportGlyphs.jsx  # a tiny picture of each kind, for its badge
+    │       ├── SupportPlotCard.jsx  # the card frame the error plots and drift plots share
+    │       ├── SupportPlotGallery.jsx  # the grid of ready-made plots to pick from in the support-nodes window
+    │       ├── ErrorPlotSupport.jsx, ErrorPlotCard.jsx  # error plot kind: a histogram or heatmap of the host's table
+    │       ├── DriftSupport.jsx, DriftPlotCard.jsx, DriftMiniature.jsx  # drift plot kind: the host against root on one column
+    │       ├── CompareSupport.jsx, compareView.js  # compare kind: a saved comparison, kept on both of its nodes
+    │       ├── SparklineSupport.jsx  # sparkline kind: one error type, or drift, along the branch ending at the host
+    │       ├── QualityMetricsSupport.jsx  # quality metrics kind: the host's metrics
+    │       └── WrangleDiffSupport.jsx, wrangleDiffRules.js  # wrangle diff kind: what the edge into the host changed
+    ├── visualizations/          # the plots, drawn with d3
+    │   ├── PGraph.jsx           # the provenance graph: tree and analysis modes, panning, folding, the camera
+    │   ├── analysisLayout.js    # analysis mode: nodes placed on drift (x) against error rate (y)
+    │   ├── AnalysisAxes.jsx     # analysis mode's axes, drawn over the graph
+    │   ├── AnalysisInset.jsx    # a zoomed-in box for nodes that sit on top of each other in analysis mode
+    │   ├── HistogramBarChart.jsx, HeatMap.jsx, ScatterPlot.jsx  # the attribute plots, with brushing
+    │   ├── FocusedPlot.jsx      # one attribute plot drawn large, with its axis labels
+    │   ├── errorPlots.js        # what the error plots share: colors, stacking, and fetching with the cache
+    │   ├── previewPlots.js      # the small error plots on candidates and error plot support nodes
+    │   ├── ComparisonPlot.jsx   # the compare window's plot. Picks the view from the comparison's settings
+    │   ├── useComparisonData.js # fetches a comparison's data, for the compare window and the compare support node
+    │   ├── binnedPlot.js        # scales, bins and colors shared by the compare histograms/heatmaps and the wrangle diff
+    │   ├── compare/
+    │   │   ├── binnedViews.js   # histograms and heatmaps: side by side, overlaid, or the difference
+    │   │   ├── ridgeline.js     # drift on a numeric column: each node's shape against root's
+    │   │   ├── flows.js         # drift on a categorical column: a Sankey of where root's rows went
+    │   │   ├── driftCommon.js   # what the ridgeline and the flows share
+    │   │   ├── frames.js        # panel layout, titles, axes and "nothing to plot" messages
+    │   │   └── tooltip.js       # the compare plot's own tooltip (it can be in a separate window)
+    │   ├── flowLayout.js        # the Sankey's geometry, worked out once and drawn twice
+    │   ├── SankeyMinimap.jsx    # the strip beside the Sankey for scrolling and zooming it
+    │   ├── RidgelineBrush.jsx   # root's row under the ridgelines, with a brush for zooming
+    │   ├── WrangleDiffChart.jsx # the wrangle diff plot: the parent against the node
+    │   ├── QualitySparkline.jsx # one error type (or drift) along a branch, with its start and end values
+    │   └── Sparkline.jsx        # the line itself, with improvements in green and regressions in red
+    ├── utils/
+    │   ├── serverCalls.jsx      # every request to the backend
+    │   ├── comparisonSpec.js    # the comparison object: everything the compare window shows, as one record
+    │   ├── comparison.js        # node names and table prefixes for the compare window
+    │   ├── candidates.js        # what each candidate source is called, and what its row count counts
+    │   ├── graphTopology.js     # walking and folding the graph on the client
+    │   ├── drift.js             # how drift values are written out
+    │   ├── visCommon.jsx        # tooltip placement, shared by the plots
+    │   ├── html.js              # escaping user data for tooltips, and safe ids
+    │   ├── randomKey.js         # short unique keys
+    │   └── textUtils.js         # truncateText
+    └── styles/                  # one CSS file per component, plus main.css for the whole app
+```
+
+### `tests/`
+
+Section 13 covers how to run them.
+
+```
+tests/
+├── sql/                         # run against the real database. They need Postgres running
+│   ├── conftest.py              # shared fixtures: make_root builds a root with its errors, profile and graph
+│   ├── test_upload.py, test_plots.py, test_errors_row_id.py
+│   ├── test_detector_sql.py, test_data_profile.py, test_drift_sql.py, test_compare_sql.py
+│   ├── test_wrangling.py, test_candidates.py, test_node_compare_route.py
+│   ├── test_ai_routes.py, test_ai_resolve.py, test_ai_accept.py
+│   └── test_distortion_survey.py
+└── unit/                        # no database needed
+    ├── test_distortion.py, test_node_metrics.py, test_safe_pg_name.py, test_ai_tools.py
+    ├── test_support_nodes.py    # what a child inherits, and what each accept choice keeps
+    └── test_approx_cardinality.py, test_benchmark_validation.py, test_reproducibility.py   # for the folders below
+```
+
+### Other folders
+
+```
+detectors/
+└── approx_cardinality.py        # a HyperLogLog-style distinct-value counter. Only the tests use it, not the app
+experiments/
+├── benchmark_validation.py      # benchmark checks for profiling experiments
+└── reproducibility.py           # records the setup an experiment ran with
+provided_datasets/               # the sample CSVs offered on the home page, plus copies of older versions
+└── create_mari_dataset.py       # writes mari_dataset.csv, a six-row dataset with a few bad values
+```
+
+`detectors/` and `experiments/` aren't imported by the app. Only the unit tests use them.
 
 ---
 
-## 12. Key Files
+## 13. Tests
 
-| File | Role |
-|------|------|
-| `detectors/missing_value.py` | Missing value detector |
-| `detectors/datatype_mismatch.py` | Type mismatch detector |
-| `detectors/anomaly.py` | Statistical outlier detector |
-| `detectors/incomplete.py` | Rare-category detector |
-| `app/__init__.py` | Engine init, global `db_operations`, `pgraph_for_session`, route auto-import |
-| `app/db_utils/db_functions_sql.py` | `DBOperations` (line 115) + `ColumnTypes` (line 22) |
-| `app/db_utils/filtering_sql.py` | `FilteringSQL` class |
-| `app/db_utils/query.py` | SQL primitives: delete rows, impute, drop column |
-| `app/db_utils/execute_sql.py` | `fetch_sql` / `execute_sql` thin wrappers |
-| `app/server_utils/service_helpers.py` | Preview creation, wrangle execution, detector orchestration, `_safe_pg_name`, pgraph entry points (`init_pgraph_for_session`, `n_wrangle`, `make_new_table_name`) |
-| `app/server_utils/data_attribute_summary_integration.py` | Rankings + attribute distributions for the summary panel |
-| `app/server_utils/set_id_column.py` | Adds the canonical `ID` column on upload |
-| `app/routes/routes.py` | Upload, preloaded, reset, undo/redo, tablename |
-| `app/routes/wrangler_routes_sql.py` | Wrangle API endpoints (create-previews, execute, delete-column) |
-| `app/routes/plot_routes.py` | Histogram, scatterplot, preview-histogram, preview-scatterplot, summaries |
-| `app/routes/filter_routes.py` | `/api/filter/add`, `/api/filter/clear` |
-| `app/routes/pgraph_routes.py` | `/api/routes/update_pgraph`, `/api/setGraphToClickedNode` |
-| `app/pgraph/pgraph.py` | `PGraph` class — provenance DAG with current/prev/next pointers |
-| `app/pgraph/node.py` | `GraphNode` class — individual wrangle node |
-| `ui/src/App.jsx` | Top-level: upload state, wraps `Buckaroo` in `TableNameProvider` + `LoadingProvider` |
-| `ui/src/pages/Buckaroo.jsx` | Layered context providers, view mode (`plots` / `both` / `graph`), main layout |
-| `ui/src/elements/Header.jsx` | `BuckarooHeader` with view toggles, `TableStatus`, Repair / Undo / Redo / Settings / Home |
-| `ui/src/store/TableNameContext.jsx` | Global `tableName` + `setTableName` |
-| `ui/src/store/LoadingContext.jsx` | Ref-counted spinner state |
-| `ui/src/store/SettingsContext.jsx` | App-level settings (axis text size etc.) |
-| `ui/src/store/RepairContext.jsx` | Wrangle action centralization (undo/redo/repair triggers) |
-| `ui/src/store/SelectionContext.jsx` | Shared row/column selection state |
-| `ui/src/store/RowRangeContext.jsx` | Row range (filtering by ID range) |
-| `ui/src/store/PGraphContext.jsx` | React Flow nodes/edges, dagre layout, `onNodeDoubleClick` |
-| `ui/src/store/visualizationCaches.jsx` | Cache + clear helpers for scatterplot / heatmap / histogram |
-| `ui/src/visualizations/PGraph.jsx` | React Flow rendering of the provenance graph + active-node highlight |
-| `ui/src/visualizations/HistogramBarChart.jsx` / `HeatMap.jsx` / `ScatterPlot.jsx` | Plot renderers |
-| `ui/src/graph_objects/NodeTypes.jsx` | Custom React Flow node types (`SelectedNode`) |
-| `ui/src/panels/RepairPanel.jsx` | Wrangle UI — create-previews, execute |
-| `ui/src/panels/PreviewCard.jsx` | Renders preview histograms/heatmaps/scatterplots + execute button |
-| `ui/src/panels/AttributeSummaryPanel.jsx` | Per-attribute summaries + default top-3 from rankings |
-| `ui/src/utils/serverCalls.jsx` | Frontend API call helpers (now includes `getPGraph`, `setGraphToClickedNode`, `undoWrangle`, `redoWrangle`, `resetApp`) |
+- `tests/unit` tests pure logic and doesn't need a database.
+- `tests/sql` runs against your local Postgres, and its tests are marked `@pytest.mark.sql`. It covers uploading,
+  the main view's plots, error detection, compare, drift, the data profile, candidates (including the support
+  nodes they inherit and the accept choices) and the AI routes. There's
+  also a golden survey test that checks drift and Pareto results against known values.
 
----
-
-## 13. Things to be aware of
-
-- **Detectors run in Python memory. - We should fix this** All four detectors operate on the full DataFrame before writing to Postgres. For large datasets this could be slow — there is no chunking or SQL-side detection.
-- **`update_preview_error_table` is a stub.** In `app/routes/wrangler_routes_sql.py` the function is defined but its body is commented out. Previews currently rely on the real `update_errors_table` re-running detectors on the cloned preview tables in `create_previews_1d/2d`.
-- **`create_minimal_preview_table` builds an invalid SQL statement.** In `service_helpers.py`, `CREATE TABLE ... (LIKE ... INCLUDING ALL)"` has a stray trailing quote. The function isn't currently called (the full `_clone_table_pair` path is used instead) but should be cleaned up before re-enabling minimal-preview behavior.
-- **PGraph node IDs are never recycled.** `PGraph.node_count` only increments — undo/redo never decrement it, so a session that does many undo+new-wrangle cycles keeps minting new `n#` names rather than reusing an existing branch's number. Old tables stay in Postgres forever within a session.
-- **`GraphNode.update_metrics` is plumbed but not called.** Per-node `anomaly_metric / missing_metric / incomplete_metric / mismatch_metric` exist on the class but no code path populates them yet — the visualization currently only shows table names and wrangle-op edge labels.
-- **Quality metric overlay on graph nodes is not yet implemented.** `PGraph.serialize_nodes` only returns `{ id, data: { label } }`; metrics are not surfaced to the frontend.
-
+To run both, use `.venv/bin/pytest tests/unit tests/sql`.

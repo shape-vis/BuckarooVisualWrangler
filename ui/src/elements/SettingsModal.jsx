@@ -4,10 +4,18 @@ import { useRowRange } from "../store/RowRangeContext.jsx";
 import { useSettings } from "../store/SettingsContext.jsx";
 import "../styles/SettingsModal.css";
 
+const AXIS_TEXT_SIZES = [
+    { label: "S", size: 7 },
+    { label: "M", size: 9 },
+    { label: "L", size: 12 },
+];
+
 export default function SettingsModal({ visible, onClose }) {
     const { useRange, minId, maxId, setRowRange } = useRowRange();
     const { axisTextSize, setAxisTextSize } = useSettings();
 
+    // The row-range controls are hidden for now, but Apply still writes the
+    // current range back through setRowRange, so the local copy is kept.
     const [localUseRange, setLocalUseRange] = useState(useRange);
     const [localMin, setLocalMin] = useState(minId);
     const [localMax, setLocalMax] = useState(maxId);
@@ -36,64 +44,19 @@ export default function SettingsModal({ visible, onClose }) {
         <Modal visible={visible}>
             <h2>Plot Settings</h2>
 
-            {/* <div className="settings-row">
-                <label className="settings-label">Data Range</label>
-                <div className="settings-toggle">
-                    <button
-                        className={`settings-toggle-btn ${!localUseRange ? "settings-toggle-btn--active" : ""}`}
-                        onClick={() => setLocalUseRange(false)}
-                    >
-                        Whole Dataset
-                    </button>
-                    <button
-                        className={`settings-toggle-btn ${localUseRange ? "settings-toggle-btn--active" : ""}`}
-                        onClick={() => setLocalUseRange(true)}
-                    >
-                        ID Range
-                    </button>
-                </div>
-            </div>
-
-            {localUseRange && (
-                <>
-                    <div className="settings-row">
-                        <label className="settings-label">Min Row ID</label>
-                        <input
-                            className="settings-input"
-                            type="number"
-                            value={localMin}
-                            min={0}
-                            onChange={e => setLocalMin(e.target.value)}
-                        />
-                    </div>
-                    <div className="settings-row">
-                        <label className="settings-label">Max Row ID</label>
-                        <input
-                            className="settings-input"
-                            type="number"
-                            value={localMax}
-                            min={1}
-                            onChange={e => setLocalMax(e.target.value)}
-                        />
-                    </div>
-                </>
-            )} */}
-
             <div className="settings-row">
                 <label className="settings-label">Axis Text Size</label>
                 <div className="settings-toggle">
-                    <button
-                        className={`settings-toggle-btn ${axisTextSize === 7 ? "settings-toggle-btn--active" : ""}`}
-                        onClick={() => setAxisTextSize(7)}
-                    >S</button>
-                    <button
-                        className={`settings-toggle-btn ${axisTextSize === 9 ? "settings-toggle-btn--active" : ""}`}
-                        onClick={() => setAxisTextSize(9)}
-                    >M</button>
-                    <button
-                        className={`settings-toggle-btn ${axisTextSize === 12 ? "settings-toggle-btn--active" : ""}`}
-                        onClick={() => setAxisTextSize(12)}
-                    >L</button>
+                    {AXIS_TEXT_SIZES.map(({ label, size }) => {
+                        const activeClass = axisTextSize === size ? "settings-toggle-btn--active" : "";
+                        return (
+                            <button
+                                key={label}
+                                className={`settings-toggle-btn ${activeClass}`}
+                                onClick={() => setAxisTextSize(size)}
+                            >{label}</button>
+                        );
+                    })}
                 </div>
             </div>
 

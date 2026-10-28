@@ -1,4 +1,3 @@
-import React, { useMemo } from "react";
 import { useEffect, useState } from "react";
 import { queryTopErrorRows } from "../utils/serverCalls.jsx";
 import CollapsiblePanel from "../elements/CollapsiblePanel";
@@ -27,7 +26,7 @@ function TableRow({tableData, rowIndex, columns, errorData}) {
   const errorPriority = ["mismatch", "missing", "anomaly", "incomplete"];
 
   return (
-    <tr key={`row${rowIndex}`}>
+    <tr>
     {
       columns.map((col) => {
         const key = col + "_" + (tableData?.["ID"]?.[rowIndex] ?? rowIndex);
@@ -56,22 +55,48 @@ function TableRow({tableData, rowIndex, columns, errorData}) {
 function TableBody({ columns, tableData, numRows, errorData}) {
 
   const rowIndices = Array.from({ length: numRows }, (_, i) => i);
-  
+
   return (
         <tbody>
           {
-            rowIndices.map( rowIdx => { 
-              return (<TableRow tableData={tableData} rowIndex={rowIdx} columns={columns} errorData={errorData} />)
+            rowIndices.map( rowIdx => {
+              return (
+                <TableRow
+                  key={rowIdx}
+                  tableData={tableData}
+                  rowIndex={rowIdx}
+                  columns={columns}
+                  errorData={errorData}
+                />
+              )
             })
           }
-        </tbody>    
+        </tbody>
+  );
+}
+
+function TableContent({ fetchError, tableData, errorData, columns, numRows }) {
+  if (fetchError) {
+    return <div className="table-error-message">Error: {fetchError}</div>;
+  }
+
+  if (!tableData || !errorData) {
+    return <div className="table-loading-message">Loading…</div>;
+  }
+
+  return (
+    <table id="table">
+      <RowHeader columns={columns}/>
+      <TableBody columns={columns} tableData={tableData} numRows={numRows} errorData={errorData} />
+    </table>
   );
 }
 
 /**
- * TableView React component
+ * Collapsible table of the rows with the most errors, each cell coloured by
+ * its highest-priority error.
  * Props:
- *  - model: an object exposing getColumnErrors() and dataSource with objects() method (same expectations as original TableView)
+ *  - sortedAttributes: the column names to show, in display order
  *  - maxRows (optional): number of top rows to show (default 10)
  */
 export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
@@ -90,7 +115,6 @@ export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
         try {
 
           const response = await queryTopErrorRows(maxRows);
-          console.log("[TablePanel] Response:", response);
 
           if (!response || !response.success) {
             throw new Error(`[TablePanel] API call failed: ${response?.error || "Unknown error"}`);
@@ -121,27 +145,29 @@ export default function TablePanel({ sortedAttributes, maxRows = 10 }) {
 
       fetchData();
 
-  }, [table_name, maxRows]);  
+  }, [table_name, maxRows]);
 
 
   return (
-    <CollapsiblePanel collapsed={`Top ${maxRows} Rows with Most Errors`} direction="down" defaultOpen={true} className="panel--table">
+    <CollapsiblePanel
+      collapsed={`Top ${maxRows} Rows with Most Errors`}
+      direction="down"
+      defaultOpen={false}
+      className="panel--table"
+    >
       <div id="table-div">
         <div className="table-title">
           Top {maxRows} Rows with Most Errors
         </div>
 
         <div id="table-container">
-          {fetchError ? (
-            <div className="table-error-message">Error: {fetchError}</div>
-          ) : (!tableData || !errorData) ? (
-            <div className="table-loading-message">Loading…</div>
-          ) : (
-            <table id="table">
-              <RowHeader columns={sortedAttributes}/>
-              <TableBody columns={sortedAttributes} tableData={tableData} numRows={maxRows} errorData={errorData} />
-            </table>
-          )}
+          <TableContent
+            fetchError={fetchError}
+            tableData={tableData}
+            errorData={errorData}
+            columns={sortedAttributes}
+            numRows={maxRows}
+          />
         </div>
       </div>
     </CollapsiblePanel>

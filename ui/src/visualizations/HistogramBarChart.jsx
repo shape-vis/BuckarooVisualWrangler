@@ -1,76 +1,53 @@
 import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { queryHistogram1d, queryHistogram1dRange, queryRowsInBin, queryBinsForRows } from "../utils/serverCalls.jsx";
-import { createHybridScales, createTooltip } from "../utils/visCommon.jsx";
+import { createBinnedScales, createTooltip } from "../utils/visCommon.jsx";
 import { useSelection } from "../store/SelectionContext.jsx";
-import { useRowRange } from "../store/RowRangeContext.jsx";
 import { useTableName } from "../store/TableNameContext.jsx";
+import { HIGHLIGHT_FILL, plainColorScale, stackBars, useCachedPlotData, useLatestRef } from "./errorPlots.js";
 
 // Module-level cache so base histogram data survives component unmount/remount (e.g. focus zoom in/out).
 import { histogramCache } from "../store/visualizationCaches.jsx";
-const baseSampleCache = histogramCache;
 
 /**
  * HistogramBarChart renders a stacked histogram with optional brushing/selection.
  */
 function HistogramBarChart({
-    cellID,
     pos,
     size,
     attrX,
     errorColors,
 }) {
-    const { tableName: table_name } = useTableName();
+    const { tableName } = useTableName();
 
     const drawingRef = useRef(null);
     const clearSelectionRef = useRef(() => {});
 
-    const [histogramData, setHistogramData] = React.useState(null);
-
     // Refs to D3 elements / helpers so the highlight effect can re-color
     // without rebuilding the chart.
     const barsRef = useRef(null);
-    const colorScaleRef = useRef(k => "steelblue");
-    const numHistDataXRef = useRef([]);
+    const colorScaleRef = useRef(plainColorScale);
 
     const { highlightedRowIds, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
-    const setHighlightedRef = useRef(setHighlightedRowIds);
-    const highlightRevisionRef = useRef(highlightRevision);
-    useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
-    useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
-
-    const { useRange, minId, maxId } = useRowRange();
+    const setHighlightedRef = useLatestRef(setHighlightedRowIds);
+    const highlightRevisionRef = useLatestRef(highlightRevision);
 
     // ── data fetch ─────────────────────────────────────────────────────────
-    useEffect(() => {
-        const cacheKey = `${table_name}|${attrX}`;
-
-        async function fetchData() {
-            // Restore cached base data instead of re-fetching (survives unmount/remount from focus zoom).
-            if (!useRange && baseSampleCache.has(cacheKey)) {
-                setHistogramData(baseSampleCache.get(cacheKey));
-                return;
+    const histogramData = useCachedPlotData(
+        histogramCache,
+        `${tableName}|${attrX}`,
+        async ({ useRange, minId, maxId }) => {
+            const response = useRange
+                ? await queryHistogram1dRange(tableName, attrX, 10, minId, maxId)
+                : await queryHistogram1d(tableName, attrX, 10);
+            if (!response || !response.success) {
+                throw new Error(`API failed: ${response?.error || "Unknown error"}`);
             }
-
-            try {
-                const response = useRange
-                    ? await queryHistogram1dRange(table_name, attrX, 10, minId, maxId)
-                    : await queryHistogram1d(table_name, attrX, 10);
-                if (!response || !response.success) {
-                    throw new Error(`API failed: ${response?.error || "Unknown error"}`);
-                }
-                setHistogramData(response.histogram);
-
-                // Cache the base data so future mounts restore it without re-fetching.
-                if (!useRange) {
-                    baseSampleCache.set(cacheKey, response.histogram);
-                }
-            } catch (err) {
-                console.error("[HistogramBarChart] " + (err?.message || err));
-            }
-        }
-        fetchData();
-    }, [table_name, attrX, useRange, minId, maxId]);
+            return response.histogram;
+        },
+        [tableName, attrX],
+        "[HistogramBarChart] ",
+    );
 
     // ── draw chart ──────────────────────────────────────────────────────────
     useEffect(() => {
@@ -81,35 +58,20 @@ function HistogramBarChart({
 
         const numHistDataX = histogramData.scaleX.numeric || [];
         const catHistDataX = errorColors ? (histogramData.scaleX.categorical || []) : [];
-        numHistDataXRef.current = numHistDataX;
 
-        const numDomainY = (numHistDataX.length === 0 || !numHistDataX[0])
-            ? null : [d3.min(numHistDataX, d => d.x0), d3.max(numHistDataX, d => d.x1)];
-        const catDomainY = catHistDataX.length === 0 ? null : catHistDataX.map(d => d);
-
-        const xScale = createHybridScales(size.w, numHistDataX, catHistDataX, numDomainY, catDomainY, "horizontal");
+        const xScale = createBinnedScales(size.w, numHistDataX, catHistDataX, "horizontal");
 
         const yScale = d3.scaleLinear()
             .domain([0, d3.max(histogramData.histograms, d => d.count.items)]).nice()
             .range([size.h, 0]);
 
-        const colorScale = errorColors || (k => "steelblue");
+        const colorScale = errorColors || plainColorScale;
         colorScaleRef.current = colorScale;
 
-        // Flatten stacked data per bin. When no null columns, skip categorical bins entirely.
-        const myData = [];
-        (errorColors ? histogramData.histograms : histogramData.histograms.filter(d => d.xType !== "categorical")).forEach(d => {
-            let items = d.count.items;
-            Object.keys(d.count).filter(k => k !== "items").forEach(key => {
-                myData.push({ bin: d.xBin, type: d.xType, value: d.count[key], name: key, top: items, bottom: items - d.count[key] });
-                items -= d.count[key];
-            });
-            if (items > 0) {
-                myData.push({ bin: d.xBin, type: d.xType, value: items, name: "none", top: items, bottom: 0 });
-            }
-        });
-
-        console.log("[HistogramBarChart] Transformed histogram data for bars:", myData);
+        // When no null columns, skip categorical bins entirely.
+        let shownBins = histogramData.histograms;
+        if (!errorColors) shownBins = shownBins.filter(d => d.xType !== "categorical");
+        const segments = stackBars(shownBins);
 
         const barColor = d => colorScale(d.name);
 
@@ -117,7 +79,7 @@ function HistogramBarChart({
 
         const bars = canvas.append("g")
             .selectAll("rect")
-            .data(myData)
+            .data(segments)
             .join("rect")
             .attr("x", d => xScale.apply(d.type === "numeric" ? numHistDataX[d.bin].x0 : d.bin, d.type))
             .attr("y", d => yScale(d.top))
@@ -145,7 +107,7 @@ function HistogramBarChart({
                 }
                 const [x0, x1] = event.selection;
                 const brushedBins = new Set();
-                myData.forEach(d => {
+                segments.forEach(d => {
                     let start, end;
                     if (d.type === "numeric") {
                         const bin = numHistDataX[d.bin];
@@ -159,7 +121,7 @@ function HistogramBarChart({
                     if (end >= x0 && start <= x1) brushedBins.add(String(d.bin));
                 });
 
-                bars.attr("fill", d => brushedBins.has(String(d.bin)) ? "gold" : barColor(d));
+                bars.attr("fill", d => brushedBins.has(String(d.bin)) ? HIGHLIGHT_FILL : barColor(d));
 
                 // Async: fetch row IDs for all brushed bins and push to context.
                 if (event.type === "end" && brushedBins.size > 0) {
@@ -184,7 +146,7 @@ function HistogramBarChart({
             brushGroup.call(brush.move, null);
         };
 
-        if (xScale && typeof xScale.draw === "function") xScale.draw(canvas);
+        xScale.draw(canvas);
         canvas.append("g").call(d3.axisLeft(yScale)).selectAll("text").attr("class", "left-axis-text");
 
         createTooltip(bars,
@@ -194,7 +156,7 @@ function HistogramBarChart({
                     : d.bin;
                 return `<strong>Bin: </strong>${bin}<br><strong>Items: </strong>${d.value}<br><strong>Errors: </strong>${d.name}`;
             },
-            (d, event) => {
+            (d) => {
                 // Left click: fetch row IDs for this bin then update context.
                 const requestRevision = highlightRevisionRef.current;
                 queryRowsInBin({ type: "1d", column: attrX, bin: d.bin})
@@ -205,12 +167,11 @@ function HistogramBarChart({
                         }
                     });
             },
-            (d) => { console.log("Right click on bar", d); },
-            (d) => { console.log("Double click on bar", d); }
         );
 
         return () => { canvas.selectAll("*").remove(); };
-    }, [size, histogramData]);
+        // The panels pass size as a new object every render, so the chart is redrawn only when its numbers change
+    }, [size.w, size.h, histogramData, errorColors]);
 
     // ── react to cross-chart highlight changes ──────────────────────────────
     useEffect(() => {
@@ -229,7 +190,7 @@ function HistogramBarChart({
                 if (!isActive || !result?.success || !barsRef.current) return;
                 const highlightedBins = new Set(result.bins.map(String));
                 barsRef.current.attr("fill", d =>
-                    highlightedBins.has(String(d.bin)) ? "gold" : colorScale(d.name)
+                    highlightedBins.has(String(d.bin)) ? HIGHLIGHT_FILL : colorScale(d.name)
                 );
             });
 
@@ -244,12 +205,12 @@ function HistogramBarChart({
     }
 
     return (
-        <g key={cellID} transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
+        <g transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
             <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearSelection} />
             <g ref={drawingRef}></g>
         </g>
     );
 }
 
-// Adds memoization (shallow copy) - may need to make a custom checker.
+// Adds memoization (shallow compare) - may need to make a custom checker.
 export default React.memo(HistogramBarChart);

@@ -2,8 +2,7 @@
 import { createContext, useState, useCallback } from "react";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
-import MatrixView from "../panels/SelectionPanel.jsx";
-import RepairPanel from "../panels/RepairPanel.jsx";
+import PlotsPane from "../panels/PlotsPane.jsx";
 import { SelectionProvider } from "../store/SelectionContext.jsx";
 import { RowRangeProvider } from "../store/RowRangeContext.jsx";
 import { SettingsProvider } from "../store/SettingsContext.jsx";
@@ -14,17 +13,87 @@ import PGraph from "../visualizations/PGraph.jsx";
 import { BuckarooHeader } from "../elements/Header.jsx";
 import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
+import {AISuggestionsProvider} from "../store/AISuggestionsContext.jsx";
+import {CandidatesProvider} from "../store/CandidatesContext.jsx";
+import {PlotsWindowsProvider} from "../store/PlotsWindowsContext.jsx";
+import {CompareProvider} from "../store/CompareContext.jsx";
+import SupportNodesWindow from "../elements/SupportNodesWindow.jsx";
+import SplitDivider, {DEFAULT_SPLIT} from "../elements/SplitDivider.jsx";
 
 export const ViewContext = createContext();
 
+const MAX_OPEN_VIEWS = 2;
+// The attribute panel keeps at most this many attributes selected, dropping the oldest past it
+const MAX_SELECTED_ATTRIBUTES = 3;
 
+/* The selected attributes with columns added, oldest dropped past the cap - though never one of the columns
+   being added, which are the point. */
+function withAttributes(selected, columns) {
+    const next = [...selected, ...columns.filter((column) => !selected.includes(column))];
+    while (next.length > MAX_SELECTED_ATTRIBUTES) {
+        const drop = next.findIndex((column) => !columns.includes(column));
+        if (drop < 0) break;
+        next.splice(drop, 1);
+    }
+    return next;
+}
+
+// The open views with view added, the oldest dropped past MAX_OPEN_VIEWS
+function withView(openViews, view) {
+    return [...openViews, view].slice(-MAX_OPEN_VIEWS);
+}
+
+/* The open views with view closed - unless it is the last one open, which stays */
+function withoutView(openViews, view) {
+    const isLastOpen = openViews.length <= 1;
+    if (isLastOpen) return openViews;
+    return openViews.filter((open) => open !== view);
+}
 
 export default function Buckaroo({ onReset }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const [activeView, setActiveView] = useState("plots");
+    /* The views on screen, oldest first. Both can sit side by side, and the last open view cannot be
+       closed, so the main area is never empty. MAX_OPEN_VIEWS keeps a later third view to two. */
+    const [openViews, setOpenViews] = useState(["plots"]);
+
+    const toggleView = useCallback((view) => {
+        setOpenViews((current) => {
+            if (current.includes(view)) return withoutView(current, view);
+            return withView(current, view);
+        });
+    }, []);
+
+    /* The Plots view's share of the width it splits with the graph. Held here, above the container a wrangle
+       remounts, so a dragged divider stays where it was put. */
+    const [split, setSplit] = useState(DEFAULT_SPLIT);
+
+    // Opens a view if it is closed, and leaves it open if it is not - for a view asking to be shown
+    const openView = useCallback((view) => {
+        setOpenViews((current) => {
+            if (current.includes(view)) return current;
+            return withView(current, view);
+        });
+    }, []);
+    const revealPlots = useCallback(() => openView("plots"), [openView]);
+
+    /* A plot the Plots view is asked to zoom to: its columns, x then y, stamped so asking for the same one twice
+       still counts. The matrix applies it once its columns are among the selected attributes, then hands it back
+       here to be dropped - only that request, should a newer one have arrived meanwhile. */
+    const [plotFocus, setPlotFocus] = useState(null);
+    const dropPlotFocus = useCallback((key) => {
+        setPlotFocus((current) => (current?.key === key ? null : current));
+    }, []);
+
+    /** Shows one plot in the Plots view - where brushing and wrangling happen - selecting its columns if they
+        are not already, and zoomed to it as its magnifier would. */
+    const focusPlot = useCallback((columns) => {
+        setSelectedAttributes((selected) => withAttributes(selected, columns));
+        setPlotFocus({columns, key: Date.now()});
+        openView("plots");
+    }, [openView]);
 
     const handleWrangleExecuted = useCallback(() => {
         clearScatterPlotCache();
@@ -33,65 +102,76 @@ export default function Buckaroo({ onReset }) {
         setRefreshKey(k => k + 1);
     }, []);
 
+    // selectedAttributes too: the error-plot sub-node's gallery offers the same columns the Plots view shows
+    const viewContext = { openViews, toggleView, openView, refreshKey, setRefreshKey, selectedAttributes, focusPlot };
+
     return (
-        <>
-            <ViewContext.Provider value={{ activeView, setActiveView, refreshKey, setRefreshKey}}>
-                <SettingsProvider>
-                <PGraphProvider>
-                <RowRangeProvider>
-                <SelectionProvider>
-                <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
-                    <BuckarooHeader onReset={onReset} />
-                    <div key={refreshKey} className="matrix-and-dropdown-container">
-                        <AttributeSummaryPanel
-                            selectedAttributes={selectedAttributes}
-                            setSelectedAttributes={setSelectedAttributes}
-                            setSortedAttributes={setSortedAttributes}
-                        />
+        <ViewContext.Provider value={viewContext}>
+            <SettingsProvider>
+            {/* The Plots view's windows - the attribute plots, compare and support nodes - as tabs. Above PGraph,
+                whose support-node buttons open the support-nodes window. */}
+            <PlotsWindowsProvider revealPlots={revealPlots}>
+            <PGraphProvider>
+            {/* Inside PGraphProvider: the server stages the AI's suggestions as candidates, which arrive with
+                the graph; this owns asking for them. Accepting is CandidatesProvider's, below. */}
+            <AISuggestionsProvider>
+            <RowRangeProvider>
+            <SelectionProvider>
+            {/* Accepting or declining a candidate - a repair or an AI suggestion - lands like a wrangle */}
+            <CandidatesProvider onWrangleExecuted={handleWrangleExecuted}>
+            <RepairProvider onWrangleExecuted={handleWrangleExecuted}>
+            {/* Outside the keyed container below, so an open comparison survives a wrangle. It docks
+                into the Plots view, and opens that view to do so. */}
+            <CompareProvider>
+                <BuckarooHeader onReset={onReset} />
+                {/* Outside the keyed container too, for the same reason */}
+                <SupportNodesWindow />
+                <div key={refreshKey} className="matrix-and-dropdown-container">
+                    <AttributeSummaryPanel
+                        selectedAttributes={selectedAttributes}
+                        setSelectedAttributes={setSelectedAttributes}
+                        setSortedAttributes={setSortedAttributes}
+                    />
 
-                        <div className="main-view">
-                            <div className="svg-and-toolbox">
+                    <div className="main-view">
+                        <div
+                            className="svg-and-toolbox"
+                            // Only while both share the row: a lone view's grow under 1 would leave it short of filling it
+                            style={openViews.length > 1 ? {"--plots-grow": split, "--graph-grow": 1 - split} : undefined}
+                        >
 
-                                {/*Plot view*/}
-                                {activeView === "plots" && (
-                                    <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                            />
-                                        <RepairPanel />
-                                    </>
-                                )}
-
-                                {/*Plots and Graph view*/}
-                                {activeView === "both" && (
-                                    <>
-                                        <MatrixView
-                                            selectedAttributes={selectedAttributes}
-                                        />
-                                        <PGraph />
-                                        <RepairPanel />
-                                    </>
-                                )}
-
-                                {/*Graph View*/}
-                                {activeView === "graph" &&
-                                    <PGraph />}
-                            </div>
-                            <div className={`table-panel-wrapper ${activeView === "both" || activeView === "plots" ? "table-panel-wrapper--visible" : ""}`}>
-                                <TablePanel
-                                    sortedAttributes={sortedAttributes}
+                            {/* Whichever views are open, always in this order, so the pair
+                                does not swap sides depending on which was opened first */}
+                            {openViews.includes("plots") && (
+                                <PlotsPane
+                                    selectedAttributes={selectedAttributes}
+                                    plotFocus={plotFocus}
+                                    onPlotFocused={dropPlotFocus}
                                 />
-                            </div>
-                        </div>
+                            )}
 
-                        <div id="tooltip" className="tooltip"></div>
+                            {openViews.length > 1 && <SplitDivider split={split} onSplit={setSplit} />}
+
+                            {openViews.includes("graph") && <PGraph />}
+                        </div>
+                        <div className={`table-panel-wrapper ${openViews.includes("plots") ? "table-panel-wrapper--visible" : ""}`}>
+                            <TablePanel
+                                sortedAttributes={sortedAttributes}
+                            />
+                        </div>
                     </div>
-                </RepairProvider>
-                </SelectionProvider>
-                </RowRangeProvider>
-                </PGraphProvider>
-                </SettingsProvider>
-            </ViewContext.Provider>
-        </>
+
+                    <div id="tooltip" className="tooltip"></div>
+                </div>
+            </CompareProvider>
+            </RepairProvider>
+            </CandidatesProvider>
+            </SelectionProvider>
+            </RowRangeProvider>
+            </AISuggestionsProvider>
+            </PGraphProvider>
+            </PlotsWindowsProvider>
+            </SettingsProvider>
+        </ViewContext.Provider>
     );
 }

@@ -1,30 +1,34 @@
-#Buckaroo Project - June 1, 2025
-#This file handles all endpoints from the front-end
+#Buckaroo Project - June 1, 2025 - Nicolas Baret
 
+
+import os
+import traceback
 
 import pandas as pd
 from flask import request, send_file
-import time
+
+import app as app_package
 from app import app
 from app import db_operations, engine
-from app.db_utils.data_profile import DataProfile 
+from app.db_utils.execute_sql import copy_insert, errors_table_name
 from app.server_utils.service_helpers import (
+    WRANGLE_LOCK,
+    build_node,
     generate_table_name,
-    create_error_df,
     get_sqlalchemy_dtype_map,
-    calculate_attribute_rankings, get_pgraph_redo, get_pgraph_undo, init_pgraph_for_session, create_data_profile_df,
+    get_pgraph_redo,
+    get_pgraph_undo,
+    init_pgraph_for_session,
 )
 from app.server_utils.set_id_column import set_id_column
+from app.pgraph.pgraph import node_id_for_count
 
 
 def load_file(csv_file, filename):
     """
-    This loads the csv from the local path of the repo that the user clicked;
-    set's IDs to each row,
-    puts the whole csv into a Pandas Dataframe,
-    runs the python detectors the dataframe,
-    generates a unique name for the table,
-    and returns a JSON object of all the info.
+    Load an uploaded or provided csv as the session's root: read it into a pandas DataFrame, give each row an
+    "ID", write it to the database under a unique table name, build the root's errors, data profile, metrics and
+    drift there - the same build every node gets - and start the session's graph from it.
 
     :param csv_file: the local csv to use
     :param filename: the name of the csv_file
@@ -32,59 +36,34 @@ def load_file(csv_file, filename):
     """
     dataframe = pd.read_csv(csv_file)
 
-    # run the detectors on the uploaded file for the starting data state
     table_with_id_added = set_id_column(dataframe)
-    start_time = time.time()
-    detected_data = create_error_df(dataframe)
-    time_to_detect = time.time() - start_time
-    app.original_table_name = filename
     table_name = generate_table_name(filename)
-    table_name_with_node_id = f"n0_{table_name}"
+    table_name_with_node_id = f"{node_id_for_count(0)}_{table_name}"
     # Build dtype map from actual column values before pushing to DB
     dtype_map = get_sqlalchemy_dtype_map(table_with_id_added)
-    error_table_name = f"errors_{table_name_with_node_id}"
-    dp_table_name = f"dp_{table_name_with_node_id}"
+    error_table_name = errors_table_name(table_name_with_node_id)
 
     try:
-        """
-        pulled from the Pandas Docs for reference because these values returned by .to_sql is not the actual numbers:
+        # The rows go in through COPY, one stream, rather than one INSERT per row. "ID" names each row, so pandas'
+        # own index is left out rather than stored as a column of its own
+        table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map,
+                                   method=copy_insert, index=False)
 
-        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
+        # The root is detected, profiled, ranked and measured from the stored table, exactly as every node is
+        root_metrics, root_distortion = build_node(table_name_with_node_id, table_name_with_node_id)
 
-        The number of returned rows affected is the sum of the rowcount attribute of sqlite3.Cursor or SQLAlchemy
-        connectable which may not reflect the exact number of written rows as stipulated in the sqlite3 or SQLAlchemy.
-        """
-        table_with_id_added.to_sql(table_name_with_node_id, engine, if_exists='replace', dtype=dtype_map)
-        # No index: these rows are keyed by column_id / column_name, so the pandas row counter is
-        # just noise that changes whenever a subset of rows is rebuilt
-        detected_data.to_sql(error_table_name, engine, if_exists='replace', index=False)
-        data_profile = DataProfile(table_name_with_node_id, engine)
+        init_pgraph_for_session(table_name_with_node_id, root_metrics, root_distortion)
 
-        data_profile_df = create_data_profile_df(data_profile)
-        dtype_map = data_profile.dtype_dict
-
-        data_profile_df.to_sql(dp_table_name, engine, if_exists='replace', dtype=dtype_map, index=False)
-
-        """
-        now we fully init the DBOperations object that was first initialized in init.py,
-        get the actual row counts since .to_sql is buggy and not right
-        """
-        db_operations.load_table(table_name_with_node_id, error_table_name, dp_table_name)
+        # Point DBOperations, made empty at startup in app/__init__.py, at the new root. The row counts are read back
+        # from the tables, since the number .to_sql returns isn't guaranteed to be the rows it wrote
+        db_operations.load_table(table_name_with_node_id)
         rows_affected = db_operations.get_row_count(table_name_with_node_id)
         detected_rows_affected = db_operations.get_row_count(error_table_name)
-
-        #calculate the attribute rankings for the top 10 error rows table on the Buckaroo.tsx page
-        rankings = calculate_attribute_rankings(detected_data)
-        rankings.to_sql("rankings_" + table_name_with_node_id, engine, if_exists='replace', index=False)
-
-        #init the pgraph
-        init_pgraph_for_session(table_name_with_node_id)
 
         return {"success": True, "rows for undetected data": rows_affected, "rows_for_detected": detected_rows_affected,
                 "table_name": table_name_with_node_id}
     except Exception as e:
         print(f"Error in upload: {e}")
-        import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
 
@@ -95,7 +74,6 @@ def upload_csv():
     Handles when a user uploads a csv to the app, creates a new table with it in the database
     :return: whether it was completed successfully
     """
-    #get the file path from the DataFrame object sent by the user's upload in the view
     csv_file = request.files['file']
     return load_file(csv_file, csv_file.filename)
 
@@ -106,9 +84,8 @@ def preloaded_csv():
     Handles when a user wants to use a preloaded csv to the app, creates a new table with it in the database
     :return: whether it was completed successfully
     """
-    #get the file name from request args
-    csv_file = request.args.get("file")
-    csv_file = csv_file[csv_file.rfind("/") + 1:]
+    # Only the file's own name, so a request can't reach outside provided_datasets/
+    csv_file = os.path.basename(request.args.get("file"))
 
     return load_file("provided_datasets/" + csv_file, csv_file)
 
@@ -124,50 +101,71 @@ def get_tablename():
         return {"success": False, "error": "No table loaded"}, 400
     return {"success": True, "table_name": name}
 
+def _move_to(table, missing_error):
+    """
+    Make a node the session's current table, once it is sure the table is still there.
+    :param table: the node to move to
+    :param missing_error: what to say when its table is gone
+    :return: the response
+    """
+    if not db_operations.table_exists(table):
+        return {"success": False, "error": missing_error}, 404
+
+    db_operations.load_table(table)
+    return {"success": True, "table_name": table}
+
+
 @app.post("/api/undo")
 def undo_wrangle():
     """
     Navigate to the previous version of the table
     """
-    prev = get_pgraph_undo()
+    # Under the lock, so a candidate can't be declined - and its tables dropped - while the graph moves
+    with WRANGLE_LOCK:
+        prev = get_pgraph_undo()
 
-    if prev is None:
-        return {"success": False, "error": "Already at the root table, cannot undo further"}, 400
+        if prev is None:
+            return {"success": False, "error": "Already at the root table, cannot undo further"}, 400
 
-    if not db_operations.table_exists(prev):
-        return {"success": False, "error": f"Table '{prev}' does not exist"}, 404
-
-    db_operations.load_table(prev, f"errors_{prev}", f"dp_{prev}")
-
-    return {"success": True, "table_name": prev}
+        return _move_to(prev, f"Table '{prev}' does not exist")
 
 
 @app.post("/api/redo")
 def redo_wrangle():
     """
-    Navigate to the next version of the table (increment node ID).
-    e.g. n1_data_xyz -> n2_data_xyz
+    Navigate to the next version of the table: the node undo last stepped up from, or the current node's most recent
+    child.
     """
-    next_node = get_pgraph_redo()
+    # Under the lock, as for undo
+    with WRANGLE_LOCK:
+        next_node = get_pgraph_redo()
 
-    if next_node is None:
-        return {"success": False, "error": "There is no further redo to execute"}, 404
+        if next_node is None:
+            return {"success": False, "error": "There is no further redo to execute"}, 404
 
-    if not db_operations.table_exists(next_node):
-        return {"success": False, "error": "Table does not exist"}, 404
+        if next_node == db_operations.main_table_name:
+            return {"success": False, "error": "You have reached the most up to date table"}
 
-    if next_node == db_operations.main_table_name:
-        return {"success": False, "error": "You have reached the most up to date table"}
-
-    db_operations.load_table(next_node, f"errors_{next_node}", f"dp_{next_node}")
-    return {"success": True, "table_name": next_node}
+        return _move_to(next_node, "Table does not exist")
 
 
 @app.post("/api/reset")
 def reset_app():
     """
-    Resets the server-side DBOperations state when the user navigates back to the home page.
+    Resets the server-side session when the user navigates back to the home page.
     """
+    # Candidates are only ever staged; leaving the session drops them rather than their tables lingering
+    from app.server_utils import candidates
+    try:
+        candidates.discard_all()
+    except Exception as exc:  # never let cleanup stand in the way of leaving
+        print(f"[reset] could not drop staged candidates: {exc}")
+
+    # The graph goes too. A candidate build still running sees it has gone when it comes to register, and drops
+    # its own tables instead of adding them to a graph nobody holds anymore
+    with WRANGLE_LOCK:
+        app_package.pgraph_for_session = None
+
     db_operations.reset()
     return {"success": True}
 

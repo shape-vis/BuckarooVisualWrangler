@@ -1,0 +1,299 @@
+/* A sub-node plot card - an error plot or a drift plot: its title or column pickers, the plot, and its buttons -
+   in the support-nodes window's gallery and in the sub-node */
+.support-plot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.support-plot-head {
+  min-height: 18px;
+}
+
+.support-plot-title {
+  display: block;
+  font-weight: 700;
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-plot-pickers {
+  display: flex;
+  gap: 6px;
+}
+
+.support-plot-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.support-plot-picker select {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+/* The plot keeps its shape and fills whatever room is left, so a resized sub-node scales it */
+.support-plot-chart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.support-plot-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.support-plot-status {
+  font-size: 11px;
+  color: #888;
+}
+
+.support-plot-status--error {
+  color: var(--more);
+}
+
+.support-plot-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.support-plot-action {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.support-plot-action:hover {
+  background: var(--surface-muted);
+}
+
+.support-plot-action--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.support-plot-action--primary:hover {
+  background: #166fe0;
+}
+
+/* A drift plot: the compare window's plot box, filling the card and tightened to fit it */
+.support-drift-plot.compare-plot {
+  flex: 1;
+  align-self: stretch;
+  min-height: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+/* A sub-node showing its plot in miniature: the miniature as large as the room allows, its column's name over the
+   top-left corner */
+.support-plot-picture {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.support-plot-picture .support-glyph {
+  width: 100%;
+  height: 100%;
+  max-width: 160px;
+  max-height: 160px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.support-plot-miniature {
+  width: 100%;
+  height: 100%;
+}
+
+/* Fainter while the next column's drift loads over the last */
+.support-plot-miniature--loading {
+  opacity: 0.45;
+}
+
+.support-plot-picture-label {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  max-width: calc(100% - 8px);
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.support-plot-picture-status {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+/* ── The gallery in the support-nodes window ───────────────────────────────── */
+
+.support-plot-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.support-plot-gallery-item {
+  height: 270px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+/* A gallery a card a page - drift plots, which carry the compare window's zoom strip, hover note and legend: the
+   pager, then the current card filling the rest of the window */
+.support-plot-pages {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.support-plot-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.support-plot-pager-pages {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.support-plot-pager-step,
+.support-plot-pager-page {
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.support-plot-pager-page {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.support-plot-pager-step:hover:not(:disabled),
+.support-plot-pager-page:hover {
+  background: var(--surface-muted);
+}
+
+.support-plot-pager-step:disabled {
+  cursor: default;
+  color: #8a8d91;
+}
+
+.support-plot-pager-page--current {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.support-plot-pager-page--current:hover {
+  background: var(--accent-tint);
+}
+
+.support-plot-pager-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.support-plot-page {
+  flex: 1;
+  min-height: 0;
+}
+
+.support-plot-page .support-plot-gallery-item {
+  height: 100%;
+}
+
+/* .support-plot-gallery-item is a block, but the page's hidden cards need saying outright */
+.support-plot-gallery-item[hidden] {
+  display: none;
+}
+
+.support-plot-gallery-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* ── In the graph ───────────────────────────────────────────────────────── */
+
+.support-plot-body {
+  flex: 1;
+  min-height: 0;
+  padding: 2px;
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+.support-plot-body .support-plot-action {
+  padding: 1px 8px;
+  font-size: 10px;
+}

@@ -1,0 +1,34 @@
+/* The compare sub-node: a summary line, and beneath it its comparison - a picture while the sub-node is small
+   (SupportPlot.css's .support-plot-picture), the whole plot once it is large enough (see CompareSupport.jsx) */
+
+.compare-support-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compare-support-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.compare-support-summary-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--support-ink);
+}
+
+/* The compare panel's plot box, filling the sub-node */
+.compare-support-plot.compare-plot {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+}

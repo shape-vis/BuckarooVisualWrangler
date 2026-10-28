@@ -1,10 +1,12 @@
-import pandas as pd
 """
 Set the ID column in a DataFrame, ensuring it is numeric and unique.
 If an ID column already exists but is not numeric or unique, it will be renamed and a new ID column will be added.
 If no ID column exists, a new numeric ID column will be created starting from 1.
 If the ID column is already numeric and unique, it will be moved to the front of the DataFrame.
 """
+
+import pandas as pd
+
 
 def set_id_column(table: pd.DataFrame) -> pd.DataFrame:
     col_names = table.columns.tolist()
@@ -29,7 +31,10 @@ def set_id_column(table: pd.DataFrame) -> pd.DataFrame:
 
     # ID is good, move to front if not already
     if col_names[0] != "ID":
-        cols = ["ID"] + [c for c in col_names if c != "ID"]
-        return table[cols]
+        reordered = ["ID"]
+        for col_name in col_names:
+            if col_name != "ID":
+                reordered.append(col_name)
+        return table[reordered]
 
     return table

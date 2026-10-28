@@ -12,7 +12,7 @@
     flex: 1;
     min-width: 0;
     height: calc(100vh - 56px);
-    background-color: #f0f2f5;
+    background-color: var(--surface-muted);
 }
 
 .svg-and-toolbox {
@@ -29,6 +29,7 @@
     box-sizing: border-box;
 }
 
+
 .table-panel-wrapper {
     display: none;
 }
@@ -40,12 +41,12 @@
 .tooltip {
     position: absolute;
     background-color: #ffffff;
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     padding: 6px 10px;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     font-size: 12px;
-    color: #1c1e21;
+    color: var(--ink);
     pointer-events: none;
     display: none;
     z-index: 9999;

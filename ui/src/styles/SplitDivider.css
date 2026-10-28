@@ -1,0 +1,22 @@
+/* The handle between the two main views: a thin rule that turns accent blue under the pointer. Above the graph,
+   which sits above the plot matrix's overflow. */
+.split-divider {
+    flex: 0 0 6px;
+    position: relative;
+    z-index: 2;
+    cursor: col-resize;
+    touch-action: none;
+    background: var(--border);
+    background-clip: content-box;
+    padding: 0 2px;
+    box-sizing: border-box;
+    transition: background-color 0.15s ease, padding 0.15s ease;
+}
+
+.split-divider:hover,
+.split-divider:active,
+.split-divider:focus-visible {
+    background-color: var(--accent);
+    padding: 0 1px;
+    outline: none;
+}
