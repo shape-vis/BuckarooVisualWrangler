@@ -1,7 +1,8 @@
 
 .upload-box {
-  width: 400px;
-  height: 180px;
+  width: min(100%, 400px);
+  box-sizing: border-box;
+  min-height: 160px;
   border: 2px dashed #dddfe2;
   border-radius: 12px;
   display: flex;
@@ -31,6 +32,21 @@
 .upload-box.dragover {
   border-color: #1877F2;
   background-color: #edf3fe;
+}
+
+.upload-box:focus-visible {
+  outline: 3px solid #123f8e;
+  outline-offset: 3px;
+}
+
+.upload-box--disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.upload-box--disabled:hover {
+  border-color: #dddfe2;
+  background-color: #f0f2f5;
 }
 
 .upload-box p {

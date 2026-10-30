@@ -74,6 +74,13 @@
   border: 1.5px solid #e0e0e0;
   transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   text-align: center;
+  font-family: inherit;
+}
+
+.navButton:focus-visible,
+.iconButton:focus-visible {
+  outline: 3px solid #123f8e;
+  outline-offset: 2px;
 }
 
 /* first tab: round left corners */

@@ -1,6 +1,6 @@
 import {NavButton, IconButton} from "./Buttons.jsx";
 import {useContext, useEffect, useState} from "react";
-import { ViewContext } from "../pages/Buckaroo.jsx";
+import { ViewContext } from "../store/ViewContext.jsx";
 import SettingsModal from "./SettingsModal.jsx";
 import SemanticGroupsModal from "../panels/SemanticGroupsModal.jsx";
 import { exportPandasScript, resetApp } from "../utils/serverCalls.jsx";
@@ -105,13 +105,23 @@ export function BuckarooHeader( { onReset, onShowAiGuide } ) {
             </div>
             <div className="headerActions">
                 <button
+                    className="header-action-btn header-action-btn--export"
+                    data-tutorial-target="export"
+                    onClick={handleExportPandas}
+                    disabled={busy}
+                    title="Export Pandas Script"
+                >
+                    <span className="btn-icon">py</span>
+                    <span className="header-action-label">Export</span>
+                </button>
+                <button
                     className="header-action-btn header-action-btn--semantic"
                     onClick={() => setSemanticGroupsOpen(true)}
                     disabled={busy}
                     title="Open Semantic Groups"
                 >
                     <span className="btn-icon">S</span>
-                    Semantic
+                    <span className="header-action-label">Semantic</span>
                 </button>
                 <button
                     className="header-action-btn"
@@ -121,7 +131,7 @@ export function BuckarooHeader( { onReset, onShowAiGuide } ) {
                     title="Repair Selection"
                 >
                     <img src="/images/icons/repair.svg" alt="" className="btn-svg-icon" />
-                    Repair
+                    <span className="header-action-label">Repair</span>
                 </button>
                 <button
                     className="header-action-btn"
@@ -130,7 +140,7 @@ export function BuckarooHeader( { onReset, onShowAiGuide } ) {
                     title="Undo"
                 >
                     <span className="btn-icon">&#8617;</span>
-                    Undo
+                    <span className="header-action-label">Undo</span>
                 </button>
                 <button
                     className="header-action-btn"
@@ -139,17 +149,7 @@ export function BuckarooHeader( { onReset, onShowAiGuide } ) {
                     title="Redo"
                 >
                     <span className="btn-icon">&#8618;</span>
-                    Redo
-                </button>
-                <button
-                    className="header-action-btn"
-                    data-tutorial-target="export"
-                    onClick={handleExportPandas}
-                    disabled={busy}
-                    title="Export Pandas Script"
-                >
-                    <span className="btn-icon">py</span>
-                    Export
+                    <span className="header-action-label">Redo</span>
                 </button>
                 <IconButton onClick={onShowAiGuide} title="AI Guide" className="ai-guide-header-button">AI</IconButton>
                 <IconButton onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</IconButton>

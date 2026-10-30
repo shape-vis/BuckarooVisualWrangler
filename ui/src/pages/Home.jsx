@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import Header from "../elements/Header.jsx";
 import SpinnerModal from "../elements/SpinnerModal.jsx";
@@ -27,8 +27,8 @@ export default function Home( { onSuccess } ) {
 
   // NOTE: ensure these files live under `public/static/data/...` so they are available at these paths
   async function loadDataset(path) {
-    console.log("Loading dataset:", path);
-
+    if (uploading) return;
+    setUploadError(null);
     setUploading(true);
 
     try {
@@ -41,6 +41,9 @@ export default function Home( { onSuccess } ) {
       }
 
       const data = await response.json();
+      if (data?.success === false) {
+        throw new Error(data.error || "Could not load this dataset.");
+      }
 
       handleUploadSuccess(data);
 
@@ -54,9 +57,11 @@ export default function Home( { onSuccess } ) {
 
 
   async function fileUpload(uploadedFile) {
+    if (uploading || !uploadedFile) return;
     const fileToSend = new FormData();
     fileToSend.append("file", uploadedFile);
 
+    setUploadError(null);
     setUploading(true);
 
     try {
@@ -70,6 +75,9 @@ export default function Home( { onSuccess } ) {
       }
 
       const data = await response.json();
+      if (data?.success === false) {
+        throw new Error(data.error || "Could not upload this CSV.");
+      }
 
       handleUploadSuccess(data);
 
@@ -90,53 +98,58 @@ export default function Home( { onSuccess } ) {
       <Header />
       <div className="ui-nav-box">
         <div id="placeholder-message">
-          <div>Welcome to Buckaroo!</div>
+          <img
+            src="/images/favicon/web-app-manifest-512x512.png"
+            alt="Buckaroo mascot riding a horse with a lasso"
+            className="mascot-image"
+          />
+          <h2>Welcome to Buckaroo!</h2>
           <div className="placeholder-subtitle">
-            <p>Start by uploading your own or selecting a sample dataset:</p>
+            <p>Upload a CSV or explore a sample dataset.</p>
 
-            <UploadBox fileUpload={fileUpload} />
+            <UploadBox fileUpload={fileUpload} disabled={uploading} />
 
             {uploadError && (
-              <div className="error-box">
+              <div className="error-box" role="alert">
                 {uploadError}
               </div>
             )}
 
-            <p className="sample-datasets-heading">Sample Datasets</p>
+            <h3 className="sample-datasets-heading">Sample datasets</h3>
 
             <div className="dataset-button-row">
-              <div
+              <button
+                type="button"
                 className="dataset-button"
-                onClick={() => loadDataset("stackoverflow_db_uncleaned_original.csv")}
-                role="button"
-                tabIndex={0}
+                onClick={() => loadDataset("stackoverflow_db_uncleaned.csv")}
+                disabled={uploading}
               >
                 StackOverflow
                 <br />
                 Survey
-              </div>
+              </button>
 
-              <div
+              <button
+                type="button"
                 className="dataset-button"
                 onClick={() =>
-                  loadDataset("Crimes_-_One_year_prior_to_present_20250421.csv")
+                  loadDataset("crimes.csv")
                 }
-                role="button"
-                tabIndex={0}
+                disabled={uploading}
               >
                 Chicago
                 <br />
                 Crime
-              </div>
+              </button>
 
-              <div
+              <button
+                type="button"
                 className="dataset-button"
                 onClick={() => loadDataset("complaints-2025-04-21_17_31.csv")}
-                role="button"
-                tabIndex={0}
+                disabled={uploading}
               >
                 Student Loan Complaints
-              </div>
+              </button>
             </div>
           </div>
         </div>

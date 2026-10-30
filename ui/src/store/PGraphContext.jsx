@@ -1,4 +1,4 @@
-import {createContext, useCallback, useContext} from "react";
+import {useCallback, useContext} from "react";
 import {
     addEdge,
     ConnectionLineType,
@@ -10,14 +10,12 @@ import dagre from '@dagrejs/dagre';
 import {useTableName} from "./TableNameContext"
 import {SelectionContext} from "./SelectionContext.jsx";
 import { clearScatterPlotCache, clearHeatMapCache, clearHistogramCache } from "../store/visualizationCaches.jsx";
-import {ViewContext} from "../pages/Buckaroo.jsx";
+import {ViewContext} from "./ViewContext.jsx";
+import {PGraphContext} from "./PGraphStore.jsx";
 import {setGraphToClickedNode} from "../utils/serverCalls.jsx";
 import "../styles/Nodes.css"
 
 
-export const PGraphContext = createContext(null);
-
-const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 172;
 const nodeHeight = 36;
 
@@ -129,8 +127,4 @@ export function PGraphProvider({children}) {
             {children}
         </PGraphContext.Provider>
     );
-}
-
-export function usePgraph() {
-    return useContext(PGraphContext);
 }
