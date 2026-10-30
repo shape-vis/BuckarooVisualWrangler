@@ -1025,7 +1025,8 @@ app. Every number a test reads off the screen is checked against two things: the
 - `e2e_anomalies`: known outliers.
 
 `.venv/bin/python -m tests.stress.make_e2e_expected` writes the CSVs and their expected values, using the stress
-tests' answer key. Rerun it whenever a rule in `reference.py` changes.
+tests' answer key. Playwright runs it before every e2e run (`ui/e2e/global-setup.js`), so the expected values always
+follow `reference.py`. The expected JSON is not kept in git (`ui/e2e/data/expected/` is ignored); the CSVs are.
 
 **Rules for changing the app.**
 - The plots' marks carry `data-*` attributes that the tests read (`data-bin`, `data-count`, `data-x-bin`,

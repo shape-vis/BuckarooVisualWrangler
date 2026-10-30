@@ -1,3 +1,6 @@
 # Playwright output
 .results/
 .report/
+
+# Written by global-setup.js before every run, from the stress tests' answer key
+data/expected/

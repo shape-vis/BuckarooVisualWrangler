@@ -9,6 +9,7 @@ import path from "node:path";
  *
  * The expected values in data/expected/*.json come from the backend stress tests' answer key - see
  * tests/stress/make_e2e_expected.py - so a number the UI shows is checked against the same truth the backend is.
+ * global-setup.js writes them before every run; they are not kept in git.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

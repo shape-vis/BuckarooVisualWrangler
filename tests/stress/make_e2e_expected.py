@@ -3,6 +3,9 @@ Writes the end-to-end suite's mock datasets and what the app should show for the
 
     .venv/bin/python -m tests.stress.make_e2e_expected
 
+Playwright's global setup (ui/e2e/global-setup.js) runs it before every e2e run, so the expected values always
+follow reference.py. They are not kept in git - ui/e2e/data/expected/ is ignored - only the CSVs are.
+
 Each dataset goes to ui/e2e/data/<name>.csv, and its expected values to ui/e2e/data/expected/<name>.json: every
 column's error counts and histogram, and for each wrangle the UI tests perform, the wrangled table's histograms,
 fill value, drift from root and comparison with its sibling. The values come from the stress tests' answer key

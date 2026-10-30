@@ -2,10 +2,11 @@ import { defineConfig } from "@playwright/test";
 
 /* The end-to-end suite: the real app in the system's Chrome, against an isolated stack - a backend on 5002 and a
    Vite server on 5183 - that Playwright starts and stops itself. The backend keeps one active graph, so the tests
-   run one at a time. */
+   run one at a time. Before any test, global-setup.js writes the expected values the specs check against. */
 export default defineConfig({
     testDir: "./e2e",
     outputDir: "./e2e/.results",
+    globalSetup: "./e2e/global-setup.js",
     workers: 1,
     fullyParallel: false,
     timeout: 90_000,
