@@ -192,13 +192,9 @@ test("brushing across bins selects every row in them", async ({ page, upload }) 
     expect([...rowIds].sort((a, b) => a - b)).toEqual([1, 2, 3]);
 });
 
-test("no bar is drawn below its plot's floor", async ({ page, upload }) => {
-    test.info().annotations.push({
-        type: "BUG",
-        description: "stackBars subtracts each error type's count from the bin's rows, so a row flagged two ways (Rating's "
-            + "\"undefined\" is missing and incomplete) stacks past zero and its bar is drawn below the x axis",
-    });
-    test.fail();
+test("a bin whose rows are flagged two ways shows both colours, and no bar is drawn below its plot's floor", async ({ page, upload }) => {
+    // Fixed October 30, 2026: a row flagged two ways (Rating's "undefined" is missing and incomplete) used to stack
+    // its bar past zero; the error types now share the bar instead
     await upload("e2e_tiny");
     await plotOnly(page, ["Rating"]);
     const plot = histogram(page, "Rating");
@@ -213,6 +209,11 @@ test("no bar is drawn below its plot's floor", async ({ page, upload }) => {
     });
     for (const bottom of bottoms) {
         expect(bottom).toBeLessThanOrEqual(floor + 0.5);
+    }
+
+    for (const errorType of ["missing", "incomplete"]) {
+        const segment = plot.locator(`rect[data-bin="undefined"][data-segment="${errorType}"]`);
+        expect(Number(await segment.getAttribute("height")), errorType).toBeGreaterThan(0);
     }
 });
 

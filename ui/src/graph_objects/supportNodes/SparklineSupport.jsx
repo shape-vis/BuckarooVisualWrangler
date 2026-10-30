@@ -132,8 +132,9 @@ export function SparklineBody({record}) {
 }
 
 /* One blank sparkline card in the window: its dimension, a faint stand-in for its line, and Add. Adding starts
-   picking its source straight away, which opens the graph. */
-function SparklineCard({dimension, onAdd}) {
+   picking its source straight away, which opens the graph. While the node has one of this dimension still waiting
+   for its source, a second is refused. */
+function SparklineCard({dimension, onAdd, already}) {
     const hostWindow = useHostWindow();
     const [added, setAdded] = useState(false);
 
@@ -149,6 +150,13 @@ function SparklineCard({dimension, onAdd}) {
         setAdded(true);
     };
 
+    let label = "Add To Node";
+    if (added) {
+        label = "Added ✓ - now pick its edge";
+    } else if (already) {
+        label = "One is waiting for its edge";
+    }
+
     return (
         <div className="sparkline-card">
             <QualitySparklineHeader dimension={dimension} values={[]} />
@@ -156,8 +164,13 @@ function SparklineCard({dimension, onAdd}) {
                 <SparklineGlyph record={{config: {dimension}}} />
             </div>
             <div className="support-plot-actions">
-                <button type="button" className="support-plot-action support-plot-action--primary" onClick={add}>
-                    {added ? "Added ✓ - now pick its edge" : "Add To Node"}
+                <button
+                    type="button"
+                    className="support-plot-action support-plot-action--primary"
+                    onClick={add}
+                    disabled={already}
+                >
+                    {label}
                 </button>
             </div>
         </div>
@@ -168,7 +181,7 @@ function SparklineCard({dimension, onAdd}) {
  * The window's picker for this kind: a blank card for each dimension. onAdd(config) adds one and hands back its
  * id, so its source can be picked straight away.
  */
-export function SparklineGallery({hostId, onAdd}) {
+export function SparklineGallery({hostId, onAdd, isAdded}) {
     const {startSparklinePick} = usePgraph();
 
     const addOne = (dimension) => {
@@ -179,7 +192,12 @@ export function SparklineGallery({hostId, onAdd}) {
     return (
         <div className="support-plot-gallery sparkline-gallery">
             {SPARKLINE_DIMENSIONS.map((dimension) => (
-                <SparklineCard key={dimension} dimension={dimension} onAdd={addOne} />
+                <SparklineCard
+                    key={dimension}
+                    dimension={dimension}
+                    onAdd={addOne}
+                    already={Boolean(isAdded?.(blankSparklineConfig(dimension)))}
+                />
             ))}
         </div>
     );

@@ -50,7 +50,7 @@ function galleryCards(attributes) {
  * The support-nodes window's picker for this kind: the selected attributes' histograms, then their pairs'
  * heatmaps, for the host's data. Attributes the host does not have are left out.
  */
-export function ErrorPlotGallery({hostId, onAdd}) {
+export function ErrorPlotGallery({hostId, onAdd, isAdded}) {
     const {selectedAttributes = []} = useContext(ViewContext) ?? {};
     const {serverNodesById} = usePgraph();
 
@@ -62,6 +62,7 @@ export function ErrorPlotGallery({hostId, onAdd}) {
         <SupportPlotGallery
             cards={cards}
             onAdd={(card, columns) => onAdd({plot: card.plot, columns})}
+            isAdded={(card, columns) => isAdded?.({plot: card.plot, columns})}
             emptyHint="Select attributes in the attribute panel to see their plots for this node here."
             renderCard={({card, columns, setColumns, enabled, addButton}) => (
                 <ErrorPlotCard

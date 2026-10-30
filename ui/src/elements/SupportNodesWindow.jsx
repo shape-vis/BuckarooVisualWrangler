@@ -12,7 +12,9 @@ import {usePgraph} from "../store/PGraphContext.jsx";
 import {HostWindowContext} from "../store/HostWindowContext.jsx";
 import {useDockableWindow} from "../store/plotsWindows.js";
 import {SUPPORT_WINDOW_ID} from "../store/supportNodes.js";
-import {SUPPORT_NODE_TYPE_LIST, anchorOf, getSupportType, recordSizeOf} from "../graph_objects/supportNodes/registry.js";
+import {
+    SUPPORT_NODE_TYPE_LIST, anchorOf, findSameSupport, getSupportType, recordSizeOf,
+} from "../graph_objects/supportNodes/registry.js";
 import {nodeName} from "../utils/comparison.js";
 import "../styles/SupportNodesWindow.css";
 
@@ -114,19 +116,6 @@ function SupportNodesForm({hostId}) {
     const host = serverNodesById[hostId];
     const attached = supportNodes.filter((record) => record.hostId === hostId);
 
-    // Why each kind cannot be added here, if it cannot - the root has no incoming edge, for one
-    const reasons = {};
-    for (const option of ADDABLE_KINDS) {
-        const reason = option.unavailable?.({host, records: attached}) ?? null;
-        reasons[option.id] = reason;
-    }
-
-    // Opens on the first kind that can be added, so the form is not greeted by a refusal
-    const [kind, setKind] = useState(() => {
-        const firstAvailable = ADDABLE_KINDS.find((option) => !reasons[option.id]);
-        const opening = firstAvailable ?? ADDABLE_KINDS[0];
-        return opening?.id ?? null;
-    });
     // A kind's starting settings, which can depend on the host and on what is selected in the graph
     const configFor = (next) => {
         const defaults = getSupportType(next)?.defaultConfig;
@@ -136,13 +125,42 @@ function SupportNodesForm({hostId}) {
         }
         return config ?? {};
     };
+    // Why one of a kind with these settings would be a second copy of one the node has, if it would
+    const duplicateReason = (option, optionConfig) => {
+        if (!findSameSupport(attached, hostId, option.id, optionConfig)) return null;
+        return `${nodeName(hostId)} already has this ${option.label.toLowerCase()}.`;
+    };
+
+    // Why each kind cannot be added here, if it cannot - the root has no incoming edge, for one. A kind picked from
+    // a gallery is checked card by card instead, since each card is a different one
+    const reasons = {};
+    for (const option of ADDABLE_KINDS) {
+        let reason = option.unavailable?.({host, records: attached}) ?? null;
+        if (!reason && !option.Gallery) {
+            reason = duplicateReason(option, configFor(option.id));
+        }
+        reasons[option.id] = reason;
+    }
+
+    // Opens on the first kind that can be added, so the form is not greeted by a refusal
+    const [kind, setKind] = useState(() => {
+        const firstAvailable = ADDABLE_KINDS.find((option) => !reasons[option.id]);
+        const opening = firstAvailable ?? ADDABLE_KINDS[0];
+        return opening?.id ?? null;
+    });
     const [config, setConfig] = useState(() => configFor(kind));
 
     const type = getSupportType(kind);
     const ConfigForm = type?.ConfigForm;
     // A kind picked from a gallery adds straight from its cards, in place of the settings form and Add
     const Gallery = type?.Gallery;
-    const reason = reasons[kind];
+    // The settings form can change what one would show, so it is checked as it stands, not only as it started
+    let reason = reasons[kind];
+    if (!reason && type && !Gallery) {
+        reason = duplicateReason(type, config);
+    }
+    // Whether a gallery's card would add a second copy of one the node has
+    const isAdded = (chosen) => Boolean(findSameSupport(attached, hostId, kind, chosen));
     // What the settings still need before one can be added, if anything
     let incomplete = null;
     if (!reason) {
@@ -202,6 +220,7 @@ function SupportNodesForm({hostId}) {
                                     <Gallery
                                         hostId={hostId}
                                         onAdd={(chosen) => addSupportNode(hostId, type.id, chosen)}
+                                        isAdded={isAdded}
                                         paged={paged}
                                     />
                                 )}

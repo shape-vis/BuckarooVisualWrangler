@@ -64,17 +64,30 @@ export function drawXAxisOnFloor(axisGroup, xScale, width, height) {
     xScale.draw(axisGroup.attr("transform", `translate(0, ${height - width})`));
 }
 
-/* One bar's stack: error flags from the top down, clean rows beneath - the preview's and main histograms' order */
+/* One bar's stack: error flags from the top down, clean rows beneath - the preview's and main histograms' order.
+   When a row flagged two ways makes the flags add up to more than the rows, the error types share the bar in
+   proportion to their counts, as stackBars in errorPlots.js does. */
 export function stackSegments(count) {
+    let flagged = 0;
+    ERROR_DIMENSIONS.forEach((type) => {
+        flagged += count[type] ?? 0;
+    });
+    let flagHeight = 1;
+    if (flagged > count.items) {
+        flagHeight = count.items / flagged;
+    }
+
     const segments = [];
     let top = count.items;
     ERROR_DIMENSIONS.forEach((type) => {
         const value = count[type] ?? 0;
         if (!value) return;
-        segments.push({type, top, bottom: Math.max(0, top - value)});
-        top -= value;
+        const height = value * flagHeight;
+        segments.push({type, top, bottom: top - height});
+        top -= height;
     });
-    if (top > 0) segments.push({type: "none", top, bottom: 0});
+    const clean = count.items - flagged;
+    if (clean > 0) segments.push({type: "none", top: clean, bottom: 0});
     return segments;
 }
 

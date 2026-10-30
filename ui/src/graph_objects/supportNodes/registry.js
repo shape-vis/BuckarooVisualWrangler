@@ -16,6 +16,8 @@
  *                   before anything is measured
  *   unavailable   - optional ({host, records}) => reason string, or null when it can be added to this host.
  *                   records are the host's existing sub-nodes. The window shows the reason and disables Add
+ *   identity      - optional (config) => a string naming what one shows. A node cannot have two of a kind with the
+ *                   same identity - see findSameSupport. A kind without one is never refused as a duplicate
  *   defaultConfig - the settings a new one starts from; plain JSON, since records are saved as-is later. Or a
  *                   function of {hostId, comparisonPair, serverNodesById} returning them
  *   incomplete    - optional (config) => what the settings still need, as a sentence, or null once they are
@@ -26,8 +28,9 @@
  *                   is small and in detail once it has room (see compareView's fitsFullPlot). Its header gets a
  *                   button that switches it between them
  *   ConfigForm    - optional ({value, onChange, hostId}) settings form the window shows before adding one
- *   Gallery       - optional ({hostId, onAdd, paged}) picker the window shows in place of ConfigForm and Add, for
- *                   a kind chosen from ready-made options; onAdd(config) adds one straight away, and returns its id.
+ *   Gallery       - optional ({hostId, onAdd, isAdded, paged}) picker the window shows in place of ConfigForm and
+ *                   Add, for a kind chosen from ready-made options; onAdd(config) adds one straight away, and returns
+ *                   its id. isAdded(config) says whether the node already has that one, so its card can refuse it.
  *                   A kind without one is previewed in the window instead - its Body, drawn for the host
  *   galleryPaged  - true for a kind whose gallery has the window to itself, a card a page, for plots with a lot
  *                   to show
@@ -93,6 +96,22 @@ function sparklineUnavailable({host}) {
     return null;
 }
 
+// What each kind's sub-node shows, so a node is not given the same one twice. Those without settings show only
+// their node, so a node has one of each
+const SHOWS_ITS_NODE = () => "";
+
+function errorPlotIdentity(config) {
+    const columns = config?.columns ?? [];
+    return `${config?.plot}:${columns.join("×")}`;
+}
+
+// A sparkline is one dimension along one branch; one still waiting for its branch is told apart from those with one
+function sparklineIdentity(config) {
+    const branch = config?.branch;
+    if (!branch) return `${config?.dimension}:unpicked`;
+    return `${config?.dimension}:${branch.source}→${branch.target}`;
+}
+
 export const SUPPORT_NODE_TYPES = {
     qualityMetrics: {
         id: "qualityMetrics",
@@ -101,6 +120,7 @@ export const SUPPORT_NODE_TYPES = {
         anchor: "side",
         side: "auto",
         size: {width: 160, height: 82},
+        identity: SHOWS_ITS_NODE,
         defaultConfig: {},
         Badge: QualityMetricsGlyph,
         Body: QualityMetricsBody,
@@ -112,6 +132,7 @@ export const SUPPORT_NODE_TYPES = {
         anchor: "edge",
         size: {width: 210, height: 198},
         unavailable: wrangleDiffUnavailable,
+        identity: SHOWS_ITS_NODE,
         defaultConfig: {},
         Badge: WrangleDiffGlyph,
         summary: (record) => `On the edge into ${nodeName(record.hostId)}`,
@@ -125,6 +146,7 @@ export const SUPPORT_NODE_TYPES = {
         side: "auto",
         size: {width: 230, height: 250},
         resizable: () => true,
+        identity: errorPlotIdentity,
         defaultConfig: {plot: "histogram", columns: []},
         Gallery: ErrorPlotGallery,
         Badge: ErrorPlotGlyph,
@@ -148,6 +170,7 @@ export const SUPPORT_NODE_TYPES = {
         size: MINIATURE_SIZE,
         resizable: () => true,
         zoom: {miniature: MINIATURE_SIZE, detail: DETAIL_SIZE},
+        identity: (config) => config?.column ?? "",
         defaultConfig: {column: ""},
         Gallery: DriftGallery,
         galleryPaged: true,
@@ -169,6 +192,7 @@ export const SUPPORT_NODE_TYPES = {
         size: {width: 240, height: 130},
         resizable: () => true,
         unavailable: sparklineUnavailable,
+        identity: sparklineIdentity,
         defaultConfig: {},
         Gallery: SparklineGallery,
         Badge: SparklineGlyph,
@@ -202,6 +226,27 @@ export const SUPPORT_NODE_TYPE_LIST = Object.values(SUPPORT_NODE_TYPES);
 
 // A record whose kind has since been removed from the registry still draws, as a bare sub-node
 export const getSupportType = (kind) => SUPPORT_NODE_TYPES[kind] ?? null;
+
+/**
+ * The sub-node a host already has that shows the same as one of this kind and config would - see identity.
+ * Inherited copies count: a candidate that already carries its parent's quality metrics has them.
+ *
+ * @param records the sub-nodes to look among, any host's
+ * @param exceptId a record to leave out - the one being changed, when it is checked against the rest
+ * @return that record, or null when there is none
+ */
+export function findSameSupport(records, hostId, kind, config, exceptId = null) {
+    const identity = getSupportType(kind)?.identity;
+    if (!identity) return null;
+
+    const wanted = identity(config);
+    for (const record of records) {
+        if (record.id === exceptId) continue;
+        if (record.hostId !== hostId || record.kind !== kind) continue;
+        if (identity(record.config) === wanted) return record;
+    }
+    return null;
+}
 
 // The size one sub-node is drawn at: what the user resized it to, else its kind's - which can follow its settings
 export const recordSizeOf = (record) => {

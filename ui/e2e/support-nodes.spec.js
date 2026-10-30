@@ -186,6 +186,25 @@ test("accepting a candidate opens the sub-nodes it inherited from its parent", a
     await expect(graphNode(page, candidates.impute.table).locator(".support-badge")).toHaveCount(2);
 });
 
+test("a node cannot be given the same sub-node twice", async ({ page, upload }) => {
+    const root = await upload("e2e_tiny");
+    await openGraph(page);
+    await openSupportWindow(page);
+
+    await addKind(page, "Quality metrics");
+    await expect(supportWindow(page).locator(".support-window-reason")).toContainText("already has this quality metrics");
+    await expect(supportWindow(page).locator(".support-window-add")).toBeDisabled();
+
+    // A gallery's card the node already has is refused; the others can still be added
+    await addKind(page, "Error plot");
+    const cards = supportWindow(page).locator(".support-plot-action--primary");
+    await expect(cards.first()).toHaveText("Already on this node");
+    await expect(cards.first()).toBeDisabled();
+    await expect(cards.nth(1)).toBeEnabled();
+
+    expect(await supportKinds(page, root)).toEqual(["errorPlot", "qualityMetrics"]);
+});
+
 test("a wrangle diff cannot be added to the root, which has no edge into it", async ({ page, upload }) => {
     await upload("e2e_tiny");
     await openGraph(page);

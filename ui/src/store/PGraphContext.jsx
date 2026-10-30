@@ -18,6 +18,7 @@ import {SupportGroup} from "../graph_objects/supportNodes/SupportGroup.jsx";
 import {
     EDGE_GAP, badgeRoomOf, branchSides, edgeReserve, placeSupportNodes, sideReserve, spreadSupportGroups, treeEdgesOf,
 } from "../graph_objects/supportNodes/supportLayout.js";
+import {findSameSupport} from "../graph_objects/supportNodes/registry.js";
 import {useSupportNodes} from "./supportNodes.js";
 import {setNodeLabels} from "../utils/comparison.js";
 import "../styles/Nodes.css";
@@ -620,13 +621,22 @@ export function PGraphProvider({children}) {
         if (!sparklinePick || !sparklinePickRecord) return;
         const {source, target} = realEnds(edge, nodes);
 
+        // A node does not get the same sparkline twice - this dimension along this branch
+        const picked = {...sparklinePickRecord.config, branch: {source, target, destination: sparklinePickRecord.hostId}};
+        const same = findSameSupport(supportNodes, sparklinePickRecord.hostId, sparklinePickRecord.kind, picked,
+            sparklinePickRecord.id);
+        if (same) {
+            setSparklinePickError("This node already has this sparkline along that branch. Pick another edge.");
+            return;
+        }
+
         const result = await measureSparkline(sparklinePickRecord, source, target);
         if (!result?.success) {
             setSparklinePickError(result?.error || "Could not measure that branch.");
             return;
         }
         cancelSparklinePick();
-    }, [sparklinePick, sparklinePickRecord, nodes, measureSparkline, cancelSparklinePick]);
+    }, [sparklinePick, sparklinePickRecord, supportNodes, nodes, measureSparkline, cancelSparklinePick]);
 
     /* An error plot is only wrangled on while its node is the current one - a selection and a repair are always of
        the current node - so landing anywhere else puts it back. */

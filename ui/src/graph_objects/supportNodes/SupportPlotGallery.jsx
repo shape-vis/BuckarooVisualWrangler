@@ -17,11 +17,12 @@ import "../../styles/SupportPlot.css";
  *    page
  *  - renderCard: ({card, columns, setColumns, enabled, addButton}) => the card, with addButton in its actions
  *  - onAdd: called with (card, columns) to add that plot to the node
+ *  - isAdded: optional (card, columns) => whether the node already has that plot, which its card then refuses
  *  - emptyHint: shown when there are no cards
  *  - paged: one card a page, filling the room the gallery is given, rather than a grid
  */
 
-function GalleryItem({card, renderCard, onAdd, hidden = false}) {
+function GalleryItem({card, renderCard, onAdd, isAdded, hidden = false}) {
     const hostWindow = useHostWindow();
     const [columns, setColumns] = useState(card.columns);
     const [visible, setVisible] = useState(false);
@@ -45,13 +46,22 @@ function GalleryItem({card, renderCard, onAdd, hidden = false}) {
         return () => hostWindow.clearTimeout(timer);
     }, [added, hostWindow]);
 
+    // The node already has this plot - just added, or added before - so a second copy is refused
+    const already = Boolean(isAdded?.(card, columns));
+    let label = "Add To Node";
+    if (added) {
+        label = "Added ✓";
+    } else if (already) {
+        label = "Already on this node";
+    }
     const addButton = (
         <button
             type="button"
             className="support-plot-action support-plot-action--primary"
             onClick={() => { onAdd(card, columns); setAdded(true); }}
+            disabled={already}
         >
-            {added ? "Added ✓" : "Add To Node"}
+            {label}
         </button>
     );
 
@@ -71,7 +81,7 @@ function pageLabel(card) {
 /* One card a page, filling the gallery's room. Every card stays mounted - so each keeps its columns, and a page
    already looked at shows again at once - but only the current one is shown, and a card is only drawn once it has
    been paged to. */
-function PagedGallery({cards, renderCard, onAdd}) {
+function PagedGallery({cards, renderCard, onAdd, isAdded}) {
     const [page, setPage] = useState(0);
     // The cards can shrink under a page - fewer attributes selected - so the page is held to the last one
     const lastPage = cards.length - 1;
@@ -123,6 +133,7 @@ function PagedGallery({cards, renderCard, onAdd}) {
                         card={card}
                         renderCard={renderCard}
                         onAdd={onAdd}
+                        isAdded={isAdded}
                         hidden={index !== shown}
                     />
                 ))}
@@ -131,17 +142,17 @@ function PagedGallery({cards, renderCard, onAdd}) {
     );
 }
 
-export function SupportPlotGallery({cards, renderCard, onAdd, emptyHint, paged = false}) {
+export function SupportPlotGallery({cards, renderCard, onAdd, isAdded, emptyHint, paged = false}) {
     if (cards.length === 0) return <p className="support-plot-gallery-empty">{emptyHint}</p>;
 
     if (paged) {
-        return <PagedGallery cards={cards} renderCard={renderCard} onAdd={onAdd} />;
+        return <PagedGallery cards={cards} renderCard={renderCard} onAdd={onAdd} isAdded={isAdded} />;
     }
 
     return (
         <div className="support-plot-gallery">
             {cards.map((card) => (
-                <GalleryItem key={card.id} card={card} renderCard={renderCard} onAdd={onAdd} />
+                <GalleryItem key={card.id} card={card} renderCard={renderCard} onAdd={onAdd} isAdded={isAdded} />
             ))}
         </div>
     );

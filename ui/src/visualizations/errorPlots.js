@@ -19,21 +19,38 @@ export const BRUSH_CLICK_GUARD_MS = 300;
  * A histogram's bins flattened into the segments of their stacked bars: each error type's count from the top
  * down, then the clean rows beneath.
  *
+ * A row flagged two ways counts under both types, so a bin's flags can add up to more than its rows. The bar is
+ * still drawn its rows' height: the error types then share it in proportion to their counts, so each one present
+ * shows, and none reaches below the axis. A segment's value stays its real count.
+ *
  * @returns [{bin, type, value, name, top, bottom}] - type is the bin's numeric or categorical kind, name the
  *          error type the segment counts, or "none"
  */
 export function stackBars(histograms) {
     const segments = [];
     histograms.forEach((d) => {
-        let items = d.count.items;
-        Object.keys(d.count).filter((key) => key !== "items").forEach((key) => {
+        const errorTypes = Object.keys(d.count).filter((key) => key !== "items");
+        let flagged = 0;
+        for (const errorType of errorTypes) {
+            flagged += d.count[errorType];
+        }
+        // How much of the bar one flag takes: one row's height, or less when the flags overlap
+        let flagHeight = 1;
+        if (flagged > d.count.items) {
+            flagHeight = d.count.items / flagged;
+        }
+
+        let top = d.count.items;
+        for (const errorType of errorTypes) {
+            const height = d.count[errorType] * flagHeight;
             segments.push({
-                bin: d.xBin, type: d.xType, value: d.count[key], name: key, top: items, bottom: items - d.count[key],
+                bin: d.xBin, type: d.xType, value: d.count[errorType], name: errorType, top, bottom: top - height,
             });
-            items -= d.count[key];
-        });
-        if (items > 0) {
-            segments.push({ bin: d.xBin, type: d.xType, value: items, name: "none", top: items, bottom: 0 });
+            top -= height;
+        }
+        const clean = d.count.items - flagged;
+        if (clean > 0) {
+            segments.push({ bin: d.xBin, type: d.xType, value: clean, name: "none", top: clean, bottom: 0 });
         }
     });
     return segments;

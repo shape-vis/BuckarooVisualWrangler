@@ -296,6 +296,17 @@ Every copy is marked `inherited` and `startMinimized`, so a new candidate shows 
 badges instead of opening them all at once. When the user changes a copy, it stops being `inherited` and counts as
 the user's own.
 
+**No duplicates.** A node can't have the same support node twice. Each kind in `registry.js` has an `identity`
+saying what one shows, and `findSameSupport` looks for one on the node that shows the same thing:
+- **Quality metrics, wrangle diff:** they have no settings, so a node gets one of each.
+- **Error plot:** the same plot type and columns.
+- **Drift plot:** the same column.
+- **Sparkline:** the same error type along the same branch. Picking an edge that would repeat one is refused.
+
+Inherited copies count. The support-nodes window greys out a kind the node already has, and a gallery card the node
+already has reads "Already on this node". Compare support nodes come only from Save in the compare window, so they
+aren't checked. The rule lives in the frontend; the server doesn't refuse a duplicate sent to it directly.
+
 **Accepting.** `settle_inherited` runs when a candidate is accepted. It opens the copies that are still marked
 `inherited`, so the accepted node shows them. Copies the user changed, and support nodes the user added to the
 candidate themselves, are left as they are. Nothing is marked `inherited` afterwards.
@@ -1013,6 +1024,14 @@ app. Every number a test reads off the screen is checked against two things: the
 
 **Running them.**
 - `cd ui && npm run e2e` runs the suite, and `npm run e2e:report` opens the HTML report.
+- To watch the tests in a browser, run these from `ui`:
+  - `npx playwright test --ui` opens Playwright's UI mode: a list of every test. Click one to run it and watch it
+    live, then step back through each action with a snapshot of the page at that moment. Best for watching.
+  - `npx playwright test --headed` runs the tests in a visible Chrome window. It moves fast, so narrow it down to
+    one file (`npx playwright test e2e/graph.spec.js --headed`) or to tests whose name matches
+    (`npx playwright test --headed -g "undo and redo"`).
+  - `npx playwright test --debug -g "undo and redo"` pauses before every action. Press Step in the Playwright
+    Inspector to go one action at a time.
 - Playwright starts its own stack: a backend on port 5002 and Vite on 5183 (`e2e/vite.e2e.config.js`). It never
   touches the dev servers on 5001 and 5173, so you can keep using the app while the tests run.
 - The tests run one at a time (one worker), because the backend keeps a single active graph.

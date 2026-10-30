@@ -20,7 +20,7 @@ import {hostColumns} from "./registry.js";
  * Its config is {column}.
  */
 
-export function DriftGallery({hostId, onAdd, paged = false}) {
+export function DriftGallery({hostId, onAdd, isAdded, paged = false}) {
     const {selectedAttributes = []} = useContext(ViewContext) ?? {};
     const {serverNodesById} = usePgraph();
 
@@ -34,6 +34,7 @@ export function DriftGallery({hostId, onAdd, paged = false}) {
             paged={paged}
             cards={cards}
             onAdd={(card, columns) => onAdd({column: columns[0]})}
+            isAdded={(card, columns) => isAdded?.({column: columns[0]})}
             emptyHint="Select attributes in the attribute panel to see their drift for this node here."
             renderCard={({columns, setColumns, enabled, addButton}) => (
                 <DriftPlotCard
