@@ -58,15 +58,9 @@ def test_an_upload_types_its_columns_from_their_values(uploaded):
 def test_the_root_is_measured_as_every_node_is(uploaded):
     root = app.pgraph_for_session.node_map[uploaded["table_name"]]
 
+    # The error rates are checked through the attribute summary below; root's zero drift by test_distortion_survey
     assert root.metrics.row_count == 13
     assert root.metrics.column_count == 2
-    assert root.metrics.columns["amount"]["anomaly"] == pytest.approx(1 / 13)
-    assert root.metrics.columns["city"]["missing"] == pytest.approx(1 / 13)
-
-    # Root against itself has drifted nowhere
-    assert root.distortion["overall"] == 0.0
-    assert root.distortion["columns"]["amount"]["value"] == 0.0
-    assert root.distortion["columns"]["city"]["value"] == 0.0
     assert root.distortion["facts"]["rows_removed"] == 0
 
 

@@ -9,31 +9,26 @@ Registered automatically by the pkgutil sweep in app/__init__.py.
 """
 import traceback
 
-from flask import request
-
 from app import app
-from app.pgraph.support_nodes import INHERIT_CHOICES
 from app.server_utils import candidates
+from app.server_utils.service_helpers import json_object_body
 
 
 @app.post("/api/candidates/accept")
 def accept_candidate():
     """
-    Accept a candidate into the graph for good, and move the session onto it. Its siblings stay staged.
+    Accept a candidate into the graph for good, and move the session onto it. Its siblings stay staged, and the
+    sub-nodes it inherited from its parent open.
 
-    Body: {"table": "c7_adult_x7f2q", "inherit": "show" | "hide" | "drop"}
-    inherit is what becomes of the sub-nodes it inherited from its parent; left out, they stay hidden.
+    Body: {"table": "c7_adult_x7f2q"}
     :return: {"success", "table", "label", "parent"}
     """
-    body = request.get_json(force=True, silent=True) or {}
+    body = json_object_body()
     table = body.get("table")
     if not isinstance(table, str) or not table:
         return {"success": False, "error": "table is required"}, 400
-    inherit = body.get("inherit", "hide")
-    if inherit not in INHERIT_CHOICES:
-        return {"success": False, "error": f"inherit must be one of {', '.join(INHERIT_CHOICES)}"}, 400
     try:
-        return candidates.accept(table, inherit)
+        return candidates.accept(table)
     except candidates.CandidateError as exc:
         return {"success": False, "error": str(exc)}, 409
     except Exception as exc:
@@ -60,7 +55,7 @@ def discard_candidates():
     Body: {"tables": ["c7_adult_x7f2q", ...]}
     :return: {"success", "current": the table the session moved to, or null}
     """
-    body = request.get_json(force=True, silent=True) or {}
+    body = json_object_body()
     tables = body.get("tables")
     if not _is_list_of_names(tables):
         return {"success": False, "error": "tables is required"}, 400

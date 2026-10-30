@@ -1,0 +1,13 @@
+Score,Count,Platform,Rating
+10,1,Wii,E
+20,2,Wii,E
+30,3,PS2,T
+40,4,PC,E
+50,5,Wii,T
+60,6,PS2,M
+70,7,PC,E
+80,8,Wii,T
+90,9,PS2,E
+100,10,PC,T
+,,Wii,undefined
+,,PS2,

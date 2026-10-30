@@ -9,41 +9,41 @@ from flask import request
 
 from app import app, db_operations
 from app.server_utils import candidates
+from app.server_utils.wrangle_ops import repair_options
+
+# The range of a bigint, which the table's "ID" column is: an id outside it names no row
+SMALLEST_ROW_ID = -(2 ** 63)
+LARGEST_ROW_ID = 2 ** 63 - 1
 
 
-def _repair_options(cols, row_count):
+def _is_row_id(value):
     """
-    The ways a selection can be repaired. Deleting removes the selected rows; imputing fills a column in them
-    with its mean, or its most common value if it is categorical. A two-column selection can be imputed on
-    either column.
-    :return: [(op, imputed column, label, reason)]
+    Whether a request's value can name a row: a whole number, within a bigint's range. Anything else - a string, a
+    fraction, a list - is refused, rather than handed to Postgres to cast, which would read 1.5 as row 2.
     """
-    if row_count == 1:
-        rows = "the selected row"
-    else:
-        rows = f"the {row_count:,} selected rows"
+    # A bool is an int to Python, but true is not a row
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return SMALLEST_ROW_ID <= value <= LARGEST_ROW_ID
 
-    def fill(column):
-        return f"Fill {column} in {rows} with its mean, or its most common value if it is categorical"
 
-    if len(cols) == 1:
-        return [
-            ("delete", None, "Delete rows", f"Remove {rows}"),
-            ("impute", cols[0], f"Impute {cols[0]}", fill(cols[0])),
-        ]
-    return [
-        ("delete", None, "Delete rows", f"Remove {rows}"),
-        ("impute_x", cols[0], f"Impute {cols[0]}", fill(cols[0])),
-        ("impute_y", cols[1], f"Impute {cols[1]}", fill(cols[1])),
-    ]
+def _is_list_of_columns(value):
+    """Whether a request's value is a list of column names."""
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, str):
+            return False
+    return True
 
 
 @app.post("/api/wrangle/create-previews")
 def create_previews():
     """
     Stage every way of repairing the current node's selected rows as a candidate: a provisional node under the
-    current node, its wrangle already run on a copy of its table. Delete and impute for a one-column selection;
-    delete, impute x and impute y for two.
+    current node, its wrangle already run on a copy of its table. One candidate per operation in
+    app/server_utils/wrangle_ops.py - delete and impute for a one-column selection; delete, impute x and impute y for
+    two.
 
     Body JSON:
       row_ids  – list of integer row IDs to operate on
@@ -60,7 +60,12 @@ def create_previews():
 
         if not row_ids:
             return {"success": False, "error": "No rows selected"}, 400
-        if len(cols) not in (1, 2):
+        if not isinstance(row_ids, list):
+            return {"success": False, "error": "row_ids must be a list of row IDs"}, 400
+        for row_id in row_ids:
+            if not _is_row_id(row_id):
+                return {"success": False, "error": f"{row_id!r} is not a row ID"}, 400
+        if not _is_list_of_columns(cols) or len(cols) not in (1, 2):
             return {"success": False, "error": "A selection is on one column or two"}, 400
 
         # A one-column candidate's preview is a histogram; a two-column one draws as the plot it was selected on
@@ -70,7 +75,7 @@ def create_previews():
             chart_type = body.get("source") or "heatmap"
 
         specs = []
-        for op, imputed, label, reason in _repair_options(cols, len(row_ids)):
+        for op, imputed, label, reason in repair_options(cols, len(row_ids)):
             meta = {"label": label, "reason": reason, "row_count": len(row_ids), "error_type": None,
                     "chart_type": chart_type}
             specs.append(candidates.CandidateSpec(op=op, cols=list(cols), row_ids=row_ids, imputed_column=imputed,

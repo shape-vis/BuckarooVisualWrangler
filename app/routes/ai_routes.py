@@ -13,14 +13,13 @@ resolved by the server from the flags (see ai_wrangle), so nothing the model say
 """
 import traceback
 
-from flask import request
-
 from app import app as flask_app
 from app.llm import gemini_client, tools
 from app.llm.profile import build_profile_block
 from app.llm.prompts import SYSTEM_PROMPT, build_user_prompt
 from app.server_utils import ai_wrangle, candidates
 from app.server_utils.ai_wrangle import SuggestionError
+from app.server_utils.service_helpers import json_object_body
 
 
 def _node_table_from_request(body) -> str:
@@ -108,7 +107,7 @@ def ai_suggest():
     the user accepts or declines them through candidate_routes.py.
     """
     try:
-        node_table = _node_table_from_request(request.get_json(force=True, silent=True))
+        node_table = _node_table_from_request(json_object_body())
     except SuggestionError as exc:
         return {"success": False, "error": str(exc)}, 400
     try:

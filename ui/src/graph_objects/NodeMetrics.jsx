@@ -1,4 +1,4 @@
-import {ERROR_TYPES, ERROR_DIMENSIONS} from "../store/errorColors.js";
+import {ERROR_TYPES, ERROR_DIMENSIONS, errorSwatchStyle} from "../store/errorColors.js";
 import "../styles/Nodes.css";
 
 /**
@@ -14,7 +14,7 @@ export function NodeMetrics( { metrics } ){
             <div className="node-metrics-rows">
                 {ERROR_DIMENSIONS.map((dimension) => (
                     <div key={dimension} className="node-metrics-row" title={ERROR_TYPES[dimension]}>
-                        <span className="node-metrics-swatch" data-error-type={dimension} />
+                        <span className="node-metrics-swatch" data-error-type={dimension} style={errorSwatchStyle(dimension)} />
                         <span className="node-metrics-value">
                             {((metrics.totals?.[dimension] ?? 0) * 100).toFixed(2)}%
                         </span>

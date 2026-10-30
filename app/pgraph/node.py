@@ -1,8 +1,10 @@
 """ the base node class for the pgraph - March 31, 2026 - Nicolas Baret
 
 When the user performs a new wrangling operation, a new instance of this class is made
-and put into the provenance graph
+and put into the provenance graph. What each operation is - its name, which column it acted on, how it is described -
+is read from app/server_utils/wrangle_ops.py.
 """
+from app.server_utils.wrangle_ops import AXES, parse_wrangle_op
 
 
 def wrangle_operation_name(wrangle_op):
@@ -12,10 +14,13 @@ def wrangle_operation_name(wrangle_op):
     That suffix only says which of a 2D pair was imputed, which is detail rather than identity - the
     graph's edges are labelled with this, and name the columns in their hover detail instead.
 
-    :param wrangle_op: "delete", "impute", "impute_x", "impute_y" or "root"
-    :return: "delete", "impute" or "root"
+    :param wrangle_op: the wrangle as a node records it - "delete", "impute", "impute_x", "impute_y" - or "root"
+    :return: the operation's name - "delete", "impute" - or wrangle_op itself when it names no operation
     """
-    return "impute" if wrangle_op.startswith("impute") else wrangle_op
+    op, _ = parse_wrangle_op(wrangle_op)
+    if op is None:
+        return wrangle_op
+    return op.name
 
 
 def acted_on_columns(wrangle_op, wrangle_cols):
@@ -26,17 +31,17 @@ def acted_on_columns(wrangle_op, wrangle_cols):
     out by the pair. A 2D impute acted only on the column it filled - which is the whole point of the
     _x / _y suffix, since "impute_x" on its own never said *which* column that was.
 
-    :param wrangle_op: "delete", "impute", "impute_x", "impute_y" or "root"
+    :param wrangle_op: the wrangle as a node records it, or "root"
     :param wrangle_cols: the columns the wrangle was performed on, in selection order
     :return: a list of column names, empty when none were recorded
     """
     if not wrangle_cols:
         return []
-    if wrangle_op == "impute_x":
-        return list(wrangle_cols[:1])
-    if wrangle_op == "impute_y":
-        return list(wrangle_cols[1:2])
-    return list(wrangle_cols)
+    _, axis = parse_wrangle_op(wrangle_op)
+    if axis is None:
+        return list(wrangle_cols)
+    axis_index = AXES.index(axis)
+    return list(wrangle_cols[axis_index:axis_index + 1])
 
 
 def format_wrangle_label(wrangle_op, wrangle_cols):
@@ -47,7 +52,7 @@ def format_wrangle_label(wrangle_op, wrangle_cols):
     Falls back to the bare operation when no columns were recorded, so the root node and any wrangle
     that did not carry its columns through still label sensibly.
 
-    :param wrangle_op: "delete", "impute", "impute_x", "impute_y" or "root"
+    :param wrangle_op: the wrangle as a node records it, or "root"
     :param wrangle_cols: the columns the wrangle was performed on, in selection order
     :return: a label such as "impute · salary" or "delete · salary × region"
     """
@@ -139,8 +144,16 @@ class GraphNode:
         return wrangle_operation_name(self.wrangle_op)
 
     def wrangle_summary(self):
-        """The operation and the columns it acted on, for the front end to describe this node with."""
-        return {"op": self.wrangle_name(), "columns": acted_on_columns(self.wrangle_op, self.wrangle_cols)}
+        """
+        The operation, the columns it acted on, and a sentence describing it - "Imputed age" - for the front end to
+        describe this node with. The sentence is None for the root, which no operation made.
+        """
+        columns = acted_on_columns(self.wrangle_op, self.wrangle_cols)
+        op, _ = parse_wrangle_op(self.wrangle_op)
+        description = None
+        if op is not None:
+            description = op.description(columns)
+        return {"op": self.wrangle_name(), "columns": columns, "description": description}
 
     def add_child(self, child_node: str):
         self.children.append(child_node)

@@ -107,20 +107,15 @@ def test_the_facts_follow_the_wrangles(survey, client):
 
 
 @pytest.mark.sql
-def test_only_leaves_are_ranked(survey, client):
-    pareto = _graph(client)["pareto"]
-
-    assert set(pareto["scored"]) == {survey["clean"], survey["impute"], survey["gender"]}
-
-
-@pytest.mark.sql
-def test_trajectory_deltas_are_differences_of_root_referenced_values(survey, client):
-    _, body = _get(client, "/api/pgraph/branch_trajectory", source=survey["root"],
-                   target=survey["anomalies"], destination=survey["clean"])
+def test_the_trajectory_route_walks_the_branch_from_root(survey, client):
+    # How the deltas are worked out is test_distortion's to check
+    status, body = _get(client, "/api/pgraph/branch_trajectory", source=survey["root"],
+                        target=survey["anomalies"], destination=survey["clean"])
     drift = body["distortion"]
 
+    assert status == 200, body
     assert drift["values"][0] == 0.0
-    assert drift["deltas"] == pytest.approx([b - a for a, b in zip(drift["values"], drift["values"][1:])])
+    assert len(drift["deltas"]) == len(drift["values"]) - 1
 
 
 @pytest.mark.sql
@@ -148,7 +143,7 @@ def test_a_categorical_column_is_drawn_as_its_flows(survey, client):
 
 @pytest.mark.sql
 def test_drift_can_be_measured_from_an_ancestor(survey, client):
-    removed_above = _drift(_graph(client), survey["anomalies"])["facts"]["rows_removed"]
+    # What changes when measured from an ancestor is test_drift_sql's to check
     _, from_root = _get(client, "/api/pgraph/drift_detail", node=survey["clean"], column="ConvertedSalary")
     status, from_ancestor = _get(client, "/api/pgraph/drift_detail", node=survey["clean"], column="ConvertedSalary",
                                  base=survey["anomalies"])
@@ -156,10 +151,6 @@ def test_drift_can_be_measured_from_an_ancestor(survey, client):
     assert status == 200, from_ancestor
     assert from_root["base"] == survey["root"]
     assert from_ancestor["base"] == survey["anomalies"]
-    # Measured from the ancestor, the rows its own delete removed are no longer counted
-    assert from_ancestor["rows_root"] == from_root["rows_root"] - removed_above
-    assert from_ancestor["rows_removed"] == from_root["rows_removed"] - removed_above
-    assert len(from_ancestor["density"]["node"]) == len(from_ancestor["density"]["root"])
 
 
 @pytest.mark.sql

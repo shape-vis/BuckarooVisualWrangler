@@ -1,0 +1,49 @@
+{
+  "about": "The error types the detectors raise, in the order every list, scale and query shows them. Read by the backend (app/error_types.py) and the frontend (ui/src/store/errorColors.js). Adding a detector is adding an entry here and its detect_<key> method in app/db_utils/detector_sql.py - see DEVNOTES.md. label: the attribute list's name for it. short_label and noun: the compare panel's measure menu and axes. color and text_color: its swatches, bars and table cells, and the text on them. table_priority: which colours a table cell flagged several ways, lowest first. ai_definition and ai_tool_phrase: how the AI's system prompt and its tools explain it.",
+  "error_types": [
+    {
+      "key": "missing",
+      "label": "Missing Values",
+      "short_label": "Missing",
+      "noun": "missing values",
+      "color": "saddlebrown",
+      "text_color": "white",
+      "table_priority": 2,
+      "ai_definition": "the cell is empty, NULL, or the literal text \"null\"/\"undefined\"/\"nan\"",
+      "ai_tool_phrase": "empty or null"
+    },
+    {
+      "key": "mismatch",
+      "label": "Data Type Mismatch",
+      "short_label": "Type mismatch",
+      "noun": "type mismatches",
+      "color": "hotpink",
+      "text_color": "black",
+      "table_priority": 1,
+      "ai_definition": "the value is not of the column's dominant data type",
+      "ai_tool_phrase": "the wrong data type for the column"
+    },
+    {
+      "key": "anomaly",
+      "label": "Average Anomalies (Outliers)",
+      "short_label": "Anomalies",
+      "noun": "anomalies",
+      "color": "red",
+      "text_color": "white",
+      "table_priority": 3,
+      "ai_definition": "the value is a statistical outlier for the column",
+      "ai_tool_phrase": "a statistical outlier"
+    },
+    {
+      "key": "incomplete",
+      "label": "Incomplete Data (< 3 points)",
+      "short_label": "Incomplete",
+      "noun": "incomplete values",
+      "color": "gray",
+      "text_color": "white",
+      "table_priority": 4,
+      "ai_definition": "the value is partial or truncated",
+      "ai_tool_phrase": "a partial or truncated value"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import Sparkline from "./Sparkline.jsx";
-import { ERROR_TYPES, errorColors, DRIFT_COLOR } from "../store/errorColors.js";
+import { ERROR_TYPES, errorColors, errorSwatchStyle, DRIFT_COLOR } from "../store/errorColors.js";
 import { formatDrift } from "../utils/drift.js";
 import { asPercent } from "../utils/visCommon.jsx";
 import "../styles/QualitySparkline.css";
@@ -26,6 +26,7 @@ export function QualitySparklineHeader({ dimension, values }) {
       <span
         className={`quality-swatch ${isDrift(dimension) ? "quality-swatch--drift" : ""}`}
         data-error-type={isDrift(dimension) ? undefined : dimension}
+        style={isDrift(dimension) ? undefined : errorSwatchStyle(dimension)}
       />
       <span className="quality-dimension-name">{isDrift(dimension) ? "Drift from root" : ERROR_TYPES[dimension]}</span>
       {measured && (

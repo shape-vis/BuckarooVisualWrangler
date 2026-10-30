@@ -295,14 +295,12 @@ export function requestAiSuggestions(nodeTable, signal) {
 /**
  * POST /api/candidates/accept
  * Accept a staged candidate - a repair or an AI suggestion - into the graph for good, moving the session onto
- * it. Nothing is renamed: it keeps its table and gets its label.
- *
- * inherit is what becomes of the sub-nodes it inherited from its parent: "show", "hide" or "drop".
+ * it. Nothing is renamed: it keeps its table and gets its label. The sub-nodes it inherited from its parent open.
  *
  * Returns { success, table, label, parent } or { success: false, error }.
  */
-export function acceptCandidate(table, inherit = "hide") {
-    return postJson("/api/candidates/accept", { table, inherit }, failureResult);
+export function acceptCandidate(table) {
+    return postJson("/api/candidates/accept", { table }, failureResult);
 }
 
 /**

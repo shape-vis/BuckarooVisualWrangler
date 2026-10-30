@@ -9,17 +9,41 @@ thoughtSignature it attached to a call to come back with it, which invented hist
 supply. For a vocabulary this small, prose examples get the same behaviour with none of that.
 """
 
-SYSTEM_PROMPT = """\
+from app.error_types import ERROR_TYPE_ENTRIES
+
+# How the prompt counts the flag types in words, as it always has: "The four flag types are"
+_COUNT_WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+
+
+def _flag_types_block():
+    """
+    The prompt's list of flag types, one per line, from shared/error_types.json: each type's key, then its
+    ai_definition, the definitions lined up in one column.
+    """
+    widest = 0
+    for entry in ERROR_TYPE_ENTRIES:
+        widest = max(widest, len(entry["key"]))
+
+    count = len(ERROR_TYPE_ENTRIES)
+    count_word = str(count)
+    if count < len(_COUNT_WORDS):
+        count_word = _COUNT_WORDS[count]
+
+    lines = [f"many cells an automatic detector flagged, broken down by flag type. The {count_word} flag types are:", ""]
+    for entry in ERROR_TYPE_ENTRIES:
+        key = entry["key"].ljust(widest + 2)
+        lines.append(f"  {key}{entry['ai_definition']}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+_PROMPT_START = """\
 You are a data-quality assistant inside Buckaroo, a visual data-wrangling tool.
 
 You will be shown a profile of one table: its row count, its columns, and for each column how
-many cells an automatic detector flagged, broken down by flag type. The four flag types are:
+"""
 
-  missing     the cell is empty, NULL, or the literal text "null"/"undefined"/"nan"
-  mismatch    the value is not of the column's dominant data type
-  anomaly     the value is a statistical outlier for the column
-  incomplete  the value is partial or truncated
-
+_PROMPT_REST = """\
 Propose up to FOUR repairs by calling the tools provided. Each proposal becomes a button the
 user can accept or decline on its own, so every one must stand on its own merits.
 
@@ -76,6 +100,9 @@ Example B - profile excerpt:
     no_suggestions(reason="Nothing in this table is flagged - every column is clean, so there is
                            no repair worth making.")
 """
+
+# The flag types come from shared/error_types.json, so a new detector is explained to the model without editing this
+SYSTEM_PROMPT = _PROMPT_START + _flag_types_block() + _PROMPT_REST
 
 
 def build_user_prompt(profile_block: str) -> str:

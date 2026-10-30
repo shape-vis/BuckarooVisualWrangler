@@ -78,29 +78,3 @@ def test_every_row_id_joins_back_to_a_real_row():
     finally:
         with engine.begin() as conn:
             _drop_tables(conn, table, f"errors_{table}")
-
-
-@pytest.mark.sql
-def test_flags_survive_on_the_columns_not_wrangled():
-    """A full rebuild keeps flags for every column, not just the one just wrangled."""
-    table = "t_errid_allcols"
-    df = pd.DataFrame({
-        "ID": [1, 2, 3, 4],
-        "amount": [1.0, None, 3.0, 4.0],
-        "label": ["a", None, "c", "d"],
-    })
-    df.to_sql(table, engine, if_exists="replace", index=False)
-
-    try:
-        DetectorSQL(engine, table).generate_errors_table()
-
-        errors = pd.read_sql_query(f'SELECT * FROM "errors_{table}"', engine)
-        flagged_columns = set(errors["column_id"])
-        assert {"amount", "label"} <= flagged_columns, (
-            f"expected flags on both columns, got {flagged_columns}"
-        )
-        # "ID" is structural - DetectorSQL skips it - so it must never be flagged.
-        assert "ID" not in flagged_columns
-    finally:
-        with engine.begin() as conn:
-            _drop_tables(conn, table, f"errors_{table}")

@@ -27,11 +27,8 @@
     --fewer: #1a7f37;
     --more: #c1121f;
 
-    /* The error types, as ERROR_TYPE_COLORS in ui/src/store/errorColors.js */
-    --error-missing: saddlebrown;
-    --error-mismatch: hotpink;
-    --error-anomaly: red;
-    --error-incomplete: gray;
+    /* A column nothing flags. The error types' own colours come from shared/error_types.json, set on each element that
+       draws one - see errorSwatchStyle in ui/src/store/errorColors.js */
     --error-none: steelblue;
 
     /* Supporting sub-nodes: turquoise, clear of the comparison's green and blue, the candidates' violet and the

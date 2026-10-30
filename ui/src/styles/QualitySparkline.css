@@ -31,10 +31,8 @@
     display: inline-block;
 }
 
-.quality-swatch[data-error-type="missing"]    { background-color: var(--error-missing); }
-.quality-swatch[data-error-type="mismatch"]   { background-color: var(--error-mismatch); }
-.quality-swatch[data-error-type="anomaly"]    { background-color: var(--error-anomaly); }
-.quality-swatch[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
+/* An error type's colour, from the --swatch-color the element sets - see errorSwatchStyle in errorColors.js */
+.quality-swatch { background-color: var(--swatch-color); }
 
 /* Drift from root is a cost rather than an error, so it takes its own colour - never red. The teal matches
    DRIFT_COLOR in errorColors.js. */

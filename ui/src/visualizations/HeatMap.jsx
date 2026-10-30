@@ -90,7 +90,11 @@ function Heatmap({
       .attr("fill", tileFill)
       .attr("stroke", "white")
       .attr("cursor", "pointer")
-      .attr("stroke-width", 1);
+      .attr("stroke-width", 1)
+      // For the end-to-end tests: which tile this is, and how many rows it holds
+      .attr("data-x-bin", d => String(d.xBin))
+      .attr("data-y-bin", d => String(d.yBin))
+      .attr("data-count", d => d.count.items);
 
     tilesRef.current = tiles;
 
@@ -247,7 +251,8 @@ function Heatmap({
   }
 
   return (
-    <g transform={`translate(${xPos}, ${yPos})`} className="heatmap-canvas">
+    <g transform={`translate(${xPos}, ${yPos})`} className="heatmap-canvas" data-testid="heatmap"
+       data-x-column={attrX} data-y-column={attrY}>
       <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
       <g ref={drawingRef}></g>
     </g>

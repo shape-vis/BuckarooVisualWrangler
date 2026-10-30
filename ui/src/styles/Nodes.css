@@ -121,10 +121,8 @@
   flex-shrink: 0;
 }
 
-.node-metrics-swatch[data-error-type="missing"]    { background-color: var(--error-missing); }
-.node-metrics-swatch[data-error-type="mismatch"]   { background-color: var(--error-mismatch); }
-.node-metrics-swatch[data-error-type="anomaly"]    { background-color: var(--error-anomaly); }
-.node-metrics-swatch[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
+/* Its error type's colour, from the --swatch-color the element sets - see errorSwatchStyle in errorColors.js */
+.node-metrics-swatch { background-color: var(--swatch-color); }
 
 .node-metrics-value {
   font-weight: 600;

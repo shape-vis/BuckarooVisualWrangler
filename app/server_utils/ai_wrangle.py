@@ -23,10 +23,7 @@ from app.db_utils import query
 from app.db_utils.detector_sql import ERROR_TYPES
 from app.server_utils import candidates
 from app.server_utils.service_helpers import WRANGLE_LOCK, is_node
-
-# Deleting is destructive and cannot be undone at the table level, so a suggestion that would
-# take out more than this share of the table is refused rather than offered.
-MAX_DELETE_FRACTION = 0.30
+from app.server_utils.wrangle_ops import AI_TOOL_OPS, WrangleOp, recorded_name
 
 
 class SuggestionError(ValueError):
@@ -36,19 +33,25 @@ class SuggestionError(ValueError):
 @dataclass(frozen=True)
 class Op:
     """
-    One wrangle operation, as both the model and the pipeline see it.
+    One of the model's tools: the wrangle operation it makes, and on how many columns.
     """
-    kind: str               # "impute" or "delete" - also the wrangle a node records, but for a 2D impute
+    wrangle: WrangleOp      # see app/server_utils/wrangle_ops.py
     dims: int               # 1 or 2 columns
 
 
-TOOL_OPS: dict[str, Op] = {
-    "impute_rows":    Op(kind="impute", dims=1),
-    "delete_rows":    Op(kind="delete", dims=1),
-    # Which column of the pair it fills is picked from `target` - see Suggestion.wrangle_op
-    "impute_rows_2d": Op(kind="impute", dims=2),
-    "delete_rows_2d": Op(kind="delete", dims=2),
-}
+def _tool_ops() -> dict[str, Op]:
+    """
+    Every tool the model is offered, by its name, read from the operations in AI_TOOL_OPS. For an operation that
+    fills a column, the 2D tool's `target` picks which column of the pair - see Suggestion.wrangle_op.
+    """
+    tool_ops = {}
+    for wrangle in AI_TOOL_OPS:
+        for dims, tool in wrangle.ai_tools.items():
+            tool_ops[tool.name] = Op(wrangle=wrangle, dims=dims)
+    return tool_ops
+
+
+TOOL_OPS: dict[str, Op] = _tool_ops()
 
 
 @dataclass
@@ -57,7 +60,7 @@ class Suggestion:
     op: str
     columns: list[str]                  # 1 or 2, in the order the model gave them
     error_type: str
-    target: str | None = None           # "x" or "y", 2D impute only
+    target: str | None = None           # "x" or "y", for a 2D tool whose operation fills a column
     reason: str = ""
     row_ids: list[int] = field(default_factory=list)   # filled by resolve_ids_for
 
@@ -67,19 +70,19 @@ class Suggestion:
 
     @property
     def imputed_column(self) -> str | None:
-        """The one column an impute writes to. None for deletes."""
-        if self.spec.kind != "impute":
+        """The one column an operation that fills a column writes to. None for any other operation."""
+        if not self.spec.wrangle.fills_column:
             return None
-        if self.op == "impute_rows_2d" and self.target == "y":
+        if self.spec.dims == 2 and self.target == "y":
             return self.columns[1]
         return self.columns[0]
 
     @property
     def wrangle_op(self) -> str:
         """The wrangle as a node records it: delete, impute, or impute_x / impute_y for one column of a pair."""
-        if self.op == "impute_rows_2d":
-            return f"impute_{self.target}"
-        return self.spec.kind
+        if self.spec.dims == 2 and self.spec.wrangle.fills_column:
+            return recorded_name(self.spec.wrangle, self.target)
+        return self.spec.wrangle.name
 
     def label(self) -> str:
         """Matches format_wrangle_label, so a candidate reads like the node it becomes."""
@@ -143,9 +146,9 @@ def validate_suggestion(node_table: str, raw: dict[str, Any], columns: list[str]
         raise SuggestionError(f"no such column in {node_table}: {unknown_list}")
 
     target = raw.get("target")
-    if op == "impute_rows_2d":
+    if spec.dims == 2 and spec.wrangle.fills_column:
         if target not in ("x", "y"):
-            raise SuggestionError(f"impute_rows_2d needs target 'x' or 'y', got {target!r}")
+            raise SuggestionError(f"{op} needs target 'x' or 'y', got {target!r}")
     else:
         target = None
 
@@ -158,12 +161,12 @@ def columns_for_ids(suggestion: Suggestion) -> list[str]:
     """
     Which columns' flags pick out the rows this operation touches.
 
-    This is the invariant in one function. An impute writes exactly one column, so only that
-    column's flagged rows may be in its id set - otherwise a 2D impute would overwrite a good
-    value in a row whose only problem was in the *other* column. A delete removes whole rows,
-    so for the 2D form the union is right: every row in it is still a flagged row.
+    This is the invariant in one function. An operation that fills a column - an impute - writes exactly that
+    column, so only its flagged rows may be in the id set - otherwise a 2D impute would overwrite a good
+    value in a row whose only problem was in the *other* column. Any other operation - a delete - acts on whole
+    rows, so for the 2D form the union is right: every row in it is still a flagged row.
     """
-    if suggestion.spec.kind == "impute":
+    if suggestion.spec.wrangle.fills_column:
         return [suggestion.imputed_column]
     return list(suggestion.columns)
 
@@ -193,34 +196,13 @@ def guard(node_table: str, suggestion: Suggestion) -> None:
     if row_count <= 0:
         raise SuggestionError(f"{node_table} has no rows")
 
-    if suggestion.spec.kind == "delete":
-        if len(ids) >= row_count:
-            raise SuggestionError(
-                f"that would delete all {row_count} rows and leave an empty table"
-            )
-        share = len(ids) / row_count
-        if share > MAX_DELETE_FRACTION:
-            raise SuggestionError(
-                f"that would delete {len(ids)} of {row_count} rows "
-                f"({share:.0%}); more than {MAX_DELETE_FRACTION:.0%} is refused"
-            )
+    # What else would make it do harm depends on the operation - see each one's ai_check in wrangle_ops.py
+    ai_check = suggestion.spec.wrangle.ai_check
+    if ai_check is None:
         return
-
-    # Impute: there has to be something clean left to derive a fill value from.
-    if len(ids) >= row_count:
-        raise SuggestionError(
-            f"every row in {columns} is flagged, so imputing would set them all to one constant"
-        )
-
-    col = suggestion.imputed_column
-    try:
-        # The same value impute_by_ids will fill with, so the guard and the write cannot disagree
-        fill = query.imputation_value(node_table, col)
-    except Exception as exc:
-        raise SuggestionError(f"could not compute a fill value for {col}: {exc}") from exc
-
-    if fill is None:
-        raise SuggestionError(f"{col} has no clean values to compute a fill from")
+    problem = ai_check(node_table, suggestion, row_count, columns)
+    if problem is not None:
+        raise SuggestionError(problem)
 
 
 def prepare(node_table: str, raw: dict[str, Any], columns: list[str]) -> Suggestion:

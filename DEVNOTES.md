@@ -96,6 +96,10 @@ When a file is uploaded, `load_file` in `app/routes/routes.py`:
 5. runs `build_node` on it,
 6. and starts the session's graph with this table as the root (`init_pgraph_for_session`).
 
+It refuses a file pandas can't read as a table, such as an empty file, a binary one, or one with a quote that's never
+closed, and returns `{"success": false}` with the reason. If an upload fails partway through, the tables it had
+already built are dropped. `GET /api/preloaded` answers 404 for a name that isn't one of the provided datasets.
+
 ---
 
 ## 4. Error detection
@@ -112,6 +116,29 @@ inside Postgres, in one query with several steps, and the results are saved as t
 | `incomplete` | it's in a text column that has 10 or fewer numbers, and its value shows up fewer than 3 times |
 
 For text columns, each distinct value is only checked once, no matter how many rows it appears in.
+
+Each error type is one **detector**: a `detect_<type>` method on `DetectorSQL`. A detector doesn't add steps to the
+query. It returns its rule as SELECT branches (a `DetectorBranches`), and two steps gather every detector's branches:
+- `flag_text_values` gathers the rules over a text column's distinct values.
+- `collect_flagged_cells` gathers the rules over cells.
+
+The measurements several rules share are steps of their own, so they're made once: each text value's count, number
+and kind, and each numeric column's mean and spread.
+
+The error types themselves are listed once, in `shared/error_types.json`, with each one's label, colour and how the
+AI is told about it. The backend reads it in `app/error_types.py`, and `ERROR_TYPES` in `detector_sql.py` is its keys
+in order. The frontend reads the same file in `ui/src/store/errorColors.js`.
+
+### Adding a detector
+
+1. Add an entry to `shared/error_types.json`. Its position is where the type shows up in every list.
+2. Write a `detect_<key>` method on `DetectorSQL` that returns its branches. `DetectorSQL` refuses to start if a
+   listed type has no method, so a missing one fails straight away instead of quietly flagging nothing.
+3. Add the rule to `tests/stress/reference.py`'s `detect`. Until you do, the detector stress tests fail, because the
+   new flags don't match the answer key.
+
+That's all. The node metrics, the sparklines, the compare panel's measures, the attribute list, the table colours and
+the AI's prompt and tools all read the new type from the JSON.
 
 Some columns are just bookkeeping and never get flagged. Metrics, drift and the AI's profile ignore them too. They're
 listed in `STRUCTURAL_COLUMNS` in `column_types.py`: `ID`, `Unnamed: 0`, and the `index` and `level_0` columns that
@@ -132,6 +159,9 @@ There are two ways candidates get made:
 - **Repairs.** `POST /api/wrangle/create-previews` creates a candidate for every possible way to repair what the
   user has selected. If one column is selected, that's delete and impute. If two columns are selected, it's delete,
   impute x and impute y. These candidates belong together, so `stage_all` either adds all of them or none of them.
+  The route only accepts whole-number row IDs in bigint's range, so `1.5` or `"1"` is refused instead of cast. Every
+  candidate, from either source, is refused before its table is copied unless its columns are data columns of the
+  node (`_check_columns`). That rules out the structural `ID` column, which an impute would otherwise overwrite.
 - **AI suggestions.** `POST /api/ai/suggest` writes up the node's profile as text (`app/llm/profile.py`) and asks
   Gemini which tools it wants to call (`app/llm/gemini_client.py`, `app/llm/tools.py`). Each call Gemini makes is
   validated, and its rows are found from the error flags (`ai_wrangle.prepare`). Then `stage_each` adds each
@@ -139,9 +169,8 @@ There are two ways candidates get made:
 
 Once candidates exist, the user can accept or decline them:
 
-- `POST /api/candidates/accept` accepts a candidate. It gets a label and becomes the current node. Its optional
-  `inherit` field says what happens to the support nodes the candidate inherited from its parent: `"show"`,
-  `"hide"` (the default) or `"drop"`. See [Support nodes](#support-nodes).
+- `POST /api/candidates/accept` accepts a candidate. It gets a label and becomes the current node, and the support
+  nodes it inherited from its parent open. See [Support nodes](#support-nodes).
 - `POST /api/candidates/discard` removes candidates and deletes their tables.
 - `POST /api/reset` removes every candidate.
 
@@ -157,7 +186,38 @@ file), the new tables are deleted instead of registered.
 
 The wrangles themselves are `remove_rows_by_ids` and `impute_by_ids` in `app/db_utils/query.py`. Impute fills cells
 with the column's mean. If the column is categorical, it uses the most common value instead. Either way, the value is
-calculated only from the cells that aren't missing.
+calculated only from the cells that aren't missing. In a whole-number column the mean is rounded, so the column stays
+whole numbers. That's intended.
+
+Each operation is declared once, as a `WrangleOp` in `app/server_utils/wrangle_ops.py`. Each entry holds:
+- how the operation runs
+- its candidate's title and reason
+- the sentence the compare panel describes its node with
+- its AI tools, and the check an AI suggestion of it has to pass
+
+Everything that offers, runs or describes a wrangle reads that entry:
+- the repair route (`repair_options`)
+- `candidates._build`
+- the graph's labels in `node.py`
+- `ai_wrangle` and `app/llm/tools.py`
+
+An unknown operation is refused, not run as something else.
+
+A node records its operation by name: `delete` or `impute`. When an operation that fills a column runs on a
+two-column selection, the name gets an `_x` or `_y` suffix (`impute_y`) to say which column it filled.
+`parse_wrangle_op` reads either form back.
+
+### Adding a wrangle operation
+
+1. Write its SQL in `app/db_utils/query.py`, following DBOperations' structure.
+2. Add a `WrangleOp` to `WRANGLE_OPS` in `wrangle_ops.py`, with `fills_column` set if it writes one column. Its
+   position is where its candidate is listed.
+3. If the AI should be able to suggest it, give it `ai_tools` and an `ai_check`, add it to `AI_TOOL_OPS`, and add a
+   sentence about when to use it to the rules in `app/llm/prompts.py`.
+4. Add it to `tests/stress/reference.py` and to the wrangle stress tests' `expected_rows_for`.
+
+An operation can edit or delete rows, but it can't create them. Drift, the Sankey's removed sink and the compare views
+all rely on a node's rows being a subset of root's, and `check_row_identity` raises an error when they aren't.
 
 ---
 
@@ -176,8 +236,9 @@ uploaded yet. Use `service_helpers.session_graph()` to get it.
 
 Moving around the graph:
 - `undo_pgraph` moves up to the current node's parent. It does nothing at the root.
-- `redo_pgraph` moves back down to the node you most recently undid out of. If there isn't one, it moves to the
-  current node's newest child.
+- `redo_pgraph` moves back down the path undo came up, one node at a time, so several undos are redone in order.
+  Each undo adds the node it left to `_redo_path`, and each redo takes it off again. Any other move (clicking a
+  node, a new node) clears the path. With no undo to retrace, redo moves to the current node's newest child.
 - `set_clicked_node_as_current` jumps straight to whatever node the user clicked.
 
 Any route that moves these pointers holds `WRANGLE_LOCK` while it does, so a candidate can't be deleted halfway
@@ -235,14 +296,9 @@ Every copy is marked `inherited` and `startMinimized`, so a new candidate shows 
 badges instead of opening them all at once. When the user changes a copy, it stops being `inherited` and counts as
 the user's own.
 
-**Accepting.** `apply_inherit_choice` runs when a candidate is accepted, and does what the `inherit` field asks:
-
-- `"show"` opens the inherited support nodes.
-- `"hide"` leaves them as badges.
-- `"drop"` removes the copies that are still marked `inherited`. Copies the user changed, and support nodes the user
-  added to the candidate themselves, stay.
-
-Either way, nothing is marked `inherited` afterwards.
+**Accepting.** `settle_inherited` runs when a candidate is accepted. It opens the copies that are still marked
+`inherited`, so the accepted node shows them. Copies the user changed, and support nodes the user added to the
+candidate themselves, are left as they are. Nothing is marked `inherited` afterwards.
 
 **Keeping the records up to date.** The frontend changes its own copy of a record first, then sends the change to
 `POST`, `PATCH` or `DELETE /api/pgraph/support_nodes`. The `PATCH` requests are delayed slightly, so that a resize
@@ -330,11 +386,18 @@ and its oid. `ColumnTypes.forget(table)` clears a table's cached entry, and any 
 
 This module also defines the shared rules that every query uses to read a cell. Because everything uses the same
 rules, all the views show consistent results:
-- `number_expression`: how to read a value as a number
+- `number_expression`: how to read a value as a number. Text counts as a number when it's digits, with an optional
+  minus sign and fraction, and only ASCII spaces around it (`NUMERIC_TEXT_REGEX`). A number padded with a unicode
+  space, such as a non-breaking space pasted from a spreadsheet, is text, because Postgres can't cast it.
 - `missing_cell_predicate`: how to tell if a cell is missing. This is the same rule the `missing` error check uses.
 - `category_expression`: how to read a cell as a category. Missing cells come out as `NULL_LABEL`.
 
 It also defines the labels that all the plots share: `NULL_LABEL`, `OTHER_LABEL`, `MAX_LABELS` and `REMOVED_LABEL`.
+
+The catch-all `(other)` and the Sankey's `(removed)` sink belong to the app, so a real value can't share their names.
+`category_expression` adds one more pair of double quotes to any value spelled like either of them
+(`SENTINEL_LOOKALIKE_REGEX`). A real `(other)` shows as `"(other)"`, and a real `"(other)"` shows as `""(other)""`, so no
+two values end up with the same label.
 
 ### DataProfile
 
@@ -482,7 +545,7 @@ there. You don't need to add an import anywhere.
 | `routes.py` | `POST /api/upload`, `GET /api/preloaded`, `GET /api/tablename`, `POST /api/undo`, `POST /api/redo`, `POST /api/reset` |
 | `plot_routes.py` | `GET /api/plots/1-d-histogram`, `2-d-histogram`, `scatterplot`, `top-error-rows`, `summaries`; `POST rows-in-bin`, `bins-for-rows`, `update-backend-attributes`; `GET preview-histogram`, `preview-scatterplot` (these two work on any node's table) |
 | `wrangler_routes_sql.py` | `POST /api/wrangle/create-previews` (creates repair candidates) |
-| `candidate_routes.py` | `POST /api/candidates/accept` (with an optional `inherit`), `POST /api/candidates/discard` |
+| `candidate_routes.py` | `POST /api/candidates/accept`, `POST /api/candidates/discard` |
 | `ai_routes.py` | `GET /api/ai/status`, `POST /api/ai/suggest` |
 | `pgraph_routes.py` | `GET /api/routes/update_pgraph`, `POST /api/setGraphToClickedNode`, `GET /api/pgraph/branch_trajectory`, `GET /api/pgraph/compare`, `GET /api/pgraph/drift_detail`, `POST`/`PATCH`/`DELETE /api/pgraph/support_nodes` |
 
@@ -549,12 +612,9 @@ This is where the user accepts or declines a candidate. It doesn't matter whethe
 or from the AI. Both kinds are handled the same way here, just like on the server.
 
 - `candidates`: the candidates currently in the graph. They come from `PGraphContext`.
-- `acceptCandidate(table, inherit)`: calls `POST /api/candidates/accept`, applies the same `inherit` choice to the
-  support nodes on the page (`settleInherited`), refreshes the graph, then moves to the accepted node with
-  `useMoveToTable`. To the rest of the app, an accepted candidate looks exactly like a wrangle that just ran. If the
-  candidate inherited support nodes, its Accept button first opens a choice: "Accept & show support nodes",
-  "Accept & hide support nodes" or "Accept without support nodes". Otherwise it accepts straight away with
-  `"hide"`.
+- `acceptCandidate(table)`: calls `POST /api/candidates/accept`, opens the inherited support nodes on the page
+  (`settleInherited`), refreshes the graph, then moves to the accepted node with `useMoveToTable`. To the rest of the
+  app, an accepted candidate looks exactly like a wrangle that just ran.
 - `declineCandidate(table)` and `declineAll(parent)`: call `POST /api/candidates/discard`, remove any support nodes
   attached to those candidates, and refresh the graph. If the user was on a declined candidate, the server moves
   them to its parent, and this follows along.
@@ -675,6 +735,8 @@ and the tests are in `tests/`. Everything else is either run once by hand, or us
 ├── .env.example                 # the database settings and GEMINI_API_KEY to copy into .env
 ├── requirements.txt             # Python dependencies
 ├── pytest.ini                   # test paths and the `sql` / `slow` markers
+├── shared/
+│   └── error_types.json         # the error types, their labels and colours - read by the backend and the frontend
 ├── README.md
 ├── DEVNOTES.md                  # this file
 └── LICENSE
@@ -686,6 +748,7 @@ and the tests are in `tests/`. Everything else is either run once by hand, or us
 app/
 ├── __init__.py                  # creates the Flask app, serves ui/dist, checks the database exists, sets up the engine,
 │                                #   db_operations and pgraph_for_session, then imports every file in routes/
+├── error_types.py               # reads shared/error_types.json: the error types, in order
 ├── db_utils/                    # all of the SQL lives here
 │   ├── bootstrap.py             # creates the database on startup if it doesn't exist yet
 │   ├── db_functions_sql.py      # DBOperations: the plots, plus creating, copying and deleting tables
@@ -716,6 +779,7 @@ app/
 │   └── ai_routes.py             # AI status, and staging AI suggestions as candidates
 ├── server_utils/                # the logic the routes share
 │   ├── service_helpers.py       # build_node, table naming, getting the session's graph, WRANGLE_LOCK
+│   ├── wrangle_ops.py           # every wrangle operation, declared once: how it runs, is offered, described and suggested
 │   ├── candidates.py            # claiming, building, registering, accepting and declining candidates
 │   ├── ai_wrangle.py            # the database's side of AI suggestions: checks each one and finds its rows
 │   ├── workers.py               # QUERY_POOL, NODE_POOL, run_all
@@ -735,6 +799,8 @@ Section 11 explains how the frontend fits together. This is the full list of fil
 ui/
 ├── package.json, package-lock.json
 ├── vite.config.js               # the Vite dev server, which forwards /api to Flask on port 5001. `npm run build` writes dist/
+├── playwright.config.js         # the end-to-end tests' setup - see section 13
+├── e2e/                         # the end-to-end tests: specs, fixtures, helpers, and the mock datasets in data/
 ├── eslint.config.js
 ├── index.html                   # the page Vite builds from
 ├── public/images/               # copied into the build as they are
@@ -780,7 +846,7 @@ ui/
     │   └── PreviewCard.jsx      # the small plot on a candidate node
     ├── graph_objects/           # the custom React Flow nodes and edges
     │   ├── NodeTypes.jsx        # the graph's node: label, metrics, buttons, and its role in a comparison
-    │   ├── ProspectiveNode.jsx  # a candidate node: its preview, why it was suggested, Accept (with the inherit choice) and Decline
+    │   ├── ProspectiveNode.jsx  # a candidate node: its preview, why it was suggested, Accept and Decline
     │   ├── NodeMetrics.jsx      # a node's error rates and size, as the magnifier and the metrics support node show them
     │   ├── AnalysisEdge.jsx     # analysis mode's straight edges, cut off at each node's box
     │   └── supportNodes/        # support nodes: the small extras attached to a graph node
@@ -853,8 +919,19 @@ tests/
 │   └── test_distortion_survey.py
 └── unit/                        # no database needed
     ├── test_distortion.py, test_node_metrics.py, test_safe_pg_name.py, test_ai_tools.py
-    ├── test_support_nodes.py    # what a child inherits, and what each accept choice keeps
+    ├── test_support_nodes.py    # what a child inherits, and what accepting does with it
+    ├── test_wrangle_ops.py      # the wrangle operations' registry, and that a detector-less error type fails at start
     └── test_approx_cardinality.py, test_benchmark_validation.py, test_reproducibility.py   # for the folders below
+└── stress/                      # the data operations over generated datasets, held to an answer key. Needs Postgres
+    ├── generators.py            # seeded adversarial datasets: a "personality" per column, aimed at one rule each
+    ├── reference.py             # the answer key: every rule restated in plain Python, none of the app's SQL
+    ├── conftest.py              # make_root (through the upload path, or values stored as they are), the seeds
+    ├── family.py                # root, an accepted child, its sibling candidate and a grandchild, built as a user would
+    ├── make_e2e_expected.py     # writes the end-to-end tests' mock CSVs and their expected values, from reference.py
+    ├── test_detector_stress.py, test_wrangle_stress.py, test_plots_stress.py, test_upload_stress.py
+    ├── test_compare_stress.py, test_drift_stress.py
+    ├── test_route_fuzz.py       # every data route given input it should refuse
+    └── test_found_bugs.py       # each bug the stress tests found, reproduced on its own, now a regression test
 ```
 
 ### Other folders
@@ -878,7 +955,82 @@ provided_datasets/               # the sample CSVs offered on the home page, plu
 - `tests/unit` tests pure logic and doesn't need a database.
 - `tests/sql` runs against your local Postgres, and its tests are marked `@pytest.mark.sql`. It covers uploading,
   the main view's plots, error detection, compare, drift, the data profile, candidates (including the support
-  nodes they inherit and the accept choices) and the AI routes. There's
+  nodes they inherit and what accepting does with them) and the AI routes. There's
   also a golden survey test that checks drift and Pareto results against known values.
 
 To run both, use `.venv/bin/pytest tests/unit tests/sql`.
+
+### Stress tests
+
+`tests/stress` runs the data operations over datasets it generates, and checks every result against an answer key
+instead of against hand-picked numbers. It covers:
+
+- error detection and the node metrics
+- uploads
+- delete and impute, on one column and on two, through the same route the Repair button uses
+- chains of accepted wrangles, and candidates built at the same time
+- the main view's histograms, scatterplot and bar-click selections
+- comparisons between every kind of node pair
+- drift, its detail payloads, and drift measured from an ancestor
+- every data route given bad input
+
+**The answer key.** `reference.py` restates each rule in plain Python and computes the same results the app's SQL
+does. It never imports the app's query builders, so a mistake in a query can't be copied into its own answer. Its rules
+come from the app's docstrings and from the original pandas code (the git history before `56d65dd`), which is the gold
+standard when the two disagree. Some values sit exactly on a threshold, such as a number on a bin edge or a cell at
+exactly two standard deviations. The database can round those either way, so the answer key marks them
+"borderline" and the tests accept either side.
+
+**The datasets.** `generators.py` builds each dataset from a seed. Each column gets a personality that targets one
+rule: fewer than ten numbers, a constant column, numbers stored as text, the missing tokens and text that only looks
+missing, more labels than an axis keeps, ties, unicode, and quotes in names and values. A dataset reaches the database
+in one of two ways. It goes through the real upload path as a CSV, or its values are stored exactly as they are, which
+keeps values a CSV can't carry (an empty string, the text `"null"`).
+
+**Running them.**
+
+- `.venv/bin/pytest tests/stress` runs every test over 20 seeds, in about two minutes.
+- `STRESS_SEEDS=50` is a deeper run, which is plenty before a merge. `STRESS_SEED_START` moves the window to seeds
+  you haven't run yet.
+- Every failure names its seed. `STRESS_SEEDS=1 STRESS_SEED_START=<seed>` reruns just that one.
+
+**Bugs they find.** The bugs found so far were all fixed on October 29, 2026. Their tests stay in
+`test_found_bugs.py` and `test_route_fuzz.py` as regression tests.
+
+When a new bug turns up:
+1. Add a test that reproduces it, marked `pytest.mark.xfail(strict=True, reason="BUG: ...")`.
+2. Keep its input out of the random datasets until it's fixed, so it can't hide other bugs.
+
+Once the bug is fixed, the test passes and the strict marker turns that into a failure. That's the reminder to take
+the marker off.
+
+### End-to-end tests
+
+`ui/e2e` drives the real app in Chrome with Playwright. It covers uploading, the attribute plots, repairs, the graph,
+comparing (docked and popped out), support nodes, AI suggestions, settings, and long random "journeys" through the
+app. Every number a test reads off the screen is checked against two things: the expected values in
+`ui/e2e/data/expected/*.json` and the live API response.
+
+**Running them.**
+- `cd ui && npm run e2e` runs the suite, and `npm run e2e:report` opens the HTML report.
+- Playwright starts its own stack: a backend on port 5002 and Vite on 5183 (`e2e/vite.e2e.config.js`). It never
+  touches the dev servers on 5001 and 5173, so you can keep using the app while the tests run.
+- The tests run one at a time (one worker), because the backend keeps a single active graph.
+- They use your installed Chrome, so there's no browser to download.
+
+**The mock data.** There are four small CSVs in `ui/e2e/data/`, each built to exercise one thing:
+- `e2e_tiny`: twelve rows, every value picked by hand.
+- `e2e_games_small`: shaped like games.csv, with the same rows missing in Critic_Score and Critic_Count.
+- `e2e_many_labels`: more categories than an axis keeps.
+- `e2e_anomalies`: known outliers.
+
+`.venv/bin/python -m tests.stress.make_e2e_expected` writes the CSVs and their expected values, using the stress
+tests' answer key. Rerun it whenever a rule in `reference.py` changes.
+
+**Rules for changing the app.**
+- The plots' marks carry `data-*` attributes that the tests read (`data-bin`, `data-count`, `data-x-bin`,
+  `data-row-id`, and so on). Treat them as part of the app, and keep them when you change a plot.
+- A shared guard fails any test that logs a console error or gets a 5xx response.
+- `/api/ai/suggest` is always mocked, so the tests never call Gemini.
+- A test that captures a known bug uses `test.fail()` with a "BUG:" annotation. Take the marker off once the bug is
+  fixed.

@@ -1,7 +1,7 @@
 // comparison.js
 // Shared by the compare panel and the plot it draws.
 
-import { ERROR_DIMENSIONS } from "../store/errorColors.js";
+import { ERROR_DIMENSIONS, ERROR_TYPE_DETAILS } from "../store/errorColors.js";
 import { truncateText } from "./textUtils.js";
 
 /* What each node is called, by its table - "n2b" - as the graph's payload labels it. A node's table name is
@@ -33,14 +33,14 @@ export function baseName(id) {
 }
 
 /* A sentence for the wrangle that produced a node: "Imputed age", "Deleted rows selected on age ×
-   income". An op this does not know still reads, as the op and its columns. */
+   income". The server writes it, from the operation's own description (app/server_utils/wrangle_ops.py); a wrangle
+   without one still reads, as the op and its columns. */
 export function describeWrangle(wrangle) {
     if (!wrangle) return null;
     if (wrangle.op === "root") return "Original upload";
+    if (wrangle.description) return wrangle.description;
 
     const columns = wrangle.columns?.join(" × ");
-    if (wrangle.op === "impute") return columns ? `Imputed ${columns}` : "Imputed values";
-    if (wrangle.op === "delete") return columns ? `Deleted rows selected on ${columns}` : "Deleted rows";
     return columns ? `${wrangle.op} · ${columns}` : wrangle.op;
 }
 
@@ -127,16 +127,17 @@ export function otherCategories(data) {
     };
 }
 
-/* What a difference plot, or a heatmap tile, measures: rows, or error flags of some kind. The label
-   names the option; the noun is how the plot talks about it on an axis or in a tooltip. */
+/* What a difference plot, or a heatmap tile, measures: rows, or error flags of some kind - all of them, or one error
+   type, named as shared/error_types.json names it. The label names the option; the noun is how the plot talks about
+   it on an axis or in a tooltip. */
 export const MEASURES = {
     items: { label: "Rows", noun: "rows" },
     errors: { label: "All errors", noun: "error flags" },
-    missing: { label: "Missing", noun: "missing values" },
-    mismatch: { label: "Type mismatch", noun: "type mismatches" },
-    anomaly: { label: "Anomalies", noun: "anomalies" },
-    incomplete: { label: "Incomplete", noun: "incomplete values" },
 };
+for (const type of ERROR_DIMENSIONS) {
+    const details = ERROR_TYPE_DETAILS[type];
+    MEASURES[type] = { label: details.short_label, noun: details.noun };
+}
 
 /**
  * One side's value for a measure, read from a bin's counts ({items, missing, anomaly, ...}). An

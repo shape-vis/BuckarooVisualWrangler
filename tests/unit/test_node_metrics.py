@@ -92,7 +92,8 @@ class QualityTrajectoryTests(unittest.TestCase):
         ]
 
     def test_deltas_and_contributions(self):
-        # 0.20 -> 0.10 -> 0.15, so deltas are -0.10 and +0.05 and the absolute change is 0.15
+        # 0.20 -> 0.10 -> 0.15, so deltas are -0.10 and +0.05 and the absolute change is 0.15. q is an error rate,
+        # so higher is worse: a fall in errors contributes negatively, a rise positively
         trajectory = quality_trajectory(self._metrics([0.20, 0.10, 0.15]))['missing']
 
         self.assertAlmostEqual(trajectory['deltas'][0], -0.10)
@@ -100,17 +101,6 @@ class QualityTrajectoryTests(unittest.TestCase):
         self.assertAlmostEqual(trajectory['contributions'][0], -2 / 3)
         self.assertAlmostEqual(trajectory['contributions'][1], 1 / 3)
         self.assertFalse(trajectory['no_change'])
-
-    def test_a_rise_in_error_rate_is_a_positive_contribution(self):
-        # q is an error rate, so higher is worse: a step that adds errors degrades quality
-        trajectory = quality_trajectory(self._metrics([0.1, 0.3]))['missing']
-
-        self.assertGreater(trajectory['contributions'][0], 0)
-
-    def test_a_fall_in_error_rate_is_a_negative_contribution(self):
-        trajectory = quality_trajectory(self._metrics([0.3, 0.1]))['missing']
-
-        self.assertLess(trajectory['contributions'][0], 0)
 
     def test_flat_branch_reports_no_change_instead_of_dividing_by_zero(self):
         trajectory = quality_trajectory(self._metrics([0.2, 0.2, 0.2]))['missing']
@@ -173,6 +163,58 @@ class PathBetweenTests(unittest.TestCase):
         graph = self._branched_graph()
         self.assertIsNone(graph.path_between("nope", "n2c"))
         self.assertIsNone(graph.path_between("n0a", "nope"))
+
+
+class UndoRedoTests(unittest.TestCase):
+    def _chain_with_staged_siblings(self):
+        """
+            n0a ── n1b ── n2c ── n3d
+                     └ c0    └ c1
+
+        Each step's other repair is still staged, and was added after the one accepted, so it is its parent's
+        most recent child.
+        """
+        graph = PGraph()
+        graph.add_root_node(GraphNode("root", "root", "n0a", "errors_n0a"))
+        for parent, child, sibling in (("n0a", "n1b", None), ("n1b", "n2c", "c0"), ("n2c", "n3d", "c1")):
+            graph.add_node(GraphNode(parent, "delete", child, f"errors_{child}"))
+            if sibling:
+                graph.add_candidate(GraphNode(parent, "impute", sibling, f"errors_{sibling}"))
+        return graph
+
+    def test_redo_retraces_several_undos_past_staged_siblings(self):
+        graph = self._chain_with_staged_siblings()
+
+        undone = []
+        for _ in range(3):
+            undone.append(graph.undo_pgraph())
+        self.assertEqual(undone, ["n2c", "n1b", "n0a"])
+        self.assertIsNone(graph.undo_pgraph())
+
+        redone = []
+        for _ in range(3):
+            redone.append(graph.redo_pgraph())
+        self.assertEqual(redone, ["n1b", "n2c", "n3d"])
+        self.assertIsNone(graph.redo_pgraph())
+
+    def test_with_no_undo_to_retrace_redo_goes_to_the_newest_child(self):
+        graph = self._chain_with_staged_siblings()
+        graph.undo_pgraph()
+        graph.undo_pgraph()
+
+        # Clicking a node is a move of its own, so the undos before it are not retraced
+        graph.set_clicked_node_as_current("n1b")
+        self.assertEqual(graph.redo_pgraph(), "c0")
+
+    def test_declining_a_node_on_the_redo_path_takes_it_off(self):
+        graph = self._chain_with_staged_siblings()
+        graph.set_clicked_node_as_current("c1")
+        graph.undo_pgraph()
+
+        graph.remove_candidate("c1")
+
+        # c1 was the newest child, so the newest left is the accepted n3d
+        self.assertEqual(graph.redo_pgraph(), "n3d")
 
 
 class NodeIdTests(unittest.TestCase):
@@ -260,11 +302,15 @@ class WrangleLabelTests(unittest.TestCase):
 
     def test_summary_names_only_the_columns_the_wrangle_acted_on(self):
         node = GraphNode("n0a_x", "impute_x", "n0b_x", "errors_n0b_x", ["salary", "region"])
-        self.assertEqual(node.wrangle_summary(), {"op": "impute", "columns": ["salary"]})
+        summary = node.wrangle_summary()
+        self.assertEqual(summary["op"], "impute")
+        self.assertEqual(summary["columns"], ["salary"])
+        # The wording itself is test_wrangle_ops' to check
+        self.assertIsNotNone(summary["description"])
 
     def test_root_summary_has_no_columns(self):
         root = GraphNode("root", "root", "n0a_x", "errors_n0a_x")
-        self.assertEqual(root.wrangle_summary(), {"op": "root", "columns": []})
+        self.assertEqual(root.wrangle_summary(), {"op": "root", "columns": [], "description": None})
 
     def test_serialized_nodes_carry_their_wrangle(self):
         # A node folded into a collapsed run loses its incoming edge on screen, so the node itself has
@@ -275,8 +321,9 @@ class WrangleLabelTests(unittest.TestCase):
 
         wrangles = {node["id"]: node["data"]["wrangle"] for node in graph.serialize_nodes()}
 
-        self.assertEqual(wrangles["n0a_x"], {"op": "root", "columns": []})
-        self.assertEqual(wrangles["n0b_x"], {"op": "delete", "columns": ["salary", "region"]})
+        self.assertEqual(wrangles["n0b_x"]["op"], "delete")
+        self.assertEqual(wrangles["n0b_x"]["columns"], ["salary", "region"])
+        self.assertIsNotNone(wrangles["n0b_x"]["description"])
 
 
 if __name__ == '__main__':

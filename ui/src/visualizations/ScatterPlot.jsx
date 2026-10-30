@@ -87,7 +87,9 @@ function ScatterPlot({
       .attr("cy", d => yScale.apply(d.y, d.yType, true))
       .attr("r", 4)
       .attr("cursor", "pointer")
-      .attr("fill", circleFill);
+      .attr("fill", circleFill)
+      // For the end-to-end tests: which row a point is
+      .attr("data-row-id", d => d.ID);
 
     circlesRef.current = circles;
 
@@ -166,7 +168,8 @@ function ScatterPlot({
   }
 
   return (
-    <g transform={`translate(${xPos}, ${yPos})`} className="scatter-canvas">
+    <g transform={`translate(${xPos}, ${yPos})`} className="scatter-canvas" data-testid="scatterplot"
+       data-x-column={attrX} data-y-column={attrY}>
       <rect width={size} height={size} fill="#ffffff00" onClick={handleBackgroundClick} />
       <g ref={drawingRef}></g>
     </g>

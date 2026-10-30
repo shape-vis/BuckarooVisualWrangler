@@ -30,11 +30,18 @@ def load_file(csv_file, filename):
     "ID", write it to the database under a unique table name, build the root's errors, data profile, metrics and
     drift there - the same build every node gets - and start the session's graph from it.
 
+    A file pandas cannot read as a table - empty, binary, a quote never closed - is refused, and an upload that fails
+    part way through leaves none of its tables behind.
+
     :param csv_file: the local csv to use
     :param filename: the name of the csv_file
     :return: json object
     """
-    dataframe = pd.read_csv(csv_file)
+    try:
+        dataframe = pd.read_csv(csv_file)
+    except ValueError as e:
+        # pandas' EmptyDataError and ParserError, and a file that isn't text at all, are all ValueErrors
+        return {"success": False, "error": f"{filename} could not be read as a CSV file: {e}"}
 
     table_with_id_added = set_id_column(dataframe)
     table_name = generate_table_name(filename)
@@ -65,6 +72,8 @@ def load_file(csv_file, filename):
     except Exception as e:
         print(f"Error in upload: {e}")
         traceback.print_exc()
+        # Whatever was built before the failure goes with it - the table, its errors, its profile
+        db_operations.drop_node_tables(table_name_with_node_id)
         return {"success": False, "error": str(e)}
 
 
@@ -85,9 +94,12 @@ def preloaded_csv():
     :return: whether it was completed successfully
     """
     # Only the file's own name, so a request can't reach outside provided_datasets/
-    csv_file = os.path.basename(request.args.get("file"))
+    csv_file = os.path.basename(request.args.get("file") or "")
+    path = "provided_datasets/" + csv_file
+    if not csv_file or not os.path.isfile(path):
+        return {"success": False, "error": f"there is no provided dataset called {csv_file!r}"}, 404
 
-    return load_file("provided_datasets/" + csv_file, csv_file)
+    return load_file(path, csv_file)
 
 
 @app.get("/api/tablename")

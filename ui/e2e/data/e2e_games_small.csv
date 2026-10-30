@@ -1,0 +1,301 @@
+Name,Platform,Genre,Critic_Score,Critic_Count,User_Score,Developer,Rating
+Game 001,PC,Shooter,90,21,3.7,Nintendo,E10+
+Game 002,PS3,Puzzle,,,5.0,Ubisoft,E10+
+Game 003,PS3,Racing,55,40,2.1,EA Canada,E10+
+Game 004,Wii,Racing,55,36,5.5,Capcom,E10+
+Game 005,PS2,Puzzle,70,61,2.7,Konami,M
+Game 006,X360,Sports,,,5.6,Nintendo,M
+Game 007,DS,Sports,54,55,8.9,Nintendo,E
+Game 008,PC,Racing,55,34,2.3,Konami,M
+Game 009,PS3,Shooter,49,3,6.4,Capcom,T
+Game 010,PS2,Shooter,46,79,5.8,Nintendo,E10+
+Game 011,Wii,Puzzle,69,67,8.1,Konami,T
+Game 012,X360,Racing,39,9,6.8,Nintendo,E
+Game 013,PS2,Action,,,8.9,Capcom,E10+
+Game 014,Wii,Action,56,58,5.4,EA Canada,E
+Game 015,PC,Action,52,8,9.0,Nintendo,E10+
+Game 016,PS2,Puzzle,91,5,6.0,Konami,T
+Game 017,PS2,Racing,64,57,8.5,Capcom,M
+Game 018,DS,Puzzle,89,66,8.1,Tiny Studio,E10+
+Game 019,PS2,Sports,86,18,5.9,Ubisoft,E
+Game 020,PS2,Racing,41,61,5.1,EA Canada,E
+Game 021,DS,Racing,57,17,4.1,Konami,T
+Game 022,Wii,Racing,46,15,2.7,Capcom,T
+Game 023,PS2,Racing,53,16,4.1,Nintendo,M
+Game 024,Wii,Sports,62,11,tbd,Ubisoft,E10+
+Game 025,PS3,Shooter,60,5,2.7,Konami,M
+Game 026,PS2,Shooter,,,7.4,Nintendo,E10+
+Game 027,X360,Sports,89,57,8.6,Ubisoft,M
+Game 028,X360,Shooter,85,6,4.5,Nintendo,M
+Game 029,Wii,Sports,32,72,3.5,Nintendo,E
+Game 030,PS2,Racing,34,19,6.5,Ubisoft,E
+Game 031,Wii,Shooter,83,52,7.8,EA Canada,T
+Game 032,PS3,Racing,80,35,3.7,Nintendo,M
+Game 033,DS,Racing,70,20,6.5,EA Canada,E
+Game 034,PS2,Shooter,73,69,4.4,Nintendo,T
+Game 035,PS2,Racing,49,54,4.7,EA Canada,M
+Game 036,PC,Puzzle,75,61,6.1,Capcom,M
+Game 037,PC,Action,49,65,9.1,Konami,E10+
+Game 038,Wii,Shooter,40,41,7.5,EA Canada,E
+Game 039,DS,Action,57,77,2.3,Capcom,E10+
+Game 040,X360,Racing,,,2.8,EA Canada,E10+
+Game 041,X360,Action,35,78,3.4,Ubisoft,M
+Game 042,X360,Shooter,,,3.4,Nintendo,E10+
+Game 043,Wii,Shooter,51,69,tbd,Ubisoft,T
+Game 044,DS,Shooter,30,50,tbd,Ubisoft,T
+Game 045,PC,Sports,61,19,,Ubisoft,E10+
+Game 046,PS3,Sports,,,6.6,Nintendo,M
+Game 047,X360,Sports,,,3.9,Ubisoft,E10+
+Game 048,PS3,Shooter,38,14,7.8,Ubisoft,T
+Game 049,PS2,Puzzle,72,44,7.4,Capcom,E10+
+Game 050,PS3,Shooter,58,47,4.6,Konami,E10+
+Game 051,X360,Racing,,,3.0,Ubisoft,M
+Game 052,DS,Sports,86,36,6.7,EA Canada,M
+Game 053,PC,Racing,,,6.3,Capcom,
+Game 054,PC,Racing,82,46,,Capcom,T
+Game 055,DS,Shooter,37,54,2.1,Konami,M
+Game 056,PC,Sports,83,63,5.6,Nintendo,E
+Game 057,PS3,Shooter,,,9.1,Ubisoft,E
+Game 058,PS2,Racing,65,50,tbd,EA Canada,E
+Game 059,PC,Shooter,58,62,7.0,Ubisoft,E
+Game 060,PS3,Sports,,,6.2,Nintendo,E
+Game 061,X360,Racing,,,7.5,EA Canada,E10+
+Game 062,PS3,Action,74,43,3.9,Ubisoft,
+Game 063,DS,Puzzle,32,64,3.9,Capcom,T
+Game 064,DS,Sports,68,30,8.1,Nintendo,M
+Game 065,DS,Action,95,69,5.7,Ubisoft,M
+Game 066,PS2,Action,62,70,4.9,Nintendo,
+Game 067,X360,Puzzle,,,8.4,EA Canada,T
+Game 068,PC,Shooter,47,74,8.4,Ubisoft,E10+
+Game 069,PC,Shooter,54,22,7.3,EA Canada,T
+Game 070,DS,Racing,37,7,4.2,EA Canada,T
+Game 071,DS,Puzzle,46,61,7.2,EA Canada,T
+Game 072,PC,Puzzle,33,41,4.7,Konami,E
+Game 073,Wii,Sports,,,4.4,Konami,E
+Game 074,PS2,Shooter,75,78,7.2,Ubisoft,M
+Game 075,PS3,Action,54,14,5.2,EA Canada,T
+Game 076,PC,Action,77,23,8.5,Capcom,E10+
+Game 077,PS2,Action,69,59,6.2,Capcom,E
+Game 078,PC,Puzzle,44,13,7.1,EA Canada,E
+Game 079,X360,Puzzle,54,57,tbd,EA Canada,M
+Game 080,Wii,Action,31,64,8.7,Ubisoft,E10+
+Game 081,PC,Shooter,58,48,6.6,Konami,E
+Game 082,DS,Shooter,71,35,2.6,Capcom,M
+Game 083,PS3,Shooter,42,38,2.6,Nintendo,E
+Game 084,PS2,Racing,43,52,8.0,Capcom,E10+
+Game 085,X360,Sports,47,6,,Nintendo,T
+Game 086,PS3,Action,35,12,5.9,Ubisoft,T
+Game 087,PS3,Action,71,62,5.0,Konami,M
+Game 088,Wii,Puzzle,53,59,2.9,Capcom,E10+
+Game 089,DS,Racing,57,52,6.0,EA Canada,M
+Game 090,Wii,Shooter,64,58,6.4,Ubisoft,T
+Game 091,Wii,Puzzle,77,30,6.2,Capcom,E10+
+Game 092,Wii,Racing,81,3,2.4,EA Canada,M
+Game 093,DS,Sports,51,7,8.3,Konami,E
+Game 094,PS3,Sports,75,62,5.9,Nintendo,T
+Game 095,PC,Sports,67,14,2.5,EA Canada,E
+Game 096,DS,Shooter,90,36,tbd,Konami,T
+Game 097,PS2,Sports,60,66,6.1,EA Canada,E10+
+Game 098,PS2,Shooter,31,55,2.7,Konami,T
+Game 099,X360,Sports,55,67,5.0,EA Canada,
+Game 100,X360,Action,46,75,7.8,Capcom,T
+Game 101,PC,Puzzle,93,73,,Nintendo,
+Game 102,PS2,Sports,83,75,9.1,Nintendo,E
+Game 103,DS,Sports,78,34,6.5,Konami,T
+Game 104,PS3,Action,33,46,3.3,Capcom,E
+Game 105,X360,Action,94,64,,EA Canada,E
+Game 106,PS3,Sports,82,35,tbd,Konami,M
+Game 107,PS3,Racing,86,78,3.7,Ubisoft,E10+
+Game 108,DS,Puzzle,,,5.3,Ubisoft,M
+Game 109,PC,Racing,90,40,8.1,Nintendo,E
+Game 110,PS2,Shooter,81,31,7.0,EA Canada,E
+Game 111,X360,Puzzle,72,71,6.6,Ubisoft,E10+
+Game 112,PS3,Shooter,61,25,2.3,Konami,T
+Game 113,DS,Shooter,46,59,6.8,Nintendo,M
+Game 114,DS,Shooter,73,74,5.1,Konami,M
+Game 115,DS,Puzzle,,,9.4,Capcom,
+Game 116,PC,Sports,79,49,8.0,Konami,E10+
+Game 117,PS2,Puzzle,43,33,5.7,Capcom,E10+
+Game 118,Wii,Puzzle,95,27,6.1,Nintendo,E
+Game 119,Wii,Sports,74,69,6.7,Capcom,T
+Game 120,PS2,Shooter,38,46,5.5,Capcom,E
+Game 121,PS3,Sports,92,46,2.9,Ubisoft,T
+Game 122,Wii,Puzzle,84,19,,Capcom,E10+
+Game 123,PS3,Action,,,5.4,Ubisoft,E
+Game 124,PS2,Sports,84,11,6.1,EA Canada,E10+
+Game 125,X360,Sports,48,80,4.3,Capcom,E
+Game 126,DS,Racing,82,13,6.6,Ubisoft,E10+
+Game 127,X360,Shooter,59,80,6.0,Ubisoft,E
+Game 128,PC,Shooter,88,40,8.4,Ubisoft,T
+Game 129,X360,Sports,,,4.7,Konami,M
+Game 130,PC,Sports,61,3,6.5,Ubisoft,M
+Game 131,X360,Puzzle,73,54,6.6,Konami,E10+
+Game 132,X360,Racing,87,77,4.8,Nintendo,M
+Game 133,Wii,Racing,,,2.1,Capcom,
+Game 134,PC,Racing,36,17,5.2,Capcom,M
+Game 135,DS,Shooter,30,29,2.6,EA Canada,E
+Game 136,Wii,Puzzle,88,16,6.0,Konami,E
+Game 137,PC,Puzzle,59,17,2.5,Nintendo,E
+Game 138,X360,Shooter,34,20,8.3,Nintendo,M
+Game 139,DS,Action,86,27,5.1,EA Canada,M
+Game 140,PS3,Action,80,9,tbd,Konami,E10+
+Game 141,PC,Puzzle,30,39,2.7,Tiny Studio,E10+
+Game 142,PS2,Puzzle,49,29,7.7,Ubisoft,E
+Game 143,Wii,Racing,79,12,9.3,Nintendo,M
+Game 144,Wii,Action,58,27,2.7,Konami,E
+Game 145,DS,Racing,89,74,7.9,EA Canada,T
+Game 146,PS2,Racing,45,52,6.9,Ubisoft,T
+Game 147,DS,Sports,90,11,6.5,Konami,M
+Game 148,Wii,Racing,,,4.6,EA Canada,M
+Game 149,X360,Puzzle,49,37,8.7,Nintendo,T
+Game 150,PC,Sports,,,tbd,Ubisoft,M
+Game 151,Wii,Sports,38,40,2.7,EA Canada,T
+Game 152,DS,Puzzle,70,28,tbd,Ubisoft,E
+Game 153,PS3,Puzzle,72,72,3.6,Ubisoft,E10+
+Game 154,DS,Sports,37,46,3.5,Ubisoft,M
+Game 155,PC,Puzzle,32,58,7.1,Konami,E
+Game 156,PS2,Puzzle,81,18,6.8,Ubisoft,E
+Game 157,DS,Puzzle,58,29,3.6,Nintendo,
+Game 158,X360,Action,74,25,8.0,EA Canada,T
+Game 159,PS2,Sports,,,5.2,Capcom,E10+
+Game 160,X360,Action,80,51,8.6,Konami,E10+
+Game 161,PC,Racing,,,8.1,Ubisoft,E
+Game 162,PS3,Puzzle,53,13,3.7,EA Canada,M
+Game 163,X360,Puzzle,35,38,7.4,Ubisoft,E
+Game 164,PS3,Sports,,,8.1,Capcom,E10+
+Game 165,X360,Shooter,45,38,,Nintendo,T
+Game 166,DS,Racing,70,31,7.1,Nintendo,M
+Game 167,X360,Puzzle,91,38,5.9,Nintendo,T
+Game 168,PC,Sports,31,25,2.7,Ubisoft,E10+
+Game 169,PC,Action,30,11,tbd,Nintendo,E
+Game 170,Wii,Action,32,5,7.8,Konami,E
+Game 171,Wii,Racing,49,66,3.6,Ubisoft,
+Game 172,PS3,Sports,94,64,6.0,Nintendo,E10+
+Game 173,PS2,Shooter,43,42,4.7,Nintendo,E
+Game 174,Wii,Sports,60,7,tbd,Ubisoft,E
+Game 175,PS3,Sports,,,4.9,Capcom,E
+Game 176,PS2,Puzzle,73,47,6.4,Nintendo,E
+Game 177,X360,Puzzle,86,8,2.7,EA Canada,E10+
+Game 178,PS2,Action,52,77,3.3,Konami,E
+Game 179,Wii,Racing,,,8.3,Capcom,E
+Game 180,PS3,Sports,45,20,8.5,Konami,E
+Game 181,PS3,Action,81,63,4.4,Konami,
+Game 182,X360,Shooter,72,15,5.1,Konami,T
+Game 183,PS3,Action,,,3.9,Nintendo,T
+Game 184,DS,Action,78,36,9.4,Capcom,E10+
+Game 185,PS2,Sports,33,25,tbd,EA Canada,M
+Game 186,PC,Shooter,67,20,5.9,Capcom,E
+Game 187,PC,Sports,,,4.7,Capcom,E
+Game 188,PS2,Action,87,4,4.3,Capcom,E
+Game 189,PC,Puzzle,,,3.1,EA Canada,E10+
+Game 190,Wii,Shooter,54,63,8.2,EA Canada,E10+
+Game 191,DS,Racing,47,15,6.4,Nintendo,
+Game 192,PC,Shooter,81,10,2.1,EA Canada,T
+Game 193,PS3,Racing,,,8.8,EA Canada,M
+Game 194,PC,Sports,80,43,2.3,EA Canada,M
+Game 195,PC,Sports,85,27,7.4,Nintendo,
+Game 196,X360,Sports,51,37,6.7,Nintendo,E10+
+Game 197,Wii,Puzzle,82,72,tbd,Nintendo,M
+Game 198,Wii,Action,39,8,6.7,Nintendo,T
+Game 199,PS2,Shooter,43,48,2.0,Nintendo,E
+Game 200,DS,Action,62,17,9.4,Ubisoft,E
+Game 201,PC,Sports,57,68,6.8,EA Canada,M
+Game 202,DS,Puzzle,46,26,3.6,Konami,E10+
+Game 203,PS2,Racing,92,53,tbd,Nintendo,M
+Game 204,X360,Action,,,5.9,Ubisoft,M
+Game 205,PC,Puzzle,,,5.2,Nintendo,T
+Game 206,PC,Puzzle,69,35,5.3,Capcom,E
+Game 207,X360,Shooter,41,31,4.9,Nintendo,M
+Game 208,X360,Action,80,49,2.1,Capcom,E
+Game 209,PS3,Puzzle,59,29,8.9,Konami,T
+Game 210,PS3,Shooter,43,4,8.9,Capcom,M
+Game 211,PS2,Action,69,8,5.4,Nintendo,M
+Game 212,DS,Puzzle,83,52,8.9,Capcom,M
+Game 213,PS2,Sports,75,13,4.3,Nintendo,E10+
+Game 214,X360,Action,61,76,8.0,Nintendo,E10+
+Game 215,Wii,Sports,93,14,,Nintendo,E10+
+Game 216,PS3,Sports,,,5.8,EA Canada,T
+Game 217,DS,Racing,,,6.7,Capcom,T
+Game 218,PS3,Action,,,9.4,Konami,
+Game 219,PS3,Racing,65,37,8.4,Capcom,M
+Game 220,PS3,Puzzle,,,6.7,Nintendo,E10+
+Game 221,PC,Shooter,50,13,7.2,EA Canada,M
+Game 222,DS,Shooter,80,59,4.6,EA Canada,E
+Game 223,DS,Action,34,29,2.5,Capcom,E10+
+Game 224,DS,Racing,51,62,3.7,EA Canada,E
+Game 225,PS2,Sports,92,14,2.2,EA Canada,M
+Game 226,DS,Action,,,3.3,Capcom,M
+Game 227,Wii,Puzzle,90,15,5.0,Ubisoft,M
+Game 228,DS,Racing,63,43,tbd,Nintendo,E
+Game 229,Wii,Sports,82,7,6.3,Ubisoft,M
+Game 230,Wii,Action,88,37,4.4,Ubisoft,E
+Game 231,PC,Sports,,,2.5,Ubisoft,
+Game 232,PC,Shooter,55,62,8.8,Konami,M
+Game 233,X360,Racing,83,11,2.1,Nintendo,E
+Game 234,PC,Action,63,42,4.7,Ubisoft,E10+
+Game 235,X360,Racing,,,6.8,Nintendo,E
+Game 236,DS,Racing,34,24,8.3,Konami,E
+Game 237,PC,Action,,,2.6,Ubisoft,T
+Game 238,Wii,Puzzle,57,51,7.7,Konami,M
+Game 239,X360,Shooter,71,39,5.5,Ubisoft,E
+Game 240,PC,Action,94,8,4.8,Konami,M
+Game 241,PS3,Action,71,26,4.4,Capcom,E
+Game 242,X360,Sports,63,6,5.0,EA Canada,M
+Game 243,PC,Action,82,77,3.2,Capcom,E
+Game 244,Wii,Puzzle,61,12,9.1,Nintendo,M
+Game 245,Wii,Shooter,65,61,4.9,Konami,E10+
+Game 246,Wii,Action,,,tbd,Ubisoft,E
+Game 247,PS2,Sports,62,8,8.2,Konami,M
+Game 248,Wii,Shooter,64,27,7.1,Ubisoft,M
+Game 249,PS2,Racing,37,60,4.6,Capcom,E
+Game 250,X360,Shooter,79,54,3.3,EA Canada,E
+Game 251,PC,Racing,73,19,4.5,Konami,E
+Game 252,PS3,Puzzle,,,5.5,One Off Games,E10+
+Game 253,Wii,Puzzle,95,66,6.3,Konami,E10+
+Game 254,PS3,Sports,88,72,6.9,Ubisoft,E10+
+Game 255,PC,Puzzle,77,49,4.2,Konami,T
+Game 256,PS3,Action,,,6.1,Capcom,M
+Game 257,PS2,Puzzle,63,41,5.4,Capcom,E10+
+Game 258,DS,Sports,,,2.3,EA Canada,
+Game 259,Wii,Racing,86,24,6.6,EA Canada,M
+Game 260,X360,Racing,,,5.6,Capcom,E10+
+Game 261,PS2,Shooter,75,63,2.2,Capcom,T
+Game 262,PC,Racing,54,20,9.2,Ubisoft,M
+Game 263,PS3,Shooter,,,8.4,Nintendo,M
+Game 264,PS3,Action,87,27,5.6,Ubisoft,
+Game 265,DS,Puzzle,47,31,,Ubisoft,M
+Game 266,Wii,Racing,,,3.7,Capcom,M
+Game 267,PS2,Sports,58,8,5.1,EA Canada,T
+Game 268,DS,Action,,,8.2,EA Canada,M
+Game 269,X360,Racing,,,2.8,Ubisoft,M
+Game 270,PS2,Racing,39,44,4.9,EA Canada,
+Game 271,Wii,Sports,49,6,7.3,EA Canada,E10+
+Game 272,PC,Shooter,79,26,8.1,Ubisoft,T
+Game 273,PS3,Racing,37,25,2.6,Ubisoft,T
+Game 274,PC,Shooter,69,57,tbd,Ubisoft,E
+Game 275,PS3,Racing,58,9,tbd,Nintendo,
+Game 276,PS2,Racing,,,9.2,Capcom,T
+Game 277,Wii,Shooter,59,9,3.3,Capcom,M
+Game 278,X360,Shooter,51,31,8.0,EA Canada,E
+Game 279,PS3,Racing,30,57,,Konami,T
+Game 280,X360,Racing,71,32,4.3,EA Canada,M
+Game 281,PC,Racing,,,2.6,Konami,M
+Game 282,PC,Action,54,80,6.5,Konami,E
+Game 283,PS2,Puzzle,82,14,7.2,Capcom,
+Game 284,DS,Puzzle,,,8.5,Capcom,E
+Game 285,PC,Puzzle,,,tbd,Nintendo,T
+Game 286,PS3,Racing,,,3.1,EA Canada,T
+Game 287,Wii,Shooter,60,61,tbd,Capcom,
+Game 288,X360,Racing,36,71,3.2,Capcom,T
+Game 289,Wii,Racing,,,5.7,EA Canada,E10+
+Game 290,Wii,Racing,56,18,tbd,Nintendo,E10+
+Game 291,PS3,Racing,47,24,9.4,Ubisoft,T
+Game 292,DS,Sports,91,54,8.0,EA Canada,
+Game 293,DS,Shooter,95,47,6.3,EA Canada,T
+Game 294,Wii,Action,,,9.3,Capcom,
+Game 295,PS3,Sports,,,5.4,Capcom,E
+Game 296,PS3,Racing,,,,Konami,E10+
+Game 297,DS,Sports,64,60,9.0,EA Canada,E10+
+Game 298,PS2,Puzzle,89,61,7.3,EA Canada,M
+Game 299,DS,Action,70,76,7.3,Nintendo,T
+Game 300,X360,Puzzle,,,4.5,Capcom,M

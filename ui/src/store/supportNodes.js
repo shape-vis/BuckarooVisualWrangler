@@ -96,7 +96,7 @@ function viewRevealing(view, records, ids) {
  * page loads, and the copies a new candidate inherits from its parent.
  *
  * An inherited record is marked inherited until the user changes it or the candidate is accepted, and
- * arrives minimised, so a candidate doesn't come buried in its parent's plots. Accepting it settles them -
+ * arrives minimised, so a candidate doesn't come buried in its parent's plots. Accepting it opens them -
  * see settleInherited.
  *
  * A record outlives its host disappearing from view - folded into a run, or undone - and is simply not
@@ -323,10 +323,9 @@ export function useSupportNodes() {
 
     /**
      * What accepting a candidate does, here, with the sub-nodes it inherited - the server has done the same to its
-     * copy. "show" opens them, "hide" leaves them as badges, "drop" takes away those the user didn't change.
-     * Afterwards none of the host's records is counted as inherited.
+     * copy. They open, and afterwards none of the host's records is counted as inherited.
      */
-    const settleInherited = useCallback((hostId, choice) => {
+    const settleInherited = useCallback((hostId) => {
         setState((current) => {
             const inheritedIds = [];
             const records = [];
@@ -337,12 +336,10 @@ export function useSupportNodes() {
                     continue;
                 }
                 inheritedIds.push(record.id);
-                if (choice === "drop") continue;
-                records.push({...record, inherited: false, startMinimized: choice === "hide"});
+                records.push({...record, inherited: false, startMinimized: false});
             }
 
-            let view = current.view;
-            if (choice === "show") view = viewRevealing(current.view, records, inheritedIds);
+            const view = viewRevealing(current.view, records, inheritedIds);
             return {records, view};
         });
     }, []);

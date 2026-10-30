@@ -73,6 +73,10 @@ function HistogramBarChart({
         if (!errorColors) shownBins = shownBins.filter(d => d.xType !== "categorical");
         const segments = stackBars(shownBins);
 
+        // Each bin's rows, for the end-to-end tests: a row flagged twice is in two segments, so they cannot sum to it
+        const itemsByBin = new Map();
+        shownBins.forEach((bin) => itemsByBin.set(String(bin.xBin), bin.count.items));
+
         const barColor = d => colorScale(d.name);
 
         const brushGroup = canvas.append("g").attr("class", "histogram-brush");
@@ -90,7 +94,13 @@ function HistogramBarChart({
             .attr("fill", barColor)
             .attr("stroke", "white")
             .attr("cursor", "pointer")
-            .attr("stroke-width", 2);
+            .attr("stroke-width", 2)
+            // For the end-to-end tests: which bin and error type a segment is, and how many rows it holds
+            .attr("data-bin", d => String(d.bin))
+            .attr("data-bin-type", d => d.type)
+            .attr("data-segment", d => d.name)
+            .attr("data-count", d => d.value)
+            .attr("data-bin-items", d => itemsByBin.get(String(d.bin)));
 
         barsRef.current = bars;
 
@@ -205,7 +215,8 @@ function HistogramBarChart({
     }
 
     return (
-        <g transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
+        <g transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas" data-testid="histogram"
+           data-column={attrX} data-height={size.h}>
             <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearSelection} />
             <g ref={drawingRef}></g>
         </g>

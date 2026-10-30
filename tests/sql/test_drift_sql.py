@@ -352,10 +352,8 @@ def test_deleted_rows_go_to_the_removed_sink(store):
     _, flows = _flows(store, pd.DataFrame({"ID": [1, 2, 3], "g": ["a", "a", "b"]}),
                       pd.DataFrame({"ID": [1, 2], "g": ["a", "a"]}))
 
+    # Only that Postgres sends the deleted row to the sink; the rates and churn read from it are test_distortion's
     assert {"source": "b", "target": REMOVED_LABEL, "rows": 1} in flows["flows"]
-    assert flows["targets"][-1] == REMOVED_LABEL
-    assert flows["removal_rates"] == {"a": 0.0, "b": 1.0}
-    assert flows["churn"] == pytest.approx(1 / 3)
 
 
 @pytest.mark.sql

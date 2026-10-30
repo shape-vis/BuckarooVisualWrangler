@@ -125,7 +125,12 @@ export function draw1D(canvas, histogramData, colorScale, size = PLOT_SIZE) {
             : xScale.categoricalBandwidth())
         .attr("fill", d => colorScale(d.name))
         .attr("stroke", "white")
-        .attr("stroke-width", 1);
+        .attr("stroke-width", 1)
+        // For the end-to-end tests: which bin and error type a segment is, and how many rows it holds
+        .attr("data-bin", d => String(d.bin))
+        .attr("data-bin-type", d => d.type)
+        .attr("data-segment", d => d.name)
+        .attr("data-count", d => d.value);
 
     canvas.append("g").call(d3.axisLeft(yScale).ticks(4)).style("font-size", "7px");
     xScale.draw(canvas);

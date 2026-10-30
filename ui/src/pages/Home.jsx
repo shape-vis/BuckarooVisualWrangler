@@ -20,18 +20,20 @@ export default function Home( { onSuccess } ) {
   const [uploadError, setUploadError] = useState(null);
 
   /* Both ways in - a sample dataset or the user's own file - end the same way: the server's reply is handed
-     to onSuccess, or its failure is shown under the upload box. */
+     to onSuccess, or its failure is shown under the upload box. A refusal can come as an error status or as
+     {success: false} - a file that isn't a table, say - and either shows the server's own reason when it gives one. */
   async function runUpload(fetchPromise) {
     setUploading(true);
+    setUploadError(null);
 
     try {
       const response = await fetchPromise;
+      const data = await response.json().catch(() => null);
 
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || `Upload failed: ${response.status}`);
       }
 
-      const data = await response.json();
       onSuccess(data);
     } catch (err) {
       console.error("Upload error:", err);

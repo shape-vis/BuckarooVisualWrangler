@@ -71,10 +71,8 @@ def test_ids_are_scoped_per_operation():
                          "target": "x", "error_type": "missing"})
         y = _ids(table, {"op": "impute_rows_2d", "columns": ["a", "b"],
                          "target": "y", "error_type": "missing"})
-        assert x == [2, 4], f"target=x must be a's flagged rows only, got {x}"
-        assert 3 not in x, "row 3 is clean in `a` - imputing it would destroy a good value"
-        assert y == [3, 4], f"target=y must be b's flagged rows only, got {y}"
-        assert 2 not in y, "row 2 is clean in `b` - imputing it would destroy a good value"
+        assert x == [2, 4], f"target=x must be a's flagged rows only - row 3 is clean in `a` - got {x}"
+        assert y == [3, 4], f"target=y must be b's flagged rows only - row 2 is clean in `b` - got {y}"
 
         # Deleting a row is well defined however it was flagged, so 2D delete takes the union.
         both = _ids(table, {"op": "delete_rows_2d", "columns": ["a", "b"],

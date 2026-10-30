@@ -17,8 +17,7 @@ const CandidatesContext = createContext(null);
  * keeps its table name, so the sub-nodes added to it while it was staged stay with it. Declining drops the
  * node and its sub-nodes; if the session was on it, the server moves it to the parent.
  *
- * A candidate is staged with copies of its parent's sub-nodes, as badges. Accepting it says what becomes of
- * them: "show" opens them, "hide" leaves them as badges, "drop" takes them away.
+ * A candidate is staged with copies of its parent's sub-nodes, as badges. Accepting it opens them.
  */
 export function CandidatesProvider({ onWrangleExecuted, children }) {
     const { addLoader, removeLoader } = useLoading();
@@ -47,16 +46,16 @@ export function CandidatesProvider({ onWrangleExecuted, children }) {
         return result;
     }, [addLoader, removeLoader]);
 
-    const acceptCandidate = useCallback((table, inherit = "hide") => {
+    const acceptCandidate = useCallback((table) => {
         async function accept() {
-            const result = await acceptOnServer(table, inherit);
+            const result = await acceptOnServer(table);
             if (!result?.success) {
                 setError(result?.error || "Could not accept that candidate.");
                 return result;
             }
 
             // The server has done the same to its copy of them
-            settleInherited(table, inherit);
+            settleInherited(table);
             await refreshGraph();
             moveToTable(result.table);
             return result;

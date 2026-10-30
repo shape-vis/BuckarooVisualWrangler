@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 
 import { queryAttributeSummaries } from "../utils/serverCalls.jsx";
-import { ERROR_TYPES, errorColors } from "../store/errorColors.js";
+import { ERROR_TYPES, errorColors, errorSwatchStyle } from "../store/errorColors.js";
 import { truncateText } from "../utils/textUtils.js";
 import CollapsiblePanel from "../elements/CollapsiblePanel.jsx";
 import { RotatedButton, StandardButton } from "../elements/Buttons.jsx";
@@ -121,6 +121,7 @@ function AttributeRow({
                   title={`${type}: ${(pct * 100).toFixed(1)}% of entries`}
                   className="error-scent"
                   data-error-type={type}
+                  style={errorSwatchStyle(type)}
                 >
                   {(pct * 100).toFixed(2)}%
               </span>
@@ -242,6 +243,7 @@ export default function AttributeSummaryView({ setSelectedAttributes, selectedAt
                 <span
                   className={`attribute-sorting-swatch ${selected ? "attribute-sorting-item-color-selected" : "attribute-sorting-item-color"}`}
                   data-error-type={error}
+                  style={errorSwatchStyle(error)}
                 />
                 <span>{ERROR_TYPES[error]}</span>
               </div>

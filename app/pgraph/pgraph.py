@@ -176,7 +176,8 @@ class PGraph:
         self.prev_node_table_name = None
         self.next_node_table_name = None
         self.current_node_table_name = None
-
+        # The nodes undo stepped up from, the nearest last, so redo retraces them in turn. Any other move clears it.
+        self._redo_path = []
 
         # How many candidates have ever been staged. Their tables are named c{count}_<base> from it, and it only
         # counts up, so a name is never reused - not even a discarded candidate's. Candidates do not count in
@@ -308,6 +309,13 @@ class PGraph:
             return None
         return node.children[-1]
 
+    def _redo_target(self):
+        """:return: where redo goes from the current node - back down the path undo came up, else its last child"""
+        if self._redo_path:
+            return self._redo_path[-1]
+        current = self.node_map.get(self.current_node_table_name)
+        return self._last_child(current)
+
     def add_node(self, node: GraphNode):
         new_node_table_name = node.table_name
         self._assign_next_label(node)
@@ -319,6 +327,8 @@ class PGraph:
 
         self.prev_node_table_name = self.current_node_table_name
         self.current_node_table_name = new_node_table_name
+        self._redo_path = []
+        self.next_node_table_name = None
 
     def add_root_node(self, node: GraphNode):
         root_table_name = node.table_name
@@ -327,6 +337,8 @@ class PGraph:
 
         self.prev_node_table_name = self.current_node_table_name
         self.current_node_table_name = root_table_name
+        self._redo_path = []
+        self.next_node_table_name = None
 
         self.root_table_name = root_table_name
 
@@ -390,9 +402,10 @@ class PGraph:
         if self.current_node_table_name == table_name and parent is not None:
             self.set_clicked_node_as_current(parent.table_name)
             return parent.table_name
-        if self.next_node_table_name == table_name:
-            current = self.node_map.get(self.current_node_table_name)
-            self.next_node_table_name = self._last_child(current)
+        # A candidate has no children, so it can only be the deepest step of the redo path
+        if table_name in self._redo_path:
+            self._redo_path.remove(table_name)
+        self.next_node_table_name = self._redo_target()
         return None
 
     def undo_pgraph(self):
@@ -405,6 +418,7 @@ class PGraph:
             return None
 
         parent_node = self.node_map[current_node.parent_table]
+        self._redo_path.append(current_node.table_name)
         self.next_node_table_name = current_node.table_name
         self.current_node_table_name = parent_node.table_name
         self.prev_node_table_name = parent_node.parent_table
@@ -412,16 +426,17 @@ class PGraph:
 
     def redo_pgraph(self):
         """
-        Step down to the node undo last stepped up from, or the current node's most recent child.
+        Step back down the path undo came up, one node at a time; with no undo to retrace, to the current node's
+        most recent child.
         :return: that node's table name, or None when there is nothing below
         """
         if self.next_node_table_name is None:
             return None
+        if self._redo_path and self._redo_path[-1] == self.next_node_table_name:
+            self._redo_path.pop()
         self.prev_node_table_name = self.current_node_table_name
         self.current_node_table_name = self.next_node_table_name
-
-        current_node = self.node_map[self.current_node_table_name]
-        self.next_node_table_name = self._last_child(current_node)
+        self.next_node_table_name = self._redo_target()
         return self.current_node_table_name
 
     def set_clicked_node_as_current(self, node_table_name):
@@ -430,6 +445,7 @@ class PGraph:
         :return: the node's table name
         """
         current_node = self.node_map[node_table_name]
+        self._redo_path = []
         self.next_node_table_name = self._last_child(current_node)
         self.prev_node_table_name = current_node.parent_table
         self.current_node_table_name = node_table_name

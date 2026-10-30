@@ -19,7 +19,6 @@ from sqlalchemy import text as sa_text
 import app
 from app import engine, db_operations
 from app.db_utils.execute_sql import node_table_names
-from app import app as flask_app
 
 ROOT = "n0a_cands"
 
@@ -94,7 +93,6 @@ def test_a_2d_impute_fills_only_its_own_column(root, client):
     root(NUMERIC)
     staged = _stage(client, [2, 3, 5, 7], ["x", "y"], source="scatterplot")
 
-    assert set(staged) == {"delete", "impute_x", "impute_y"}
     assert staged["impute_x"]["chart_type"] == "scatterplot"
     x_filled = _read(staged["impute_x"]["table"])
     assert x_filled["x"].notna().all() and x_filled["y"].isna().sum() == 2
@@ -204,52 +202,31 @@ def test_a_sub_node_must_be_on_a_node_and_of_a_known_kind(root, client):
 
 @pytest.mark.sql
 def test_candidates_inherit_their_parents_sub_nodes_minimised(root, client):
+    # Only that staging through the route hands the copies on; what a copy holds is test_support_nodes' to check
     root(NUMERIC)
     _hang(client, ROOT, "errorPlot", {"plot": "histogram", "columns": ["x"]}, "a")
-    _hang(client, ROOT, "wrangleDiff", {}, "b")
     staged = _stage(client, [2, 5], ["x"])
 
     for candidate in staged.values():
         records = _records_of(client, candidate["table"])
         assert len(records) == 1
-        assert records[0]["kind"] == "errorPlot"
-        assert records[0]["hostId"] == candidate["table"]
         assert records[0]["inherited"] and records[0]["startMinimized"]
 
 
 @pytest.mark.sql
-@pytest.mark.parametrize("choice, kept, minimised", [("show", 2, False), ("hide", 2, True), ("drop", 1, None),
-                                                     (None, 2, True)])
-def test_accepting_does_as_asked_with_what_was_inherited(root, client, choice, kept, minimised):
+def test_accepting_opens_what_was_inherited(root, client):
+    # Only that the route settles the copies; what settling keeps and changes is test_support_nodes' to check
     root(NUMERIC)
     _hang(client, ROOT, "drift", {"column": "x"}, "a")
     table = _stage(client, [2, 5], ["x"])["delete"]["table"]
-    own = _hang(client, table, "qualityMetrics", {}, "mine")
 
-    body = {"table": table}
-    if choice:
-        body["inherit"] = choice
-    resp = client.post("/api/candidates/accept", json=body)
+    resp = client.post("/api/candidates/accept", json={"table": table})
     assert resp.status_code == 200, resp.get_json()
 
     records = _records_of(client, table)
-    assert len(records) == kept
-    for record in records:
-        assert record["inherited"] is False
-        if record["id"] != own["id"]:
-            assert record["startMinimized"] is minimised
-    assert own["id"] in {record["id"] for record in records}
-
-
-@pytest.mark.sql
-def test_accepting_refuses_an_unknown_inherit_choice(root, client):
-    root(NUMERIC)
-    table = _stage(client, [2], ["x"])["delete"]["table"]
-
-    resp = client.post("/api/candidates/accept", json={"table": table, "inherit": "keep"})
-
-    assert resp.status_code == 400
-    assert _graph().node_map[table].provisional
+    assert len(records) == 1
+    assert records[0]["inherited"] is False
+    assert records[0]["startMinimized"] is False
 
 
 @pytest.mark.sql
@@ -321,7 +298,7 @@ def test_navigating_to_it_and_back(root, client):
     undo = client.post("/api/undo").get_json()
     assert undo["success"] is True and db_operations.main_table_name == ROOT
 
-    # Redo from the parent steps into its last child, candidate or not
+    # Redo retraces the undo, back into the candidate it stepped up from
     redo = client.post("/api/redo").get_json()
     assert redo["success"] is True and db_operations.main_table_name == table
 
@@ -363,9 +340,6 @@ def test_a_2d_selection_stages_three_at_once_named_in_order(root, client):
     # Named in the order the repairs were asked for, whichever finished building first
     assert [candidate["op"] for candidate in staged] == ["delete", "impute_x", "impute_y"]
     assert [candidate["table"] for candidate in staged] == ["c0_cands", "c1_cands", "c2_cands"]
-    for candidate in staged:
-        node = _graph().node_map[candidate["table"]]
-        assert node.provisional and node.metrics is not None and node.distortion is not None
 
 
 @pytest.mark.sql

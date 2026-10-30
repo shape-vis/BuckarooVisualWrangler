@@ -4,6 +4,7 @@ import CollapsiblePanel from "../elements/CollapsiblePanel";
 import { truncateText } from "../utils/textUtils.js";
 import { useTableName } from "../store/TableNameContext.jsx";
 import { useLoading } from "../store/LoadingContext.jsx";
+import { ERROR_TABLE_PRIORITY, errorSwatchStyle } from "../store/errorColors.js";
 import "../styles/TablePanel.css";
 
 function RowHeader({ columns }) {
@@ -21,10 +22,6 @@ function RowHeader({ columns }) {
 }
 
 function TableRow({tableData, rowIndex, columns, errorData}) {
-
-  // Priority order for determining which error drives the cell color
-  const errorPriority = ["mismatch", "missing", "anomaly", "incomplete"];
-
   return (
     <tr>
     {
@@ -34,12 +31,13 @@ function TableRow({tableData, rowIndex, columns, errorData}) {
         const cellValue = tableData[col][rowIndex];
 
         // Pick the highest-priority error for the data attribute
-        const primaryError = errorPriority.find(e => errors.includes(e)) || null;
+        const primaryError = ERROR_TABLE_PRIORITY.find(e => errors.includes(e)) || null;
 
           return (
             <td
               key={`${rowIndex}-${col}`}
               data-error={primaryError}
+              style={primaryError ? errorSwatchStyle(primaryError) : undefined}
               title={cellValue}
             >
               {truncateText(cellValue, 25)}

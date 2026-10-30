@@ -11,6 +11,7 @@ from app.server_utils.service_helpers import (
     bounded_int,
     clicked_node_access_helper,
     get_current_pgraph,
+    json_object_body,
     require_node,
     session_graph,
 )
@@ -218,7 +219,7 @@ def _support_body():
     if error:
         return None, None, error
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = json_object_body()
     host = body.get("host")
     if not isinstance(host, str) or host not in pgraph.node_map:
         return None, None, ({"success": False, "error": "host must be a node of the graph"}, 400)

@@ -1,0 +1,4913 @@
+{
+ "dataset": "e2e_tiny",
+ "columns": [
+  "Score",
+  "Count",
+  "Platform",
+  "Rating"
+ ],
+ "kinds": {
+  "Score": "numeric",
+  "Count": "numeric",
+  "Platform": "categorical",
+  "Rating": "categorical"
+ },
+ "numeric_columns": [
+  "Count",
+  "ID",
+  "Score"
+ ],
+ "root": {
+  "rows": 12,
+  "ids": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12
+  ],
+  "errors": {
+   "Score": {
+    "missing": 2,
+    "mismatch": 0,
+    "anomaly": 0,
+    "incomplete": 0
+   },
+   "Count": {
+    "missing": 2,
+    "mismatch": 0,
+    "anomaly": 0,
+    "incomplete": 0
+   },
+   "Platform": {
+    "missing": 0,
+    "mismatch": 0,
+    "anomaly": 0,
+    "incomplete": 0
+   },
+   "Rating": {
+    "missing": 2,
+    "mismatch": 0,
+    "anomaly": 0,
+    "incomplete": 2
+   }
+  },
+  "borderline_flags": 0,
+  "histograms": {
+   "Score": {
+    "bins": [
+     {
+      "xBin": "0",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "1",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "2",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "3",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "4",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "5",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "6",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "7",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "8",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "9",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "null",
+      "xType": "categorical",
+      "count": {
+       "items": 2,
+       "missing": 2
+      }
+     }
+    ],
+    "numeric": [
+     {
+      "x0": 10.0,
+      "x1": 19.0
+     },
+     {
+      "x0": 19.0,
+      "x1": 28.0
+     },
+     {
+      "x0": 28.0,
+      "x1": 37.0
+     },
+     {
+      "x0": 37.0,
+      "x1": 46.0
+     },
+     {
+      "x0": 46.0,
+      "x1": 55.0
+     },
+     {
+      "x0": 55.0,
+      "x1": 64.0
+     },
+     {
+      "x0": 64.0,
+      "x1": 73.0
+     },
+     {
+      "x0": 73.0,
+      "x1": 82.0
+     },
+     {
+      "x0": 82.0,
+      "x1": 91.0
+     },
+     {
+      "x0": 91.0,
+      "x1": 100.0
+     }
+    ],
+    "labels": [
+     "null"
+    ],
+    "borderline_rows": []
+   },
+   "Count": {
+    "bins": [
+     {
+      "xBin": "0",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "1",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "2",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "3",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "4",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "5",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "6",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "7",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "8",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "9",
+      "xType": "numeric",
+      "count": {
+       "items": 1
+      }
+     },
+     {
+      "xBin": "null",
+      "xType": "categorical",
+      "count": {
+       "items": 2,
+       "missing": 2
+      }
+     }
+    ],
+    "numeric": [
+     {
+      "x0": 1.0,
+      "x1": 1.9
+     },
+     {
+      "x0": 1.9,
+      "x1": 2.8
+     },
+     {
+      "x0": 2.8,
+      "x1": 3.7
+     },
+     {
+      "x0": 3.7,
+      "x1": 4.6
+     },
+     {
+      "x0": 4.6,
+      "x1": 5.5
+     },
+     {
+      "x0": 5.5,
+      "x1": 6.4
+     },
+     {
+      "x0": 6.4,
+      "x1": 7.3
+     },
+     {
+      "x0": 7.3,
+      "x1": 8.2
+     },
+     {
+      "x0": 8.2,
+      "x1": 9.1
+     },
+     {
+      "x0": 9.1,
+      "x1": 10.0
+     }
+    ],
+    "labels": [
+     "null"
+    ],
+    "borderline_rows": []
+   },
+   "Platform": {
+    "bins": [
+     {
+      "xBin": "PC",
+      "xType": "categorical",
+      "count": {
+       "items": 3
+      }
+     },
+     {
+      "xBin": "PS2",
+      "xType": "categorical",
+      "count": {
+       "items": 4
+      }
+     },
+     {
+      "xBin": "Wii",
+      "xType": "categorical",
+      "count": {
+       "items": 5
+      }
+     }
+    ],
+    "numeric": [],
+    "labels": [
+     "PC",
+     "PS2",
+     "Wii"
+    ],
+    "borderline_rows": []
+   },
+   "Rating": {
+    "bins": [
+     {
+      "xBin": "E",
+      "xType": "categorical",
+      "count": {
+       "items": 5
+      }
+     },
+     {
+      "xBin": "M",
+      "xType": "categorical",
+      "count": {
+       "items": 1,
+       "incomplete": 1
+      }
+     },
+     {
+      "xBin": "T",
+      "xType": "categorical",
+      "count": {
+       "items": 4
+      }
+     },
+     {
+      "xBin": "null",
+      "xType": "categorical",
+      "count": {
+       "items": 1,
+       "missing": 1
+      }
+     },
+     {
+      "xBin": "undefined",
+      "xType": "categorical",
+      "count": {
+       "items": 1,
+       "incomplete": 1,
+       "missing": 1
+      }
+     }
+    ],
+    "numeric": [],
+    "labels": [
+     "E",
+     "M",
+     "T",
+     "null",
+     "undefined"
+    ],
+    "borderline_rows": []
+   }
+  },
+  "drift": {
+   "overall": 0.0,
+   "columns": {
+    "Score": {
+     "value": 0.0,
+     "reason": null
+    },
+    "Count": {
+     "value": 0.0,
+     "reason": null
+    },
+    "Platform": {
+     "value": 0.0,
+     "reason": null
+    },
+    "Rating": {
+     "value": 0.0,
+     "reason": null
+    }
+   }
+  }
+ },
+ "scenarios": {
+  "score_missing": {
+   "row_ids": [
+    11,
+    12
+   ],
+   "cols": [
+    "Score"
+   ],
+   "candidates": {
+    "delete": {
+     "rows": 10,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+     ],
+     "errors": {
+      "Score": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 1
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.05416666666666666,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.04999999999999999,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.16666666666666666,
+        "reason": null
+       }
+      }
+     },
+     "fill": null
+    },
+    "impute": {
+     "rows": 12,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "errors": {
+      "Score": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 2
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": [
+        11,
+        12
+       ]
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 2,
+          "missing": 2
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [
+        "null"
+       ],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "missing": 1
+         }
+        },
+        {
+         "xBin": "undefined",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1,
+          "missing": 1
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T",
+        "null",
+        "undefined"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.02314814814814815,
+      "columns": {
+       "Score": {
+        "value": 0.0925925925925926,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.0,
+        "reason": null
+       }
+      }
+     },
+     "fill": 55
+    }
+   },
+   "delete_vs_impute": {
+    "Score": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "numeric",
+       "xBin": 0,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 1,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 2,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 3,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 4,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 5,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 3
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 6,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 7,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 8,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 9,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      }
+     ],
+     "is_numeric": true,
+     "borderline_rows": [
+      11,
+      12
+     ]
+    },
+    "Count": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "numeric",
+       "xBin": 0,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 1,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 2,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 3,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 4,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 5,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 6,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 7,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 8,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 9,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "null",
+       "a": {
+        "items": 0
+       },
+       "b": {
+        "items": 2,
+        "missing": 2
+       }
+      }
+     ],
+     "is_numeric": true,
+     "borderline_rows": []
+    },
+    "Platform": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "categorical",
+       "xBin": "PC",
+       "a": {
+        "items": 3
+       },
+       "b": {
+        "items": 3
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "PS2",
+       "a": {
+        "items": 3
+       },
+       "b": {
+        "items": 4
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "Wii",
+       "a": {
+        "items": 4
+       },
+       "b": {
+        "items": 5
+       }
+      }
+     ],
+     "is_numeric": false,
+     "borderline_rows": []
+    },
+    "Rating": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "categorical",
+       "xBin": "E",
+       "a": {
+        "items": 5
+       },
+       "b": {
+        "items": 5
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "M",
+       "a": {
+        "items": 1,
+        "incomplete": 1
+       },
+       "b": {
+        "items": 1,
+        "incomplete": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "T",
+       "a": {
+        "items": 4
+       },
+       "b": {
+        "items": 4
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "null",
+       "a": {
+        "items": 0
+       },
+       "b": {
+        "items": 2,
+        "incomplete": 1,
+        "missing": 2
+       }
+      }
+     ],
+     "is_numeric": false,
+     "borderline_rows": []
+    }
+   }
+  },
+  "count_missing": {
+   "row_ids": [
+    11,
+    12
+   ],
+   "cols": [
+    "Count"
+   ],
+   "candidates": {
+    "delete": {
+     "rows": 10,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+     ],
+     "errors": {
+      "Score": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 1
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.05416666666666666,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.04999999999999999,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.16666666666666666,
+        "reason": null
+       }
+      }
+     },
+     "fill": null
+    },
+    "impute": {
+     "rows": 12,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "errors": {
+      "Score": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 2
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 2,
+          "missing": 2
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [
+        "null"
+       ],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "missing": 1
+         }
+        },
+        {
+         "xBin": "undefined",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1,
+          "missing": 1
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T",
+        "null",
+        "undefined"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.02314814814814815,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0925925925925926,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.0,
+        "reason": null
+       }
+      }
+     },
+     "fill": 6
+    }
+   },
+   "delete_vs_impute": {
+    "Score": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "numeric",
+       "xBin": 0,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 1,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 2,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 3,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 4,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 5,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 6,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 7,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 8,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 9,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "null",
+       "a": {
+        "items": 0
+       },
+       "b": {
+        "items": 2,
+        "missing": 2
+       }
+      }
+     ],
+     "is_numeric": true,
+     "borderline_rows": []
+    },
+    "Count": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "numeric",
+       "xBin": 0,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 1,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 2,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 3,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 4,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 5,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 3
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 6,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 7,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 8,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 9,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      }
+     ],
+     "is_numeric": true,
+     "borderline_rows": []
+    },
+    "Platform": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "categorical",
+       "xBin": "PC",
+       "a": {
+        "items": 3
+       },
+       "b": {
+        "items": 3
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "PS2",
+       "a": {
+        "items": 3
+       },
+       "b": {
+        "items": 4
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "Wii",
+       "a": {
+        "items": 4
+       },
+       "b": {
+        "items": 5
+       }
+      }
+     ],
+     "is_numeric": false,
+     "borderline_rows": []
+    },
+    "Rating": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "categorical",
+       "xBin": "E",
+       "a": {
+        "items": 5
+       },
+       "b": {
+        "items": 5
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "M",
+       "a": {
+        "items": 1,
+        "incomplete": 1
+       },
+       "b": {
+        "items": 1,
+        "incomplete": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "T",
+       "a": {
+        "items": 4
+       },
+       "b": {
+        "items": 4
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "null",
+       "a": {
+        "items": 0
+       },
+       "b": {
+        "items": 2,
+        "incomplete": 1,
+        "missing": 2
+       }
+      }
+     ],
+     "is_numeric": false,
+     "borderline_rows": []
+    }
+   }
+  },
+  "score_count_missing": {
+   "row_ids": [
+    11,
+    12
+   ],
+   "cols": [
+    "Score",
+    "Count"
+   ],
+   "candidates": {
+    "delete": {
+     "rows": 10,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+     ],
+     "errors": {
+      "Score": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 1
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.05416666666666666,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.04999999999999999,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.16666666666666666,
+        "reason": null
+       }
+      }
+     },
+     "fill": null
+    },
+    "impute_x": {
+     "rows": 12,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "errors": {
+      "Score": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 2
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": [
+        11,
+        12
+       ]
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 2,
+          "missing": 2
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [
+        "null"
+       ],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "missing": 1
+         }
+        },
+        {
+         "xBin": "undefined",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1,
+          "missing": 1
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T",
+        "null",
+        "undefined"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.02314814814814815,
+      "columns": {
+       "Score": {
+        "value": 0.0925925925925926,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.0,
+        "reason": null
+       }
+      }
+     },
+     "fill": 55
+    },
+    "impute_y": {
+     "rows": 12,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "errors": {
+      "Score": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 2
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 2,
+          "missing": 2
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [
+        "null"
+       ],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "missing": 1
+         }
+        },
+        {
+         "xBin": "undefined",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1,
+          "missing": 1
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T",
+        "null",
+        "undefined"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.02314814814814815,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0925925925925926,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.0,
+        "reason": null
+       }
+      }
+     },
+     "fill": 6
+    }
+   },
+   "delete_vs_impute": {}
+  },
+  "rating_missing": {
+   "row_ids": [
+    11,
+    12
+   ],
+   "cols": [
+    "Rating"
+   ],
+   "candidates": {
+    "delete": {
+     "rows": 10,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+     ],
+     "errors": {
+      "Score": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 1
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.05416666666666666,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.04999999999999999,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.16666666666666666,
+        "reason": null
+       }
+      }
+     },
+     "fill": null
+    },
+    "impute": {
+     "rows": 12,
+     "ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "errors": {
+      "Score": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Count": {
+       "missing": 2,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Platform": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 0
+      },
+      "Rating": {
+       "missing": 0,
+       "mismatch": 0,
+       "anomaly": 0,
+       "incomplete": 1
+      }
+     },
+     "borderline_flags": 0,
+     "histograms": {
+      "Score": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 2,
+          "missing": 2
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 10.0,
+         "x1": 19.0
+        },
+        {
+         "x0": 19.0,
+         "x1": 28.0
+        },
+        {
+         "x0": 28.0,
+         "x1": 37.0
+        },
+        {
+         "x0": 37.0,
+         "x1": 46.0
+        },
+        {
+         "x0": 46.0,
+         "x1": 55.0
+        },
+        {
+         "x0": 55.0,
+         "x1": 64.0
+        },
+        {
+         "x0": 64.0,
+         "x1": 73.0
+        },
+        {
+         "x0": 73.0,
+         "x1": 82.0
+        },
+        {
+         "x0": 82.0,
+         "x1": 91.0
+        },
+        {
+         "x0": 91.0,
+         "x1": 100.0
+        }
+       ],
+       "labels": [
+        "null"
+       ],
+       "borderline_rows": []
+      },
+      "Count": {
+       "bins": [
+        {
+         "xBin": "0",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "1",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "2",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "3",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "4",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "5",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "6",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "7",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "8",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "9",
+         "xType": "numeric",
+         "count": {
+          "items": 1
+         }
+        },
+        {
+         "xBin": "null",
+         "xType": "categorical",
+         "count": {
+          "items": 2,
+          "missing": 2
+         }
+        }
+       ],
+       "numeric": [
+        {
+         "x0": 1.0,
+         "x1": 1.9
+        },
+        {
+         "x0": 1.9,
+         "x1": 2.8
+        },
+        {
+         "x0": 2.8,
+         "x1": 3.7
+        },
+        {
+         "x0": 3.7,
+         "x1": 4.6
+        },
+        {
+         "x0": 4.6,
+         "x1": 5.5
+        },
+        {
+         "x0": 5.5,
+         "x1": 6.4
+        },
+        {
+         "x0": 6.4,
+         "x1": 7.3
+        },
+        {
+         "x0": 7.3,
+         "x1": 8.2
+        },
+        {
+         "x0": 8.2,
+         "x1": 9.1
+        },
+        {
+         "x0": 9.1,
+         "x1": 10.0
+        }
+       ],
+       "labels": [
+        "null"
+       ],
+       "borderline_rows": []
+      },
+      "Platform": {
+       "bins": [
+        {
+         "xBin": "PC",
+         "xType": "categorical",
+         "count": {
+          "items": 3
+         }
+        },
+        {
+         "xBin": "PS2",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        },
+        {
+         "xBin": "Wii",
+         "xType": "categorical",
+         "count": {
+          "items": 5
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "PC",
+        "PS2",
+        "Wii"
+       ],
+       "borderline_rows": []
+      },
+      "Rating": {
+       "bins": [
+        {
+         "xBin": "E",
+         "xType": "categorical",
+         "count": {
+          "items": 7
+         }
+        },
+        {
+         "xBin": "M",
+         "xType": "categorical",
+         "count": {
+          "items": 1,
+          "incomplete": 1
+         }
+        },
+        {
+         "xBin": "T",
+         "xType": "categorical",
+         "count": {
+          "items": 4
+         }
+        }
+       ],
+       "numeric": [],
+       "labels": [
+        "E",
+        "M",
+        "T"
+       ],
+       "borderline_rows": []
+      }
+     },
+     "drift": {
+      "overall": 0.04166666666666667,
+      "columns": {
+       "Score": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Count": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Platform": {
+        "value": 0.0,
+        "reason": null
+       },
+       "Rating": {
+        "value": 0.16666666666666669,
+        "reason": null
+       }
+      }
+     },
+     "fill": "E"
+    }
+   },
+   "delete_vs_impute": {
+    "Score": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "numeric",
+       "xBin": 0,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 1,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 2,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 3,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 4,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 5,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 6,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 7,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 8,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 9,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "null",
+       "a": {
+        "items": 0
+       },
+       "b": {
+        "items": 2,
+        "missing": 2
+       }
+      }
+     ],
+     "is_numeric": true,
+     "borderline_rows": []
+    },
+    "Count": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "numeric",
+       "xBin": 0,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 1,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 2,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 3,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 4,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 5,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 6,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 7,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 8,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "numeric",
+       "xBin": 9,
+       "a": {
+        "items": 1
+       },
+       "b": {
+        "items": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "null",
+       "a": {
+        "items": 0
+       },
+       "b": {
+        "items": 2,
+        "missing": 2
+       }
+      }
+     ],
+     "is_numeric": true,
+     "borderline_rows": []
+    },
+    "Platform": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "categorical",
+       "xBin": "PC",
+       "a": {
+        "items": 3
+       },
+       "b": {
+        "items": 3
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "PS2",
+       "a": {
+        "items": 3
+       },
+       "b": {
+        "items": 4
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "Wii",
+       "a": {
+        "items": 4
+       },
+       "b": {
+        "items": 5
+       }
+      }
+     ],
+     "is_numeric": false,
+     "borderline_rows": []
+    },
+    "Rating": {
+     "rows": {
+      "a": 10,
+      "b": 12
+     },
+     "bins": [
+      {
+       "xType": "categorical",
+       "xBin": "E",
+       "a": {
+        "items": 5
+       },
+       "b": {
+        "items": 7
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "M",
+       "a": {
+        "items": 1,
+        "incomplete": 1
+       },
+       "b": {
+        "items": 1,
+        "incomplete": 1
+       }
+      },
+      {
+       "xType": "categorical",
+       "xBin": "T",
+       "a": {
+        "items": 4
+       },
+       "b": {
+        "items": 4
+       }
+      }
+     ],
+     "is_numeric": false,
+     "borderline_rows": []
+    }
+   }
+  }
+ }
+}

@@ -132,27 +132,13 @@
   display: inline-block;
 }
 
-/* Error color backgrounds via data attribute */
-.error-scent[data-error-type="missing"] { background-color: var(--error-missing); }
-.error-scent[data-error-type="mismatch"] { background-color: var(--error-mismatch); }
-.error-scent[data-error-type="anomaly"] { background-color: var(--error-anomaly); }
-.error-scent[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
-.error-scent[data-error-type="none"],
+/* An error badge and a sorting swatch take their type's colour from the --swatch-color their element sets - see
+   errorSwatchStyle in ui/src/store/errorColors.js */
+.error-scent { background-color: var(--swatch-color); }
 .error-scent--ok { background-color: var(--error-none); }
 
-/* Sorting color swatch backgrounds via data attribute */
-.attribute-sorting-item-color[data-error-type="total"],
-.attribute-sorting-item-color-selected[data-error-type="total"] { background-color: transparent; }
-.attribute-sorting-item-color[data-error-type="missing"],
-.attribute-sorting-item-color-selected[data-error-type="missing"] { background-color: var(--error-missing); }
-.attribute-sorting-item-color[data-error-type="mismatch"],
-.attribute-sorting-item-color-selected[data-error-type="mismatch"] { background-color: var(--error-mismatch); }
-.attribute-sorting-item-color[data-error-type="anomaly"],
-.attribute-sorting-item-color-selected[data-error-type="anomaly"] { background-color: var(--error-anomaly); }
-.attribute-sorting-item-color[data-error-type="incomplete"],
-.attribute-sorting-item-color-selected[data-error-type="incomplete"] { background-color: var(--error-incomplete); }
-.attribute-sorting-item-color[data-error-type="none"],
-.attribute-sorting-item-color-selected[data-error-type="none"] { background-color: var(--error-none); }
+.attribute-sorting-item-color,
+.attribute-sorting-item-color-selected { background-color: var(--swatch-color); }
 
 /* AttributeRow layout */
 .attribute-row {

@@ -6,7 +6,7 @@ import unittest
 
 from app.pgraph.node import GraphNode
 from app.pgraph.pgraph import PGraph
-from app.pgraph.support_nodes import apply_inherit_choice, inherited_support_nodes
+from app.pgraph.support_nodes import inherited_support_nodes, settle_inherited
 
 PARENT = "n0a_t"
 CHILD = "c0_t"
@@ -103,49 +103,32 @@ class InheritTests(unittest.TestCase):
         self.assertIsNone(config["branch"])
 
 
-class AcceptChoiceTests(unittest.TestCase):
+class AcceptTests(unittest.TestCase):
     def records(self):
         inherited = inherited_support_nodes([record("drift", {"column": "age"}, key="a"),
                                              record("errorPlot", {"columns": ["age"]}, key="b")], PARENT, CHILD)
         own = record("qualityMetrics", host=CHILD, key="mine")
         return inherited, own
 
-    def test_show_opens_what_was_inherited(self):
+    def test_accepting_opens_what_was_inherited_and_keeps_everything(self):
         inherited, own = self.records()
 
-        kept = apply_inherit_choice(inherited + [own], "show")
+        kept = settle_inherited(inherited + [own])
 
         self.assertEqual(len(kept), 3)
         for kept_record in kept:
             self.assertFalse(kept_record.get("startMinimized", False))
             self.assertFalse(kept_record["inherited"])
 
-    def test_hide_leaves_them_as_badges(self):
-        inherited, own = self.records()
-
-        kept = apply_inherit_choice(inherited + [own], "hide")
-
-        self.assertEqual(len(kept), 3)
-        self.assertTrue(kept[0]["startMinimized"])
-        self.assertTrue(kept[1]["startMinimized"])
-        for kept_record in kept:
-            self.assertFalse(kept_record["inherited"])
-
-    def test_drop_takes_the_copies_away_but_keeps_the_users_own(self):
+    def test_a_copy_the_user_changed_is_left_as_it_is(self):
         inherited, own = self.records()
         # The user changed the second copy while looking the candidate over, so it is theirs now
         inherited[1]["inherited"] = False
 
-        kept = apply_inherit_choice(inherited + [own], "drop")
+        kept = settle_inherited(inherited + [own])
 
-        kept_ids = []
-        for kept_record in kept:
-            kept_ids.append(kept_record["id"])
-        self.assertEqual(kept_ids, [inherited[1]["id"], own["id"]])
-
-    def test_an_unknown_choice_is_refused(self):
-        with self.assertRaises(ValueError):
-            apply_inherit_choice([], "keep")
+        self.assertFalse(kept[0]["startMinimized"])
+        self.assertTrue(kept[1]["startMinimized"])
 
 
 class GraphTests(unittest.TestCase):

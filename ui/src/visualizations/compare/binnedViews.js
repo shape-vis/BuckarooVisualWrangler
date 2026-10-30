@@ -71,7 +71,13 @@ export function drawHistogramSide(svg, data, ctx) {
             .attr("height", (d) => Math.max(0, y(d.bottom) - y(d.top)))
             .attr("fill", (d) => errorColors(d.type))
             .attr("stroke", "white")
-            .attr("stroke-width", 0.5);
+            .attr("stroke-width", 0.5)
+            // For the end-to-end tests: whose bar this is, which bin, and how many rows the bin holds on that side
+            .attr("data-role", role)
+            .attr("data-bin", (d) => String(d.bin.xBin))
+            .attr("data-bin-type", (d) => d.bin.xType)
+            .attr("data-segment", (d) => d.type)
+            .attr("data-bin-items", (d) => d.bin[role].items);
         ctx.tooltip.attach(bars, (d) => countsTooltip(binLabel(data.scaleX, d.bin.xType, d.bin.xBin), d.bin, ctx));
 
         drawXAxis(g, xScale, w, h);
@@ -99,7 +105,12 @@ export function drawHistogramOverlay(svg, data, ctx) {
         .attr("y", (d) => y(d.bin[d.role].items))
         .attr("height", (d) => Math.max(0, h - y(d.bin[d.role].items)))
         .attr("fill", (d) => ROLE_COLORS[d.role])
-        .attr("fill-opacity", 0.85);
+        .attr("fill-opacity", 0.85)
+        // For the end-to-end tests, as the side-by-side bars carry them
+        .attr("data-role", (d) => d.role)
+        .attr("data-bin", (d) => String(d.bin.xBin))
+        .attr("data-bin-type", (d) => d.bin.xType)
+        .attr("data-bin-items", (d) => d.bin[d.role].items);
     ctx.tooltip.attach(marks, (d) => countsTooltip(binLabel(data.scaleX, d.bin.xType, d.bin.xBin), d.bin, ctx));
 
     drawXAxis(g, xScale, w, h);

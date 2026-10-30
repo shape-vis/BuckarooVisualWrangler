@@ -77,6 +77,20 @@ def require_node(table_name):
         raise ValueError(f"{table_name} is not a node in this graph")
 
 
+def json_object_body():
+    """
+    The request's JSON body when it is an object, and {} otherwise - when there is no body, it isn't JSON, or it is some
+    other JSON value, such as a list. A route can then read its fields with .get and refuse what is missing, whatever
+    shape the body came in.
+    """
+    from flask import request
+
+    body = request.get_json(force=True, silent=True)
+    if isinstance(body, dict):
+        return body
+    return {}
+
+
 def bounded_int(args, name, default, low, high):
     """
     An integer request parameter, clamped so a request cannot ask for an absurd amount of work.

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Handle, NodeResizer, Position } from "@xyflow/react";
 import { useCandidates } from "../store/CandidatesContext.jsx";
 import { usePgraph } from "../store/PGraphContext.jsx";
@@ -15,71 +14,17 @@ import "../styles/ProspectiveNode.css";
 // Smaller than this and its preview chart no longer reads; it starts larger
 const MIN_SIZE = { width: 170, height: 300 };
 
-// What accepting can do with the sub-nodes a candidate inherited from its parent - see CandidatesContext
-const INHERIT_CHOICES = [
-    { inherit: "show", label: "Accept & show support nodes", title: "Accept, and open the support nodes it inherited" },
-    { inherit: "hide", label: "Accept & hide support nodes", title: "Accept, and leave the inherited support nodes as badges" },
-    { inherit: "drop", label: "Accept without support nodes", title: "Accept, and remove the support nodes it inherited" },
-];
-
-/* The Accept button, or - once it is pressed on a candidate that inherited sub-nodes from its parent - the choice
-   of what becomes of them. One that inherited none is accepted in one click. */
+/* Accept and Decline. Accepting opens the sub-nodes the candidate inherited from its parent - see CandidatesContext. */
 function AcceptControls({ id, stop }) {
     const { acceptCandidate, declineCandidate, busy, busyId } = useCandidates();
-    const { supportNodes } = usePgraph();
-    const [choosing, setChoosing] = useState(false);
 
     const isBusy = busyId === id;
-    const inheritedCount = supportNodes.filter((record) => record.hostId === id && record.inherited).length;
-
-    const pressAccept = (event) => {
-        stop(event);
-        if (inheritedCount > 0) {
-            setChoosing(true);
-            return;
-        }
-        acceptCandidate(id);
-    };
-
-    const choose = (event, inherit) => {
-        stop(event);
-        setChoosing(false);
-        acceptCandidate(id, inherit);
-    };
-
-    if (choosing && inheritedCount > 0) {
-        const noun = inheritedCount === 1 ? "support node" : "support nodes";
-        return (
-            <div className="prospective-node-buttons prospective-node-buttons--inherit">
-                <div className="prospective-node-inherit-note">{inheritedCount} inherited {noun}</div>
-                {INHERIT_CHOICES.map((choice) => (
-                    <button
-                        key={choice.inherit}
-                        className="prospective-node-btn prospective-node-btn--accept"
-                        onClick={(e) => choose(e, choice.inherit)}
-                        onDoubleClick={stop}
-                        disabled={busy}
-                        title={choice.title}
-                    >
-                        {choice.label}
-                    </button>
-                ))}
-                <button
-                    className="prospective-node-btn"
-                    onClick={(e) => { stop(e); setChoosing(false); }}
-                    onDoubleClick={stop}
-                >
-                    Back
-                </button>
-            </div>
-        );
-    }
 
     return (
         <div className="prospective-node-buttons">
             <button
                 className="prospective-node-btn prospective-node-btn--accept"
-                onClick={pressAccept}
+                onClick={(e) => { stop(e); acceptCandidate(id); }}
                 onDoubleClick={stop}
                 disabled={busy}
                 title="Accept this wrangle and cement it into the graph"

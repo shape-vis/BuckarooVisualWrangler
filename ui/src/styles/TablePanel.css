@@ -29,24 +29,11 @@
 }
 
 /* Error cell colors */
-#table td[data-error="mismatch"] {
-  color: black;
-  background-color: var(--error-mismatch);
-}
-
-#table td[data-error="missing"] {
-  color: white;
-  background-color: var(--error-missing);
-}
-
-#table td[data-error="anomaly"] {
-  color: white;
-  background-color: var(--error-anomaly);
-}
-
-#table td[data-error="incomplete"] {
-  color: white;
-  background-color: var(--error-incomplete);
+/* A flagged cell takes its error type's colours from the --swatch-color and --swatch-text it sets - see
+   errorSwatchStyle in ui/src/store/errorColors.js */
+#table td[data-error] {
+  color: var(--swatch-text);
+  background-color: var(--swatch-color);
 }
 
 .table-error-message {

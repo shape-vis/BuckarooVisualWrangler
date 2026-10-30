@@ -130,10 +130,8 @@ def test_accepting_a_suggestion_runs_the_wrangle(root, stub_model):
     staged = client.post("/api/ai/suggest", json={"node_table": ROOT}).get_json()["candidates"][0]
     body = client.post("/api/candidates/accept", json={"table": staged["table"]}).get_json()
 
+    # What accepting does to the graph is test_candidates' to check; here, that the suggestion's wrangle ran
     assert body["success"] is True
-    assert body["table"] == staged["table"], "accepting renames nothing"
-    assert body["label"] == "n0b"
-    assert not app.pgraph_for_session.node_map[body["table"]].provisional
     after = pd.read_sql_query(f'SELECT * FROM "{body["table"]}" ORDER BY "ID"', engine)
     assert after.loc[after["ID"] == 3, "a"].iloc[0] == pytest.approx(50.0)
 

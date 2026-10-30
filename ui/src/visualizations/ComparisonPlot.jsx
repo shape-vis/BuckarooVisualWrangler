@@ -301,7 +301,8 @@ export default function ComparisonPlot({data, view, measure, labelA, labelB, hid
                 <div className="compare-plot-stage">
                     {/* A click that misses a category clears the selection */}
                     <div ref={canvasRef} className="compare-plot-canvas" onClick={() => setSelected(null)}>
-                        <svg ref={svgRef} width={size.width} height={size.height}/>
+                        <svg ref={svgRef} width={size.width} height={size.height} data-testid="comparison-plot"
+                             data-kind={data?.kind} data-x={data?.x} data-view={view}/>
                         <div ref={tooltipRef} className="compare-tooltip"/>
                         {tooSmall && <div className="compare-plot-small">Make this larger to see the plot</div>}
                     </div>

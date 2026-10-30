@@ -7,8 +7,10 @@ import threading
 from app.db_utils.execute_sql import fetch_sql, quote_identifier, quote_literal, sql_identifier
 
 # What a value has to look like to be read as a number - the pattern every query builder reads text values by, named
-# once here. It is a SQL string literal, quotes included.
-NUMERIC_TEXT_REGEX = r"'^\s*-?\d+(\.\d+)?\s*$'"
+# once here. It is a SQL string literal, quotes included. The space around the number is spelled out as the ASCII
+# whitespace ::float8 itself skips: Postgres' \s also matches unicode spaces - a non-breaking space pasted from a
+# spreadsheet - which the cast that follows would then refuse.
+NUMERIC_TEXT_REGEX = r"'^[ \t\n\r\f\v]*-?\d+(\.\d+)?[ \t\n\r\f\v]*$'"
 
 # The text a cell can hold and still count as missing
 MISSING_TOKENS = ("null", "undefined")
@@ -24,6 +26,12 @@ OTHER_LABEL = "(other)"
 
 # What a row deleted before the later state is called as a flow's target
 REMOVED_LABEL = "(removed)"
+
+# A real value spelled like one of the labels above, give or take double quotes around it, is shown with one more pair
+# of double quotes - "(other)" for a real (other) - so it can never be taken for the catch-all or the removed sink. Every
+# such value gains exactly one pair, so no two real values can end up with the same label either. A SQL string
+# literal, quotes included.
+SENTINEL_LOOKALIKE_REGEX = r"""'^"*(\(other\)|\(removed\))"*$'"""
 
 # information_schema data types read as numbers, and as text
 NUMERIC_DATA_TYPES = {'integer', 'bigint', 'numeric', 'real', 'double precision', 'smallint'}
@@ -59,15 +67,23 @@ def missing_cell_predicate(column_sql: str) -> str:
 
 def category_expression(column_sql: str) -> str:
     """
-    A cell as a category: its value as text, or NULL_LABEL when it is missing by missing_cell_predicate.
+    A cell as a category: its value as text, or NULL_LABEL when it is missing by missing_cell_predicate. A value spelled
+    like OTHER_LABEL or REMOVED_LABEL is quoted, by SENTINEL_LOOKALIKE_REGEX, so the catch-all and the removed sink are
+    only ever the app's own.
     :arg: column_sql: the cell as the query references it, already quoted, e.g. r."Gender".
     :return: a text SQL expression.
     """
 
     is_missing = missing_cell_predicate(column_sql)
     null_label = quote_literal(NULL_LABEL)
+    value = f"{column_sql}::text"
+    quoted_value = f"""'"' || {value} || '"'"""
 
-    return f"CASE WHEN {is_missing} THEN {null_label} ELSE {column_sql}::text END"
+    return f"""CASE
+                WHEN {is_missing} THEN {null_label}
+                WHEN {value} ~ {SENTINEL_LOOKALIKE_REGEX} THEN {quoted_value}
+                ELSE {value}
+            END"""
 
 
 def text_number_expression(column_sql: str) -> str:

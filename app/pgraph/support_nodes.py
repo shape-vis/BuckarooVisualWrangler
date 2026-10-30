@@ -9,8 +9,8 @@ costs nothing, and copying one costs a dictionary copy.
 
 That is what lets a new node start with the sub-nodes its parent has: when a candidate is staged, its parent's
 records are copied onto it, each pointed at the candidate. They arrive minimised - badges on the candidate - so a
-repair staging three candidates doesn't fill the graph with plots, and accepting the candidate chooses what becomes
-of them: shown, kept hidden, or dropped - see apply_inherit_choice.
+repair staging three candidates doesn't fill the graph with plots. Accepting the candidate opens them - see
+settle_inherited.
 
 Nothing here touches the database, so it is all testable on its own.
 """
@@ -22,9 +22,6 @@ SUPPORT_KINDS = ("qualityMetrics", "wrangleDiff", "errorPlot", "drift", "quality
 
 # Describes the one edge into its host, which a child does not share, so it is never inherited
 NOT_INHERITED = ("wrangleDiff",)
-
-# What accepting a candidate does with the sub-nodes it inherited
-INHERIT_CHOICES = ("show", "hide", "drop")
 
 # Table names never contain a colon, so the prefix keeps every sub-node id clear of them - see graphTopology.js
 SUPPORT_PREFIX = "support:"
@@ -132,33 +129,20 @@ def inherited_support_nodes(parent_records, parent_id, child_id):
     return inherited
 
 
-def apply_inherit_choice(records, choice):
+def settle_inherited(records):
     """
-    What accepting a candidate does with the sub-nodes it inherited.
-
-        show  they open on the accepted node
-        hide  they stay badges until the user opens one
-        drop  they are taken away - all but any the user changed while looking the candidate over, which are theirs
-
-    Either way, what is left is an ordinary record from then on.
+    What accepting a candidate does with the sub-nodes it inherited: they open on the accepted node, and are ordinary
+    records from then on. Those the user changed or added while looking the candidate over are left as they are.
 
     :param records: the candidate's support-node records
-    :param choice: one of INHERIT_CHOICES
     :return: the records the accepted node keeps
     """
-    if choice not in INHERIT_CHOICES:
-        raise ValueError(f"unknown inherit choice {choice!r}")
-
     kept = []
     for record in records:
-        was_inherited = record.get("inherited", False)
-        if was_inherited and choice == "drop":
-            continue
-
         kept_record = dict(record)
-        kept_record["inherited"] = False
-        if was_inherited and choice == "show":
+        if record.get("inherited", False):
             kept_record["startMinimized"] = False
+        kept_record["inherited"] = False
         kept.append(kept_record)
 
     return kept

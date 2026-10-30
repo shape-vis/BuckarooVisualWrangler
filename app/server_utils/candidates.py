@@ -21,20 +21,19 @@ Staging happens in three steps, so several candidates can be built at once:
     register  under WRANGLE_LOCK again: add the built nodes to the graph, in the order their names were claimed
 
 The one thing a candidate cannot do is be wrangled from: require_accepted is called by every path that would.
-None of the SQL lives here - the tables are made by DBOperations and query.py, and built by build_node.
+None of the SQL lives here - the tables are made by DBOperations, each wrangle is run by its operation in
+app/server_utils/wrangle_ops.py (whose SQL is in query.py), and the nodes are built by build_node.
 """
 from dataclasses import dataclass, field
 
 import app
-from app.db_utils import query
+from app.db_utils.column_types import ColumnTypes
 from app.db_utils.execute_sql import errors_table_name
 from app.pgraph.node import GraphNode
-from app.pgraph.support_nodes import apply_inherit_choice
+from app.pgraph.support_nodes import settle_inherited
 from app.server_utils.service_helpers import WRANGLE_LOCK, build_node, parse_node_id, safe_pg_name, session_graph
+from app.server_utils.wrangle_ops import parse_wrangle_op
 from app.server_utils.workers import NODE_POOL
-
-# The wrangle a candidate stages, as GraphNode records it: the _x / _y of a 2D impute says which column it filled
-WRANGLE_OPS = ("delete", "impute", "impute_x", "impute_y")
 
 SOURCES = ("repair", "ai")
 
@@ -48,7 +47,7 @@ class CandidateSpec:
     """
     One candidate to stage.
 
-    op:             one of WRANGLE_OPS
+    op:             the wrangle, as a node records it - see app/server_utils/wrangle_ops.py
     cols:           the column(s) the wrangle was chosen on, as the node records them
     row_ids:        the rows it touches
     imputed_column: the column an impute fills
@@ -98,12 +97,13 @@ def candidate_json(node):
 
 def _check(spec):
     """Refuse a spec that could not be staged, before anything is claimed or built."""
-    if spec.op not in WRANGLE_OPS:
+    op, _ = parse_wrangle_op(spec.op)
+    if op is None:
         raise CandidateError(f"Unknown wrangle {spec.op!r}.")
     if spec.source not in SOURCES:
         raise CandidateError(f"Unknown candidate source {spec.source!r}.")
-    if spec.op.startswith("impute") and not spec.imputed_column:
-        raise CandidateError("An impute needs the column it fills.")
+    if op.fills_column and not spec.imputed_column:
+        raise CandidateError(f"{op.name} needs the column it fills.")
     if not spec.row_ids:
         raise CandidateError("No rows selected.")
 
@@ -134,18 +134,30 @@ def _claim(parent, count):
     return graph, tables
 
 
+def _check_columns(parent, spec):
+    """
+    Refuse a wrangle on anything but the parent's data columns, before its table is copied: an unknown column, or a
+    structural one such as "ID" - imputing that would overwrite the ids every row is matched by.
+    """
+    data_columns = ColumnTypes.for_table(parent, app.engine).data_column_names()
+    for column in spec.cols:
+        if column not in data_columns:
+            raise CandidateError(f"{column!r} is not a data column of this node.")
+    if spec.imputed_column is not None and spec.imputed_column not in spec.cols:
+        raise CandidateError(f"{spec.imputed_column!r} is not one of the selection's columns.")
+
+
 def _build(parent, build, root_table):
     """
-    Build one candidate's tables: copy the parent's table, run the wrangle on the copy, and build everything the
-    node is read through. Runs on the node-build pool, holding no lock - the tables are the candidate's alone until
-    it is registered.
+    Build one candidate's tables: check its columns, copy the parent's table, run the wrangle on the copy, and build
+    everything the node is read through. Runs on the node-build pool, holding no lock - the tables are the candidate's
+    alone until it is registered.
     """
     spec = build.spec
+    _check_columns(parent, spec)
     app.db_operations.clone_table(parent, build.table)
-    if spec.op == "delete":
-        query.remove_rows_by_ids(table=build.table, ids=spec.row_ids)
-    else:
-        query.impute_by_ids(table=build.table, col=spec.imputed_column, ids=spec.row_ids)
+    op, _ = parse_wrangle_op(spec.op)
+    op.run(build.table, spec)
     return build_node(build.table, root_table)
 
 
@@ -265,13 +277,12 @@ def stage_each(parent, specs):
     return staged, failures
 
 
-def accept(table, inherit="hide"):
+def accept(table):
     """
     Publish a candidate into the graph for good, and move the session onto it. Nothing is renamed: it keeps its
-    table, its sub-nodes keep pointing at it, and its siblings stay staged under the same, unchanged parent.
+    table, its sub-nodes keep pointing at it, and its siblings stay staged under the same, unchanged parent. The
+    sub-nodes it inherited from its parent open - see app/pgraph/support_nodes.py.
 
-    :param inherit: what becomes of the sub-nodes it inherited from its parent - "show" opens them, "hide" leaves them
-                    as badges, "drop" takes them away; see app/pgraph/support_nodes.py
     :return: {"success", "table", "label", "parent"}
     """
     with WRANGLE_LOCK:
@@ -279,7 +290,7 @@ def accept(table, inherit="hide"):
         if not graph.is_provisional(table):
             raise CandidateError(f"{table} is not a candidate.")
         node = graph.publish(table)
-        node.support_nodes = apply_inherit_choice(node.support_nodes, inherit)
+        node.support_nodes = settle_inherited(node.support_nodes)
         # It may branch off a node other than the current one, so the cursor is set from the tree
         graph.set_clicked_node_as_current(table)
         app.db_operations.load_table(table)
