@@ -1,12 +1,14 @@
 # Buckaroo Visual Data Wrangler
 
 ## Overview
-Buckaroo Visual Wrangler is a data visualization tool that enables users to visually detect errors in their data and apply data wranglers to clean the dataset. Users can choose from 3 provided datasets:
-- StackOverflow survey (stackoverflow_db_uncleaned.csv)
-- Chicago crimes (Crimes_-_One_year_prior_to_present_20250421.csv)
+Buckaroo Visual Wrangler is a data visualization tool that enables users to visually detect errors in their data and apply data wranglers to clean the dataset. Users can upload their own CSV, or pick one of 3 provided datasets from the home page (the files are in `provided_datasets/`):
+- StackOverflow survey (stackoverflow_db_uncleaned_original.csv)
+- Video game sales (games.csv)
 - Student loan complaints (complaints-2025-04-21_17_31.csv)
 
- The user may explore their data using various visualization styles, such as heatmaps, scatterplots, or histograms. The user may select data by clicking on the plots and applying various wrangling techniques. After performing the desired wrangling actions, the user may export a python script of those actions to run on the dataset outside of the tool.
+The user may explore their data using various visualization styles, such as heatmaps, scatterplots, or histograms. The user may select data by clicking on the plots and applying various wrangling techniques.
+
+The provenance graph is now the main workspace. Every version of the data is a node in it, starting from the uploaded table as the root node. A repair, or an AI suggestion, is added as a candidate node that the user can look over, compare with other nodes, and then accept or decline. From the graph, the user can move between versions, undo and redo, compare any two nodes side by side, see how far each one has drifted from the original data, and attach small support plots beside a node.
 
 ## Quick Start (VLDB Demo Version)
 
