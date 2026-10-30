@@ -55,3 +55,44 @@
   margin-top: 8px;
   align-self: center;
 }
+
+.preview-card-impact {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.preview-card-impact > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.preview-card-impact span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.preview-card-impact strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.preview-card-execute--destructive {
+  border-color: #dc2626;
+  background: #ffffff;
+  color: #b91c1c;
+}
+
+.preview-card-execute--destructive:hover {
+  background: #fff1f2;
+}

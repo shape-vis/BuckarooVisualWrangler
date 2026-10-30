@@ -30,15 +30,17 @@ export function StandardButton({ children, isSelected, onClick, className = "" }
 
 export function NavButton({ children, isSelected, onClick, className = "", icon }) {
   return (
-      <div
+      <button
+          type="button"
           className={`navButton ${isSelected ? "navButton--selected" : ""} ${className}`}
+          aria-pressed={isSelected}
           onClick={onClick}
       >
         {icon && <span className="navButtonIcon">{icon}</span>}
         <span className="navButtonButtonText">
             {children}
         </span>
-      </div>
+      </button>
   );
 }
 

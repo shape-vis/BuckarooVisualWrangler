@@ -2,24 +2,33 @@ import { useRef, useState } from "react";
 
 import "../styles/UploadBox.css";
 
-export default function UploadBox({ fileUpload }) {
+export default function UploadBox({ fileUpload, disabled = false }) {
 
   const fileInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
 
   function handleUploadBoxClick() {
-    if (fileInputRef.current) fileInputRef.current.click();
+    if (!disabled && fileInputRef.current) fileInputRef.current.click();
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleUploadBoxClick();
+    }
   }
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     fileUpload(file);
+    e.target.value = "";
   }
 
   function handleDragOver(e) {
     e.preventDefault();
     e.stopPropagation();
+    if (disabled) return;
     setDragOver(true);
   }
 
@@ -33,6 +42,7 @@ export default function UploadBox({ fileUpload }) {
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
+    if (disabled) return;
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
       fileUpload(files[0]);
@@ -41,9 +51,14 @@ export default function UploadBox({ fileUpload }) {
 
   return (
     <div
-            className={`upload-box ${dragOver ? "dragover" : ""}`}
+            className={`upload-box ${dragOver ? "dragover" : ""} ${disabled ? "upload-box--disabled" : ""}`}
             id="uploadBox"
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            aria-label="Upload a CSV file"
+            aria-disabled={disabled}
             onClick={handleUploadBoxClick}
+            onKeyDown={handleKeyDown}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -54,6 +69,7 @@ export default function UploadBox({ fileUpload }) {
               id="fileInput"
               accept=".csv"
               hidden
+              disabled={disabled}
               onChange={handleFileChange}
             />
             <p>

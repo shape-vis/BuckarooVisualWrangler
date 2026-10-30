@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HeatMap from "../visualizations/HeatMap.jsx";
 import HistogramBarChart from "../visualizations/HistogramBarChart.jsx";
 import ScatterPlot from "../visualizations/ScatterPlot.jsx";
@@ -56,15 +56,27 @@ function MinimizeIcon({ x, y, onClick }) {
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
-function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onFocusChange, setContentHeight }) {
+function SelectionPanel({ selectedAttributes, w, h, errorColors, onFocusChange, setContentHeight }) {
     const { tableName: table_name } = useTableName();
     const { highlightedRowIds, highlightedCols, selectionSource, highlightRevision, clearHighlight } = useSelection();
     const matrixPlotAreaRef = useRef(null);
-    const [focusedCell, setFocusedCell] = useState(null); // { i, j } or null
-    const [deferOffDiagonalPlots, setDeferOffDiagonalPlots] = useState(true);
+    const [focusState, setFocusState] = useState({ scope: "", cell: null });
+    const [offDiagonalReadyScope, setOffDiagonalReadyScope] = useState("");
 
-    const columns = selectedAttributes || [];
+    const columns = useMemo(() => selectedAttributes || [], [selectedAttributes]);
     const columnsKey = columns.join("|");
+    const focusScope = `${table_name}|${columnsKey}`;
+    const focusedCell = focusState.scope === focusScope ? focusState.cell : null;
+    const setFocusedCell = useCallback((cellOrUpdater) => {
+        setFocusState((current) => {
+            const currentCell = current.scope === focusScope ? current.cell : null;
+            const nextCell = typeof cellOrUpdater === "function"
+                ? cellOrUpdater(currentCell)
+                : cellOrUpdater;
+            return { scope: focusScope, cell: nextCell };
+        });
+    }, [focusScope]);
+    const deferOffDiagonalPlots = offDiagonalReadyScope !== focusScope;
     const columnCount = columns.length || 1;
     const view = {
         yPadding: 50,
@@ -101,19 +113,18 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onF
     const matrixHeight =
         view.topMargin + columnCount * plotSize + (columnCount - 1) * view.yPadding + view.bottomMargin;
 
-    const [prevAttributes, setPrevAttributes] = useState(columns);
+    const prevAttributesRef = useRef(columns);
 
     useEffect(() => {
         onFocusChange?.(focusedCell !== null);
     }, [focusedCell, onFocusChange]);
 
     useEffect(() => {
-        setDeferOffDiagonalPlots(true);
         const timer = setTimeout(() => {
-            setDeferOffDiagonalPlots(false);
+            setOffDiagonalReadyScope(focusScope);
         }, 900);
         return () => clearTimeout(timer);
-    }, [table_name, columnsKey]);
+    }, [focusScope]);
 
     // Report the height the matrix needs so the container can scroll vertically
     // instead of hiding the bottom plots behind the table.
@@ -125,7 +136,7 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onF
         }
     }, [focusedCell, matrixHeight, setContentHeight]);
 
-    function clearFrontendPlotCaches(removedAttributes, activeAttributes) {
+    const clearFrontendPlotCaches = useCallback((removedAttributes, activeAttributes) => {
         // clear 1D hist cache
         removedAttributes.forEach((attr) => {
             histogramCache.delete(`${table_name}|${attr}`);
@@ -154,15 +165,16 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onF
                 }
             }
         }
-    }
+    }, [table_name]);
 
     // Updates active active attributes to backend
     useEffect(() => {
         // Determine removed attributes
-        const removed = prevAttributes.filter(attr => !columns.includes(attr));
+        const previousAttributes = prevAttributesRef.current;
+        const removed = previousAttributes.filter(attr => !columns.includes(attr));
 
         if (removed.length === 0) {
-            setPrevAttributes(columns);
+            prevAttributesRef.current = columns;
             return;
         }
 
@@ -198,14 +210,9 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onF
         // send nonactive views to backend.
         updateBackendAttributes({ removed_keys: removedKeys });
 
-        // Update prevAttributes for next run
-        setPrevAttributes(columns);
-    }, [selectedAttributes]);
-
-    // Clear focus if columns change (e.g. user deselects an attribute)
-    useEffect(() => {
-        setFocusedCell(null);
-    }, [table_name, selectedAttributes]);
+        // Preserve the previous column set for the next cache-diff pass.
+        prevAttributesRef.current = columns;
+    }, [clearFrontendPlotCaches, columns]);
 
     // ── Focused (expanded) view ───────────────────────────────────────────────
     useEffect(() => {
@@ -229,13 +236,16 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onF
         }
 
         if (!nextFocusedCell) return;
+        // SelectionContext is an external interaction source; synchronize focus
+        // when a plot publishes a new row selection.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setFocusedCell(current => {
             if (current && current.i === nextFocusedCell.i && current.j === nextFocusedCell.j) {
                 return current;
             }
             return nextFocusedCell;
         });
-    }, [highlightRevision, highlightedRowIds, highlightedCols, selectionSource, columns]);
+    }, [highlightRevision, highlightedRowIds, highlightedCols, selectionSource, columns, setFocusedCell]);
 
     if (focusedCell !== null) {
         const { i, j } = focusedCell;
@@ -378,6 +388,32 @@ function SelectionPanel({ selectedAttributes, w, h, errorTypes, errorColors, onF
                     fontWeight={selectedIds.length > 0 ? "600" : "400"}
                 >
                     {selectedIdsLabel}
+                </text>
+            </g>
+        );
+    }
+
+    if (columns.length === 0) {
+        return (
+            <g className="plot-matrix-empty-state" pointerEvents="none">
+                <text
+                    x={w / 2}
+                    y={Math.max(120, h / 2 - 8)}
+                    textAnchor="middle"
+                    fontSize={16}
+                    fontWeight="700"
+                    fill="#334155"
+                >
+                    Select a column to view its profile
+                </text>
+                <text
+                    x={w / 2}
+                    y={Math.max(148, h / 2 + 20)}
+                    textAnchor="middle"
+                    fontSize={12}
+                    fill="#64748b"
+                >
+                    Use the checkbox beside a column name. Up to three columns can be compared.
                 </text>
             </g>
         );

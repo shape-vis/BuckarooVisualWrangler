@@ -1,5 +1,5 @@
 // Buckaroo.jsx
-import { createContext, useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { queryUploadStatus } from "../utils/serverCalls.jsx";
 import AttributeSummaryPanel from "../panels/AttributeSummaryPanel.jsx";
 import TablePanel from "../panels/TablePanel.jsx";
@@ -18,17 +18,29 @@ import SelectionStatusBar from "../elements/SelectionStatusBar.jsx";
 import DebugContextBridge from "../elements/DebugContextBridge.jsx";
 import { RepairProvider } from "../store/RepairContext.jsx";
 import {PGraphProvider} from "../store/PGraphContext.jsx";
+import { ViewContext } from "../store/ViewContext.jsx";
 
-export const ViewContext = createContext();
+function readPendingUpload() {
+    const stored = sessionStorage.getItem("uploadResponse");
+    if (!stored) return null;
 
-
+    try {
+        const uploadResponse = JSON.parse(stored);
+        return uploadResponse?.loading_complete === false && uploadResponse?.table_name
+            ? uploadResponse
+            : null;
+    } catch {
+        return null;
+    }
+}
 
 export default function Buckaroo({ onReset }) {
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [sortedAttributes, setSortedAttributes] = useState([]);
     const [refreshKey, setRefreshKey] = useState(0);
-    const [isPlotFocused, setIsPlotFocused] = useState(false);
-    const [backgroundLoading, setBackgroundLoading] = useState(false);
+    const [plotFocus, setPlotFocus] = useState({ scope: "", focused: false });
+    const [pendingUpload] = useState(readPendingUpload);
+    const [backgroundLoading, setBackgroundLoading] = useState(Boolean(pendingUpload));
     const [showTutorialSignal, setShowTutorialSignal] = useState(0);
     const pollTimerRef = useRef(null);
 
@@ -41,27 +53,15 @@ export default function Buckaroo({ onReset }) {
         setRefreshKey(k => k + 1);
     }, []);
 
-    useEffect(() => {
-        setIsPlotFocused(false);
-    }, [activeView, selectedAttributes]);
+    const plotFocusScope = `${activeView}|${selectedAttributes.join("|")}`;
+    const isPlotFocused = plotFocus.scope === plotFocusScope && plotFocus.focused;
+    const handlePlotFocusChange = useCallback((focused) => {
+        setPlotFocus({ scope: plotFocusScope, focused });
+    }, [plotFocusScope]);
 
     useEffect(() => {
-        const stored = sessionStorage.getItem("uploadResponse");
-        if (!stored) return undefined;
-
-        let uploadResponse;
-        try {
-            uploadResponse = JSON.parse(stored);
-        } catch {
-            return undefined;
-        }
-
-        if (uploadResponse?.loading_complete !== false || !uploadResponse?.table_name) {
-            setBackgroundLoading(false);
-            return undefined;
-        }
-
-        setBackgroundLoading(true);
+        const uploadResponse = pendingUpload;
+        if (!uploadResponse) return undefined;
         const tableName = uploadResponse.table_name;
 
         const pollStatus = async () => {
@@ -96,7 +96,7 @@ export default function Buckaroo({ onReset }) {
                 pollTimerRef.current = null;
             }
         };
-    }, []);
+    }, [pendingUpload]);
 
     return (
         <>
@@ -110,7 +110,6 @@ export default function Buckaroo({ onReset }) {
                         onReset={onReset}
                         onShowAiGuide={() => setShowTutorialSignal(signal => signal + 1)}
                     />
-                    <AITutorial showSignal={showTutorialSignal} />
                     <SelectionStatusBar />
                     <DebugContextBridge />
                     {backgroundLoading && (
@@ -134,7 +133,7 @@ export default function Buckaroo({ onReset }) {
                                     <>
                                         <MatrixView
                                             selectedAttributes={selectedAttributes}
-                                            onFocusChange={setIsPlotFocused}
+                                            onFocusChange={handlePlotFocusChange}
                                             />
                                         <RepairPanel />
                                     </>
@@ -150,6 +149,11 @@ export default function Buckaroo({ onReset }) {
                                 />
                             </div>
                         </div>
+
+                        <AITutorial
+                            showSignal={showTutorialSignal}
+                            selectedAttributes={selectedAttributes}
+                        />
 
                         <div id="tooltip" className="tooltip"></div>
                     </div>

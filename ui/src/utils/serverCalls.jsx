@@ -84,13 +84,39 @@ export async function queryAttributeSummaries(table_name) {
     }
 }
 
+export async function saveProfileRoleOverride(column, role, note = "") {
+    const response = await fetch("/api/plots/profile-overrides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ column, role, note }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "Could not save the profile correction.");
+    }
+    return result;
+}
+
+export async function deleteProfileRoleOverride(column) {
+    const response = await fetch("/api/plots/profile-overrides", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ column }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "Could not clear the profile correction.");
+    }
+    return result;
+}
+
 export async function querySemanticGroups(tableName, strategy = "auto", options = {}) {
     const params = new URLSearchParams({
         tablename: tableName,
         strategy,
         limit: options.limit ?? 8,
-        sample_rows: options.sampleRows ?? 5000,
     });
+    if (options.sampleRows) params.set("sample_rows", options.sampleRows);
     if (options.clusterCount) params.set("cluster_count", options.clusterCount);
     if (options.minGroupSize) params.set("min_group_size", options.minGroupSize);
     if (options.minErrorRows) params.set("min_error_rows", options.minErrorRows);
@@ -304,6 +330,40 @@ export async function deleteColumn(column) {
     }
 }
 
+/** Apply a plot/bin selection as a backend row filter. */
+export async function addDataFilter(table, selection) {
+    try {
+        const response = await fetch("/api/filter/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table, selection }),
+        });
+        const result = await response.json();
+        if (!response.ok) return { success: false, error: result?.error || `Filter failed (${response.status})` };
+        return result;
+    } catch (error) {
+        console.error("[addDataFilter]", error.message);
+        return { success: false, error: error.message || "Filter request failed." };
+    }
+}
+
+/** Clear specific filter indices, or all filters when indices is empty. */
+export async function clearDataFilters(filterIndices = []) {
+    try {
+        const response = await fetch("/api/filter/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filterIndices }),
+        });
+        const result = await response.json();
+        if (!response.ok) return { success: false, error: result?.error || `Clear filter failed (${response.status})` };
+        return result;
+    } catch (error) {
+        console.error("[clearDataFilters]", error.message);
+        return { success: false, error: error.message || "Clear filter request failed." };
+    }
+}
+
 /**
  * GET /api/plots/preview-scatterplot
  * Fetch scatterplot data for a preview table.
@@ -425,6 +485,8 @@ const serverCalls = {
     queryHistogram2d,
     querySample2d,
     queryAttributeSummaries,
+    saveProfileRoleOverride,
+    deleteProfileRoleOverride,
     querySemanticGroups,
     queryTopErrorRows,
     queryTableName,
@@ -439,6 +501,8 @@ const serverCalls = {
     queryPreviewRowDiff,
     executeWrangle,
     deleteColumn,
+    addDataFilter,
+    clearDataFilters,
     exportPandasScript,
 };
 

@@ -1,22 +1,20 @@
 .ai-tutorial {
-  position: fixed;
-  right: clamp(14px, 3vw, 28px);
-  bottom: clamp(14px, 3vw, 28px);
-  z-index: 2600;
-  width: min(340px, calc(100vw - 28px));
+  position: sticky;
+  top: 64px;
+  z-index: 30;
+  flex: 0 0 clamp(270px, 22vw, 340px);
+  align-self: flex-start;
+  width: clamp(270px, 22vw, 340px);
+  max-height: calc(100vh - 72px);
+  margin: 8px 8px 8px 0;
   padding: 14px;
+  overflow: auto;
   border: 1px solid #c7d2e2;
   border-radius: 8px;
   background: #ffffff;
   color: #1f2937;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-}
-
-.ai-tutorial--workspace {
-  left: clamp(72px, 5vw, 96px);
-  right: auto;
-  bottom: clamp(18px, 3vw, 28px);
 }
 
 .ai-tutorial-header {
@@ -107,6 +105,7 @@
 }
 
 [data-buckaroo-tutorial-target="plots"] [data-tutorial-target="plots"],
+[data-buckaroo-tutorial-target="columns"] [data-tutorial-target="columns"],
 [data-buckaroo-tutorial-target="repair"] [data-tutorial-target="repair"],
 [data-buckaroo-tutorial-target="repair-workspace"] [data-tutorial-target="repair-workspace"],
 [data-buckaroo-tutorial-target="export"] [data-tutorial-target="export"] {
@@ -133,16 +132,19 @@
   }
 }
 
+@media (max-width: 1100px) {
+  .ai-tutorial {
+    flex-basis: 230px;
+    width: 230px;
+    padding: 12px;
+  }
+}
+
 @media (max-width: 720px) {
   .ai-tutorial {
-    left: 14px;
-    right: 14px;
-    bottom: 14px;
-    width: auto;
-  }
-
-  .ai-tutorial--workspace {
-    top: 74px;
-    bottom: auto;
+    flex-basis: 210px;
+    width: 210px;
+    margin-right: 6px;
+    padding: 10px;
   }
 }

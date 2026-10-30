@@ -32,14 +32,28 @@ function HistogramBarChart({
     // Refs to D3 elements / helpers so the highlight effect can re-color
     // without rebuilding the chart.
     const barsRef = useRef(null);
-    const colorScaleRef = useRef(k => "steelblue");
+    const colorScaleRef = useRef(() => "steelblue");
     const numHistDataXRef = useRef([]);
 
-    const { highlightedRowIds, highlightedCols, setHighlightedRowIds, clearHighlight, highlightRevision } = useSelection();
+    const {
+        highlightedRowIds,
+        highlightedCols,
+        setHighlightedRowIds,
+        clearHighlight,
+        highlightRevision,
+        setSelection,
+        clearSelection: clearSelectionMeta,
+    } = useSelection();
     const shouldHighlightSelection = highlightedRowIds?.length > 0 && highlightedCols?.includes(attrX);
     const setHighlightedRef = useRef(setHighlightedRowIds);
+    const clearHighlightRef = useRef(clearHighlight);
+    const setSelectionRef = useRef(setSelection);
+    const clearSelectionMetaRef = useRef(clearSelectionMeta);
     const highlightRevisionRef = useRef(highlightRevision);
     useEffect(() => { setHighlightedRef.current = setHighlightedRowIds; }, [setHighlightedRowIds]);
+    useEffect(() => { clearHighlightRef.current = clearHighlight; }, [clearHighlight]);
+    useEffect(() => { setSelectionRef.current = setSelection; }, [setSelection]);
+    useEffect(() => { clearSelectionMetaRef.current = clearSelectionMeta; }, [clearSelectionMeta]);
     useEffect(() => { highlightRevisionRef.current = highlightRevision; }, [highlightRevision]);
 
     const { useRange, minId, maxId } = useRowRange();
@@ -96,7 +110,7 @@ function HistogramBarChart({
             .domain([0, d3.max(histogramData.histograms, d => d.count.items)]).nice()
             .range([size.h, 0]);
 
-        const colorScale = errorColors || (k => "steelblue");
+        const colorScale = errorColors || (() => "steelblue");
         colorScaleRef.current = colorScale;
 
         // Flatten stacked data per bin. When no null columns, skip categorical bins entirely.
@@ -155,12 +169,14 @@ function HistogramBarChart({
                 if (!event.selection) {
                     applyBarEmphasis();
                     if (event.type === "end" && event.sourceEvent) {
-                        clearHighlight("histogram_brush_empty", { source: "histogram", cols: [attrX] });
+                        clearSelectionMetaRef.current();
+                        clearHighlightRef.current("histogram_brush_empty", { source: "histogram", cols: [attrX] });
                     }
                     return;
                 }
                 const [x0, x1] = event.selection;
                 const brushedBins = new Set();
+                const selectedBins = [];
                 myData.forEach(d => {
                     let start, end;
                     if (d.type === "numeric") {
@@ -172,24 +188,38 @@ function HistogramBarChart({
                         start = xScale.apply(d.bin, "categorical");
                         end = start + xScale.categoricalBandwidth();
                     }
-                    if (end >= x0 && start <= x1) brushedBins.add(String(d.bin));
+                    if (end >= x0 && start <= x1) {
+                        const key = `${d.type}:${d.bin}`;
+                        if (!brushedBins.has(key)) {
+                            brushedBins.add(key);
+                            selectedBins.push({ bin: d.bin, type: d.type });
+                        }
+                    }
                 });
 
-                applyBarEmphasis(brushedBins);
+                const displayBins = new Set(selectedBins.map(item => String(item.bin)));
+                applyBarEmphasis(displayBins);
 
                 // Async: fetch row IDs for all brushed bins and push to context.
-                if (event.type === "end" && brushedBins.size > 0) {
+                if (event.type === "end" && selectedBins.length > 0) {
                     const requestRevision = highlightRevisionRef.current;
-                    const binsToQuery = [...brushedBins];
-                    Promise.all(binsToQuery.map(b =>
-                        queryRowsInBin({ type: "1d", column: attrX, bin: b})
+                    setSelectionRef.current({
+                        table: table_name,
+                        viewType: "barchart",
+                        cols: [attrX],
+                        data: selectedBins,
+                        scaleX: histogramData.scaleX,
+                        scaleY: null,
+                    });
+                    Promise.all(selectedBins.map(item =>
+                        queryRowsInBin({ type: "1d", column: attrX, bin: item.bin })
                     )).then(results => {
                         if (highlightRevisionRef.current !== requestRevision) return;
                         const allIds = [];
                         results.forEach(r => { if (r?.success) allIds.push(...r.row_ids); });
                         setHighlightedRef.current([...new Set(allIds)], [attrX], "histogram", {
                             action: "brush",
-                            bins: binsToQuery,
+                            bins: selectedBins.map(item => item.bin),
                         });
                     });
                 }
@@ -224,9 +254,18 @@ function HistogramBarChart({
             },
             (d, event) => {
                 if (isFocused && d3.select(event.currentTarget).attr("fill") === "gold") {
-                    clearHighlight("histogram_selected_bin_click", { source: "histogram", cols: [attrX], bin: d.bin });
+                    clearSelectionMetaRef.current();
+                    clearHighlightRef.current("histogram_selected_bin_click", { source: "histogram", cols: [attrX], bin: d.bin });
                     return;
                 }
+                setSelectionRef.current({
+                    table: table_name,
+                    viewType: "barchart",
+                    cols: [attrX],
+                    data: [{ bin: d.bin, type: d.type }],
+                    scaleX: histogramData.scaleX,
+                    scaleY: null,
+                });
                 // Left click: fetch row IDs for this bin then update context.
                 const requestRevision = highlightRevisionRef.current;
                 queryRowsInBin({ type: "1d", column: attrX, bin: d.bin})
@@ -246,7 +285,7 @@ function HistogramBarChart({
         );
 
         return () => { canvas.selectAll("*").remove(); };
-    }, [size, histogramData, detailMode]);
+    }, [size, histogramData, detailMode, attrX, table_name, errorColors, isFocused]);
 
     // ── react to cross-chart highlight changes ──────────────────────────────
     useEffect(() => {
@@ -277,14 +316,15 @@ function HistogramBarChart({
         };
     }, [highlightedRowIds, highlightedCols, shouldHighlightSelection, attrX, highlightRevision, histogramData]);
 
-    function clearSelection() {
+    function clearChartSelection() {
         clearSelectionRef.current();
-        clearHighlight("histogram_background_click", { source: "histogram", cols: [attrX] });
+        clearSelectionMetaRef.current();
+        clearHighlightRef.current("histogram_background_click", { source: "histogram", cols: [attrX] });
     }
 
     return (
         <g key={cellID} transform={`translate(${pos.x}, ${pos.y})`} className="barchart-canvas">
-            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearSelection} />
+            <rect width={size.w} height={size.h} fill="#ffffff00" onClick={clearChartSelection} />
             <g ref={drawingRef}></g>
         </g>
     );
